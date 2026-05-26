@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual environments
+.venv/
+venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# PyTorch models
+*.pth
+
+# VS Code
+.vscode/
+
+# Dataset cache
+.cache/
+kagglehub/
+
+# Logs
+*.log
