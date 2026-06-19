@@ -1,0 +1,87 @@
+{
+  "config": {
+    "seed": 42,
+    "device": "cuda",
+    "dataset": "tiny-imagenet-200",
+    "img_size": 64,
+    "num_classes": 200,
+    "train_val_split": 0.9,
+    "batch_size": 64,
+    "num_workers": 4,
+    "pin_memory": true,
+    "fp32_epochs": 30,
+    "fp32_lr": 0.0003,
+    "fp32_weight_decay": 0.0005,
+    "fp32_label_smoothing": 0.1,
+    "qat_epochs": 5,
+    "qat_lr": 0.0001,
+    "qat_weight_decay": 0.0005,
+    "save_dir": "./saved_models_hybrid_qat",
+    "checkpoint_dir": "./saved_models_hybrid_qat/checkpoints"
+  },
+  "system_info": {
+    "device": "cuda",
+    "torch_version": "2.5.1+cu121",
+    "cuda_available": true,
+    "cuda_version": "12.1",
+    "gpu_count": 1,
+    "gpu_name": "NVIDIA GeForce RTX 4060 Laptop GPU",
+    "gpu_memory_gb": 8.186822656
+  },
+  "model_info": {
+    "total_parameters": 176200,
+    "parameters_millions": 0.1762,
+    "size_fp32_mb": 0.672149658203125,
+    "size_int8_mb": 0.16803741455078125
+  },
+  "results": {
+    "fp32": {
+      "accuracy": 3.4704560676574707,
+      "loss": 31.88,
+      "size_mb": 0.7304592132568359,
+      "num_parameters": 176200
+    },
+    "qat_int8_simulated": {
+      "accuracy": 30.83,
+      "loss": 3.493881036758423,
+      "size_mb": 0.3056507110595703,
+      "torchscript_size_mb": 0.3226337432861328,
+      "note": "QAT model simulates INT8 quantization behavior"
+    },
+    "quantization_metrics": {
+      "accuracy_drop": -27.35954393234253,
+      "accuracy_drop_percent": -788.3558644443524,
+      "compression_ratio": 2.389849546643037,
+      "size_reduction_percent": 58.156361708850014
+    },
+    "training_config": {
+      "seed": 42,
+      "device": "cuda",
+      "dataset": "tiny-imagenet-200",
+      "img_size": 64,
+      "num_classes": 200,
+      "train_val_split": 0.9,
+      "batch_size": 64,
+      "num_workers": 4,
+      "pin_memory": true,
+      "fp32_epochs": 30,
+      "fp32_lr": 0.0003,
+      "fp32_weight_decay": 0.0005,
+      "fp32_label_smoothing": 0.1,
+      "qat_epochs": 5,
+      "qat_lr": 0.0001,
+      "qat_weight_decay": 0.0005,
+      "save_dir": "./saved_models_hybrid_qat",
+      "checkpoint_dir": "./saved_models_hybrid_qat/checkpoints"
+    },
+    "system_info": {
+      "device": "cuda",
+      "torch_version": "2.5.1+cu121",
+      "cuda_available": true,
+      "cuda_version": "12.1",
+      "gpu_count": 1,
+      "gpu_name": "NVIDIA GeForce RTX 4060 Laptop GPU",
+      "gpu_memory_gb": 8.186822656
+    }
+  }
+}
