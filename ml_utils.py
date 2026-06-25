@@ -11,12 +11,10 @@ import os
 import time
 import random
 import json
-import copy
-import math
 from pathlib import Path
-from typing import Dict, Tuple, Optional, Any, Callable, List, Iterable
-from collections import defaultdict, OrderedDict
-
+from typing import Dict, Tuple, Optional, Any, Callable, List, Iterable, Sequence
+from collections import defaultdict
+import copy
 import numpy as np
 import pandas as pd
 import torch
@@ -24,6 +22,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, Subset
 from torchvision import datasets, transforms
 from torchvision.transforms import AutoAugmentPolicy
+import torch.ao.quantization as tq
 from tqdm.auto import tqdm
 
 try:
@@ -944,3 +943,103 @@ def register_model(
         "fuse_map": fuse_map or [],
         **metadata,
     }
+
+# =============================================================================
+# QAT HELPERS
+# =============================================================================
+
+def prepare_qat_model(
+    model: nn.Module,
+    fuse_pairs: list,
+    fuse_root: nn.Module | None = None,
+    qengine: str = "fbgemm",
+) -> nn.Module:
+    """
+    Prepare a model for Quantization-Aware Training (QAT).
+
+    This function:
+    1. Creates a deep copy of the model to avoid modifying the original.
+    2. Sets the model to training mode.
+    3. Assigns a QAT quantization configuration for the selected backend.
+    4. Fuses specified module pairs (e.g., Conv + ReLU).
+    5. Wraps the model with QAT fake-quantization observers.
+    """
+
+    # Work on a copy to avoid mutating the original FP32 model
+    model = copy.deepcopy(model)
+
+    # QAT requires training mode to simulate inference-time statistics
+    model.train()
+
+    # Assign backend-specific QAT configuration
+    model.qconfig = tq.get_default_qat_qconfig(qengine)
+
+    # Select fusion root (full model or submodule)
+    root = model if fuse_root is None else fuse_root
+
+    # Fuse adjacent layers to match quantized inference kernels
+    if fuse_pairs:
+        tq.fuse_modules_qat(root, fuse_pairs, inplace=True)
+
+    # Insert fake quantization modules for QAT simulation
+    return tq.prepare_qat(model, inplace=False)
+
+def load_best_model(
+    arch_name: str,
+    ctor,
+    save_dir: str,
+    device: torch.device,
+    eval_mode: bool = True,
+) -> nn.Module:
+    model = ctor()
+    path = os.path.join(save_dir, f"{arch_name}_best.pth")
+
+    load_model(model, path, device=str(device))
+    model = model.to(device)
+
+    if eval_mode:
+        model.eval()
+
+    return model
+
+def build_qat_from_model(model: nn.Module, arch_name: str, device: torch.device) -> nn.Module:
+    spec = MODEL_REGISTRY[arch_name]
+    qat_model = prepare_qat_model(
+        model,
+        spec["fuse_map"],
+        fuse_root=getattr(model, "features", model),
+)
+    return qat_model.to(device)
+
+def convert_to_int8(qat_model: nn.Module, inplace: bool = False) -> nn.Module:
+    """
+    Convert a trained QAT model into a real INT8 quantized model.
+    """
+
+    qat_model = qat_model.to("cpu")
+    qat_model.eval()
+    return torch.ao.quantization.convert(qat_model, inplace=inplace)
+
+def build_qat(arch_name: str, save_dir: str, device: torch.device) -> nn.Module:
+    """
+    Load FP32 best model → convert to QAT model.
+    """
+    spec = MODEL_REGISTRY[arch_name]
+
+    # 1. Load pretrained FP32 model
+    model = load_best_model(
+        arch_name=arch_name,
+        ctor=spec["ctor"],
+        save_dir=save_dir,
+        device=device,
+        eval_mode=False,  # IMPORTANT: QAT must start in train mode
+    )
+
+    # 2. Convert to QAT
+    qat_model = build_qat_from_model(
+        model,
+        arch_name,
+        device,
+    )
+
+    return qat_model.to(device)
