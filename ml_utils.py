@@ -43,8 +43,9 @@ IMAGENET_STD = [0.229, 0.224, 0.225]
 # Global registry of architectures available for training/QAT/comparison.
 MODEL_REGISTRY = {}
 
-EPOCHS_FP32 = 2
-EPOCHS_INT8 = 2
+EPOCHS_FP32 = 100
+EPOCHS_INT8 = 20
+EARLY_STOPPING_PATIENCE = 5
 
 # =============================================================================
 # REPRODUCIBILITY & SYSTEM UTILITIES
@@ -772,22 +773,42 @@ def run_fp32_training(
     criterion: nn.Module,
     config,
     device: torch.device,
+    skip_names: Optional[Sequence[str]] = None,
+    resume_names: Optional[Sequence[str]] = None,
 ) -> Tuple[Dict[str, nn.Module], Dict[str, Any]]:
     """
     Run FP32 training for every architecture in `model_registry`.
 
-    Moves each trained model to CPU and frees GPU memory before moving to
-    the next architecture, avoiding accumulation of multiple models +
-    optimizer states on GPU across the loop.
-
-    Returns (fp32_models, fp32_training_results), both keyed by plain
-    architecture name.
+    skip_names: architectures already fully trained in a previous run —
+        their best checkpoint is reloaded from disk instead of retraining.
+    resume_names: architectures that were interrupted mid-training — their
+        best checkpoint (if any) is loaded before continuing training,
+        instead of starting from random initialization again.
     """
+    skip_names = set(skip_names or [])
+    resume_names = set(resume_names or [])
+
     fp32_models = {}
     fp32_training_results = {}
 
     for name, spec in model_registry.items():
+        ckpt_path = os.path.join(config["save_dir"], f"{name}_best.pth")
+
+        if name in skip_names:
+            print(f"Skipping {name} (already trained) — reloading checkpoint.")
+            model = spec["ctor"]()
+            load_model(model, ckpt_path, device=str(device))
+            fp32_models[name] = model.cpu()
+            del model
+            torch.cuda.empty_cache()
+            continue
+
         model = spec["ctor"]().to(device)
+
+        if name in resume_names and os.path.exists(ckpt_path):
+            print(f"Resuming {name} from {ckpt_path}")
+            load_model(model, ckpt_path, device=str(device))
+            model.to(device)
 
         optimizer = optim.AdamW(
             model.parameters(),
@@ -823,7 +844,6 @@ def run_fp32_training(
         torch.cuda.empty_cache()
 
     return fp32_models, fp32_training_results
-
 def run_qat_training(
     model_registry: Dict[str, Any],
     train_loader: DataLoader,
@@ -831,23 +851,43 @@ def run_qat_training(
     criterion: nn.Module,
     config,
     device: torch.device,
+    skip_names: Optional[Sequence[str]] = None,
+    resume_names: Optional[Sequence[str]] = None,
 ) -> Tuple[Dict[str, nn.Module], Dict[str, Any]]:
     """
     Run QAT fine-tuning for every architecture in `model_registry`.
 
-    Builds the QAT model from the best FP32 checkpoint, trains it, then
-    moves it to CPU and frees GPU memory before moving to the next
-    architecture (avoids accumulating multiple models + optimizer states
-    on GPU across the loop).
-
-    Returns (qat_models, qat_training_results), both keyed by plain
-    architecture name.
+    skip_names: architectures already fully trained in a previous run —
+        their best checkpoint is reloaded from disk instead of retraining.
+    resume_names: architectures that were interrupted mid-training — their
+        best QAT checkpoint (if any) is loaded into the fresh QAT-prepared
+        model before continuing training, instead of starting from the
+        FP32 weights again.
     """
+    skip_names = set(skip_names or [])
+    resume_names = set(resume_names or [])
+
     qat_models = {}
     qat_training_results = {}
 
     for name in model_registry:
+        ckpt_path = os.path.join(config["save_dir"], f"qat_{name}_best.pth")
+
+        if name in skip_names:
+            print(f"Skipping {name} (already trained) — reloading checkpoint.")
+            qat_model = build_qat(name, save_dir=config["save_dir"], device=device)
+            load_model(qat_model, ckpt_path, device=str(device))
+            qat_models[name] = qat_model.cpu()
+            del qat_model
+            torch.cuda.empty_cache()
+            continue
+
         qat_model = build_qat(name, save_dir=config["save_dir"], device=device)
+
+        if name in resume_names and os.path.exists(ckpt_path):
+            print(f"Resuming {name} from {ckpt_path}")
+            load_model(qat_model, ckpt_path, device=str(device))
+            qat_model.to(device)
 
         optimizer = optim.AdamW(
             qat_model.parameters(),
@@ -943,7 +983,7 @@ def build_default_config(seed: int, device: torch.device, save_dir: str) -> Expe
         "label_smoothing": 0.1,
         "weight_decay": 5e-4,
         "use_amp": True,
-        "early_stopping_patience": 4,
+        "early_stopping_patience": EARLY_STOPPING_PATIENCE,
 
         "save_dir": save_dir,
     })
@@ -1163,3 +1203,40 @@ def build_qat(arch_name: str, save_dir: str, device: torch.device) -> nn.Module:
     )
 
     return qat_model.to(device)
+
+# =============================================================================
+# SANITY CHECK
+# =============================================================================
+
+def sanity_check_models(
+    model_ctors,
+    img_size: int,
+    num_classes: int,
+    device: str | torch.device = "cpu",
+) -> None:
+    """
+    Smoke-test one or more model constructors by verifying the output shape.
+
+    Args:
+        model_ctors: Iterable of zero-argument model constructors.
+        img_size: Input image size.
+        num_classes: Expected number of output classes.
+        device: Device on which to run the test.
+    """
+    x = torch.randn(2, 3, img_size, img_size, device=device)
+
+    for ctor in model_ctors:
+        model = ctor().to(device)
+        model.eval()
+
+        with torch.no_grad():
+            y = model(x)
+
+        assert y.shape == (2, num_classes), (
+            f"{ctor.__name__}: expected {(2, num_classes)}, got {tuple(y.shape)}"
+        )
+
+        print(
+            f"{ctor.__name__:25s} OK -> {tuple(y.shape)}, "
+            f"params={count_parameters(model)/1e6:.2f}M"
+        )

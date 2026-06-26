@@ -1,73 +1,105 @@
-# QAT Research Framework (PyTorch)
-
-This repository provides a modular framework for experimenting with:
-
-- FP32 training
-- Quantization-Aware Training (QAT)
-- INT8 model conversion and inference
-- Architecture comparison under quantization constraints
-
-All core logic is centralized in `ml_utils.py`, ensuring reproducibility and avoiding duplicated training code across notebooks.
-
 ---
 
-# Project Structure
+# Research Roadmap
 
-## Core library
+## Objective
 
-### `ml_utils.py`
-
-This file contains the entire ML pipeline:
-
-- Data loading (ImageNet-style datasets)
-- Training and evaluation loops
-- Checkpointing utilities
-- Model registry system
-- QAT preparation and fusion
-- INT8 conversion utilities
-- Experiment configuration system
-- Weights & Biases (optional) logging
-- Model analysis utilities
-
-All experiments should import and use this module exclusively.
-
----
-
-## Notebooks
-
-### `alexnet_qat.ipynb`
-
-Focused on AlexNet-family architectures:
-
-- Pretrained AlexNet (fine-tuned)
-- 3×3 kernel AlexNet variant
-- Small-kernel lightweight AlexNet
-- QAT versions of all above
-- INT8 converted models
-
-**Goal:**
-Evaluate how architectural changes in classical CNNs affect:
+Design an **AlexNet-inspired CNN** using **3×3 (or smaller) kernels** that provides the best trade-off between:
 
 - Accuracy
-- QAT stability
-- INT8 degradation
+- Model size
+- Training speed
+- Inference speed
+- Quantization performance
+- Winograd compatibility
 
 ---
 
-### `tinyhybrid_qat.ipynb`
+## Architectures to Explore
 
-Focused on modern efficient architectures:
+### Baselines
 
-- Fire modules (SqueezeNet-style blocks)
-- MobileNet-style depthwise separable convolutions
-- Hybrid CNN architectures
-- Custom fusion strategies for QAT
+- AlexNet
+- AlexNet (3×3)
+- StrongCNN
+- TinyHybridNet
 
-**Goal:**
-Study:
+### Lightweight CNNs
 
-- Efficiency vs accuracy trade-offs
-- Impact of QAT fusion strategies
-- Performance of modern lightweight CNNs under INT8
+- SqueezeNet
+- MobileNetV2
+- ShuffleNetV2
+- GhostNet
 
 ---
+
+## Architectural Ideas
+
+### Kernel Designs
+
+- 3×3 kernels
+- 2×2 kernels
+- Stacked 3×3 convolutions
+- Mixed-kernel architectures
+
+### Convolution Variants
+
+- Standard convolutions
+- Depthwise separable convolutions
+- Group convolutions
+
+### Network Blocks
+
+- Residual connections
+- Fire modules (SqueezeNet)
+- Inverted Residual blocks (MobileNetV2)
+- Squeeze-and-Excitation (SE)
+
+---
+
+## Training Techniques
+
+- Better data augmentation
+- Label smoothing
+- Exponential Moving Average (EMA)
+- Cosine learning rate scheduling
+- Mixed Precision (AMP)
+
+---
+
+## Model Optimization
+
+- Quantization-Aware Training (QAT)
+- Post-Training Quantization (PTQ)
+- Structured pruning
+- Knowledge Distillation
+- Winograd-compatible kernel design
+
+---
+
+## Evaluation Metrics
+
+Evaluate every architecture using:
+
+- Top-1 / Top-5 Accuracy
+- Parameters
+- FLOPs / MACs
+- Model size
+- FP32 vs INT8 accuracy
+- Quantization accuracy drop
+- Training time
+- CPU latency
+- INT8 inference latency
+
+---
+
+## Final Goal
+
+Develop a lightweight **AlexNet-like architecture** composed primarily of **3×3 (or smaller) kernels**, inspired by ideas from **ResNet**, **SqueezeNet**, and **MobileNet**, that is:
+
+- Accurate
+- Lightweight
+- Fast to train
+- Fast to infer
+- Quantization-friendly
+- Compatible with Winograd-based accelerators
