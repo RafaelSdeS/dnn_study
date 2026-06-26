@@ -23,6 +23,7 @@ from torch.utils.data import DataLoader, Subset
 from torchvision import datasets, transforms
 from torchvision.transforms import AutoAugmentPolicy
 import torch.ao.quantization as tq
+import torch.optim as optim
 from tqdm.auto import tqdm
 
 try:
@@ -764,6 +765,123 @@ def train_and_evaluate(
     finally:
         finish_wandb()
 
+def run_fp32_training(
+    model_registry: Dict[str, Any],
+    train_loader: DataLoader,
+    val_loader: DataLoader,
+    criterion: nn.Module,
+    config,
+    device: torch.device,
+) -> Tuple[Dict[str, nn.Module], Dict[str, Any]]:
+    """
+    Run FP32 training for every architecture in `model_registry`.
+
+    Moves each trained model to CPU and frees GPU memory before moving to
+    the next architecture, avoiding accumulation of multiple models +
+    optimizer states on GPU across the loop.
+
+    Returns (fp32_models, fp32_training_results), both keyed by plain
+    architecture name.
+    """
+    fp32_models = {}
+    fp32_training_results = {}
+
+    for name, spec in model_registry.items():
+        model = spec["ctor"]().to(device)
+
+        optimizer = optim.AdamW(
+            model.parameters(),
+            lr=spec["lr"],
+            weight_decay=config["weight_decay"],
+        )
+
+        scheduler = optim.lr_scheduler.CosineAnnealingLR(
+            optimizer,
+            T_max=config["epochs_fp32"],
+        )
+
+        results = train_and_evaluate(
+            model=model,
+            model_name=name,
+            train_loader=train_loader,
+            val_loader=val_loader,
+            optimizer=optimizer,
+            criterion=criterion,
+            epochs=config["epochs_fp32"],
+            scheduler=scheduler,
+            device=device,
+            save_dir=config["save_dir"],
+            use_amp=config["use_amp"],
+            early_stopping_patience=config["early_stopping_patience"],
+            model_ctor=spec["ctor"],
+        )
+
+        fp32_training_results[name] = results
+        fp32_models[name] = model.cpu()
+
+        del model, optimizer, scheduler
+        torch.cuda.empty_cache()
+
+    return fp32_models, fp32_training_results
+
+def run_qat_training(
+    model_registry: Dict[str, Any],
+    train_loader: DataLoader,
+    val_loader: DataLoader,
+    criterion: nn.Module,
+    config,
+    device: torch.device,
+) -> Tuple[Dict[str, nn.Module], Dict[str, Any]]:
+    """
+    Run QAT fine-tuning for every architecture in `model_registry`.
+
+    Builds the QAT model from the best FP32 checkpoint, trains it, then
+    moves it to CPU and frees GPU memory before moving to the next
+    architecture (avoids accumulating multiple models + optimizer states
+    on GPU across the loop).
+
+    Returns (qat_models, qat_training_results), both keyed by plain
+    architecture name.
+    """
+    qat_models = {}
+    qat_training_results = {}
+
+    for name in model_registry:
+        qat_model = build_qat(name, save_dir=config["save_dir"], device=device)
+
+        optimizer = optim.AdamW(
+            qat_model.parameters(),
+            lr=config["lr_qat"],
+            weight_decay=config["weight_decay"],
+        )
+
+        scheduler = optim.lr_scheduler.CosineAnnealingLR(
+            optimizer,
+            T_max=config["epochs_qat"],
+        )
+
+        results = train_and_evaluate(
+            model=qat_model,
+            model_name=f"qat_{name}",
+            train_loader=train_loader,
+            val_loader=val_loader,
+            optimizer=optimizer,
+            criterion=criterion,
+            epochs=config["epochs_qat"],
+            device=device,
+            save_dir=config["save_dir"],
+            scheduler=scheduler,
+            use_amp=False,
+            early_stopping_patience=config["early_stopping_patience"],
+        )
+
+        qat_training_results[name] = results
+        qat_models[name] = qat_model.cpu()
+
+        del qat_model, optimizer, scheduler
+        torch.cuda.empty_cache()
+
+    return qat_models, qat_training_results
 # =============================================================================
 # EXPERIMENT CONFIGURATION
 # =============================================================================
@@ -1004,11 +1122,13 @@ def load_best_model(
 
 def build_qat_from_model(model: nn.Module, arch_name: str, device: torch.device) -> nn.Module:
     spec = MODEL_REGISTRY[arch_name]
+    root_attr = spec.get("fuse_root_attr")
+    fuse_root = getattr(model, root_attr) if root_attr else model
     qat_model = prepare_qat_model(
         model,
         spec["fuse_map"],
-        fuse_root=getattr(model, "features", model),
-)
+        fuse_root=fuse_root,
+    )
     return qat_model.to(device)
 
 def convert_to_int8(qat_model: nn.Module, inplace: bool = False) -> nn.Module:
