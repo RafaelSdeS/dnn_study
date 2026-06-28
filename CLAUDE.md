@@ -12,12 +12,27 @@ Do not immediately edit files.
 
 ## Project Overview
 
-This is a deep-learning research project investigating how CNN kernel size affects accuracy, efficiency, and quantization performance on **Tiny ImageNet-200** (64×64 RGB images, 200 classes). The core goal is to compare classical (AlexNet-style) and modern efficient architectures (MobileNet-style) under FP32 training and **Quantization-Aware Training (QAT)** → INT8 conversion for edge deployment.
+This is a deep-learning research project investigating the impact of **convolutional kernel size restriction** on deep neural networks across classification, object detection, and semantic segmentation tasks. The central motivation is **Winograd-accelerated convolution**: these specialized hardware accelerators achieve high computational efficiency for small kernels (2×2, 3×3) but face scalability limitations for larger filters. This project explores the trade-off between **computational efficiency** (via small kernels and Winograd acceleration) and **prediction quality**, aiming to identify when kernel restrictions preserve model performance and when they incur significant losses.
+
+**Current implementation scope:** Classification on **Tiny ImageNet-200** (64×64 RGB images, 200 classes) under FP32 training and **Quantization-Aware Training (QAT)** → INT8 conversion. Stages 1–3 compare classical (AlexNet-style) and modern efficient architectures (MobileNet-style) to inform architecture design for Winograd-compatible CNNs.
 
 Research questions:
-- How do 3×3 vs. larger kernels affect accuracy and quantization?
-- Can small, efficient CNNs match pretrained models at a fraction of the size?
-- What is the FP32 → INT8 accuracy drop for different architecture families?
+- How do kernel-size restrictions (e.g., 2×2, 3×3 vs. mixed/larger kernels) affect accuracy, efficiency, and quantization robustness?
+- Can small-kernel CNNs match pretrained models while remaining Winograd-accelerator-friendly?
+- What is the FP32 → INT8 accuracy drop across architecture families under kernel constraints?
+- Which kernel sizes and architectural patterns preserve prediction quality sufficiently for Winograd deployment?
+
+---
+
+## Expected Results
+
+At project completion, expect:
+
+1. **Quantitative & Qualitative Analysis:** Measure kernel-restriction impact on accuracy, model size, latency, and INT8 robustness across classification, detection, and segmentation tasks (initial focus: classification on Tiny ImageNet-200).
+
+2. **Scenario Map:** Identify which scenarios tolerate small kernels (2×2, 3×3) without significant accuracy loss vs. which cases require mixed or larger kernels. Compare impact by architecture family (AlexNet, MobileNet, hybrid) and task.
+
+3. **Architecture Recommendations:** Propose CNN designs optimized for Winograd-accelerated deployment, balancing kernel-size restrictions with prediction quality, and provide guidelines for practitioners choosing kernels for specialized accelerators.
 
 ---
 
