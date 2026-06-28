@@ -1,0 +1,8 @@
+# TrainerConfig — maps to ml/config.py TrainerConfig
+epochs: 100
+lr: 3.0e-4
+weight_decay: 5.0e-4
+label_smoothing: 0.1
+grad_clip_norm: null
+use_amp: true
+early_stopping_patience: 5

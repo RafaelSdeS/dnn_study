@@ -1,0 +1,9 @@
+# DataConfig — maps to ml/config.py DataConfig
+# dataset_path is omitted: filled at runtime via kagglehub
+img_size: 64
+num_classes: 200
+batch_size: 64
+num_workers: 4
+pin_memory: true
+train_val_split: 0.9
+seed: 42

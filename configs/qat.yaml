@@ -1,0 +1,6 @@
+# QATConfig — maps to ml/config.py QATConfig
+epochs: 20
+lr: 1.0e-5
+weight_decay: 5.0e-4
+freeze_bn_epoch: 3
+disable_observer_epoch: 5
