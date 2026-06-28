@@ -71,8 +71,7 @@ alexnet_rafael/
 ```
 
 Checkpoint artifacts (git-ignored, created at runtime):
-- `notebooks/models/alexnet_qat/` — AlexNet experiments (`{arch}_best.pth`, `qat_{arch}_best.pth`, `{arch}.pth` for INT8)
-- `checkpoints/` — additional checkpoint storage
+- `checkpoints/` — per-notebook checkpoint storage (`{arch}_best.pth`, `qat_{arch}_best.pth`, `{arch}.pth` for INT8)
 
 ---
 

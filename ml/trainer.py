@@ -62,10 +62,13 @@ class Trainer:
             start_epoch += 1
 
         best_val_acc = 0.0
+        best_val_top5 = 0.0
+        best_val_loss = float("inf")
         best_epoch = 0
         patience_counter = 0
-        history: dict[str, list] = {"train_loss": [], "train_acc": [], "val_loss": [], "val_acc": []}
+        history: dict[str, list] = {"train_loss": [], "train_acc": [], "val_loss": [], "val_acc": [], "val_top5": []}
         best_path = self.save_dir / f"{self.run_name}_best.pth"
+        train_start = time.time()
 
         for epoch in range(start_epoch, cfg.epochs):
             epoch_start = time.time()
@@ -74,23 +77,26 @@ class Trainer:
                 self.epoch_callback(epoch, model)
 
             train_loss, train_acc = self._train_one_epoch(model, optimizer, scaler, criterion)
-            val_loss, val_acc = self._validate(model, criterion)
+            val_loss, val_acc, val_top5 = self._validate(model, criterion)
             scheduler.step()
 
             history["train_loss"].append(train_loss)
             history["train_acc"].append(train_acc)
             history["val_loss"].append(val_loss)
             history["val_acc"].append(val_acc)
+            history["val_top5"].append(val_top5)
 
             if self.wandb_run is not None:
                 self.wandb_run.log(
                     {"train_loss": train_loss, "train_acc": train_acc,
-                     "val_loss": val_loss, "val_acc": val_acc},
+                     "val_loss": val_loss, "val_acc": val_acc, "val_top5": val_top5},
                     step=epoch + 1,
                 )
 
             if val_acc > best_val_acc:
                 best_val_acc = val_acc
+                best_val_top5 = val_top5
+                best_val_loss = val_loss
                 best_epoch = epoch
                 patience_counter = 0
                 save_checkpoint(best_path, model, optimizer, scheduler, epoch, {"val_acc": val_acc})
@@ -103,14 +109,40 @@ class Trainer:
             elapsed = time.time() - epoch_start
             print(f"Epoch {epoch+1:3d}/{cfg.epochs} | "
                   f"train_loss={train_loss:.4f} train_acc={train_acc:.2f}% | "
-                  f"val_loss={val_loss:.4f} val_acc={val_acc:.2f}% | "
+                  f"val_loss={val_loss:.4f} val_acc={val_acc:.2f}% val_top5={val_top5:.2f}% | "
                   f"time={elapsed:.1f}s")
 
             if cfg.early_stopping_patience and patience_counter >= cfg.early_stopping_patience:
                 print(f"Early stopping at epoch {epoch + 1}")
                 break
 
-        return {"best_val_accuracy": best_val_acc, "best_epoch": best_epoch, "history": history}
+        final_val_top1 = history["val_acc"][-1] if history["val_acc"] else 0.0
+        final_val_top5 = history["val_top5"][-1] if history["val_top5"] else 0.0
+        total_time_str = time.strftime("%H:%M:%S", time.gmtime(time.time() - train_start))
+
+        print(f"""
+================= Run Summary =================
+Model          : {self.run_name}
+Epochs         : {epoch + 1}
+Best Val Top-1 : {best_val_acc:.2f}%
+Best Val Top-5 : {best_val_top5:.2f}%
+Final Val Top-1: {final_val_top1:.2f}%
+Final Val Top-5: {final_val_top5:.2f}%
+Best Val Loss  : {best_val_loss:.4f}
+Total Time     : {total_time_str}
+===============================================""")
+
+        return {
+            "best_val_accuracy": best_val_acc,
+            "best_val_top1": best_val_acc,
+            "best_val_top5": best_val_top5,
+            "best_val_loss": best_val_loss,
+            "final_val_top1": final_val_top1,
+            "final_val_top5": final_val_top5,
+            "best_epoch": best_epoch,
+            "total_training_time": total_time_str,
+            "history": history,
+        }
 
     @torch.no_grad()
     def evaluate(self, loader: Optional[DataLoader] = None, topk: tuple = (1, 5)) -> dict:
@@ -175,16 +207,17 @@ class Trainer:
         return total_loss / total, 100 * correct / total
 
     @torch.no_grad()
-    def _validate(self, model, criterion) -> tuple[float, float]:
+    def _validate(self, model, criterion) -> tuple[float, float, float]:
         model.eval()
-        total_loss = correct = total = 0
+        total_loss = correct1 = correct5 = total = 0
 
         for data, target in (bar := tqdm(self.val_loader, desc="Validation")):
             data, target = data.to(self.device), target.to(self.device)
             out = model(data)
             total_loss += criterion(out, target).item() * target.size(0)
-            correct += out.argmax(1).eq(target).sum().item()
+            correct1 += out.argmax(1).eq(target).sum().item()
+            correct5 += out.topk(5, dim=1).indices.eq(target.unsqueeze(1)).any(dim=1).sum().item()
             total += target.size(0)
-            bar.set_postfix(loss=f"{total_loss/total:.4f}", acc=f"{100*correct/total:.2f}%")
+            bar.set_postfix(loss=f"{total_loss/total:.4f}", top1=f"{100*correct1/total:.2f}%", top5=f"{100*correct5/total:.2f}%")
 
-        return total_loss / total, 100 * correct / total
+        return total_loss / total, 100 * correct1 / total, 100 * correct5 / total
