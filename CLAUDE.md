@@ -25,19 +25,35 @@ alexnet_rafael/
 │   ├── quantization.py      # find_fuse_groups, prepare_qat_model, build_qat,
 │   │                        #   convert_to_int8, load_best_model, make_qat_callback
 │   └── reporting.py         # build_comparison_table(), create_results_summary(), disk_mb()
-├── models/                  # Model architecture definitions
-│   ├── __init__.py
-│   ├── alexnet.py           # AlexNetTV + build_alexnet — pretrained AlexNet for 200 classes
-│   ├── alexnet3x3.py        # AlexNet3x3 — all-3×3 kernel variant, same MLP head
-│   ├── alexnet_smallkernel.py  # AlexNetSmallKernel — lightweight, global pooling head
-│   └── tinyhybridnet.py     # FireMobileResidual, TinyHybridNet,
-│                            #   InvertedResidual, TinyMobileNetV2
-├── alexnet_qat.ipynb        # AlexNet family FP32 + QAT experiments
-├── tinyhybridnet_qat.ipynb  # TinyHybridNet & TinyMobileNetV2 FP32 + QAT experiments
-├── tiny_hybridnet_qat.ipynb # Earlier TinyHybridNet experiment (same models, older structure)
-├── small_kernel_cnns.ipynb  # Kernel size ablation: 2×2, 3×3, mixed, standard kernels
-├── tiny_imagenet_cnn_benchmark.py.ipynb  # Broad benchmark including ConvNeXtSETiny
-├── alexnet_qat_wandb_results_analysis.ipynb  # W&B offline sync + plotting
+├── models/                  # Model architecture definitions (five experimental phases)
+│   ├── __init__.py          # Re-exports all public constructors
+│   ├── baselines.py         # Stage 1: AlexNetTV, StrongCNN, VGGStyleCNN, ResNet18TV,
+│   │                        #   FireMobileResidual, TinyHybridNet
+│   ├── alexnet_variants.py  # Stage 2: AlexNet3x3, AlexNetSmallKernel, AlexNetStacked,
+│   │                        #   AlexNetFactorized, AlexNetBottleneck, AlexNetResidual
+│   ├── efficient_cnns.py    # Stage 3: InvertedResidual, TinyMobileNetV2, MobileNetV2TV,
+│   │                        #   ShuffleNetV2TV, EfficientNetB0TV, ConvNeXtTinyTV
+│   └── hybrids.py           # H1–H10: ResidualVGGHybrid, AlexNetInceptionHybrid,
+│                            #   MobileNetResidualHybrid, FireResidualHybrid, FactorizedAlexNet,
+│                            #   LargeSmallKernelHybrid, ShuffleResidualHybrid,
+│                            #   ConvNeXtLiteHybrid, KernelConstraintNetwork,
+│                            #   AttentionAugmentedCNN
+├── configs/                 # Hyperparameter YAML files — loaded via configs/loader.py
+│   ├── loader.py            # load_config(filename) → dict (searches configs/ dir)
+│   ├── data.yaml            # DataConfig defaults
+│   ├── training.yaml        # TrainerConfig defaults
+│   ├── qat.yaml             # QATConfig defaults
+│   └── models/              # Per-model lr overrides (loaded and applied in notebooks)
+│       ├── alexnet_fp32.yaml
+│       ├── alexnet_3x3.yaml
+│       ├── alexnet_small_kernel.yaml
+│       ├── tinyhybridnet.yaml
+│       └── tinymobilenetv2.yaml
+├── notebooks/               # Experiment notebooks
+│   ├── alexnet_qat.ipynb                    # AlexNet family FP32 + QAT
+│   ├── tinyhybridnet_qat.ipynb              # TinyHybridNet & TinyMobileNetV2 FP32 + QAT
+│   └── alexnet_qat_wandb_results_analysis.ipynb  # W&B offline sync + plotting
+├── results/                 # Output CSVs and JSON summaries (git-ignored)
 ├── README.md
 ├── AGENTS.md
 ├── TODO.md
@@ -45,10 +61,8 @@ alexnet_rafael/
 ```
 
 Checkpoint artifacts (git-ignored, created at runtime):
-- `models/alexnet_qat/` — AlexNet experiments (`{arch}_best.pth`, `qat_{arch}_best.pth`, `{arch}.pth` for INT8)
-- `models/tinyhybridnet_qat/` — TinyHybridNet experiments
-- `saved_models_hybrid_qat/` — older TinyHybridNet experiment
-- `saved_models_small_kernels/` — kernel ablations
+- `notebooks/models/alexnet_qat/` — AlexNet experiments (`{arch}_best.pth`, `qat_{arch}_best.pth`, `{arch}.pth` for INT8)
+- `checkpoints/` — additional checkpoint storage
 
 ---
 
@@ -82,15 +96,22 @@ All notebooks import from the `ml/` package. `ml_utils.py` has been deleted. Whe
 
 ### 2. Hyperparameter Visibility
 
-All hyperparameters live in typed `@dataclass` fields with explicit defaults. Each notebook starts with a visible config block:
+All hyperparameters live in typed `@dataclass` fields with explicit defaults. Configs are loaded from `configs/*.yaml` at notebook startup:
 
 ```python
-data_cfg = DataConfig(batch_size=64, num_workers=4, seed=42)
-fp32_cfg = TrainerConfig(epochs=100, lr=3e-4, weight_decay=5e-4, use_amp=True, early_stopping_patience=5)
-qat_extra = QATConfig(epochs=20, lr=1e-5, freeze_bn_epoch=3, disable_observer_epoch=5)
+from configs.loader import load_config
+data_cfg  = DataConfig(**load_config("data.yaml"))
+fp32_cfg  = TrainerConfig(**load_config("training.yaml"))
+qat_cfg   = QATConfig(**load_config("qat.yaml"))
+data_cfg.seed = SEED  # tie split seed to notebook-level constant
 ```
 
-Use `dataclasses.replace(cfg, lr=1e-4)` to override per-model without mutating the base config.
+Quick one-off override (e.g., to test with 2 epochs):
+```python
+fp32_cfg = replace(fp32_cfg, epochs=2)
+```
+
+Per-model lr overrides live in `configs/models/{arch}.yaml` and are applied in the notebook loop via `replace(fp32_cfg, lr=spec["lr"])`. Use `dataclasses.replace()` to override any field without mutating the base config.
 
 ### 3. QAT Workflow
 
@@ -185,42 +206,55 @@ Skip/resume logic lives in the notebook loop — not hidden inside a wrapper fun
 
 ```
 Notebook
+  ├─ from configs.loader import load_config
   ├─ from ml import DataConfig, TrainerConfig, QATConfig
   │                 create_imagenet_loaders
   │                 MODEL_REGISTRY, register_model
   │                 Trainer, make_qat_callback
   │                 build_qat, load_best_model, convert_to_int8
   │                 build_comparison_table, create_results_summary, disk_mb
-  ├─ from models import AlexNetTV, AlexNet3x3, ...  (architecture constructors)
+  ├─ from models import AlexNetTV, AlexNet3x3, ...  (pick from baselines/alexnet_variants/efficient_cnns/hybrids)
   ├─ register_model() → MODEL_REGISTRY
   ├─ for name, spec in MODEL_REGISTRY.items():
   │     Trainer(..., cfg=replace(fp32_cfg, lr=spec["lr"])).fit()
   ├─ for name in MODEL_REGISTRY:
   │     build_qat(name, SAVE_DIR, device) → Trainer(..., epoch_callback=cb).fit()
   │     convert_to_int8(qat_model) → Trainer.evaluate(topk=(1,5))
-  └─ build_comparison_table(rows) → final_comparison.csv
-     create_results_summary(results, config, output_path) → experiment_summary.json
+  └─ build_comparison_table(rows) → results/alexnet_qat/final_comparison.csv
+     create_results_summary(results, config, output_path) → results/alexnet_qat/experiment_summary.json
 ```
+
+---
+
+## Model Inventory
+
+Five experimental phases (see `TODO.md`), all in `models/`:
+
+| Phase | File | Models |
+|-------|------|--------|
+| 1 — Reference Architectures | `baselines.py` | AlexNetTV (pretrained), StrongCNN, VGGStyleCNN, ResNet18TV (pretrained), MobileNetV2TV (pretrained), TinyHybridNet |
+| 2 — Kernel Restriction Study | `alexnet_variants.py` | AlexNet3x3, AlexNetSmallKernel, AlexNetStacked, AlexNetFactorized, AlexNetBottleneck, AlexNetResidual |
+| 3 — Compensation Mechanisms | `efficient_cnns.py` + `hybrids.py` | TinyMobileNetV2, ShuffleNetV2TV (pretrained), EfficientNetB0TV (pretrained), ConvNeXtTinyTV (pretrained); H1–H10: ResidualVGGHybrid, AlexNetInceptionHybrid, MobileNetResidualHybrid, FireResidualHybrid, FactorizedAlexNet, LargeSmallKernelHybrid, ShuffleResidualHybrid, ConvNeXtLiteHybrid, KernelConstraintNetwork, AttentionAugmentedCNN |
+| 4 — Final Architecture | TBD | Design pending — combines best ideas from phases 1–3 |
+| 5 — Final Analysis | — | FP32/INT8 rankings, latency, model size, Winograd, conclusions |
 
 ---
 
 ## Experimental Results (Reference)
 
-| Model | Params | FP32 Top-1 | INT8 Top-1 | FP32 Size | INT8 Size |
-|-------|--------|-----------|-----------|-----------|-----------|
-| ConvNeXtSETiny | — | 92.14% | — | — | — |
-| SmallKernelResNet | — | 51.22% | — | — | — |
-| TinyMobileNetV2 | 1.51M | 50.45% | 46.24% | 5.85 MB | 1.76 MB |
-| TinyHybridNet | 0.18M | 32.96% | 32.00% | 0.73 MB | 0.31 MB |
-| AlexNet (pretrained) | 57.82M | 28.43% | 30.06% | 220.6 MB | 55.3 MB |
-| AlexNet3x3 | 57.61M | 8.25% | 9.57% | 219.8 MB | 55.1 MB |
-| AlexNetSmallKernel | 1.60M | 8.56% | 8.95% | 6.1 MB | 1.56 MB |
+AlexNet family (from `notebooks/alexnet_qat.ipynb`, 10 FP32 epochs + 2 QAT epochs):
+
+| Model | Params | FP32 Top-1 | INT8 Top-1 | FP32 Top-5 | INT8 Top-5 | FP32 Size | INT8 Size |
+|-------|--------|-----------|-----------|-----------|-----------|-----------|-----------|
+| AlexNet (pretrained) | 57.82M | 27.30% | 30.22% | 53.65% | 56.78% | 661.75 MB | 55.33 MB |
+| AlexNet3x3 | 57.61M | 6.82% | 7.93% | 21.20% | 23.48% | 659.26 MB | 55.12 MB |
+| AlexNetSmallKernel | 1.60M | 8.68% | 9.53% | 25.36% | 27.48% | 18.35 MB | 1.56 MB |
 
 Key findings:
-- Residual connections are essential for from-scratch 3×3 CNNs (SmallKernelResNet 51% vs. SmallKernelCNN 22%).
-- Modern architectures (ConvNeXt + SE) vastly outperform classical designs.
-- TinyHybridNet achieves <1% INT8 accuracy drop at only 0.31 MB — best quantization efficiency.
-- INT8 for pretrained AlexNet actually improves top-1 (+1.6%), suggesting the FP32 model was slightly overfit.
+- Residual connections are essential for from-scratch 3×3 CNNs.
+- INT8 for pretrained AlexNet improves top-1 (+2.9%), suggesting mild FP32 overfit / quantization regularization.
+- AlexNetSmallKernel: 1.6M params, 1.56 MB INT8 — best efficiency in the AlexNet family.
+- TinyHybridNet achieves <1% INT8 accuracy drop at only 0.31 MB — best quantization efficiency overall.
 
 ---
 
