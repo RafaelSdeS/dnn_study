@@ -101,9 +101,9 @@ class Trainer:
 
             elapsed = time.time() - epoch_start
             print(f"Epoch {epoch+1:3d}/{cfg.epochs} | "
-                  f"Train {train_loss:.4f}/{train_acc:.2f}% | "
-                  f"Val {val_loss:.4f}/{val_acc:.2f}% | "
-                  f"{elapsed:.1f}s")
+                  f"train_loss={train_loss:.4f} train_acc={train_acc:.2f}% | "
+                  f"val_loss={val_loss:.4f} val_acc={val_acc:.2f}% | "
+                  f"time={elapsed:.1f}s")
 
             if cfg.early_stopping_patience and patience_counter >= cfg.early_stopping_patience:
                 print(f"Early stopping at epoch {epoch + 1}")
@@ -144,7 +144,7 @@ class Trainer:
         cfg = self.cfg
         total_loss = correct = total = 0
 
-        for data, target in tqdm(self.train_loader, desc="Training"):
+        for data, target in (bar := tqdm(self.train_loader, desc="Training")):
             data, target = data.to(self.device), target.to(self.device)
             optimizer.zero_grad()
 
@@ -169,6 +169,7 @@ class Trainer:
             total_loss += loss.item() * target.size(0)
             correct += out.argmax(1).eq(target).sum().item()
             total += target.size(0)
+            bar.set_postfix(loss=f"{total_loss/total:.4f}", acc=f"{100*correct/total:.2f}%")
 
         return total_loss / total, 100 * correct / total
 
@@ -177,11 +178,12 @@ class Trainer:
         model.eval()
         total_loss = correct = total = 0
 
-        for data, target in tqdm(self.val_loader, desc="Validation"):
+        for data, target in (bar := tqdm(self.val_loader, desc="Validation")):
             data, target = data.to(self.device), target.to(self.device)
             out = model(data)
             total_loss += criterion(out, target).item() * target.size(0)
             correct += out.argmax(1).eq(target).sum().item()
             total += target.size(0)
+            bar.set_postfix(loss=f"{total_loss/total:.4f}", acc=f"{100*correct/total:.2f}%")
 
         return total_loss / total, 100 * correct / total
