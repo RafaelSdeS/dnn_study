@@ -1,5 +1,15 @@
 # CLAUDE.md — alexnet_rafael
 
+## Default workflow
+
+For any non-trivial coding request:
+
+1. Inspect the relevant files.
+2. Produce a short implementation plan.
+3. Wait for approval before modifying code.
+
+Do not immediately edit files.
+
 ## Project Overview
 
 This is a deep-learning research project investigating how CNN kernel size affects accuracy, efficiency, and quantization performance on **Tiny ImageNet-200** (64×64 RGB images, 200 classes). The core goal is to compare classical (AlexNet-style) and modern efficient architectures (MobileNet-style) under FP32 training and **Quantization-Aware Training (QAT)** → INT8 conversion for edge deployment.

@@ -1,34 +1,23 @@
 from .baselines import (
     AlexNetTV, build_alexnet,
-    StrongCNN, build_strongcnn,
     VGGStyleCNN, build_vggstylecnn,
     ResNet18TV, build_resnet18,
-    FireMobileResidual, TinyHybridNet, build_tinyhybridnet,
+    MobileNetV2TV, build_mobilenetv2,
 )
 from .alexnet_variants import (
-    AlexNet3x3,
-    AlexNetSmallKernel,
+    AlexNet3x3, build_alexnet_3x3,
+    AlexNet2x2, build_alexnet_2x2,
     AlexNetStacked, build_alexnet_stacked,
-    AlexNetFactorized, build_alexnet_factorized,
+    AlexNetMixed, build_alexnet_mixed,
+    AlexNetSmallKernel, build_alexnet_smallkernel,
+)
+from .compensation import (
     AlexNetBottleneck, build_alexnet_bottleneck,
+    AlexNetFactorized, build_alexnet_factorized,
+    AlexNetGroupConv, build_alexnet_groupconv,
+    AlexNetDepthwiseSep, build_alexnet_depthwisesep,
     AlexNetResidual, build_alexnet_residual,
-)
-from .efficient_cnns import (
-    InvertedResidual, TinyMobileNetV2, build_tinymobilenetv2,
-    MobileNetV2TV, build_mobilenetv2,
-    ShuffleNetV2TV, build_shufflenetv2,
-    EfficientNetB0TV, build_efficientnetb0,
-    ConvNeXtTinyTV, build_convnexttiny,
-)
-from .hybrids import (
-    ResidualVGGHybrid, build_residual_vgg,
-    AlexNetInceptionHybrid, build_alexnet_inception,
-    MobileNetResidualHybrid, build_mobilenet_residual,
-    FireResidualHybrid, build_fire_residual,
-    FactorizedAlexNet, build_factorized_alexnet,
-    LargeSmallKernelHybrid, build_large_small_kernel,
-    ShuffleResidualHybrid, build_shuffle_residual,
-    ConvNeXtLiteHybrid, build_convnext_lite,
-    KernelConstraintNetwork, build_kernel_constraint,
-    AttentionAugmentedCNN, build_attention_augmented,
+    AlexNetFire, build_alexnet_fire,
+    AlexNetGAP, build_alexnet_gap,
+    AlexNetSE, build_alexnet_se,
 )

@@ -96,6 +96,7 @@ class Trainer:
                 save_checkpoint(best_path, model, optimizer, scheduler, epoch, {"val_acc": val_acc})
                 if self.wandb_run is not None:
                     self.wandb_run.log({"best_val_acc": best_val_acc})
+                    self.wandb_run.save(str(best_path))
             else:
                 patience_counter += 1
 

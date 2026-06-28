@@ -1,25 +1,17 @@
-"""Stage 2: AlexNet-derived variants isolating single architectural choices."""
+"""Phase 2 — Kernel Restriction Study: AlexNet with enforced kernel sizes."""
 
-import torch
 import torch.nn as nn
 import torch.ao.quantization as tq
 
 
-def _float_functional():
-    try:
-        return torch.nn.quantized.FloatFunctional()
-    except AttributeError:
-        return tq.FloatFunctional()
-
-
-# ─── AlexNet3x3 (moved from alexnet3x3.py) ───────────────────────────────────
+# ─── AlexNet3x3 ───────────────────────────────────────────────────────────────
 
 class AlexNet3x3(nn.Module):
-    """All-3x3 AlexNet — tests impact of enforcing small kernels across all layers.
+    """All-3×3 AlexNet — uniform small kernel baseline for the restriction study.
 
-    Architecture: 5 conv stages (all 3x3, same channels as AlexNet), AdaptiveAvgPool(6x6),
-    3-layer FC head. Identical structure to AlexNetTV but with 3x3 kernels everywhere.
-    Expected top-1: ~8-12% (from scratch; 3x3 alone insufficient without residuals).
+    Architecture: 5 conv stages (all 3×3, same channels as AlexNetTV), AdaptiveAvgPool(6×6),
+    3-layer FC head. Identical structure to AlexNetTV but with 3×3 kernels everywhere.
+    Expected top-1: ~8-12% (from scratch; 3×3 alone insufficient without residuals).
     Size: ~220 MB FP32 / ~55 MB INT8 (large FC head dominates).
     Training speed: slow (same large FC head as original AlexNet).
     QAT: full — flat Sequential, hand-written fuse_map for Conv-ReLU pairs.
@@ -64,18 +56,25 @@ class AlexNet3x3(nn.Module):
         return x
 
 
-# ─── AlexNetSmallKernel (moved from alexnet_smallkernel.py) ──────────────────
+def build_alexnet_3x3(num_classes: int = 200) -> nn.Module:
+    return AlexNet3x3(num_classes)
 
-class AlexNetSmallKernel(nn.Module):
-    """All-3×3 CNN with global-pool head — kernel-restricted, lightweight variant.
 
-    Architecture: 5 conv stages (3×3, narrower channels), AdaptiveAvgPool(1×1),
-    single Linear classifier (~250× smaller than AlexNet3x3's FC head).
-    Expected top-1: ~8-10%. Size: ~6 MB FP32 / ~1.6 MB INT8.
-    Training speed: fast (GAP head eliminates most parameters).
-    QAT: full — flat Sequential, Conv-ReLU pairs fuseable.
-    Trade-off: GAP vs large FC head — measures how much the head contributes to accuracy.
-    Note: no BatchNorm (matches AlexNet3x3 for controlled comparison).
+# ─── AlexNet2x2 ───────────────────────────────────────────────────────────────
+
+class AlexNet2x2(nn.Module):
+    """All-2×2 AlexNet — tests the impact of even-size kernels (no Winograd, no center pixel).
+
+    Architecture: 5 conv stages (all 2×2, no padding, same channels as AlexNet3x3),
+    AdaptiveAvgPool(1×1), single Linear head. 2×2 kernels reduce spatial dims by 1 per
+    layer; GAP absorbs the resulting non-standard spatial sizes.
+    2×2 kernels: smallest even kernel, no natural center pixel, incompatible with Winograd,
+    receptive field smaller than 3×3 per layer.
+    Expected top-1: ~5-9% (smallest receptive field in Phase 2; hard to compensate).
+    Size: ~3 MB FP32 / ~1 MB INT8 (GAP head vs large FC; fewer params per layer).
+    Training speed: fast (GAP head, slightly fewer params per conv than 3×3).
+    QAT: full — flat Sequential, Conv-ReLU pairs fuseable; fbgemm supports 2×2 kernels.
+    Trade-off: 2×2 vs 3×3 receptive field; even vs odd kernel; Winograd compatibility.
     """
 
     def __init__(self, num_classes: int = 200):
@@ -83,20 +82,21 @@ class AlexNetSmallKernel(nn.Module):
         self.quant = tq.QuantStub()
         self.dequant = tq.DeQuantStub()
 
+        # Spatial dims: 64 → 32 → 16 → 15 → 7 → 6 → 5 → 4 → AdaptiveAvgPool(1)
         self.features = nn.Sequential(
-            nn.Conv2d(3, 64, 3, stride=1, padding=1),     # 0
-            nn.ReLU(inplace=False),                         # 1
-            nn.MaxPool2d(2),                                # 2
-            nn.Conv2d(64, 128, 3, padding=1),               # 3
-            nn.ReLU(inplace=False),                         # 4
-            nn.MaxPool2d(2),                                # 5
-            nn.Conv2d(128, 256, 3, padding=1),              # 6
-            nn.ReLU(inplace=False),                         # 7
-            nn.Conv2d(256, 256, 3, padding=1),              # 8
-            nn.ReLU(inplace=False),                         # 9
-            nn.Conv2d(256, 256, 3, padding=1),              # 10
-            nn.ReLU(inplace=False),                         # 11
-            nn.AdaptiveAvgPool2d((1, 1)),                   # 12
+            nn.Conv2d(3, 64, 2, stride=2),         # 64→32
+            nn.ReLU(inplace=False),
+            nn.MaxPool2d(2),                        # 32→16
+            nn.Conv2d(64, 192, 2),                  # 16→15
+            nn.ReLU(inplace=False),
+            nn.MaxPool2d(2),                        # 15→7 (floor)
+            nn.Conv2d(192, 384, 2),                 # 7→6
+            nn.ReLU(inplace=False),
+            nn.Conv2d(384, 256, 2),                 # 6→5
+            nn.ReLU(inplace=False),
+            nn.Conv2d(256, 256, 2),                 # 5→4
+            nn.ReLU(inplace=False),
+            nn.AdaptiveAvgPool2d(1),
         )
         self.classifier = nn.Sequential(
             nn.Flatten(),
@@ -109,6 +109,10 @@ class AlexNetSmallKernel(nn.Module):
         x = self.classifier(x)
         x = self.dequant(x)
         return x
+
+
+def build_alexnet_2x2(num_classes: int = 200) -> nn.Module:
+    return AlexNet2x2(num_classes)
 
 
 # ─── AlexNetStacked ───────────────────────────────────────────────────────────
@@ -182,19 +186,21 @@ def build_alexnet_stacked(num_classes: int = 200) -> nn.Module:
     return AlexNetStacked(num_classes)
 
 
-# ─── AlexNetFactorized ────────────────────────────────────────────────────────
+# ─── AlexNetMixed ─────────────────────────────────────────────────────────────
 
-class AlexNetFactorized(nn.Module):
-    """1×3 + 3×1 asymmetric convolution pairs — tests spatial factorization (Inception-style).
+class AlexNetMixed(nn.Module):
+    """AlexNet with alternating 3×3 and 2×2 kernels — tests heterogeneous kernel restriction.
 
-    Architecture: each stage replaces a single 3×3 conv with a 1×3 followed by a 3×1 conv.
-    Same channel progression as AlexNet3x3. Factorized convolutions have the same receptive
-    field as 3×3 but ~33% fewer parameters and FLOPs per stage.
-    Expected top-1: ~10-15% (factorization adds asymmetry; may hurt for small images).
-    Size: ~200 MB FP32 / ~50 MB INT8.
-    Training speed: similar to AlexNet3x3 (slightly fewer FLOPs per stage).
-    QAT: full — Conv-BN-ReLU fuseable, asymmetric kernels supported by fbgemm.
-    Trade-off: parameter efficiency via factorization vs representational completeness.
+    Architecture: 5 stages alternating 3×3 and 2×2 kernels (3×3 → 2×2 → 3×3 → 2×2 → 3×3),
+    same channel widths as AlexNet3x3, AdaptiveAvgPool(1×1), single Linear head. GAP handles
+    the non-uniform spatial sizes introduced by the 2×2 stages (no padding, -1 per dim).
+    Tests whether alternating kernel sizes outperforms either uniform 3×3 or uniform 2×2,
+    combining their respective receptive field scales across stages.
+    Expected top-1: ~7-12% (mixed strategy between AlexNet3x3 and AlexNet2x2 baselines).
+    Size: ~3 MB FP32 / ~1 MB INT8 (GAP head like AlexNet2x2).
+    Training speed: fast (GAP head; alternating kernel sizes have similar cost to 3×3).
+    QAT: full — flat Sequential, Conv-ReLU pairs fuseable; both 2×2 and 3×3 fbgemm-supported.
+    Trade-off: kernel diversity within a single model vs the uniform-restriction baselines.
     """
 
     def __init__(self, num_classes: int = 200):
@@ -202,104 +208,20 @@ class AlexNetFactorized(nn.Module):
         self.quant = tq.QuantStub()
         self.dequant = tq.DeQuantStub()
 
+        # Spatial dims: 64 → 32 → 16 → 15 → 7 → 7 → 6 → 6 → AdaptiveAvgPool(1)
         self.features = nn.Sequential(
-            # Stage 1: 1×3 → 3×1 pair (two MaxPools to compensate for no stride=2 conv)
-            nn.Conv2d(3, 64, (1, 3), padding=(0, 1), bias=False),
-            nn.BatchNorm2d(64), nn.ReLU(inplace=False),
-            nn.Conv2d(64, 64, (3, 1), padding=(1, 0), bias=False),
-            nn.BatchNorm2d(64), nn.ReLU(inplace=False),
-            nn.MaxPool2d(2),  # 64→32
-            nn.MaxPool2d(2),  # 32→16
-            # Stage 2
-            nn.Conv2d(64, 192, (1, 3), padding=(0, 1), bias=False),
-            nn.BatchNorm2d(192), nn.ReLU(inplace=False),
-            nn.Conv2d(192, 192, (3, 1), padding=(1, 0), bias=False),
-            nn.BatchNorm2d(192), nn.ReLU(inplace=False),
-            nn.MaxPool2d(2),  # 16→8
-            # Stage 3
-            nn.Conv2d(192, 384, (1, 3), padding=(0, 1), bias=False),
-            nn.BatchNorm2d(384), nn.ReLU(inplace=False),
-            nn.Conv2d(384, 384, (3, 1), padding=(1, 0), bias=False),
-            nn.BatchNorm2d(384), nn.ReLU(inplace=False),
-            # Stage 4
-            nn.Conv2d(384, 256, (1, 3), padding=(0, 1), bias=False),
-            nn.BatchNorm2d(256), nn.ReLU(inplace=False),
-            nn.Conv2d(256, 256, (3, 1), padding=(1, 0), bias=False),
-            nn.BatchNorm2d(256), nn.ReLU(inplace=False),
-            # Stage 5
-            nn.Conv2d(256, 256, (1, 3), padding=(0, 1), bias=False),
-            nn.BatchNorm2d(256), nn.ReLU(inplace=False),
-            nn.Conv2d(256, 256, (3, 1), padding=(1, 0), bias=False),
-            nn.BatchNorm2d(256), nn.ReLU(inplace=False),
-            nn.AdaptiveAvgPool2d((6, 6)),
-        )
-        self.classifier = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(256 * 36, 4096),
+            nn.Conv2d(3, 64, 3, stride=2, padding=1),     # 3×3  64→32
             nn.ReLU(inplace=False),
-            nn.Linear(4096, 4096),
+            nn.MaxPool2d(2),                               # 32→16
+            nn.Conv2d(64, 192, 2),                         # 2×2  16→15
             nn.ReLU(inplace=False),
-            nn.Linear(4096, num_classes),
-        )
-
-    def forward(self, x):
-        x = self.quant(x)
-        x = self.features(x)
-        x = self.classifier(x)
-        x = self.dequant(x)
-        return x
-
-
-def build_alexnet_factorized(num_classes: int = 200) -> nn.Module:
-    return AlexNetFactorized(num_classes)
-
-
-# ─── AlexNetBottleneck ────────────────────────────────────────────────────────
-
-class _AlexBottleneck(nn.Module):
-    """1×1 squeeze → 3×3 → 1×1 expand bottleneck block, no residual."""
-
-    def __init__(self, in_ch: int, out_ch: int, stride: int = 1, reduction: int = 4):
-        super().__init__()
-        mid_ch = max(out_ch // reduction, 32)
-        self.block = nn.Sequential(
-            nn.Conv2d(in_ch, mid_ch, 1, bias=False),
-            nn.BatchNorm2d(mid_ch), nn.ReLU(inplace=False),
-            nn.Conv2d(mid_ch, mid_ch, 3, stride=stride, padding=1, bias=False),
-            nn.BatchNorm2d(mid_ch), nn.ReLU(inplace=False),
-            nn.Conv2d(mid_ch, out_ch, 1, bias=False),
-            nn.BatchNorm2d(out_ch), nn.ReLU(inplace=False),
-        )
-
-    def forward(self, x):
-        return self.block(x)
-
-
-class AlexNetBottleneck(nn.Module):
-    """Bottleneck blocks + global average pooling — tests parameter reduction with 3×3 core.
-
-    Architecture: 5 stages of 1×1→3×3→1×1 bottleneck blocks (reduction=4), GAP head.
-    Bottleneck squeezes channels to 1/4 before the 3×3, reducing FLOPs and params.
-    Expected top-1: ~12-18% (bottleneck + GAP cuts params dramatically; may underfit).
-    Size: ~50 MB FP32 / ~13 MB INT8.
-    Training speed: medium (bottleneck reduces per-stage cost; GAP removes large FC).
-    QAT: full — Conv-BN-ReLU triples fuseable throughout nested blocks.
-    Trade-off: parameter efficiency via bottleneck + GAP vs raw FC capacity.
-    """
-
-    def __init__(self, num_classes: int = 200):
-        super().__init__()
-        self.quant = tq.QuantStub()
-        self.dequant = tq.DeQuantStub()
-
-        self.features = nn.Sequential(
-            _AlexBottleneck(3, 64, stride=2),
-            nn.MaxPool2d(2),
-            _AlexBottleneck(64, 192),
-            nn.MaxPool2d(2),
-            _AlexBottleneck(192, 384),
-            _AlexBottleneck(384, 256),
-            _AlexBottleneck(256, 256),
+            nn.MaxPool2d(2),                               # 15→7 (floor)
+            nn.Conv2d(192, 384, 3, padding=1),             # 3×3  7→7
+            nn.ReLU(inplace=False),
+            nn.Conv2d(384, 256, 2),                        # 2×2  7→6
+            nn.ReLU(inplace=False),
+            nn.Conv2d(256, 256, 3, padding=1),             # 3×3  6→6
+            nn.ReLU(inplace=False),
             nn.AdaptiveAvgPool2d(1),
         )
         self.classifier = nn.Sequential(
@@ -315,95 +237,48 @@ class AlexNetBottleneck(nn.Module):
         return x
 
 
-def build_alexnet_bottleneck(num_classes: int = 200) -> nn.Module:
-    return AlexNetBottleneck(num_classes)
+def build_alexnet_mixed(num_classes: int = 200) -> nn.Module:
+    return AlexNetMixed(num_classes)
 
 
-# ─── AlexNetResidual ──────────────────────────────────────────────────────────
+# ─── AlexNetSmallKernel ───────────────────────────────────────────────────────
 
-class _SEBlock(nn.Module):
-    """Squeeze-and-Excitation channel attention (Sigmoid-based, not QAT-friendly).
+class AlexNetSmallKernel(nn.Module):
+    """Kernel-restricted AlexNet — all-3×3, narrow channels, GAP head (minimal design).
 
-    Note: SE uses Sigmoid which is unsupported by fbgemm. Disable for QAT (use_se=False).
+    Architecture: 5 conv stages (3×3, narrower channels: 64→128→256→256→256),
+    AdaptiveAvgPool(1×1), single Linear classifier. ~36× fewer parameters than AlexNet3x3
+    (narrow channels + GAP head vs large FC). The most parameter-efficient Phase 2 model.
+    Expected top-1: ~8-10%. Size: ~6 MB FP32 / ~1.6 MB INT8.
+    Training speed: fast (GAP head eliminates most parameters).
+    QAT: full — flat Sequential, Conv-ReLU pairs fuseable.
+    Trade-off: narrow channels + GAP vs wide channels + FC; measures head and width contributions.
+    Note: no BatchNorm (matches AlexNet3x3 for controlled comparison).
     """
 
-    def __init__(self, ch: int, reduction: int = 16):
-        super().__init__()
-        mid = max(ch // reduction, 4)
-        self.pool = nn.AdaptiveAvgPool2d(1)
-        self.fc = nn.Sequential(
-            nn.Linear(ch, mid), nn.ReLU(inplace=False),
-            nn.Linear(mid, ch), nn.Sigmoid(),
-        )
-
-    def forward(self, x):
-        s = self.pool(x).flatten(1)
-        return x * self.fc(s).view(x.size(0), -1, 1, 1)
-
-
-class _ResBlock(nn.Module):
-    """Two 3×3 convolutions with BatchNorm and a residual skip connection."""
-
-    def __init__(self, in_ch: int, out_ch: int, stride: int = 1, use_se: bool = False):
-        super().__init__()
-        self.block = nn.Sequential(
-            nn.Conv2d(in_ch, out_ch, 3, stride=stride, padding=1, bias=False),
-            nn.BatchNorm2d(out_ch), nn.ReLU(inplace=False),
-            nn.Conv2d(out_ch, out_ch, 3, padding=1, bias=False),
-            nn.BatchNorm2d(out_ch),
-        )
-        self.shortcut = nn.Identity()
-        if stride != 1 or in_ch != out_ch:
-            self.shortcut = nn.Sequential(
-                nn.Conv2d(in_ch, out_ch, 1, stride=stride, bias=False),
-                nn.BatchNorm2d(out_ch),
-            )
-        self.se = _SEBlock(out_ch) if use_se else None
-        self.skip_add = _float_functional()
-        self.relu = nn.ReLU(inplace=False)
-
-    def forward(self, x):
-        out = self.block(x)
-        if self.se is not None:
-            out = self.se(out)
-        return self.relu(self.skip_add.add(out, self.shortcut(x)))
-
-
-class AlexNetResidual(nn.Module):
-    """AlexNet3x3 stages + residual skip connections + optional SE attention.
-
-    Architecture: 5 residual blocks (pair of 3×3 conv + BN + ReLU + FloatFunctional add),
-    same channel widths as AlexNet3x3, AdaptiveAvgPool(6×6), 3-layer FC head.
-    Optional SE blocks add channel attention after each residual pair.
-    Expected top-1: ~20-30% (residuals are the single most impactful upgrade for small CNNs).
-    Size: ~220 MB FP32 / ~55 MB INT8 (same FC head; backbone params similar).
-    Training speed: slow (large FC head; SE adds overhead when enabled).
-    QAT: full without SE (use_se=False, default). SE uses Sigmoid — disable for INT8.
-    Trade-off: residual optimization stability vs plain feedforward; most research-relevant.
-    """
-
-    def __init__(self, num_classes: int = 200, use_se: bool = False):
+    def __init__(self, num_classes: int = 200):
         super().__init__()
         self.quant = tq.QuantStub()
         self.dequant = tq.DeQuantStub()
 
         self.features = nn.Sequential(
-            _ResBlock(3, 64, stride=2, use_se=use_se),
-            nn.MaxPool2d(2),
-            _ResBlock(64, 192, use_se=use_se),
-            nn.MaxPool2d(2),
-            _ResBlock(192, 384, use_se=use_se),
-            _ResBlock(384, 256, use_se=use_se),
-            _ResBlock(256, 256, use_se=use_se),
-            nn.AdaptiveAvgPool2d((6, 6)),
+            nn.Conv2d(3, 64, 3, stride=1, padding=1),     # 0
+            nn.ReLU(inplace=False),                         # 1
+            nn.MaxPool2d(2),                                # 2
+            nn.Conv2d(64, 128, 3, padding=1),               # 3
+            nn.ReLU(inplace=False),                         # 4
+            nn.MaxPool2d(2),                                # 5
+            nn.Conv2d(128, 256, 3, padding=1),              # 6
+            nn.ReLU(inplace=False),                         # 7
+            nn.Conv2d(256, 256, 3, padding=1),              # 8
+            nn.ReLU(inplace=False),                         # 9
+            nn.Conv2d(256, 256, 3, padding=1),              # 10
+            nn.ReLU(inplace=False),                         # 11
+            nn.AdaptiveAvgPool2d((1, 1)),                   # 12
         )
         self.classifier = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(256 * 36, 4096),
-            nn.ReLU(inplace=False),
-            nn.Linear(4096, 4096),
-            nn.ReLU(inplace=False),
-            nn.Linear(4096, num_classes),
+            nn.Linear(256, num_classes),
         )
 
     def forward(self, x):
@@ -414,5 +289,5 @@ class AlexNetResidual(nn.Module):
         return x
 
 
-def build_alexnet_residual(num_classes: int = 200) -> nn.Module:
-    return AlexNetResidual(num_classes)
+def build_alexnet_smallkernel(num_classes: int = 200) -> nn.Module:
+    return AlexNetSmallKernel(num_classes)

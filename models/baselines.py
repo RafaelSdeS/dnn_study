@@ -1,16 +1,8 @@
-"""Stage 1 baseline architectures for the Tiny ImageNet-200 ablation study."""
+"""Phase 1 — Reference Architectures for Tiny ImageNet-200."""
 
-import torch
 import torch.nn as nn
 import torch.ao.quantization as tq
-from torchvision.models import alexnet, resnet18
-
-
-def _float_functional():
-    try:
-        return torch.nn.quantized.FloatFunctional()
-    except AttributeError:
-        return tq.FloatFunctional()
+from torchvision.models import alexnet, resnet18, mobilenet_v2
 
 
 def _fix_relu_inplace(module: nn.Module) -> None:
@@ -62,58 +54,6 @@ def build_alexnet(num_classes: int = 200) -> nn.Module:
     return AlexNetTV(num_classes)
 
 
-# ─── StrongCNN ────────────────────────────────────────────────────────────────
-
-class StrongCNN(nn.Module):
-    """High-capacity conventional CNN — upper reference baseline for classical architectures.
-
-    Architecture: 5 stages (64→128→256→512→512 channels), 3×3 conv + BN + ReLU + MaxPool,
-    followed by a 2-layer FC head with Dropout. No pretrained weights.
-    Expected top-1: ~40-50% (trained from scratch with strong capacity).
-    Size: ~15 MB FP32 / ~4 MB INT8.
-    Training speed: medium-slow (wide channels + FC head).
-    QAT: full — flat Sequential, Conv-BN-ReLU fuseable throughout.
-    Trade-off: raw capacity vs efficiency; tests how much width alone can achieve.
-    """
-
-    def __init__(self, num_classes: int = 200):
-        super().__init__()
-        self.quant = tq.QuantStub()
-        self.dequant = tq.DeQuantStub()
-
-        self.features = nn.Sequential(
-            nn.Conv2d(3, 64, 3, padding=1, bias=False),
-            nn.BatchNorm2d(64), nn.ReLU(inplace=False), nn.MaxPool2d(2),
-            nn.Conv2d(64, 128, 3, padding=1, bias=False),
-            nn.BatchNorm2d(128), nn.ReLU(inplace=False), nn.MaxPool2d(2),
-            nn.Conv2d(128, 256, 3, padding=1, bias=False),
-            nn.BatchNorm2d(256), nn.ReLU(inplace=False), nn.MaxPool2d(2),
-            nn.Conv2d(256, 512, 3, padding=1, bias=False),
-            nn.BatchNorm2d(512), nn.ReLU(inplace=False), nn.MaxPool2d(2),
-            nn.Conv2d(512, 512, 3, padding=1, bias=False),
-            nn.BatchNorm2d(512), nn.ReLU(inplace=False),
-            nn.AdaptiveAvgPool2d(2),
-        )
-        self.classifier = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(512 * 4, 1024),
-            nn.ReLU(inplace=False),
-            nn.Dropout(0.5),
-            nn.Linear(1024, num_classes),
-        )
-
-    def forward(self, x):
-        x = self.quant(x)
-        x = self.features(x)
-        x = self.classifier(x)
-        x = self.dequant(x)
-        return x
-
-
-def build_strongcnn(num_classes: int = 200) -> nn.Module:
-    return StrongCNN(num_classes)
-
-
 # ─── VGGStyleCNN ──────────────────────────────────────────────────────────────
 
 class VGGStyleCNN(nn.Module):
@@ -121,7 +61,7 @@ class VGGStyleCNN(nn.Module):
 
     Architecture: 5 stages each with 2× stacked 3×3 conv + BN + ReLU, MaxPool between
     stages, global average pooling head. No pretrained weights.
-    Expected top-1: ~35-45% (depth compensates for width reduction vs StrongCNN).
+    Expected top-1: ~35-45% (depth compensates for width reduction vs larger models).
     Size: ~5 MB FP32 / ~1.3 MB INT8.
     Training speed: fast (narrow channels, GAP head).
     QAT: full — flat Sequential, Conv-BN-ReLU fuseable throughout.
@@ -214,87 +154,39 @@ def build_resnet18(num_classes: int = 200) -> nn.Module:
     return ResNet18TV(num_classes)
 
 
-# ─── TinyHybridNet (moved from tinyhybridnet.py) ──────────────────────────────
+# ─── MobileNetV2TV ────────────────────────────────────────────────────────────
 
-class FireMobileResidual(nn.Module):
-    """Fire-inspired mobile residual block (squeeze → depthwise → expand + skip).
+class MobileNetV2TV(nn.Module):
+    """Torchvision MobileNetV2 pretrained on ImageNet, fine-tuned for 200 classes.
 
-    Architecture: 1×1 squeeze → depthwise 3×3 → 1×1 expand, with identity/projected skip.
-    Combines SqueezeNet channel compression with MobileNet depthwise efficiency.
-    QAT: full — FloatFunctional skip-add, inplace=False ReLU, BN after every Conv.
+    Architecture: inverted residual blocks with depthwise separable convolutions,
+    linear bottlenecks, width multiplier 1.0. Replaces final Linear(1280, 1000) with
+    Linear(1280, 200).
+    Expected top-1: ~55-65% (pretrained weights; efficient for inference).
+    Size: ~14 MB FP32 / ~3.5 MB INT8.
+    Training speed: fast (depthwise separable convolutions reduce FLOPs ~8-9×).
+    QAT: partial — QuantStub/DeQuantStub + inplace ReLU fixed. Full INT8 correctness
+    for residual adds requires torchvision.models.quantization.mobilenet_v2().
+    Trade-off: efficiency via depthwise separable convolutions vs accuracy.
     """
 
-    def __init__(self, in_ch: int, out_ch: int, stride: int = 1, squeeze_ratio: float = 0.25):
+    def __init__(self, num_classes: int = 200, pretrained: bool = True):
         super().__init__()
-        squeeze_ch = max(16, int(out_ch * squeeze_ratio))
+        weights = "IMAGENET1K_V2" if pretrained else None
+        base = mobilenet_v2(weights=weights)
+        base.classifier[1] = nn.Linear(1280, num_classes)
+        _fix_relu_inplace(base)
 
-        self.block = nn.Sequential(
-            nn.Conv2d(in_ch, squeeze_ch, 1, bias=False),
-            nn.BatchNorm2d(squeeze_ch),
-            nn.ReLU(inplace=False),
-            nn.Conv2d(squeeze_ch, squeeze_ch, 3, stride=stride, padding=1, groups=squeeze_ch, bias=False),
-            nn.BatchNorm2d(squeeze_ch),
-            nn.ReLU(inplace=False),
-            # no ReLU here — applied after the residual add
-            nn.Conv2d(squeeze_ch, out_ch, 1, bias=False),
-            nn.BatchNorm2d(out_ch),
-        )
-
-        self.shortcut = nn.Identity()
-        if stride != 1 or in_ch != out_ch:
-            self.shortcut = nn.Sequential(
-                nn.Conv2d(in_ch, out_ch, 1, stride=stride, bias=False),
-                nn.BatchNorm2d(out_ch),
-            )
-
-        self.skip_add = _float_functional()
-        self.relu = nn.ReLU(inplace=False)
-
-    def forward(self, x):
-        return self.relu(self.skip_add.add(self.block(x), self.shortcut(x)))
-
-
-class TinyHybridNet(nn.Module):
-    """Lightweight hybrid CNN for 64×64 images (200 classes), QAT-ready.
-
-    Architecture: stem → 6× FireMobileResidual blocks → GAP → Linear.
-    Expected top-1: ~32-36%. Size: ~0.73 MB FP32 / ~0.31 MB INT8.
-    Training speed: very fast (~0.18M params).
-    QAT: full — best quantization efficiency in project (<1% INT8 drop observed).
-    Trade-off: extreme compactness vs accuracy; validates that tiny models quantize cleanly.
-    """
-
-    def __init__(self, num_classes: int = 200):
-        super().__init__()
         self.quant = tq.QuantStub()
+        self.base = base
         self.dequant = tq.DeQuantStub()
-
-        self.stem = nn.Sequential(
-            nn.Conv2d(3, 32, 3, padding=1, bias=False),
-            nn.BatchNorm2d(32),
-            nn.ReLU(inplace=False),
-        )
-        self.features = nn.Sequential(
-            FireMobileResidual(32, 64),
-            FireMobileResidual(64, 64),
-            FireMobileResidual(64, 128, stride=2),
-            FireMobileResidual(128, 128),
-            FireMobileResidual(128, 256, stride=2),
-            FireMobileResidual(256, 256),
-        )
-        self.pool = nn.AdaptiveAvgPool2d(1)
-        self.fc = nn.Linear(256, num_classes)
 
     def forward(self, x):
         x = self.quant(x)
-        x = self.stem(x)
-        x = self.features(x)
-        x = self.pool(x)
-        x = torch.flatten(x, 1)
-        x = self.fc(x)
+        x = self.base(x)
         x = self.dequant(x)
         return x
 
 
-def build_tinyhybridnet(num_classes: int = 200) -> nn.Module:
-    return TinyHybridNet(num_classes)
+def build_mobilenetv2(num_classes: int = 200) -> nn.Module:
+    return MobileNetV2TV(num_classes)
