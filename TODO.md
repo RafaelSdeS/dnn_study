@@ -35,52 +35,39 @@ The main scientific goal is to understand which architectural choices preserve a
 
 ## Architectures to Explore
 
-### Stage 1 — Baselines
+## Stage 1 — Baselines (reduced)
 
-These models establish reference points for accuracy, size, and speed.
+Keep a minimal set of reference architectures covering classic, deep, and efficient CNN design spaces:
 
-- AlexNet (fine-tuned) — Standard reference CNN trained under modern conditions for baseline comparison.
-- AlexNet (3×3) — AlexNet adapted to uniform 3×3 kernels to isolate kernel-size effects.
-- AlexNet (kernel-restricted / small-kernel variant) — Fully constrained AlexNet variant enforcing small convolution kernels.
-- VGG-style stacked-convolution baseline — Deep stacked 3×3 convolution network as a strong small-kernel reference.
-- StrongCNN — High-capacity conventional CNN used as an upper baseline for classical architectures.
-- TinyHybridNet — Lightweight hybrid CNN used as a low-resource performance baseline.
-
----
-
-### Stage 2 — AlexNet-Derived Variants
-
-These are the core models for the project. Each one should change only one major idea at a time.
-
-- AlexNet with all convolutions reduced to 3×3 — Uniform small-kernel version of AlexNet to test kernel reduction impact.
-- AlexNet with first-layer kernel reduction — Only initial receptive field reduced to evaluate early-stage sensitivity.
-- AlexNet with stacked 3×3 replacement of larger kernels — Replaces large kernels with multiple 3×3 layers to preserve receptive field.
-- AlexNet with 1×1 bottleneck layers — Adds dimensionality reduction before spatial convolutions to reduce compute.
-- AlexNet with grouped convolutions — Splits channels into groups to reduce computation and test feature separation.
-- AlexNet with factorized convolutions — Replaces k×k kernels with separable 1×k and k×1 convolutions.
-- AlexNet with Fire modules — Uses squeeze-expand blocks for aggressive parameter compression.
-- AlexNet with residual connections — Adds skip connections to improve gradient flow and training stability.
-- AlexNet with SE blocks — Introduces channel attention to reweight feature maps adaptively.
-- AlexNet with reduced fully connected head or global average pooling — Replaces dense classifier with parameter-efficient pooling head.
+- **AlexNet (fine-tuned)** — Classic reference CNN under modern training conditions.  
+- **StrongCNN** — High-capacity conventional CNN used as an upper baseline for classical architectures.  
+- **VGG-style CNN** — Deep stacked 3×3 convolution baseline for small-kernel behavior.  
+- **ResNet-18** — Standard residual learning baseline for stable deep training.  
+- **TinyHybridNet** — Lightweight hybrid CNN used as a low-resource performance baseline.  
 
 ---
 
-### Stage 3 — Lightweight CNNs
+## Stage 2 — AlexNet-Derived Variants (core ablation set)
 
-These models provide modern efficiency-oriented comparison points.
+Replace many incremental variants with grouped architectural axes:
 
-- SqueezeNet — Extreme parameter-efficient CNN using Fire modules for compression.
-- MobileNetV1 — Depthwise separable convolution network optimized for mobile inference.
-- MobileNetV2 — Improved MobileNet using inverted residuals and linear bottlenecks.
-- ShuffleNetV1 — Efficient grouped convolution network with channel shuffle for mixing.
-- ShuffleNetV2 — Practical efficiency-focused redesign optimized for real hardware latency.
-- GhostNet — Generates feature maps using cheap operations to reduce redundancy.
-- ResNet-18 — Standard residual CNN baseline for stability and strong accuracy reference.
-- DenseNet-121 — Dense connectivity network maximizing feature reuse across layers.
-- RegNet small variants — Structured CNN design with scalable width/depth rules.
-- EfficientNet-B0 — Baseline compound-scaled efficient CNN balancing accuracy and cost.
-- EfficientNet-V2-S — Faster training and improved efficiency over EfficientNet-B0.
-- ConvNeXt-Tiny — Modern CNN redesigned with transformer-era design principles.
+- **AlexNet (3×3 uniform)** — Tests impact of enforcing small kernels across all layers.  
+- **AlexNet (stacked 3×3)** — Tests whether depth can recover receptive field lost from kernel reduction.  
+- **AlexNet (kernel-restricted / small-kernel variant)** — Fully constrained AlexNet variant enforcing small convolution kernels.  
+- **AlexNet (factorized convolutions)** — Tests spatial decomposition via 1×k + k×1 convolutions.  
+- **AlexNet (bottleneck + global average pooling)** — Tests parameter reduction and classifier simplification.  
+- **AlexNet (residual + optional SE blocks)** — Tests optimization stability and attention-based refinement.  
+
+---
+
+## Stage 3 — Efficient CNNs (modern comparison set)
+
+Use a small but representative set of modern architectures:
+
+- **MobileNetV2** — Depthwise separable convolution efficiency baseline.  
+- **ShuffleNetV2** — Efficient channel mixing with hardware-aware design.  
+- **EfficientNet-B0** — Strong accuracy/efficiency trade-off via compound scaling.  
+- **ConvNeXt-Tiny** — Modern CNN design inspired by transformer-era improvements.  
 
 ---
 
