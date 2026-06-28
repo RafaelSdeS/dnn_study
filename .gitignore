@@ -54,5 +54,7 @@ data/
 .DS_Store
 Thumbs.db
 
-models
-
+# =========================
+# Saved Models
+# =========================
+notebooks/models
