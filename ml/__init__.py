@@ -1,6 +1,6 @@
 from .config import DataConfig, TrainerConfig, QATConfig
 from .data import create_imagenet_loaders
-from .checkpoint import save_checkpoint, load_checkpoint
+from .checkpoint import save_checkpoint, load_checkpoint, load_resume_state, auto_resume_path
 from .registry import MODEL_REGISTRY, register_model
 from .trainer import Trainer
 from .quantization import (

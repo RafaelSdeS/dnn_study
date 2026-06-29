@@ -1,3 +1,4 @@
+import json
 import logging
 import time
 from pathlib import Path
@@ -8,7 +9,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
-from .checkpoint import save_checkpoint, load_checkpoint
+from .checkpoint import save_checkpoint, load_checkpoint, load_resume_state
 from .config import TrainerConfig
 
 
@@ -68,20 +69,33 @@ class Trainer:
         scaler = torch.amp.GradScaler("cuda") if cfg.use_amp else None
 
         start_epoch = 0
-        if resume_from is not None and Path(resume_from).exists():
-            start_epoch, _ = load_checkpoint(resume_from, model, optimizer, scheduler, device=str(self.device))
-            start_epoch += 1
-
         best_val_acc = 0.0
         best_val_top5 = 0.0
         best_val_loss = float("inf")
         best_epoch = 0
         patience_counter = 0
+        wandb_run_id = self.wandb_run.id if self.wandb_run else None
         history: dict[str, list] = {
             "train_loss": [], "train_acc": [], "val_loss": [], "val_acc": [], "val_top5": [],
             "epoch_time_s": [], "peak_gpu_mem_mb": [],
         }
+
+        # Load full training state if resuming
+        if resume_from is not None and Path(resume_from).exists():
+            state = load_resume_state(resume_from, model, optimizer, scheduler, scaler, device=str(self.device))
+            start_epoch = state["epoch"] + 1
+            best_val_acc = state["best_val_acc"]
+            best_val_top5 = best_val_acc  # ponytail: best_val_top5 not persisted, use best_val_acc as proxy
+            best_epoch = start_epoch - 1
+            patience_counter = state["patience_counter"]
+            for k, v in state["history"].items():
+                if k in history:
+                    history[k] = v
+            wandb_run_id = state["wandb_run_id"]
+
         best_path = self.save_dir / f"{self.run_name}_best.pth"
+        resume_path = self.save_dir / f"{self.run_name}_resume.pth"
+        meta_path = self.save_dir / f"{self.run_name}_meta.json"
         train_start = time.time()
 
         for epoch in range(start_epoch, cfg.epochs):
@@ -119,6 +133,18 @@ class Trainer:
                      "lr": lr, "epoch_time_s": epoch_time, "peak_gpu_mem_mb": peak_mem},
                     step=epoch + 1,
                 )
+
+            # Save resume checkpoint every epoch (full training state for recovery)
+            save_checkpoint(
+                resume_path, model, optimizer, scheduler, epoch, {"val_acc": val_acc},
+                scaler=scaler,
+                best_val_acc=best_val_acc,
+                history=history,
+                wandb_run_id=wandb_run_id,
+                patience_counter=patience_counter,
+            )
+            # Write metadata sidecar for quick access
+            meta_path.write_text(json.dumps({"epoch": epoch, "best_val_acc": best_val_acc, "wandb_run_id": wandb_run_id}))
 
             if val_acc > best_val_acc:
                 best_val_acc = val_acc
@@ -176,6 +202,7 @@ class Trainer:
             "total_training_time_s": total_training_time_s,
             "total_training_time": total_time_str,
             "history": history,
+            "wandb_run_id": wandb_run_id,
         }
 
     @torch.no_grad()
