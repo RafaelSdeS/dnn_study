@@ -1,5 +1,4 @@
 import json
-import math
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -7,10 +6,10 @@ from typing import Any
 import pandas as pd
 
 
-def disk_mb(path: str | Path) -> float:
-    """File size in MB; NaN if file doesn't exist."""
+def disk_mb(path: str | Path) -> float | None:
+    """File size in MB; None if file doesn't exist."""
     p = Path(path)
-    return p.stat().st_size / (1024 ** 2) if p.exists() else float("nan")
+    return p.stat().st_size / (1024 ** 2) if p.exists() else None
 
 
 def compute_flops(model, input_size: tuple = (1, 3, 64, 64)) -> dict:
@@ -53,7 +52,7 @@ def make_run_summary(
 
     compression_ratio = (
         fp32_size_mb / int8_size_mb
-        if int8_size_mb and not math.isnan(int8_size_mb) and int8_size_mb > 0
+        if int8_size_mb and int8_size_mb > 0
         else None
     )
     best_top1 = fit_results.get("best_val_top1", fp32_eval.get("top1"))

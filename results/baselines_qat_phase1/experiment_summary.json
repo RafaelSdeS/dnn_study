@@ -1,0 +1,295 @@
+{
+  "config": {
+    "epochs": 2,
+    "lr": 0.0003,
+    "weight_decay": 0.0005,
+    "label_smoothing": 0.1,
+    "grad_clip_norm": null,
+    "use_amp": true,
+    "early_stopping_patience": 5
+  },
+  "fp32_metrics": {
+    "alexnet_tv": {
+      "loss": 3.599759817123413,
+      "top1": 19.62716281414032,
+      "top5": 45.42696475982666
+    },
+    "vgg_style": {
+      "loss": 4.160061836242676,
+      "top1": 10.632294416427612,
+      "top5": 30.417612195014954
+    },
+    "resnet18_tv": {
+      "loss": 2.2670252323150635,
+      "top1": 46.95069491863251,
+      "top5": 73.50143790245056
+    },
+    "mobilenetv2": {
+      "loss": 2.340923309326172,
+      "top1": 45.82230746746063,
+      "top5": 72.97176122665405
+    }
+  },
+  "int8_metrics": {
+    "alexnet_tv": {
+      "loss": 3.4384660720825195,
+      "top1": 23.493534326553345,
+      "top5": 49.1888552904129
+    },
+    "vgg_style": {
+      "loss": 3.905733823776245,
+      "top1": 14.468632638454437,
+      "top5": 37.02200949192047
+    }
+  },
+  "fp32_training_results": {
+    "alexnet_tv": {
+      "best_val_accuracy": 19.76,
+      "best_val_top1": 19.76,
+      "best_val_top5": 45.51,
+      "best_val_loss": 3.904860193634033,
+      "final_val_top1": 19.76,
+      "final_val_top5": 45.51,
+      "best_epoch": 1,
+      "total_training_time_s": 95.66381525993347,
+      "total_training_time": "00:01:35",
+      "history": {
+        "train_loss": [
+          4.643511982764492,
+          4.238107804044721
+        ],
+        "train_acc": [
+          7.934743954480797,
+          14.235864153627311
+        ],
+        "val_loss": [
+          4.256210941696167,
+          3.904860193634033
+        ],
+        "val_acc": [
+          12.95,
+          19.76
+        ],
+        "val_top5": [
+          35.51,
+          45.51
+        ],
+        "epoch_time_s": [
+          47.208338022232056,
+          47.029627084732056
+        ],
+        "peak_gpu_mem_mb": [
+          1767.77001953125,
+          1409.03857421875
+        ]
+      }
+    },
+    "vgg_style": {
+      "best_val_accuracy": 10.59,
+      "best_val_top1": 10.59,
+      "best_val_top5": 30.33,
+      "best_val_loss": 4.403935466003418,
+      "final_val_top1": 10.59,
+      "final_val_top5": 30.33,
+      "best_epoch": 1,
+      "total_training_time_s": 48.84973382949829,
+      "total_training_time": "00:00:48",
+      "history": {
+        "train_loss": [
+          5.009199689156978,
+          4.5433843834471395
+        ],
+        "train_acc": [
+          2.9816411806543384,
+          8.363709103840684
+        ],
+        "val_loss": [
+          4.956932585906983,
+          4.403935466003418
+        ],
+        "val_acc": [
+          4.74,
+          10.59
+        ],
+        "val_top5": [
+          15.89,
+          30.33
+        ],
+        "epoch_time_s": [
+          24.3322594165802,
+          24.438441514968872
+        ],
+        "peak_gpu_mem_mb": [
+          888.25341796875,
+          503.3603515625
+        ]
+      }
+    },
+    "resnet18_tv": {
+      "best_val_accuracy": 46.94,
+      "best_val_top1": 46.94,
+      "best_val_top5": 73.53,
+      "best_val_loss": 2.7814904651641847,
+      "final_val_top1": 46.94,
+      "final_val_top5": 73.53,
+      "best_epoch": 1,
+      "total_training_time_s": 50.007609128952026,
+      "total_training_time": "00:00:50",
+      "history": {
+        "train_loss": [
+          3.9415695611308004,
+          3.2253172850371423
+        ],
+        "train_acc": [
+          21.949457681365576,
+          35.85526315789474
+        ],
+        "val_loss": [
+          3.0688160610198976,
+          2.7814904651641847
+        ],
+        "val_acc": [
+          39.12,
+          46.94
+        ],
+        "val_top5": [
+          66.61,
+          73.53
+        ],
+        "epoch_time_s": [
+          25.031375408172607,
+          24.728008031845093
+        ],
+        "peak_gpu_mem_mb": [
+          1841.00244140625,
+          537.9794921875
+        ]
+      }
+    },
+    "mobilenetv2": {
+      "best_val_accuracy": 45.83,
+      "best_val_top1": 45.83,
+      "best_val_top5": 72.93,
+      "best_val_loss": 2.823906470489502,
+      "final_val_top1": 45.83,
+      "final_val_top5": 72.93,
+      "best_epoch": 1,
+      "total_training_time_s": 51.56504440307617,
+      "total_training_time": "00:00:51",
+      "history": {
+        "train_loss": [
+          3.971502826529241,
+          3.245237122389195
+        ],
+        "train_acc": [
+          21.456036628733997,
+          35.15625
+        ],
+        "val_loss": [
+          2.9790101791381836,
+          2.823906470489502
+        ],
+        "val_acc": [
+          41.9,
+          45.83
+        ],
+        "val_top5": [
+          70.05,
+          72.93
+        ],
+        "epoch_time_s": [
+          26.21293592453003,
+          25.243420839309692
+        ],
+        "peak_gpu_mem_mb": [
+          1290.83056640625,
+          539.931640625
+        ]
+      }
+    }
+  },
+  "qat_training_results": {
+    "alexnet_tv": {
+      "best_val_accuracy": 23.81,
+      "best_val_top1": 23.81,
+      "best_val_top5": 49.35,
+      "best_val_loss": 3.772214776611328,
+      "final_val_top1": 23.81,
+      "final_val_top5": 49.35,
+      "best_epoch": 1,
+      "total_training_time_s": 104.52829217910767,
+      "total_training_time": "00:01:44",
+      "history": {
+        "train_loss": [
+          4.070059092251708,
+          4.026288903793943
+        ],
+        "train_acc": [
+          17.38531294452347,
+          18.218794452347083
+        ],
+        "val_loss": [
+          3.7930702766418456,
+          3.772214776611328
+        ],
+        "val_acc": [
+          23.39,
+          23.81
+        ],
+        "val_top5": [
+          48.71,
+          49.35
+        ],
+        "epoch_time_s": [
+          51.62808012962341,
+          51.394782066345215
+        ],
+        "peak_gpu_mem_mb": [
+          1410.36181640625,
+          1409.70556640625
+        ]
+      }
+    },
+    "vgg_style": {
+      "best_val_accuracy": 14.18,
+      "best_val_top1": 14.18,
+      "best_val_top5": 37.04,
+      "best_val_loss": 4.157843435668945,
+      "final_val_top1": 14.18,
+      "final_val_top5": 37.04,
+      "best_epoch": 1,
+      "total_training_time_s": 79.73089599609375,
+      "total_training_time": "00:01:19",
+      "history": {
+        "train_loss": [
+          4.328137144086032,
+          4.300180723623056
+        ],
+        "train_acc": [
+          11.770981507823613,
+          12.28885135135135
+        ],
+        "val_loss": [
+          4.168213911437988,
+          4.157843435668945
+        ],
+        "val_acc": [
+          14.17,
+          14.18
+        ],
+        "val_top5": [
+          36.9,
+          37.04
+        ],
+        "epoch_time_s": [
+          39.77488040924072,
+          39.86934232711792
+        ],
+        "peak_gpu_mem_mb": [
+          1086.3125,
+          707.73193359375
+        ]
+      }
+    }
+  }
+}
