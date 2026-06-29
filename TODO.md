@@ -39,6 +39,10 @@ Each experiment follows the same pipeline:
   * Ensure execution errors are written to the log file and are easy to locate.
   * Ensure the final run summary is always printed and saved, even if notebook output is collapsed.
 
+* Weights & Biases (W&B)
+
+  * Always initialize W&B runs with clear, descriptive names and complete metadata (e.g., project, group, tags, configuration, model, dataset, and experiment parameters) so runs are easy to identify, compare, and reproduce.
+  * Use clear, descriptive, and consistent names for all W&B artifacts so they are easy to identify and distinguish.
 ---
 
 ## Metrics to Add

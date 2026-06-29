@@ -50,19 +50,15 @@ alexnet_rafael/
 │   ├── quantization.py      # find_fuse_groups, prepare_qat_model, build_qat,
 │   │                        #   convert_to_int8, load_best_model, make_qat_callback
 │   └── reporting.py         # build_comparison_table(), create_results_summary(), disk_mb()
-├── models/                  # Model architecture definitions (five experimental phases)
+├── models/                  # Model architecture definitions (three experimental phases)
 │   ├── __init__.py          # Re-exports all public constructors
-│   ├── baselines.py         # Stage 1: AlexNetTV, StrongCNN, VGGStyleCNN, ResNet18TV,
-│   │                        #   FireMobileResidual, TinyHybridNet
-│   ├── alexnet_variants.py  # Stage 2: AlexNet3x3, AlexNetSmallKernel, AlexNetStacked,
-│   │                        #   AlexNetFactorized, AlexNetBottleneck, AlexNetResidual
-│   ├── efficient_cnns.py    # Stage 3: InvertedResidual, TinyMobileNetV2, MobileNetV2TV,
-│   │                        #   ShuffleNetV2TV, EfficientNetB0TV, ConvNeXtTinyTV
-│   └── hybrids.py           # H1–H10: ResidualVGGHybrid, AlexNetInceptionHybrid,
-│                            #   MobileNetResidualHybrid, FireResidualHybrid, FactorizedAlexNet,
-│                            #   LargeSmallKernelHybrid, ShuffleResidualHybrid,
-│                            #   ConvNeXtLiteHybrid, KernelConstraintNetwork,
-│                            #   AttentionAugmentedCNN
+│   ├── baselines.py         # Stage 1 — Reference: AlexNetTV, VGGStyleCNN, ResNet18TV,
+│   │                        #   MobileNetV2TV
+│   ├── alexnet_variants.py  # Stage 2 — Kernel Restriction: AlexNet3x3, AlexNet2x2,
+│   │                        #   AlexNetStacked, AlexNetMixed, AlexNetSmallKernel
+│   └── compensation.py      # Stage 3 — Compensation Mechanisms: AlexNetBottleneck,
+│                            #   AlexNetFactorized, AlexNetGroupConv, AlexNetDepthwiseSep,
+│                            #   AlexNetResidual, AlexNetFire, AlexNetGAP, AlexNetSE
 ├── configs/                 # Hyperparameter YAML files — loaded via configs/loader.py
 │   ├── loader.py            # load_config(filename) → dict (searches configs/ dir)
 │   ├── data.yaml            # DataConfig defaults
@@ -75,9 +71,11 @@ alexnet_rafael/
 │       ├── tinyhybridnet.yaml
 │       └── tinymobilenetv2.yaml
 ├── notebooks/               # Experiment notebooks
-│   ├── alexnet_qat.ipynb                    # AlexNet family FP32 + QAT
-│   ├── tinyhybridnet_qat.ipynb              # TinyHybridNet & TinyMobileNetV2 FP32 + QAT
-│   └── alexnet_qat_wandb_results_analysis.ipynb  # W&B offline sync + plotting
+│   ├── alexnet_qat.ipynb                    # Phase 2: AlexNet variants (3×3, small-kernel, mixed) FP32 + QAT
+│   ├── baselines_qat.ipynb                  # Phase 1: Reference architectures (ResNet18, MobileNetV2, VGG-style) FP32 + QAT
+│   ├── compensation_qat.ipynb               # Phase 3: Compensation mechanisms (bottleneck, residual, factorized, etc.) FP32 + QAT
+│   ├── tinyhybridnet_qat.ipynb              # Hybrid architectures (efficient CNNs) FP32 + QAT
+│   └── alexnet_qat_results_analysis.ipynb   # W&B offline sync + plotting
 ├── results/                 # Output CSVs and JSON summaries (git-ignored)
 ├── README.md
 ├── AGENTS.md
@@ -164,12 +162,12 @@ register_model("alexnet_fp32", build_alexnet, fuse_map=[...], fuse_root_attr="fe
 # MODEL_REGISTRY[name] = {"ctor": ..., "fuse_map": ..., "fuse_root_attr": ..., "lr": ...}
 ```
 
-`fuse_map` is a list of dotted-path lists used to fuse Conv-BN-ReLU. For flat architectures, supply it manually. For nested blocks (TinyHybridNet, TinyMobileNetV2), use `find_fuse_groups(model())` to auto-detect.
+`fuse_map` is a list of dotted-path lists used to fuse Conv-BN-ReLU. For flat architectures, supply it manually. For nested block architectures, use `find_fuse_groups(model())` to auto-detect.
 
 ### 5. Trainer Usage
 
 ```python
-from ml import Trainer
+from ml import Trainer, build_qat, build_qat_from_model
 from dataclasses import replace
 
 # FP32 — override lr per model from registry
@@ -180,9 +178,15 @@ trainer = Trainer(model, train_loader, val_loader,
 results = trainer.fit()           # → {"best_val_accuracy": ..., "best_epoch": ..., "history": {...}}
 metrics = trainer.evaluate(topk=(1, 5))  # → {"top1": ..., "top5": ..., "loss": ...}
 
-# QAT — use_amp=False, pass epoch_callback
+# QAT — two patterns: build_qat() by arch name, or build_qat_from_model(model)
 qat_cfg = replace(fp32_cfg, epochs=20, lr=1e-5, use_amp=False)
 cb = make_qat_callback(freeze_bn_epoch=3, disable_observer_epoch=5)
+
+# Option 1: by registry name
+qat_model = build_qat("alexnet_small_kernel", SAVE_DIR, device)
+# Option 2: from loaded model directly
+# qat_model = build_qat_from_model(trainer.model, freeze_maps=[...], fuse_root="features")
+
 trainer = Trainer(qat_model, ..., cfg=qat_cfg, epoch_callback=cb)
 trainer.fit()
 ```
@@ -200,8 +204,8 @@ Skip/resume logic lives in the notebook loop — not hidden inside a wrapper fun
 
 ### 7. Module Fusion Patterns (by arch family)
 
-- **AlexNet (flat sequential):** Hand-written index-based fuse maps, e.g., `[["0","1"],["3","4"],...]`
-- **TinyHybridNet / TinyMobileNetV2 (nested blocks):** `find_fuse_groups(model())` walks the tree recursively and returns dotted-path lists automatically.
+- **Flat sequential architectures (AlexNet style):** Hand-written index-based fuse maps, e.g., `[["0","1"],["3","4"],...]`
+- **Nested block architectures:** `find_fuse_groups(model())` walks the tree recursively and returns dotted-path lists automatically.
 - **New architectures:** Call `find_fuse_groups` or write a fuse map and pass it to `register_model`.
 
 ### 8. Data Pipeline
@@ -235,9 +239,10 @@ Notebook
   │                 create_imagenet_loaders
   │                 MODEL_REGISTRY, register_model
   │                 Trainer, make_qat_callback
-  │                 build_qat, load_best_model, convert_to_int8
+  │                 build_qat, build_qat_from_model, load_best_model, convert_to_int8
   │                 build_comparison_table, create_results_summary, disk_mb
-  ├─ from models import AlexNetTV, AlexNet3x3, ...  (pick from baselines/alexnet_variants/efficient_cnns/hybrids)
+  ├─ from models import AlexNetTV, AlexNet3x3, AlexNetSmallKernel, AlexNetResidual, ...
+  │                     (pick from baselines.py/alexnet_variants.py/compensation.py)
   ├─ register_model() → MODEL_REGISTRY
   ├─ for name, spec in MODEL_REGISTRY.items():
   │     Trainer(..., cfg=replace(fp32_cfg, lr=spec["lr"])).fit()
@@ -252,15 +257,14 @@ Notebook
 
 ## Model Inventory
 
-Five experimental phases (see `TODO.md`), all in `models/`:
+Three implemented experimental phases, plus future phases defined in `TODO.md`:
 
 | Phase | File | Models |
 |-------|------|--------|
-| 1 — Reference Architectures | `baselines.py` | AlexNetTV (pretrained), StrongCNN, VGGStyleCNN, ResNet18TV (pretrained), MobileNetV2TV (pretrained), TinyHybridNet |
-| 2 — Kernel Restriction Study | `alexnet_variants.py` | AlexNet3x3, AlexNetSmallKernel, AlexNetStacked, AlexNetFactorized, AlexNetBottleneck, AlexNetResidual |
-| 3 — Compensation Mechanisms | `efficient_cnns.py` + `hybrids.py` | TinyMobileNetV2, ShuffleNetV2TV (pretrained), EfficientNetB0TV (pretrained), ConvNeXtTinyTV (pretrained); H1–H10: ResidualVGGHybrid, AlexNetInceptionHybrid, MobileNetResidualHybrid, FireResidualHybrid, FactorizedAlexNet, LargeSmallKernelHybrid, ShuffleResidualHybrid, ConvNeXtLiteHybrid, KernelConstraintNetwork, AttentionAugmentedCNN |
-| 4 — Final Architecture | TBD | Design pending — combines best ideas from phases 1–3 |
-| 5 — Final Analysis | — | FP32/INT8 rankings, latency, model size, Winograd, conclusions |
+| 1 — Reference Architectures | `baselines.py` | AlexNetTV (pretrained), VGGStyleCNN, ResNet18TV (pretrained), MobileNetV2TV (pretrained) |
+| 2 — Kernel Restriction Study | `alexnet_variants.py` | AlexNet3x3, AlexNet2x2, AlexNetStacked, AlexNetMixed, AlexNetSmallKernel |
+| 3 — Compensation Mechanisms | `compensation.py` | AlexNetBottleneck, AlexNetFactorized, AlexNetGroupConv, AlexNetDepthwiseSep, AlexNetResidual, AlexNetFire, AlexNetGAP, AlexNetSE |
+| 4+ (Future) | — | See `TODO.md` for phases 4–8: Final Architecture, Final Analysis, Hardware Profiling, ViT/Attention Hybrids, Architecture Search |
 
 ---
 
@@ -278,7 +282,7 @@ Key findings:
 - Residual connections are essential for from-scratch 3×3 CNNs.
 - INT8 for pretrained AlexNet improves top-1 (+2.9%), suggesting mild FP32 overfit / quantization regularization.
 - AlexNetSmallKernel: 1.6M params, 1.56 MB INT8 — best efficiency in the AlexNet family.
-- TinyHybridNet achieves <1% INT8 accuracy drop at only 0.31 MB — best quantization efficiency overall.
+- See `notebooks/baselines_qat.ipynb` and `notebooks/compensation_qat.ipynb` for results on reference and compensation-mechanism architectures.
 
 ---
 
