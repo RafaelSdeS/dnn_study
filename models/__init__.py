@@ -4,3 +4,7 @@ from .compensation import (
     AlexNetBottleneck, AlexNetFactorized, AlexNetGroupConv, AlexNetDepthwiseSep,
     AlexNetResidual, AlexNetFire, AlexNetGAP, AlexNetSE,
 )
+from .tinyhybridnet import (
+    FireMobileResidual, TinyHybridNet, build_tinyhybridnet,
+    InvertedResidual, TinyMobileNetV2, build_tinymobilenetv2,
+)
