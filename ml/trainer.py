@@ -1,3 +1,4 @@
+import logging
 import time
 from pathlib import Path
 from typing import Callable, Optional
@@ -34,6 +35,7 @@ class Trainer:
         num_classes: int = 200,
         wandb_run=None,
         epoch_callback: Optional[Callable[[int, nn.Module], None]] = None,
+        log_file: Optional[Path] = None,
     ):
         self.model = model
         self.train_loader = train_loader
@@ -46,6 +48,15 @@ class Trainer:
         self.wandb_run = wandb_run
         self.epoch_callback = epoch_callback
         self.save_dir.mkdir(parents=True, exist_ok=True)
+
+        self.logger = logging.getLogger(f"trainer.{run_name}")
+        self.logger.setLevel(logging.INFO)
+        if not self.logger.handlers:
+            self.logger.addHandler(logging.StreamHandler())
+            if log_file is not None:
+                fh = logging.FileHandler(log_file)
+                fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+                self.logger.addHandler(fh)
 
     def fit(self, resume_from: Optional[Path] = None) -> dict:
         """Run train/val loop, checkpoint best, return history dict."""
@@ -66,7 +77,10 @@ class Trainer:
         best_val_loss = float("inf")
         best_epoch = 0
         patience_counter = 0
-        history: dict[str, list] = {"train_loss": [], "train_acc": [], "val_loss": [], "val_acc": [], "val_top5": []}
+        history: dict[str, list] = {
+            "train_loss": [], "train_acc": [], "val_loss": [], "val_acc": [], "val_top5": [],
+            "epoch_time_s": [], "peak_gpu_mem_mb": [],
+        }
         best_path = self.save_dir / f"{self.run_name}_best.pth"
         train_start = time.time()
 
@@ -76,20 +90,33 @@ class Trainer:
             if self.epoch_callback is not None:
                 self.epoch_callback(epoch, model)
 
+            if torch.cuda.is_available():
+                torch.cuda.reset_peak_memory_stats(self.device)
+
             train_loss, train_acc = self._train_one_epoch(model, optimizer, scaler, criterion)
             val_loss, val_acc, val_top5 = self._validate(model, criterion)
             scheduler.step()
+            lr = optimizer.param_groups[0]["lr"]
+
+            epoch_time = time.time() - epoch_start
+            peak_mem = (
+                torch.cuda.max_memory_allocated(self.device) / (1024 ** 2)
+                if torch.cuda.is_available() else 0.0
+            )
 
             history["train_loss"].append(train_loss)
             history["train_acc"].append(train_acc)
             history["val_loss"].append(val_loss)
             history["val_acc"].append(val_acc)
             history["val_top5"].append(val_top5)
+            history["epoch_time_s"].append(epoch_time)
+            history["peak_gpu_mem_mb"].append(peak_mem)
 
             if self.wandb_run is not None:
                 self.wandb_run.log(
                     {"train_loss": train_loss, "train_acc": train_acc,
-                     "val_loss": val_loss, "val_acc": val_acc, "val_top5": val_top5},
+                     "val_loss": val_loss, "val_acc": val_acc, "val_top5": val_top5,
+                     "lr": lr, "epoch_time_s": epoch_time, "peak_gpu_mem_mb": peak_mem},
                     step=epoch + 1,
                 )
 
@@ -106,31 +133,37 @@ class Trainer:
             else:
                 patience_counter += 1
 
-            elapsed = time.time() - epoch_start
-            print(f"Epoch {epoch+1:3d}/{cfg.epochs} | "
-                  f"train_loss={train_loss:.4f} train_acc={train_acc:.2f}% | "
-                  f"val_loss={val_loss:.4f} val_acc={val_acc:.2f}% val_top5={val_top5:.2f}% | "
-                  f"time={elapsed:.1f}s")
+            self.logger.info(
+                "Epoch %3d/%d | train_loss=%.4f train_acc=%.2f%% | "
+                "val_loss=%.4f val_acc=%.2f%% val_top5=%.2f%% | "
+                "lr=%.2e peak_mem=%.0fMB time=%.1fs",
+                epoch + 1, cfg.epochs, train_loss, train_acc,
+                val_loss, val_acc, val_top5, lr, peak_mem, epoch_time,
+            )
 
             if cfg.early_stopping_patience and patience_counter >= cfg.early_stopping_patience:
-                print(f"Early stopping at epoch {epoch + 1}")
+                self.logger.info("Early stopping at epoch %d", epoch + 1)
                 break
 
         final_val_top1 = history["val_acc"][-1] if history["val_acc"] else 0.0
         final_val_top5 = history["val_top5"][-1] if history["val_top5"] else 0.0
-        total_time_str = time.strftime("%H:%M:%S", time.gmtime(time.time() - train_start))
+        total_training_time_s = time.time() - train_start
+        total_time_str = time.strftime("%H:%M:%S", time.gmtime(total_training_time_s))
 
-        print(f"""
-================= Run Summary =================
-Model          : {self.run_name}
-Epochs         : {epoch + 1}
-Best Val Top-1 : {best_val_acc:.2f}%
-Best Val Top-5 : {best_val_top5:.2f}%
-Final Val Top-1: {final_val_top1:.2f}%
-Final Val Top-5: {final_val_top5:.2f}%
-Best Val Loss  : {best_val_loss:.4f}
-Total Time     : {total_time_str}
-===============================================""")
+        self.logger.info(
+            "\n================= Run Summary =================\n"
+            "Model          : %s\n"
+            "Epochs         : %d\n"
+            "Best Val Top-1 : %.2f%%\n"
+            "Best Val Top-5 : %.2f%%\n"
+            "Final Val Top-1: %.2f%%\n"
+            "Final Val Top-5: %.2f%%\n"
+            "Best Val Loss  : %.4f\n"
+            "Total Time     : %s\n"
+            "===============================================",
+            self.run_name, epoch + 1, best_val_acc, best_val_top5,
+            final_val_top1, final_val_top5, best_val_loss, total_time_str,
+        )
 
         return {
             "best_val_accuracy": best_val_acc,
@@ -140,6 +173,7 @@ Total Time     : {total_time_str}
             "final_val_top1": final_val_top1,
             "final_val_top5": final_val_top5,
             "best_epoch": best_epoch,
+            "total_training_time_s": total_training_time_s,
             "total_training_time": total_time_str,
             "history": history,
         }
@@ -171,6 +205,35 @@ Total Time     : {total_time_str}
             "loss": loss_m.compute().item(),
             **{f"top{k}": accs[k].compute().item() * 100 for k in topk},
         }
+
+    @torch.no_grad()
+    def benchmark(self, loader: Optional[DataLoader] = None, warmup: int = 100) -> dict:
+        """Time inference over val_loader; returns latency_ms_per_image and throughput_img_per_s."""
+        loader = loader or self.val_loader
+        model = self.model.eval().to(self.device)
+        n_warmup = 0
+
+        # warmup
+        for data, _ in loader:
+            data = data.to(self.device)
+            model(data)
+            n_warmup += data.size(0)
+            if n_warmup >= warmup:
+                break
+
+        total_images = 0
+        t0 = time.perf_counter()
+        for data, _ in loader:
+            data = data.to(self.device)
+            model(data)
+            total_images += data.size(0)
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+        elapsed = time.perf_counter() - t0
+
+        latency_ms = elapsed / total_images * 1000
+        throughput = total_images / elapsed
+        return {"latency_ms_per_image": latency_ms, "throughput_img_per_s": throughput}
 
     def _train_one_epoch(self, model, optimizer, scaler, criterion) -> tuple[float, float]:
         model.train()

@@ -12,4 +12,4 @@ from .quantization import (
     convert_to_int8,
     make_qat_callback,
 )
-from .reporting import disk_mb, build_comparison_table, create_results_summary
+from .reporting import disk_mb, build_comparison_table, create_results_summary, compute_flops, make_run_summary

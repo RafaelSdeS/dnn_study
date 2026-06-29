@@ -14,79 +14,84 @@ Each experiment follows the same pipeline:
 
 ## Notebook Output
 
-* Reduce notebook output volume.
+* ✅ Reduce notebook output volume.
 
-  * Remove or greatly reduce per-batch `print()` statements, but keep it trackable so I know it is running.
-  * Use `tqdm` progress bars instead of creating new output lines.
+  * ✅ Remove or greatly reduce per-batch `print()` statements, but keep it trackable so I know it is running.
+  * ✅ Use `tqdm` progress bars instead of creating new output lines.
 
-* Separate logs from notebook output.
+* ✅ Separate logs from notebook output.
 
-  * Save training logs to a `.log` file.
-  * Continue logging metrics to Weights & Biases.
-  * Save the final run summary to a JSON or CSV file.
+  * ✅ Save training logs to a `.log` file — `Trainer.__init__(log_file=...)` writes timestamped logs.
+  * ✅ Continue logging metrics to Weights & Biases — now includes LR, epoch time, peak GPU memory.
+  * ✅ Save the final run summary to a JSON or CSV file — per-model summary JSON via `make_run_summary()`.
 
-* Keep notebooks lightweight.
+* ✅ Keep notebooks lightweight.
 
-  * Avoid storing thousands of lines of training logs in the notebook.
+  * ✅ Avoid storing thousands of lines of training logs in the notebook.
 
-* Improve experiment reporting.
+* ✅ Improve experiment reporting.
 
-  * Save a concise `run_summary` (Top-1, Top-5, loss, training time, etc.) as a standalone file.
-  * Aggregate all experiment summaries into a single CSV for easy comparison.
+  * ✅ Save a concise `run_summary` (Top-1, Top-5, loss, training time, etc.) as a standalone file.
+  * ✅ Aggregate all experiment summaries into a single CSV for easy comparison — comparison CSV still exists; individual summaries are JSON for crash-safety.
 
-* Verify notebook execution.
+* ✅ Verify notebook execution.
 
-  * Ensure execution errors are written to the log file and are easy to locate.
-  * Ensure the final run summary is always printed and saved, even if notebook output is collapsed.
+  * ✅ Ensure execution errors are written to the log file and are easy to locate — `log_file` handler captures all logging.
+  * ✅ Ensure the final run summary is always printed and saved, even if notebook output is collapsed — logged to file + console + W&B.
 
-* Weights & Biases (W&B)
+* ✅ Weights & Biases (W&B)
 
-  * Always initialize W&B runs with clear, descriptive names and complete metadata (e.g., project, group, tags, configuration, model, dataset, and experiment parameters) so runs are easy to identify, compare, and reproduce.
-  * Use clear, descriptive, and consistent names for all W&B artifacts so they are easy to identify and distinguish.
+  * ✅ Always initialize W&B runs with clear, descriptive names and complete metadata (project, group, tags, config with num_classes/img_size/dataset, model, params).
+  * ✅ Use clear, descriptive, and consistent names for all W&B artifacts so they are easy to identify and distinguish.
 ---
 
 ## Metrics to Add
 
 ### Efficiency
 
-* Report FP32 model size (MB).
-* Report INT8 model size (MB).
-* Measure inference latency (ms/batch and ms/image).
-* Measure throughput (images/s).
-* Measure memory usage (GPU and/or CPU).
-* Report MACs/FLOPs.
-* Report parameter count.
+* ✅ Report FP32 model size (MB) — `disk_mb(SAVE_DIR / f"{name}_best.pth")`.
+* ✅ Report INT8 model size (MB) — `disk_mb(SAVE_DIR / f"{name}.pth")`.
+* ✅ Measure inference latency (ms/image) — `Trainer.benchmark()` returns `latency_ms_per_image`.
+* ✅ Measure throughput (images/s) — `Trainer.benchmark()` returns `throughput_img_per_s`.
+* ✅ Measure memory usage (GPU) — peak GPU memory per epoch tracked in `history["peak_gpu_mem_mb"]`, logged to W&B.
+* ✅ Report MACs/FLOPs — `compute_flops(model)` via fvcore, includes in `make_run_summary()`.
+* ✅ Report parameter count — via `torchinfo.summary()`, included in per-model summaries.
 
 ### Architecture Comparison
 
-* Estimate receptive field.
-* Compute parameter efficiency (Top-1 accuracy per million parameters).
-* Compute accuracy drop from FP32 → INT8 (Top-1 and Top-5).
-* Report Top-1 / Top-5 gap.
+* [ ] Estimate receptive field — requires manual calculation per architecture, not yet automated.
+* ✅ Compute parameter efficiency (Top-1 accuracy per million parameters) — `param_efficiency_top1_per_m` in `make_run_summary()`.
+* ✅ Compute accuracy drop from FP32 → INT8 (Top-1 and Top-5) — `quantization_drop_top1`, `int8_top1_top5_gap` in summary.
+* ✅ Report Top-1 / Top-5 gap — `fp32_top1_top5_gap`, `int8_top1_top5_gap` in summary.
 
 ---
 
 ## Run Summary
 
-Ensure the final `run_summary` always includes:
+✅ Per-model summaries implemented via `make_run_summary()`. Includes all fields below, saved to `{RESULTS_DIR}/{name}_summary.json`:
 
-* Model name
-* Training mode (FP32 / QAT / INT8 evaluation)
-* Number of epochs
-* Best validation Top-1
-* Best validation Top-5
-* Final validation Top-1
-* Final validation Top-5
-* Best validation loss
-* Final training loss
-* FP32 model size
-* INT8 model size
-* Number of parameters
-* Compression ratio
-* MACs/FLOPs
-* Inference latency
-* Throughput
-* Total training time
+* ✅ Model name
+* ✅ Training mode (FP32 / QAT / INT8 evaluation)
+* ✅ Number of epochs
+* ✅ Best validation Top-1
+* ✅ Best validation Top-5
+* ✅ Final validation Top-1
+* ✅ Final validation Top-5
+* ✅ Best validation loss
+* ✅ Final training loss
+* ✅ FP32 model size (MB)
+* ✅ INT8 model size (MB)
+* ✅ Number of parameters (M)
+* ✅ Compression ratio (FP32 size / INT8 size)
+* ✅ MACs/FLOPs (via fvcore)
+* ✅ Inference latency (ms/image, FP32 GPU + INT8 CPU)
+* ✅ Throughput (images/s, FP32 GPU + INT8 CPU)
+* ✅ Epoch time (average per epoch, seconds)
+* ✅ Total training time (seconds)
+* ✅ Peak GPU memory (MB)
+* ✅ FP32 vs INT8 Top-1 accuracy drop
+* ✅ Top-1 / Top-5 gap (both FP32 and INT8)
+* ✅ Parameter efficiency (Top-1 per M params)
 
 ---
 

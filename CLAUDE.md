@@ -46,10 +46,11 @@ alexnet_rafael/
 │   ├── data.py              # create_imagenet_loaders(cfg: DataConfig)
 │   ├── checkpoint.py        # save_checkpoint / load_checkpoint
 │   ├── registry.py          # MODEL_REGISTRY dict + register_model()
-│   ├── trainer.py           # Trainer class: fit(), evaluate(), _train_one_epoch(), _validate()
+│   ├── trainer.py           # Trainer class: fit(), evaluate(), benchmark(), _train_one_epoch(), _validate()
 │   ├── quantization.py      # find_fuse_groups, prepare_qat_model, build_qat,
 │   │                        #   convert_to_int8, load_best_model, make_qat_callback
-│   └── reporting.py         # build_comparison_table(), create_results_summary(), disk_mb()
+│   └── reporting.py         # build_comparison_table(), create_results_summary(), disk_mb(),
+│                            #   compute_flops(), make_run_summary()
 ├── models/                  # Model architecture definitions (three experimental phases)
 │   ├── __init__.py          # Re-exports all public constructors
 │   ├── baselines.py         # Stage 1 — Reference: AlexNetTV, VGGStyleCNN, ResNet18TV,
@@ -97,6 +98,7 @@ Checkpoint artifacts (git-ignored, created at runtime):
 | torchvision | 0.20.1+cu121 | Datasets, pretrained models, transforms |
 | torchmetrics | 1.9.0 | Top-k accuracy in `Trainer.evaluate()` |
 | torchinfo | — | Model summary (`torchinfo.summary()`) |
+| fvcore | — | FLOPs/MACs counting in `compute_flops()` |
 | W&B (wandb) | 0.28.0 | Experiment tracking (offline-first) |
 | kagglehub | — | Tiny ImageNet download |
 | JupyterLab | 4.5.7 | Notebook environment |
@@ -169,14 +171,22 @@ register_model("alexnet_fp32", build_alexnet, fuse_map=[...], fuse_root_attr="fe
 ```python
 from ml import Trainer, build_qat, build_qat_from_model
 from dataclasses import replace
+from pathlib import Path
 
-# FP32 — override lr per model from registry
+# FP32 — override lr per model from registry, optionally log to file
 trainer = Trainer(model, train_loader, val_loader,
                   cfg=replace(fp32_cfg, lr=spec["lr"]),
                   device=device, save_dir=SAVE_DIR, run_name=name,
-                  num_classes=200)
-results = trainer.fit()           # → {"best_val_accuracy": ..., "best_epoch": ..., "history": {...}}
+                  num_classes=200,
+                  log_file=SAVE_DIR / f"{name}.log")  # optional; logs to file + stdout
+results = trainer.fit()
+# → {"best_val_accuracy": ..., "best_epoch": ..., "total_training_time_s": ...,
+#    "history": {"train_loss": [...], "epoch_time_s": [...], "peak_gpu_mem_mb": [...]}, ...}
+
 metrics = trainer.evaluate(topk=(1, 5))  # → {"top1": ..., "top5": ..., "loss": ...}
+
+# Benchmark inference (FP32 on GPU, INT8 on CPU)
+benchmark_results = trainer.benchmark()  # → {"latency_ms_per_image": ..., "throughput_img_per_s": ...}
 
 # QAT — two patterns: build_qat() by arch name, or build_qat_from_model(model)
 qat_cfg = replace(fp32_cfg, epochs=20, lr=1e-5, use_amp=False)
@@ -187,7 +197,8 @@ qat_model = build_qat("alexnet_small_kernel", SAVE_DIR, device)
 # Option 2: from loaded model directly
 # qat_model = build_qat_from_model(trainer.model, freeze_maps=[...], fuse_root="features")
 
-trainer = Trainer(qat_model, ..., cfg=qat_cfg, epoch_callback=cb)
+trainer = Trainer(qat_model, ..., cfg=qat_cfg, epoch_callback=cb,
+                  log_file=SAVE_DIR / f"qat_{name}.log")
 trainer.fit()
 ```
 
@@ -216,6 +227,18 @@ Skip/resume logic lives in the notebook loop — not hidden inside a wrapper fun
 - Training augmentation: `RandomResizedCrop(scale=0.7-1.0)`, `RandomHorizontalFlip`, `RandomRotation(15°)`, `AutoAugment(ImageNet policy)`
 - Validation: `Resize(img_size) → CenterCrop(img_size)`
 
+### 9. Logging & Reporting
+
+**File-based logging:** Pass `log_file=Path(...)` to `Trainer.__init__()`. Creates a timestamped `.log` file with all epoch-level metrics. All `print()` calls → `self.logger.info(...)`. Logs to both console and file.
+
+**W&B logging:** Includes per-epoch: `train_loss`, `train_acc`, `val_loss`, `val_acc`, `val_top5`, `lr`, `epoch_time_s`, `peak_gpu_mem_mb`. Run init must include `tags`, `num_classes`, `img_size`, `dataset` in config for full traceability.
+
+**Inference benchmarking:** `Trainer.benchmark(loader=None, warmup=100)` measures latency and throughput on the given loader (or val_loader). Warm-up skips, then times a full pass with `torch.no_grad()` and (if CUDA) `torch.cuda.synchronize()`.
+
+**Per-model summaries:** `make_run_summary(name, mode, fit_results, fp32_eval, ...)` assembles 30+ fields: training metrics, FP32/INT8 eval, model sizes, MACs/FLOPs, latency, throughput, compression ratio, accuracy drops, parameter efficiency. Returns a dict; save to JSON per model for crash-safety.
+
+**FLOPs calculation:** `compute_flops(model, input_size=(1,3,64,64))` uses fvcore's FlopCountAnalysis. Returns `{"macs": int, "flops": int}`.
+
 ---
 
 ## Coding Conventions
@@ -240,17 +263,38 @@ Notebook
   │                 MODEL_REGISTRY, register_model
   │                 Trainer, make_qat_callback
   │                 build_qat, build_qat_from_model, load_best_model, convert_to_int8
-  │                 build_comparison_table, create_results_summary, disk_mb
+  │                 build_comparison_table, create_results_summary, disk_mb,
+  │                 compute_flops, make_run_summary
   ├─ from models import AlexNetTV, AlexNet3x3, AlexNetSmallKernel, AlexNetResidual, ...
   │                     (pick from baselines.py/alexnet_variants.py/compensation.py)
   ├─ register_model() → MODEL_REGISTRY
-  ├─ for name, spec in MODEL_REGISTRY.items():
-  │     Trainer(..., cfg=replace(fp32_cfg, lr=spec["lr"])).fit()
-  ├─ for name in MODEL_REGISTRY:
-  │     build_qat(name, SAVE_DIR, device) → Trainer(..., epoch_callback=cb).fit()
-  │     convert_to_int8(qat_model) → Trainer.evaluate(topk=(1,5))
-  └─ build_comparison_table(rows) → results/alexnet_qat/final_comparison.csv
-     create_results_summary(results, config, output_path) → results/alexnet_qat/experiment_summary.json
+  │
+  ├─ FP32 training loop:
+  │   ├─ for name, spec in MODEL_REGISTRY.items():
+  │   │     wandb.init(..., tags=[], config={...num_classes, img_size, dataset...})
+  │   │     Trainer(..., log_file=SAVE_DIR / f"{name}.log", wandb_run=run).fit()
+  │   │     wandb.finish()
+  │
+  ├─ QAT training loop:
+  │   ├─ for name in MODEL_REGISTRY:
+  │   │     wandb.init(..., tags=[], config={...})
+  │   │     build_qat(name, SAVE_DIR, device)
+  │   │     Trainer(..., log_file=..., epoch_callback=cb).fit()
+  │   │     wandb.finish()
+  │
+  ├─ INT8 conversion & evaluation:
+  │   ├─ convert_to_int8(qat_model) → evaluate(topk=(1,5)) on CPU
+  │
+  ├─ Benchmarking & per-model summaries (NEW):
+  │   ├─ fp32_benchmarks[name] = Trainer(...).benchmark()  # GPU
+  │   ├─ int8_benchmarks[name] = Trainer(...).benchmark()  # CPU, warmup=50
+  │   ├─ fp32_flops[name] = compute_flops(model)
+  │   ├─ for each model:
+  │   │     make_run_summary(...) → RESULTS_DIR / f"{name}_summary.json"
+  │
+  ├─ Comparison table & aggregate summary:
+  │   ├─ build_comparison_table(rows) → results/.../final_comparison.csv
+  │   └─ create_results_summary(results, config, output_path) → results/.../experiment_summary.json
 ```
 
 ---
@@ -284,6 +328,9 @@ Key findings:
 - AlexNetSmallKernel: 1.6M params, 1.56 MB INT8 — best efficiency in the AlexNet family.
 - See `notebooks/baselines_qat.ipynb` and `notebooks/compensation_qat.ipynb` for results on reference and compensation-mechanism architectures.
 
+**New (Post-High-Priority Update):**
+Each model now generates a per-model summary JSON (e.g., `{RESULTS_DIR}/alexnet_small_kernel_summary.json`) with 30+ fields: FP32/INT8 accuracy, inference latency, throughput, MACs/FLOPs, memory usage, training time, quantization drop, and parameter efficiency. See `make_run_summary()` for full schema. This enables crash-safe result collection and detailed cross-model analysis.
+
 ---
 
 ## Running the Project
@@ -300,7 +347,16 @@ jupyter lab
 
 **Dataset:** Tiny ImageNet-200 is downloaded via `kagglehub` on first run. Cached at `~/.cache/kagglehub/` (git-ignored).
 
-**Checkpoint locations:** Each notebook sets its own `SAVE_DIR`. Best FP32 model: `{SAVE_DIR}/{arch}_best.pth`. Best QAT model: `{SAVE_DIR}/qat_{arch}_best.pth`. INT8 state dict: `{SAVE_DIR}/{arch}.pth`.
+**Checkpoint & log locations:** Each notebook sets its own `SAVE_DIR`. 
+- Best FP32 model: `{SAVE_DIR}/{arch}_best.pth`. 
+- Best QAT model: `{SAVE_DIR}/qat_{arch}_best.pth`. 
+- INT8 state dict: `{SAVE_DIR}/{arch}.pth`.
+- Training logs: `{SAVE_DIR}/{arch}.log` and `{SAVE_DIR}/qat_{arch}.log` (timestamped per epoch).
+
+**Results & summaries:** Each notebook writes to `RESULTS_DIR`:
+- Per-model summaries: `{RESULTS_DIR}/{arch}_summary.json` (30+ metrics, crash-safe).
+- Comparison table: `{RESULTS_DIR}/final_comparison.csv` (all models, FP32 vs INT8).
+- Aggregate summary: `{RESULTS_DIR}/experiment_summary.json` (all metrics combined).
 
 **Sync W&B offline runs:**
 ```bash
@@ -308,3 +364,8 @@ wandb sync --sync-all
 ```
 
 **INT8 inference note:** Always call `model.eval()` and move model to CPU before `torch.ao.quantization.convert()` and before INT8 forward passes.
+
+**Install dependencies** (if needed):
+```bash
+pip install fvcore
+```
