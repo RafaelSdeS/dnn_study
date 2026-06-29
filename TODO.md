@@ -10,6 +10,99 @@ Each experiment follows the same pipeline:
 
 ---
 
+# High Priority
+
+## Notebook Output
+
+* Reduce notebook output volume.
+
+  * Remove or greatly reduce per-batch `print()` statements, but keep it trackable so I know it is running.
+  * Use `tqdm` progress bars instead of creating new output lines.
+
+* Separate logs from notebook output.
+
+  * Save training logs to a `.log` file.
+  * Continue logging metrics to Weights & Biases.
+  * Save the final run summary to a JSON or CSV file.
+
+* Keep notebooks lightweight.
+
+  * Avoid storing thousands of lines of training logs in the notebook.
+
+* Improve experiment reporting.
+
+  * Save a concise `run_summary` (Top-1, Top-5, loss, training time, etc.) as a standalone file.
+  * Aggregate all experiment summaries into a single CSV for easy comparison.
+
+* Verify notebook execution.
+
+  * Ensure execution errors are written to the log file and are easy to locate.
+  * Ensure the final run summary is always printed and saved, even if notebook output is collapsed.
+
+---
+
+## Metrics to Add
+
+### Efficiency
+
+* Report FP32 model size (MB).
+* Report INT8 model size (MB).
+* Measure inference latency (ms/batch and ms/image).
+* Measure throughput (images/s).
+* Measure memory usage (GPU and/or CPU).
+* Report MACs/FLOPs.
+* Report parameter count.
+
+### Architecture Comparison
+
+* Estimate receptive field.
+* Compute parameter efficiency (Top-1 accuracy per million parameters).
+* Compute accuracy drop from FP32 → INT8 (Top-1 and Top-5).
+* Report Top-1 / Top-5 gap.
+
+---
+
+## Run Summary
+
+Ensure the final `run_summary` always includes:
+
+* Model name
+* Training mode (FP32 / QAT / INT8 evaluation)
+* Number of epochs
+* Best validation Top-1
+* Best validation Top-5
+* Final validation Top-1
+* Final validation Top-5
+* Best validation loss
+* Final training loss
+* FP32 model size
+* INT8 model size
+* Number of parameters
+* Compression ratio
+* MACs/FLOPs
+* Inference latency
+* Throughput
+* Total training time
+
+---
+
+## Analysis
+
+* Generate a single CSV summarizing every experiment.
+* Compare all architectures (AlexNet, AlexNet 3×3, Small Kernel, VGG, etc.).
+* Compare FP32 vs INT8 side by side.
+* Rank models by:
+
+  * Top-1 accuracy
+  * Top-5 accuracy
+  * Model size
+  * Inference latency
+  * Parameter efficiency
+  * Accuracy loss after quantization
+  * Overall efficiency (accuracy vs compute).
+
+---
+
 ## Phase 1 — Reference Architectures
 
 Establish baseline performance using representative CNN families.
@@ -106,3 +199,56 @@ Produce:
 * [ ] Latency comparison
 * [ ] Winograd compatibility discussion
 * [ ] Final conclusions and recommendations
+
+---
+
+## Phase 6 — Hardware Profiling & Winograd Efficiency Validation
+
+Measure actual latency, memory bandwidth, and power consumption on RTX 4060 to empirically validate Winograd acceleration claims. Compare theoretical vs real-world efficiency gains across kernel sizes.
+
+Benchmarks:
+
+* [ ] Profile single-layer latency for Conv(k=2×2), Conv(k=3×3), Conv(k=5×5) on RTX 4060
+* [ ] Measure memory bandwidth utilization (NVIDIA Nsight Compute or similar)
+* [ ] Profile full forward pass for Phase 1–5 reference architectures (AlexNet, MobileNetV2, TinyHybridNet, etc.)
+* [ ] Profile INT8 vs FP32 inference latency on CPU (fbgemm backend)
+* [ ] Identify which layers contribute most to latency (are Winograd gains concentrated or distributed?)
+* [ ] Measure Winograd reordering overhead (input/output packing costs)
+* [ ] Profile power consumption under sustained inference (if HW supports NVIDIA RAPL or equivalent)
+
+Outputs:
+
+* [ ] Latency heatmap: kernel size vs layer depth
+* [ ] Speedup ratio: (Conv 5×5 time) / (Conv 3×3 time)
+* [ ] Winograd feasibility threshold: break-even point for reordering overhead
+* [ ] CPU INT8 latency ranking (identify bottleneck layers)
+* [ ] Revised efficiency recommendations based on empirical data
+
+---
+
+## Phase 7 — Efficient Vision Transformers & Hybrid Attention Architectures
+
+Explore whether attention-based models can match or exceed CNN efficiency within Winograd constraints. Investigate local-attention Vision Transformers as an alternative paradigm to small-kernel CNNs.
+
+Models:
+
+* [ ] Vision Transformer (ViT-Tiny) with local attention windows (e.g., 3×3 or 5×5 patches, local self-attention)
+* [ ] DeiT-Tiny (Knowledge-distilled ViT)
+* [ ] Hybrid CNN-Transformer (small-kernel CNN stem + local transformer blocks)
+* [ ] Lightweight attention variant (linear attention or depthwise attention)
+
+For each variant:
+
+* [ ] FP32 training
+* [ ] QAT fine-tuning
+* [ ] INT8 conversion
+* [ ] FP32 vs INT8 evaluation
+* [ ] Compare accuracy, latency, model size, and quantization robustness vs Phase 5–6 CNNs
+* [ ] Assess Winograd deployment feasibility (attention ops, memory layout)
+* [ ] Determine whether attention can substitute for large receptive fields in resource-constrained inference
+
+---
+
+## Phase 8 — Extended Architecture Search (Future)
+
+If Phase 7 yields promising hybrid results, consider automated architecture search (NAS or evolutionary search) to discover optimal kernel-size, depth, width, and attention-ratio combinations under Winograd constraints.
