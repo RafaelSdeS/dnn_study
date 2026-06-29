@@ -1,6 +1,5 @@
 from torch.utils.data import DataLoader, Subset
 from torchvision import datasets, transforms
-from torchvision.transforms import AutoAugmentPolicy
 import torch
 
 from .config import DataConfig

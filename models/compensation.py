@@ -77,10 +77,6 @@ class AlexNetBottleneck(nn.Module):
         return x
 
 
-def build_alexnet_bottleneck(num_classes: int = 200) -> nn.Module:
-    return AlexNetBottleneck(num_classes)
-
-
 # ─── AlexNetFactorized ────────────────────────────────────────────────────────
 
 class AlexNetFactorized(nn.Module):
@@ -149,10 +145,6 @@ class AlexNetFactorized(nn.Module):
         return x
 
 
-def build_alexnet_factorized(num_classes: int = 200) -> nn.Module:
-    return AlexNetFactorized(num_classes)
-
-
 # ─── AlexNetGroupConv ─────────────────────────────────────────────────────────
 
 class AlexNetGroupConv(nn.Module):
@@ -211,10 +203,6 @@ class AlexNetGroupConv(nn.Module):
         x = self.classifier(x)
         x = self.dequant(x)
         return x
-
-
-def build_alexnet_groupconv(num_classes: int = 200) -> nn.Module:
-    return AlexNetGroupConv(num_classes)
 
 
 # ─── AlexNetDepthwiseSep ──────────────────────────────────────────────────────
@@ -279,10 +267,6 @@ class AlexNetDepthwiseSep(nn.Module):
         x = self.classifier(x)
         x = self.dequant(x)
         return x
-
-
-def build_alexnet_depthwisesep(num_classes: int = 200) -> nn.Module:
-    return AlexNetDepthwiseSep(num_classes)
 
 
 # ─── AlexNetResidual ──────────────────────────────────────────────────────────
@@ -381,10 +365,6 @@ class AlexNetResidual(nn.Module):
         return x
 
 
-def build_alexnet_residual(num_classes: int = 200) -> nn.Module:
-    return AlexNetResidual(num_classes)
-
-
 # ─── AlexNetFire ──────────────────────────────────────────────────────────────
 
 class _FireModule(nn.Module):
@@ -454,10 +434,6 @@ class AlexNetFire(nn.Module):
         return x
 
 
-def build_alexnet_fire(num_classes: int = 200) -> nn.Module:
-    return AlexNetFire(num_classes)
-
-
 # ─── AlexNetGAP ───────────────────────────────────────────────────────────────
 
 class AlexNetGAP(nn.Module):
@@ -505,10 +481,6 @@ class AlexNetGAP(nn.Module):
         x = self.classifier(x)
         x = self.dequant(x)
         return x
-
-
-def build_alexnet_gap(num_classes: int = 200) -> nn.Module:
-    return AlexNetGAP(num_classes)
 
 
 # ─── AlexNetSE ────────────────────────────────────────────────────────────────
@@ -574,5 +546,3 @@ class AlexNetSE(nn.Module):
         return x
 
 
-def build_alexnet_se(num_classes: int = 200) -> nn.Module:
-    return AlexNetSE(num_classes)

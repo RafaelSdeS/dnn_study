@@ -50,10 +50,6 @@ class AlexNetTV(nn.Module):
         return x
 
 
-def build_alexnet(num_classes: int = 200) -> nn.Module:
-    return AlexNetTV(num_classes)
-
-
 # ─── VGGStyleCNN ──────────────────────────────────────────────────────────────
 
 class VGGStyleCNN(nn.Module):
@@ -113,10 +109,6 @@ class VGGStyleCNN(nn.Module):
         return x
 
 
-def build_vggstylecnn(num_classes: int = 200) -> nn.Module:
-    return VGGStyleCNN(num_classes)
-
-
 # ─── ResNet18TV ───────────────────────────────────────────────────────────────
 
 class ResNet18TV(nn.Module):
@@ -148,10 +140,6 @@ class ResNet18TV(nn.Module):
         x = self.base(x)
         x = self.dequant(x)
         return x
-
-
-def build_resnet18(num_classes: int = 200) -> nn.Module:
-    return ResNet18TV(num_classes)
 
 
 # ─── MobileNetV2TV ────────────────────────────────────────────────────────────
@@ -188,5 +176,3 @@ class MobileNetV2TV(nn.Module):
         return x
 
 
-def build_mobilenetv2(num_classes: int = 200) -> nn.Module:
-    return MobileNetV2TV(num_classes)

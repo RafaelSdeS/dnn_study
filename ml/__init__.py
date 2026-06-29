@@ -6,7 +6,6 @@ from .trainer import Trainer
 from .quantization import (
     find_fuse_groups,
     prepare_qat_model,
-    build_qat_from_model,
     build_qat,
     load_best_model,
     convert_to_int8,

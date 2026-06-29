@@ -56,10 +56,6 @@ class AlexNet3x3(nn.Module):
         return x
 
 
-def build_alexnet_3x3(num_classes: int = 200) -> nn.Module:
-    return AlexNet3x3(num_classes)
-
-
 # ─── AlexNet2x2 ───────────────────────────────────────────────────────────────
 
 class AlexNet2x2(nn.Module):
@@ -109,10 +105,6 @@ class AlexNet2x2(nn.Module):
         x = self.classifier(x)
         x = self.dequant(x)
         return x
-
-
-def build_alexnet_2x2(num_classes: int = 200) -> nn.Module:
-    return AlexNet2x2(num_classes)
 
 
 # ─── AlexNetStacked ───────────────────────────────────────────────────────────
@@ -182,10 +174,6 @@ class AlexNetStacked(nn.Module):
         return x
 
 
-def build_alexnet_stacked(num_classes: int = 200) -> nn.Module:
-    return AlexNetStacked(num_classes)
-
-
 # ─── AlexNetMixed ─────────────────────────────────────────────────────────────
 
 class AlexNetMixed(nn.Module):
@@ -237,10 +225,6 @@ class AlexNetMixed(nn.Module):
         return x
 
 
-def build_alexnet_mixed(num_classes: int = 200) -> nn.Module:
-    return AlexNetMixed(num_classes)
-
-
 # ─── AlexNetSmallKernel ───────────────────────────────────────────────────────
 
 class AlexNetSmallKernel(nn.Module):
@@ -289,5 +273,3 @@ class AlexNetSmallKernel(nn.Module):
         return x
 
 
-def build_alexnet_smallkernel(num_classes: int = 200) -> nn.Module:
-    return AlexNetSmallKernel(num_classes)

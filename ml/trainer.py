@@ -192,7 +192,6 @@ class Trainer:
         )
 
         return {
-            "best_val_accuracy": best_val_acc,
             "best_val_top1": best_val_acc,
             "best_val_top5": best_val_top5,
             "best_val_loss": best_val_loss,

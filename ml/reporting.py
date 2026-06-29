@@ -134,8 +134,6 @@ def create_results_summary(
     """
     if hasattr(config, "__dataclass_fields__"):
         cfg_dict = asdict(config)
-    elif hasattr(config, "to_dict"):
-        cfg_dict = config.to_dict()
     else:
         cfg_dict = dict(config)
 
