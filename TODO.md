@@ -22,7 +22,7 @@ Each experiment follows the same pipeline:
 * ✅ Separate logs from notebook output.
 
   * ✅ Save training logs to a `.log` file — `Trainer.__init__(log_file=...)` writes timestamped logs.
-  * ✅ Continue logging metrics to Weights & Biases — now includes LR, epoch time, peak GPU memory.
+  * ✅ Continue logging metrics to Weights & Biases — now includes LR, epoch time, peak GPU memory, `grad_norm` (when `grad_clip_norm` is set).
   * ✅ Save the final run summary to a JSON or CSV file — per-model summary JSON via `make_run_summary()`.
 
 * ✅ Keep notebooks lightweight.

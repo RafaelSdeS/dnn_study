@@ -181,12 +181,12 @@ trainer = Trainer(model, train_loader, val_loader,
                   log_file=SAVE_DIR / f"{name}.log")  # optional; logs to file + stdout
 results = trainer.fit()
 # → {"best_val_accuracy": ..., "best_epoch": ..., "total_training_time_s": ...,
-#    "history": {"train_loss": [...], "epoch_time_s": [...], "peak_gpu_mem_mb": [...]}, ...}
+#    "history": {"train_loss": [...], "lr": [...], "epoch_time_s": [...], "peak_gpu_mem_mb": [...]}, ...}
 
 metrics = trainer.evaluate(topk=(1, 5))  # → {"top1": ..., "top5": ..., "loss": ...}
 
 # Benchmark inference (FP32 on GPU, INT8 on CPU)
-benchmark_results = trainer.benchmark()  # → {"latency_ms_per_image": ..., "throughput_img_per_s": ...}
+benchmark_results = trainer.benchmark()  # → {"latency_ms_per_image": ..., "throughput_img_per_s": ..., "device": ...}
 
 # QAT — two patterns: build_qat() by arch name, or build_qat_from_model(model)
 qat_cfg = replace(fp32_cfg, epochs=20, lr=1e-5, use_amp=False)
@@ -223,6 +223,7 @@ Skip/resume logic lives in the notebook loop — not hidden inside a wrapper fun
 
 - Dataset: Tiny ImageNet-200, loaded via `torchvision.datasets.ImageFolder`
 - Deterministic 90/10 train/val split using `torch.Generator` seeded at `seed=42`
+- Worker RNG seeded via `worker_init_fn` (`random.seed(cfg.seed + worker_id)`) for reproducible PIL-based augmentation across DataLoader workers
 - Normalization: `mean=[0.485, 0.456, 0.406]`, `std=[0.229, 0.224, 0.225]` (ImageNet stats)
 - Training augmentation: `RandomResizedCrop(scale=0.7-1.0)`, `RandomHorizontalFlip`, `RandomRotation(15°)`, `AutoAugment(ImageNet policy)`
 - Validation: `Resize(img_size) → CenterCrop(img_size)`
@@ -231,7 +232,7 @@ Skip/resume logic lives in the notebook loop — not hidden inside a wrapper fun
 
 **File-based logging:** Pass `log_file=Path(...)` to `Trainer.__init__()`. Creates a timestamped `.log` file with all epoch-level metrics. All `print()` calls → `self.logger.info(...)`. Logs to both console and file.
 
-**W&B logging:** Includes per-epoch: `train_loss`, `train_acc`, `val_loss`, `val_acc`, `val_top5`, `lr`, `epoch_time_s`, `peak_gpu_mem_mb`. Run init must include `tags`, `num_classes`, `img_size`, `dataset` in config for full traceability.
+**W&B logging:** Includes per-epoch: `train_loss`, `train_acc`, `val_loss`, `val_acc`, `val_top5`, `lr`, `epoch_time_s`, `peak_gpu_mem_mb`, `grad_norm` (only when `grad_clip_norm` is set). Run init must include `tags`, `num_classes`, `img_size`, `dataset` in config for full traceability.
 
 **Inference benchmarking:** `Trainer.benchmark(loader=None, warmup=100)` measures latency and throughput on the given loader (or val_loader). Warm-up skips, then times a full pass with `torch.no_grad()` and (if CUDA) `torch.cuda.synchronize()`.
 
@@ -243,7 +244,7 @@ Skip/resume logic lives in the notebook loop — not hidden inside a wrapper fun
 
 ## Coding Conventions
 
-- **Reproducibility first:** Seed everything at the top of each notebook (`random`, `numpy`, `torch`, `torch.cuda`); set `cudnn.benchmark = True`.
+- **Reproducibility first:** Seed everything at the top of each notebook (`random`, `numpy`, `torch`, `torch.cuda`); set `cudnn.deterministic = True`. Do **not** set `cudnn.benchmark = True` — it conflicts with determinism and provides no benefit for fixed 64×64 inputs.
 - **Config pattern:** Instantiate `DataConfig`, `TrainerConfig`, `QATConfig` directly in the notebook — all defaults are explicit. Use `dataclasses.replace()` to override per-model.
 - **Checkpointing:** `save_checkpoint` / `load_checkpoint` in `ml/checkpoint.py` store full training state `{model, optimizer, scheduler, epoch, metrics}`.
 - **W&B logging:** Call `wandb.init(project=..., config=dataclasses.asdict(cfg), mode="offline")` directly. No wrapper. Sync later with `wandb sync --sync-all`.
