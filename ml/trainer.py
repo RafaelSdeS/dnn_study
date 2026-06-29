@@ -77,7 +77,7 @@ class Trainer:
         wandb_run_id = self.wandb_run.id if self.wandb_run else None
         history: dict[str, list] = {
             "train_loss": [], "train_acc": [], "val_loss": [], "val_acc": [], "val_top5": [],
-            "epoch_time_s": [], "peak_gpu_mem_mb": [],
+            "epoch_time_s": [], "peak_gpu_mem_mb": [], "lr": [],
         }
 
         # Load full training state if resuming
@@ -85,7 +85,7 @@ class Trainer:
             state = load_resume_state(resume_from, model, optimizer, scheduler, scaler, device=str(self.device))
             start_epoch = state["epoch"] + 1
             best_val_acc = state["best_val_acc"]
-            best_val_top5 = best_val_acc  # ponytail: best_val_top5 not persisted, use best_val_acc as proxy
+            best_val_top5 = state["best_val_top5"]
             best_epoch = start_epoch - 1
             patience_counter = state["patience_counter"]
             for k, v in state["history"].items():
@@ -107,7 +107,7 @@ class Trainer:
             if torch.cuda.is_available():
                 torch.cuda.reset_peak_memory_stats(self.device)
 
-            train_loss, train_acc = self._train_one_epoch(model, optimizer, scaler, criterion)
+            train_loss, train_acc, avg_grad_norm = self._train_one_epoch(model, optimizer, scaler, criterion)
             val_loss, val_acc, val_top5 = self._validate(model, criterion)
             scheduler.step()
             lr = optimizer.param_groups[0]["lr"]
@@ -125,20 +125,26 @@ class Trainer:
             history["val_top5"].append(val_top5)
             history["epoch_time_s"].append(epoch_time)
             history["peak_gpu_mem_mb"].append(peak_mem)
+            history["lr"].append(lr)
+            if avg_grad_norm is not None:
+                history.setdefault("grad_norm", []).append(avg_grad_norm)
 
             if self.wandb_run is not None:
-                self.wandb_run.log(
-                    {"train_loss": train_loss, "train_acc": train_acc,
-                     "val_loss": val_loss, "val_acc": val_acc, "val_top5": val_top5,
-                     "lr": lr, "epoch_time_s": epoch_time, "peak_gpu_mem_mb": peak_mem},
-                    step=epoch + 1,
-                )
+                log_dict = {
+                    "train_loss": train_loss, "train_acc": train_acc,
+                    "val_loss": val_loss, "val_acc": val_acc, "val_top5": val_top5,
+                    "lr": lr, "epoch_time_s": epoch_time, "peak_gpu_mem_mb": peak_mem,
+                }
+                if avg_grad_norm is not None:
+                    log_dict["grad_norm"] = avg_grad_norm
+                self.wandb_run.log(log_dict, step=epoch + 1)
 
             # Save resume checkpoint every epoch (full training state for recovery)
             save_checkpoint(
                 resume_path, model, optimizer, scheduler, epoch, {"val_acc": val_acc},
                 scaler=scaler,
                 best_val_acc=best_val_acc,
+                best_val_top5=best_val_top5,
                 history=history,
                 wandb_run_id=wandb_run_id,
                 patience_counter=patience_counter,
@@ -259,12 +265,13 @@ class Trainer:
 
         latency_ms = elapsed / total_images * 1000
         throughput = total_images / elapsed
-        return {"latency_ms_per_image": latency_ms, "throughput_img_per_s": throughput}
+        return {"latency_ms_per_image": latency_ms, "throughput_img_per_s": throughput, "device": str(self.device)}
 
-    def _train_one_epoch(self, model, optimizer, scaler, criterion) -> tuple[float, float]:
+    def _train_one_epoch(self, model, optimizer, scaler, criterion) -> tuple[float, float, float | None]:
         model.train()
         cfg = self.cfg
         total_loss = correct = total = 0
+        total_norm = 0.0
 
         for data, target in (bar := tqdm(self.train_loader, desc="Training")):
             data, target = data.to(self.device), target.to(self.device)
@@ -277,7 +284,7 @@ class Trainer:
                 scaler.scale(loss).backward()
                 if cfg.grad_clip_norm:
                     scaler.unscale_(optimizer)
-                    nn.utils.clip_grad_norm_(model.parameters(), cfg.grad_clip_norm)
+                    total_norm += nn.utils.clip_grad_norm_(model.parameters(), cfg.grad_clip_norm).item()
                 scaler.step(optimizer)
                 scaler.update()
             else:
@@ -285,7 +292,7 @@ class Trainer:
                 loss = criterion(out, target)
                 loss.backward()
                 if cfg.grad_clip_norm:
-                    nn.utils.clip_grad_norm_(model.parameters(), cfg.grad_clip_norm)
+                    total_norm += nn.utils.clip_grad_norm_(model.parameters(), cfg.grad_clip_norm).item()
                 optimizer.step()
 
             total_loss += loss.item() * target.size(0)
@@ -293,7 +300,8 @@ class Trainer:
             total += target.size(0)
             bar.set_postfix(loss=f"{total_loss/total:.4f}", acc=f"{100*correct/total:.2f}%")
 
-        return total_loss / total, 100 * correct / total
+        avg_norm = total_norm / len(self.train_loader) if cfg.grad_clip_norm else None
+        return total_loss / total, 100 * correct / total, avg_norm
 
     @torch.no_grad()
     def _validate(self, model, criterion) -> tuple[float, float, float]:

@@ -114,11 +114,11 @@ def make_run_summary(
 
 def build_comparison_table(rows: list[dict]) -> pd.DataFrame:
     """Build a sorted comparison DataFrame (by precision then descending top-1)."""
-    return (
-        pd.DataFrame(rows)
-        .sort_values(["precision", "top1_%"], ascending=[True, False])
-        .reset_index(drop=True)
-    )
+    df = pd.DataFrame(rows)
+    sort_cols = [c for c in ["precision", "top1_%"] if c in df.columns]
+    if not sort_cols:
+        return df.reset_index(drop=True)
+    return df.sort_values(sort_cols, ascending=[True, False][: len(sort_cols)]).reset_index(drop=True)
 
 
 def create_results_summary(

@@ -14,6 +14,7 @@ def save_checkpoint(
     metrics: dict,
     scaler=None,
     best_val_acc: float = 0.0,
+    best_val_top5: float = 0.0,
     history: Optional[dict] = None,
     wandb_run_id: Optional[str] = None,
     patience_counter: int = 0,
@@ -29,6 +30,7 @@ def save_checkpoint(
         "scaler_state_dict": scaler.state_dict() if scaler else None,
         "metrics": metrics,
         "best_val_acc": best_val_acc,
+        "best_val_top5": best_val_top5,
         "history": history or {},
         "wandb_run_id": wandb_run_id,
         "patience_counter": patience_counter,
@@ -71,6 +73,7 @@ def load_resume_state(
     return {
         "epoch": ckpt.get("epoch", 0),
         "best_val_acc": ckpt.get("best_val_acc", 0.0),
+        "best_val_top5": ckpt.get("best_val_top5", 0.0),
         "history": ckpt.get("history", {}),
         "wandb_run_id": ckpt.get("wandb_run_id"),
         "patience_counter": ckpt.get("patience_counter", 0),

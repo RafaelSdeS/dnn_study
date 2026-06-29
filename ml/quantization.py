@@ -87,7 +87,9 @@ def load_best_model(
 
 def build_qat(arch_name: str, save_dir: str | Path, device: torch.device) -> nn.Module:
     """Load best FP32 checkpoint → prepare QAT model."""
-    spec = MODEL_REGISTRY[arch_name]
+    spec = MODEL_REGISTRY.get(arch_name)
+    if spec is None:
+        raise KeyError(f"{arch_name!r} not in MODEL_REGISTRY. Registered: {list(MODEL_REGISTRY)}")
     model = load_best_model(arch_name, spec["ctor"], save_dir, device, eval_mode=False)
     return build_qat_from_model(model, arch_name, device)
 

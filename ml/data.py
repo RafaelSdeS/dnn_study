@@ -1,3 +1,4 @@
+import random
 from torch.utils.data import DataLoader, Subset
 from torchvision import datasets, transforms
 import torch
@@ -28,7 +29,7 @@ def create_imagenet_loaders(cfg: DataConfig, persistent_workers: bool = False):
             degrees=15,
             interpolation=transforms.InterpolationMode.BICUBIC,
         ),
-        transforms.AutoAugment(policy=AutoAugmentPolicy.IMAGENET),
+        transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.IMAGENET),
         transforms.ToTensor(),
         transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),
     ])
@@ -52,6 +53,8 @@ def create_imagenet_loaders(cfg: DataConfig, persistent_workers: bool = False):
     val_ds = Subset(val_full, perm[n_train:])
 
     use_pw = persistent_workers and cfg.num_workers > 0
+    # seed Python's random in each worker so PIL-based augmentation is reproducible
+    worker_init = (lambda wid: random.seed(cfg.seed + wid)) if cfg.num_workers > 0 else None
     train_loader = DataLoader(
         train_ds,
         batch_size=cfg.batch_size,
@@ -60,6 +63,7 @@ def create_imagenet_loaders(cfg: DataConfig, persistent_workers: bool = False):
         pin_memory=cfg.pin_memory,
         persistent_workers=use_pw,
         drop_last=True,
+        worker_init_fn=worker_init,
     )
     val_loader = DataLoader(
         val_ds,
@@ -68,6 +72,7 @@ def create_imagenet_loaders(cfg: DataConfig, persistent_workers: bool = False):
         num_workers=cfg.num_workers,
         pin_memory=cfg.pin_memory,
         persistent_workers=use_pw,
+        worker_init_fn=worker_init,
     )
 
     return train_ds, val_ds, train_loader, val_loader
