@@ -5,6 +5,6 @@ from .compensation import (
     AlexNetResidual, AlexNetFire, AlexNetGAP, AlexNetSE,
 )
 from .tinyhybridnet import (
-    FireMobileResidual, TinyHybridNet, build_tinyhybridnet,
-    InvertedResidual, TinyMobileNetV2, build_tinymobilenetv2,
+    FireMobileResidual, TinyHybridNet,
+    InvertedResidual, TinyMobileNetV2,
 )

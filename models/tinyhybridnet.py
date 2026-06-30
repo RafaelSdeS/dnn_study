@@ -4,12 +4,7 @@ import torch
 import torch.nn as nn
 import torch.ao.quantization as tq
 
-
-def _float_functional():
-    try:
-        return torch.nn.quantized.FloatFunctional()
-    except AttributeError:
-        return tq.FloatFunctional()
+from .compensation import _float_functional
 
 
 class FireMobileResidual(nn.Module):
@@ -79,10 +74,6 @@ class TinyHybridNet(nn.Module):
         return x
 
 
-def build_tinyhybridnet(num_classes: int = 200) -> nn.Module:
-    return TinyHybridNet(num_classes)
-
-
 class InvertedResidual(nn.Module):
     """MobileNetV2-style inverted residual block (expand → depthwise → project)."""
 
@@ -150,5 +141,3 @@ class TinyMobileNetV2(nn.Module):
         return x
 
 
-def build_tinymobilenetv2(num_classes: int = 200) -> nn.Module:
-    return TinyMobileNetV2(num_classes)

@@ -61,8 +61,7 @@ alexnet_rafael/
 │   │                        #   AlexNetFactorized, AlexNetGroupConv, AlexNetDepthwiseSep,
 │   │                        #   AlexNetResidual, AlexNetFire, AlexNetGAP, AlexNetSE
 │   └── tinyhybridnet.py     # Phase 3b — Efficient Hybrids: TinyHybridNet, TinyMobileNetV2,
-│                            #   FireMobileResidual, InvertedResidual,
-│                            #   build_tinyhybridnet, build_tinymobilenetv2
+│                            #   FireMobileResidual, InvertedResidual
 ├── configs/                 # Hyperparameter YAML files — loaded via configs/loader.py
 │   ├── loader.py            # load_config(filename) → dict (searches configs/ dir)
 │   ├── data.yaml            # DataConfig defaults
