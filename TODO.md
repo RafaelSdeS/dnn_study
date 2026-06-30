@@ -97,18 +97,17 @@ Each experiment follows the same pipeline:
 
 ## Analysis
 
-* Generate a single CSV summarizing every experiment.
-* Compare all architectures (AlexNet, AlexNet 3×3, Small Kernel, VGG, etc.).
-* Compare FP32 vs INT8 side by side.
-* Rank models by:
+* ✅ Generate a single CSV summarizing every experiment — `final_comparison.csv` per phase.
+* ✅ Cross-phase figures in `results/figures/` (accuracy_vs_macs, fp32_vs_int8_bar, training curves, etc.).
+* [ ] Full cross-phase ranking once Phase 3 results are in:
 
-  * Top-1 accuracy
-  * Top-5 accuracy
-  * Model size
-  * Inference latency
-  * Parameter efficiency
-  * Accuracy loss after quantization
-  * Overall efficiency (accuracy vs compute).
+  * [ ] Top-1 accuracy ranking
+  * [ ] Top-5 accuracy ranking
+  * [ ] Model size ranking
+  * [ ] Inference latency ranking
+  * [ ] Parameter efficiency ranking
+  * [ ] Accuracy loss after quantization ranking
+  * [ ] Overall efficiency (accuracy vs compute).
 
 ---
 
@@ -118,14 +117,14 @@ Establish baseline performance using representative CNN families.
 
 Models:
 
-* [ ] AlexNet (fine-tuned)
-* [ ] VGG-style CNN
-* [ ] ResNet-18
-* [ ] MobileNetV2
+* ✅ AlexNet (pretrained)
+* ✅ VGG-style CNN
+* ✅ ResNet-18 (pretrained)
+* ✅ MobileNetV2 (pretrained)
 
 For each model:
 
-* [ ] FP32 training
+* ✅ FP32 training — results in `results/baselines_qat_phase1/final_comparison.csv`
 * [ ] QAT fine-tuning (when supported)
 * [ ] INT8 conversion
 * [ ] FP32 vs INT8 evaluation
@@ -133,25 +132,27 @@ For each model:
 
 ---
 
-## Phase 2 — Kernel Restriction Study
+## Phase 2 — Kernel Restriction Study ✅
 
 Investigate the impact of restricting convolution kernels while keeping the architecture as controlled as possible.
 
 Models:
 
-* [ ] AlexNet (3×3)
-* [ ] AlexNet (2×2)
-* [ ] AlexNet (stacked 3×3)
-* [ ] AlexNet (mixed kernels)
-* [ ] Kernel-restricted AlexNet
+* ✅ AlexNet (3×3)
+* ✅ AlexNet (2×2)
+* ✅ AlexNet (stacked 3×3)
+* ✅ AlexNet (mixed kernels)
+* ✅ AlexNetSmallKernel (compact all-small-kernel)
 
 For each variant:
 
-* [ ] FP32 training
-* [ ] QAT fine-tuning
-* [ ] INT8 conversion
-* [ ] FP32 vs INT8 comparison
-* [ ] Compare against the original AlexNet
+* ✅ FP32 training
+* ✅ QAT fine-tuning
+* ✅ INT8 conversion
+* ✅ FP32 vs INT8 comparison
+* ✅ Compare against the original AlexNet
+
+Results in `results/alexnet_qat_phase2/` (57 epochs, full QAT + INT8).
 
 ---
 

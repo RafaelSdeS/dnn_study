@@ -19,9 +19,11 @@ jupyter lab
 ```
 
 **Notebooks (in order of scope):**
-1. `notebooks/alexnet_qat.ipynb` — AlexNet family (classical, 3×3, small-kernel variants) under FP32 and QAT
-2. `notebooks/tinyhybridnet_qat.ipynb` — Hybrid efficient architectures (TinyHybridNet, TinyMobileNetV2) under FP32 and QAT
-3. `notebooks/baselines_qat.ipynb` — Reference pretrained models (ResNet18, MobileNetV2, EfficientNetB0, ConvNeXt)
+1. `notebooks/baselines_qat.ipynb` — Phase 1: Reference pretrained models (ResNet18, MobileNetV2, AlexNet, VGG-style)
+2. `notebooks/alexnet_qat.ipynb` — Phase 2: AlexNet kernel-restriction variants (3×3, 2×2, stacked, mixed, small-kernel)
+3. `notebooks/compensation_qat.ipynb` — Phase 3a: Compensation mechanisms (bottleneck, residual, factorized, etc.)
+4. `notebooks/tinyhybridnet_qat.ipynb` — Phase 3b: Efficient hybrids (TinyHybridNet, TinyMobileNetV2)
+5. `notebooks/results_analysis.ipynb` — Cross-phase results analysis and figure generation
 
 ---
 
@@ -39,15 +41,15 @@ All notebooks import from `ml/`:
 - **`checkpoint.py`** — `save_checkpoint()`, `load_checkpoint()`
 - **`reporting.py`** — `build_comparison_table()`, `create_results_summary()`, result formatting
 
-### `models/` — Five Experimental Phases
+### `models/` — Experimental Phases
 
 | Phase | File | Purpose |
 |-------|------|---------|
 | 1 — Reference | `baselines.py` | Pretrained models, baseline architectures |
-| 2 — Classical Restriction | `alexnet_variants.py` | AlexNet variants with kernel constraints |
-| 3 — Modern Efficient | `efficient_cnns.py` + `hybrids.py` | MobileNet, ShuffleNet, EfficientNet, ConvNeXt, H1–H10 hybrids |
-| 4 — Synthesis | — | Final optimized architecture (TBD) |
-| 5 — Analysis | — | Ranking, latency, architecture recommendations |
+| 2 — Kernel Restriction | `alexnet_variants.py` | AlexNet variants with kernel constraints (3×3, 2×2, stacked, mixed, small-kernel) |
+| 3a — Compensation | `compensation.py` | Architectural compensations for small kernels (bottleneck, residual, SE, etc.) |
+| 3b — Efficient Hybrids | `tinyhybridnet.py` | TinyHybridNet, TinyMobileNetV2 (MobileNet-style efficient CNNs) |
+| 4+ — Future | — | See `TODO.md` |
 
 ### `configs/` — Hyperparameter Defaults
 
@@ -76,18 +78,31 @@ YAML-based configuration loading via `configs/loader.py`:
 
 ---
 
-## Key Findings (Reference)
+## Key Findings (Phase 1 & 2)
 
-| Model | Params | FP32 Top-1 | INT8 Top-1 | FP32 Size | INT8 Size |
-|-------|--------|-----------|-----------|-----------|-----------|
-| AlexNet (pretrained) | 57.82M | 27.30% | 30.22% | 661.75 MB | 55.33 MB |
-| AlexNetSmallKernel | 1.60M | 8.68% | 9.53% | 18.35 MB | 1.56 MB |
-| TinyHybridNet | 0.21M | 51.15% | 50.45% | 2.46 MB | 0.31 MB |
+**Phase 1 — Reference baselines** (FP32):
+
+| Model | Params | FP32 Top-1 | FP32 Top-5 |
+|-------|--------|-----------|-----------|
+| ResNet18 (pretrained) | 11.28M | 46.95% | 73.50% |
+| MobileNetV2 (pretrained) | 2.48M | 45.81% | 73.00% |
+| AlexNet (pretrained) | 57.82M | 19.63% | 45.43% |
+| VGGStyleCNN | 2.41M | 10.64% | 30.42% |
+
+**Phase 2 — AlexNet kernel-restriction variants** (FP32 + INT8, 57 epochs):
+
+| Model | Params | FP32 Top-1 | INT8 Top-1 | INT8 Size |
+|-------|--------|-----------|-----------|-----------|
+| AlexNetSmallKernel | 1.60M | 45.84% | 35.95% | 1.56 MB |
+| AlexNetStacked | 60.48M | 44.56% | 42.79% | 57.94 MB |
+| AlexNetMixed | 1.75M | 38.74% | 38.00% | 1.71 MB |
+| AlexNet3x3 | 57.61M | 35.79% | 36.19% | 55.12 MB |
+| AlexNet2x2 | 1.05M | 30.02% | 30.89% | 1.04 MB |
 
 **Key insights:**
-- Small kernels + residuals achieve reasonable accuracy at 1.6M params (1.56 MB INT8)
-- Hybrid architectures (MobileNet-style + residuals) best balance efficiency and quantization robustness
-- TinyHybridNet: <1% INT8 accuracy drop at 0.31 MB — best quantization efficiency
+- AlexNetSmallKernel matches MobileNetV2 accuracy at 1.6M params and 1.56 MB INT8 — strong Winograd candidate
+- Mixed kernels offer the best accuracy/size trade-off among compact models (38.74% FP32 at 1.71 MB INT8)
+- Quantization drop is high for AlexNetSmallKernel (–9.9pp) but acceptable for stacked/mixed/3×3 variants
 
 ---
 

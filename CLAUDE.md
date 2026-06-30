@@ -51,15 +51,18 @@ alexnet_rafael/
 │   │                        #   convert_to_int8, load_best_model, make_qat_callback
 │   └── reporting.py         # build_comparison_table(), create_results_summary(), disk_mb(),
 │                            #   compute_flops(), make_run_summary()
-├── models/                  # Model architecture definitions (three experimental phases)
+├── models/                  # Model architecture definitions (experimental phases)
 │   ├── __init__.py          # Re-exports all public constructors
-│   ├── baselines.py         # Stage 1 — Reference: AlexNetTV, VGGStyleCNN, ResNet18TV,
+│   ├── baselines.py         # Phase 1 — Reference: AlexNetTV, VGGStyleCNN, ResNet18TV,
 │   │                        #   MobileNetV2TV
-│   ├── alexnet_variants.py  # Stage 2 — Kernel Restriction: AlexNet3x3, AlexNet2x2,
+│   ├── alexnet_variants.py  # Phase 2 — Kernel Restriction: AlexNet3x3, AlexNet2x2,
 │   │                        #   AlexNetStacked, AlexNetMixed, AlexNetSmallKernel
-│   └── compensation.py      # Stage 3 — Compensation Mechanisms: AlexNetBottleneck,
-│                            #   AlexNetFactorized, AlexNetGroupConv, AlexNetDepthwiseSep,
-│                            #   AlexNetResidual, AlexNetFire, AlexNetGAP, AlexNetSE
+│   ├── compensation.py      # Phase 3a — Compensation Mechanisms: AlexNetBottleneck,
+│   │                        #   AlexNetFactorized, AlexNetGroupConv, AlexNetDepthwiseSep,
+│   │                        #   AlexNetResidual, AlexNetFire, AlexNetGAP, AlexNetSE
+│   └── tinyhybridnet.py     # Phase 3b — Efficient Hybrids: TinyHybridNet, TinyMobileNetV2,
+│                            #   FireMobileResidual, InvertedResidual,
+│                            #   build_tinyhybridnet, build_tinymobilenetv2
 ├── configs/                 # Hyperparameter YAML files — loaded via configs/loader.py
 │   ├── loader.py            # load_config(filename) → dict (searches configs/ dir)
 │   ├── data.yaml            # DataConfig defaults
@@ -75,9 +78,13 @@ alexnet_rafael/
 │   ├── alexnet_qat.ipynb                    # Phase 2: AlexNet variants (3×3, small-kernel, mixed) FP32 + QAT
 │   ├── baselines_qat.ipynb                  # Phase 1: Reference architectures (ResNet18, MobileNetV2, VGG-style) FP32 + QAT
 │   ├── compensation_qat.ipynb               # Phase 3: Compensation mechanisms (bottleneck, residual, factorized, etc.) FP32 + QAT
-│   ├── tinyhybridnet_qat.ipynb              # Hybrid architectures (efficient CNNs) FP32 + QAT
-│   └── alexnet_qat_results_analysis.ipynb   # W&B offline sync + plotting
-├── results/                 # Output CSVs and JSON summaries (git-ignored)
+│   ├── tinyhybridnet_qat.ipynb              # Phase 3b: TinyHybridNet, TinyMobileNetV2 FP32 + QAT
+│   ├── alexnet_qat_results_analysis.ipynb   # Phase 2 W&B offline sync + plotting (legacy)
+│   └── results_analysis.ipynb               # Cross-phase results analysis and figures
+├── results/                 # Output CSVs, JSON summaries, and figures (git-ignored)
+│   ├── baselines_qat_phase1/  # Phase 1 per-model JSONs, final_comparison.csv, experiment_summary.json
+│   ├── alexnet_qat_phase2/    # Phase 2 per-model JSONs, final_comparison.csv, experiment_summary.json
+│   └── figures/               # Generated charts (accuracy_vs_macs.png, fp32_accuracy_bar.png, etc.)
 ├── README.md
 ├── AGENTS.md
 ├── TODO.md
@@ -267,7 +274,8 @@ Notebook
   │                 build_comparison_table, create_results_summary, disk_mb,
   │                 compute_flops, make_run_summary
   ├─ from models import AlexNetTV, AlexNet3x3, AlexNetSmallKernel, AlexNetResidual, ...
-  │                     (pick from baselines.py/alexnet_variants.py/compensation.py)
+  │                     TinyHybridNet, TinyMobileNetV2, ...
+  │                     (pick from baselines.py/alexnet_variants.py/compensation.py/tinyhybridnet.py)
   ├─ register_model() → MODEL_REGISTRY
   │
   ├─ FP32 training loop:
@@ -302,35 +310,46 @@ Notebook
 
 ## Model Inventory
 
-Three implemented experimental phases, plus future phases defined in `TODO.md`:
+Four implemented model groups, plus future phases defined in `TODO.md`:
 
 | Phase | File | Models |
 |-------|------|--------|
 | 1 — Reference Architectures | `baselines.py` | AlexNetTV (pretrained), VGGStyleCNN, ResNet18TV (pretrained), MobileNetV2TV (pretrained) |
 | 2 — Kernel Restriction Study | `alexnet_variants.py` | AlexNet3x3, AlexNet2x2, AlexNetStacked, AlexNetMixed, AlexNetSmallKernel |
-| 3 — Compensation Mechanisms | `compensation.py` | AlexNetBottleneck, AlexNetFactorized, AlexNetGroupConv, AlexNetDepthwiseSep, AlexNetResidual, AlexNetFire, AlexNetGAP, AlexNetSE |
+| 3a — Compensation Mechanisms | `compensation.py` | AlexNetBottleneck, AlexNetFactorized, AlexNetGroupConv, AlexNetDepthwiseSep, AlexNetResidual, AlexNetFire, AlexNetGAP, AlexNetSE |
+| 3b — Efficient Hybrids | `tinyhybridnet.py` | TinyHybridNet, TinyMobileNetV2 |
 | 4+ (Future) | — | See `TODO.md` for phases 4–8: Final Architecture, Final Analysis, Hardware Profiling, ViT/Attention Hybrids, Architecture Search |
 
 ---
 
 ## Experimental Results (Reference)
 
-AlexNet family (from `notebooks/alexnet_qat.ipynb`, 10 FP32 epochs + 2 QAT epochs):
+**Phase 1 — Reference Architectures** (`results/baselines_qat_phase1/`; FP32 only):
 
-| Model | Params | FP32 Top-1 | INT8 Top-1 | FP32 Top-5 | INT8 Top-5 | FP32 Size | INT8 Size |
-|-------|--------|-----------|-----------|-----------|-----------|-----------|-----------|
-| AlexNet (pretrained) | 57.82M | 27.30% | 30.22% | 53.65% | 56.78% | 661.75 MB | 55.33 MB |
-| AlexNet3x3 | 57.61M | 6.82% | 7.93% | 21.20% | 23.48% | 659.26 MB | 55.12 MB |
-| AlexNetSmallKernel | 1.60M | 8.68% | 9.53% | 25.36% | 27.48% | 18.35 MB | 1.56 MB |
+| Model | Params | FP32 Top-1 | FP32 Top-5 |
+|-------|--------|-----------|-----------|
+| ResNet18 (pretrained) | 11.28M | 46.95% | 73.50% |
+| MobileNetV2 (pretrained) | 2.48M | 45.81% | 73.00% |
+| AlexNet (pretrained) | 57.82M | 19.63% | 45.43% |
+| VGGStyleCNN | 2.41M | 10.64% | 30.42% |
+
+**Phase 2 — Kernel Restriction Study** (`results/alexnet_qat_phase2/`; FP32 + INT8, 57 epochs):
+
+| Model | Params | FP32 Top-1 | INT8 Top-1 | FP32 Size | INT8 Size |
+|-------|--------|-----------|-----------|-----------|-----------|
+| AlexNetSmallKernel | 1.60M | 45.84% | 35.95% | 18.35 MB | 1.56 MB |
+| AlexNetStacked | 60.48M | 44.56% | 42.79% | 692.25 MB | 57.94 MB |
+| AlexNetMixed | 1.75M | 38.74% | 38.00% | 20.04 MB | 1.71 MB |
+| AlexNet3x3 | 57.61M | 35.79% | 36.19% | 659.26 MB | 55.12 MB |
+| AlexNet2x2 | 1.05M | 30.02% | 30.89% | 12.06 MB | 1.04 MB |
+| AlexNet (pretrained, retrained) | 57.82M | 24.29% | 26.28% | 661.75 MB | 55.33 MB |
 
 Key findings:
-- Residual connections are essential for from-scratch 3×3 CNNs.
-- INT8 for pretrained AlexNet improves top-1 (+2.9%), suggesting mild FP32 overfit / quantization regularization.
-- AlexNetSmallKernel: 1.6M params, 1.56 MB INT8 — best efficiency in the AlexNet family.
-- See `notebooks/baselines_qat.ipynb` and `notebooks/compensation_qat.ipynb` for results on reference and compensation-mechanism architectures.
-
-**New (Post-High-Priority Update):**
-Each model now generates a per-model summary JSON (e.g., `{RESULTS_DIR}/alexnet_small_kernel_summary.json`) with 30+ fields: FP32/INT8 accuracy, inference latency, throughput, MACs/FLOPs, memory usage, training time, quantization drop, and parameter efficiency. See `make_run_summary()` for full schema. This enables crash-safe result collection and detailed cross-model analysis.
+- AlexNetSmallKernel reaches 45.84% FP32 Top-1 at 1.6M params (1.56 MB INT8) — competitive with MobileNetV2 and ResNet18 at a fraction of the size.
+- AlexNetStacked is the most quantization-stable (–1.77pp INT8 drop) but at 58× more parameters than AlexNetSmallKernel.
+- 3×3 and mixed kernels recover well post-quantization; 2×2 also recovers (+0.87pp INT8 gain), suggesting quantization acts as regularization at this scale.
+- Per-model summaries: `{RESULTS_DIR}/{arch}_summary.json` (30+ fields: FP32/INT8 accuracy, latency, throughput, MACs/FLOPs, quantization drop). See `make_run_summary()` for full schema.
+- Cross-phase figures in `results/figures/` (accuracy_vs_macs.png, fp32_vs_int8_bar.png, fp32_training_curves.png, etc.).
 
 ---
 
@@ -354,10 +373,11 @@ jupyter lab
 - INT8 state dict: `{SAVE_DIR}/{arch}.pth`.
 - Training logs: `{SAVE_DIR}/{arch}.log` and `{SAVE_DIR}/qat_{arch}.log` (timestamped per epoch).
 
-**Results & summaries:** Each notebook writes to `RESULTS_DIR`:
+**Results & summaries:** Each notebook writes to a phase-specific `RESULTS_DIR` (e.g., `results/baselines_qat_phase1/`, `results/alexnet_qat_phase2/`):
 - Per-model summaries: `{RESULTS_DIR}/{arch}_summary.json` (30+ metrics, crash-safe).
 - Comparison table: `{RESULTS_DIR}/final_comparison.csv` (all models, FP32 vs INT8).
 - Aggregate summary: `{RESULTS_DIR}/experiment_summary.json` (all metrics combined).
+- Cross-phase figures: `results/figures/` (generated by `notebooks/results_analysis.ipynb`).
 
 **Sync W&B offline runs:**
 ```bash
