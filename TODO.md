@@ -98,7 +98,7 @@ Each experiment follows the same pipeline:
 ## Analysis
 
 * ✅ Generate a single CSV summarizing every experiment — `final_comparison.csv` per phase.
-* ✅ Cross-phase figures in `results/figures/` (accuracy_vs_macs, fp32_vs_int8_bar, training curves, etc.).
+* ✅ Cross-phase figures in `results/figures/` (accuracy_vs_macs, fp32_vs_int8_bar, efficiency_accuracy_per_mb, training curves, etc.).
 * [ ] Full cross-phase ranking once Phase 3 results are in:
 
   * [ ] Top-1 accuracy ranking
@@ -111,7 +111,7 @@ Each experiment follows the same pipeline:
 
 ---
 
-## Phase 1 — Reference Architectures
+## Phase 1 — Reference Architectures ✅
 
 Establish baseline performance using representative CNN families.
 
@@ -125,10 +125,12 @@ Models:
 For each model:
 
 * ✅ FP32 training — results in `results/baselines_qat_phase1/final_comparison.csv`
-* [ ] QAT fine-tuning (when supported)
-* [ ] INT8 conversion
-* [ ] FP32 vs INT8 evaluation
-* [ ] Record latency, model size, and quantization accuracy drop
+* ✅ QAT fine-tuning (partial — MobileNetV2, ResNet18 skipped; VGGStyle, AlexNetTV completed)
+* ✅ INT8 conversion
+* ✅ FP32 vs INT8 evaluation
+* ✅ Record latency, model size, and quantization accuracy drop
+
+**Results:** MobileNetV2 (57.99%), ResNet18 (53.91%), VGGStyle (51.81%), AlexNetTV (32.88%)
 
 ---
 
@@ -156,28 +158,42 @@ Results in `results/alexnet_qat_phase2/` (57 epochs, full QAT + INT8).
 
 ---
 
-## Phase 3 — Compensation Mechanisms
+## Phase 3 — Compensation Mechanisms ✅
 
 Evaluate architectural modifications that compensate for the reduced receptive field caused by small kernels.
 
-Candidate variants:
+Implemented variants:
 
-* [ ] Bottleneck
-* [ ] Factorized convolutions
-* [ ] Group convolutions
-* [ ] Depthwise separable convolutions
-* [ ] Residual connections
-* [ ] Fire modules
-* [ ] Global Average Pooling
-* [ ] Squeeze-and-Excitation (SE)
+* ✅ Bottleneck — **Best**: 44.62% FP32, 9.93 Acc/MB, –0.08pp QAT drop
+* ✅ Factorized convolutions — 42.89% FP32, stable QAT (–0.29pp)
+* ✅ Group convolutions — Poor results (29.18% FP32)
+* ✅ Depthwise separable convolutions — 44.39% FP32, high efficiency (12.15 Acc/MB) but QAT unstable (–2.92pp)
+* ✅ Residual connections — **Best accuracy**: 48.01% FP32, but large (694 MB)
+* ✅ Fire modules — **Excellent**: 43.98% FP32, quantization gain (+0.33pp), tiny (6 MB)
+* ✅ Global Average Pooling — Moderate (38.74% FP32)
+* ✅ Squeeze-and-Excitation (SE) — **Failed** training (collapsed to 0.5%)
 
 For each variant:
 
-* [ ] FP32 training
-* [ ] QAT fine-tuning
-* [ ] INT8 conversion
-* [ ] FP32 vs INT8 comparison
-* [ ] Compare with the corresponding kernel-restricted baseline
+* ✅ FP32 training
+* ✅ QAT fine-tuning
+* ✅ INT8 conversion
+* ✅ FP32 vs INT8 comparison
+
+**Results:** See `ideas/BEST_MODELS.md` for comprehensive analysis. Bottleneck & Fire are Pareto-optimal (tiny, competitive accuracy, quantization-stable).
+
+---
+
+## Phase 3.5 — Deployment Fine-Tuning (NEW)
+
+Optimize Tier 1 models for real-world deployment scenarios.
+
+* [ ] **Mobile (resource-constrained):** Export AlexNetBottleneck/AlexNetFire to TFLite, measure on-device latency, tune for <50ms/image, <100mA
+* [ ] **Edge (moderate constraints):** Profile AlexNetSmallKernel QAT drop (–9.89pp); investigate per-channel quantization, mixed-precision INT8
+* [ ] **Server (throughput-focused):** Batch optimization for MobileNetV2, measure throughput vs latency trade-off, optional knowledge distillation
+* [ ] **Format conversion:** ONNX, TensorRT, Core ML, ONNX-RT exports for each Tier 1 model
+
+**Expected outcome:** Production-ready model exports and deployment tuning for three scenarios.
 
 ---
 

@@ -18,12 +18,22 @@ source .venv/bin/activate
 jupyter lab
 ```
 
-**Notebooks (in order of scope):**
+**Notebooks (in order of execution):**
 1. `notebooks/baselines_qat.ipynb` — Phase 1: Reference pretrained models (ResNet18, MobileNetV2, AlexNet, VGG-style)
 2. `notebooks/alexnet_qat.ipynb` — Phase 2: AlexNet kernel-restriction variants (3×3, 2×2, stacked, mixed, small-kernel)
 3. `notebooks/compensation_qat.ipynb` — Phase 3a: Compensation mechanisms (bottleneck, residual, factorized, etc.)
 4. `notebooks/tinyhybridnet_qat.ipynb` — Phase 3b: Efficient hybrids (TinyHybridNet, TinyMobileNetV2)
-5. `notebooks/results_analysis.ipynb` — Cross-phase results analysis and figure generation
+5. `notebooks/results_analysis.ipynb` — Cross-phase results analysis and figure generation (5 visualizations: FP32 accuracy, FP32 vs INT8, accuracy vs size, accuracy vs MACs, **efficiency per MB**, plus training curves)
+
+---
+
+## Results & Recommendations
+
+**See `ideas/BEST_MODELS.md`** for:
+- Overall accuracy rankings (FP32 + INT8)
+- Analysis by dimension (accuracy-first, efficiency-first, quantization stability, kernel impact, compensation mechanisms)
+- Tiered model recommendations (Tier 1 production-ready, Tier 2 high-accuracy, Tier 3 exploratory)
+- Next steps for Phase 3.5 (deployment fine-tuning, Winograd benchmarking)
 
 ---
 
@@ -78,31 +88,46 @@ YAML-based configuration loading via `configs/loader.py`:
 
 ---
 
-## Key Findings (Phase 1 & 2)
+## Key Findings (Phases 1–3)
 
-**Phase 1 — Reference baselines** (FP32):
+**See `ideas/BEST_MODELS.md` for comprehensive ranking, Pareto analysis, and deployment recommendations.**
+
+### Phase 1 — Reference Baselines (FP32, ~80 epochs):
 
 | Model | Params | FP32 Top-1 | FP32 Top-5 |
 |-------|--------|-----------|-----------|
-| ResNet18 (pretrained) | 11.28M | 46.95% | 73.50% |
-| MobileNetV2 (pretrained) | 2.48M | 45.81% | 73.00% |
-| AlexNet (pretrained) | 57.82M | 19.63% | 45.43% |
-| VGGStyleCNN | 2.41M | 10.64% | 30.42% |
+| **MobileNetV2** | 2.48M | **57.99%** | 81.51% |
+| **ResNet18** | 11.28M | **53.91%** | 77.80% |
+| VGGStyle | 2.41M | 51.81% | 75.88% |
+| AlexNetTV | 57.82M | 32.89% | 58.22% |
 
-**Phase 2 — AlexNet kernel-restriction variants** (FP32 + INT8, 57 epochs):
+### Phase 2 — AlexNet Kernel Restriction (FP32 + QAT INT8, 57+20 epochs):
 
-| Model | Params | FP32 Top-1 | INT8 Top-1 | INT8 Size |
-|-------|--------|-----------|-----------|-----------|
-| AlexNetSmallKernel | 1.60M | 45.84% | 35.95% | 1.56 MB |
-| AlexNetStacked | 60.48M | 44.56% | 42.79% | 57.94 MB |
-| AlexNetMixed | 1.75M | 38.74% | 38.00% | 1.71 MB |
-| AlexNet3x3 | 57.61M | 35.79% | 36.19% | 55.12 MB |
-| AlexNet2x2 | 1.05M | 30.02% | 30.89% | 1.04 MB |
+| Model | Params | FP32 Top-1 | INT8 Top-1 | QAT Drop | INT8 Size |
+|-------|--------|-----------|-----------|----------|-----------|
+| **AlexNetSmallKernel** | 1.60M | 45.84% | 35.95% | –9.89pp ⚠️ | 1.56 MB |
+| **AlexNetStacked** | 60.48M | 44.56% | 42.79% | –1.77pp | 57.94 MB |
+| AlexNetMixed | 1.75M | 38.74% | 37.99% | –0.75pp | 1.71 MB |
+| AlexNet3x3 | 57.61M | 35.79% | 36.19% | +0.40pp ✓ | 55.12 MB |
+| AlexNet2x2 | 1.05M | 30.02% | 30.89% | +0.87pp ✓ | 1.04 MB |
+
+### Phase 3 — Compensation Mechanisms (FP32 + QAT INT8, 41–95+20 epochs):
+
+| Model | Params | FP32 Top-1 | INT8 Top-1 | QAT Drop | Efficiency | Tier |
+|-------|--------|-----------|-----------|----------|------------|------|
+| **AlexNetBottleneck** | 0.39M | 44.62% | 44.54% | –0.08pp ✓✓ | 9.93 Acc/MB | **1** |
+| **AlexNetFire** | 0.52M | 43.98% | 44.30% | +0.33pp ✓✓ | 7.34 Acc/MB | **1** |
+| **AlexNetResidual** | 60.67M | 48.01% | 47.27% | –0.74pp | — | **2** |
+| AlexNetDepthwiseSep | 0.31M | 44.39% | 41.47% | –2.92pp ⚠️ | 12.15 Acc/MB | 3 |
+| AlexNetFactorized | 57.07M | 42.89% | 42.60% | –0.29pp | — | 3 |
 
 **Key insights:**
-- AlexNetSmallKernel matches MobileNetV2 accuracy at 1.6M params and 1.56 MB INT8 — strong Winograd candidate
-- Mixed kernels offer the best accuracy/size trade-off among compact models (38.74% FP32 at 1.71 MB INT8)
-- Quantization drop is high for AlexNetSmallKernel (–9.9pp) but acceptable for stacked/mixed/3×3 variants
+- **Baselines dominate pure accuracy:** MobileNetV2 (57.99%), ResNet18 (53.91%) are hard to beat
+- **Tier 1 models (Bottleneck, Fire) are Pareto-optimal:** Tiny (4–6 MB), competitive accuracy (43–44%), quantization-stable
+- **Small kernels face QAT challenges:** AlexNetSmallKernel's –9.89pp drop suggests aggressive quantization sensitivity
+- **Compensation mechanisms work:** Bottleneck & Fire achieve high efficiency (7–10 Acc/MB) while maintaining accuracy
+- **Model efficiency summary:** Results in `results/results.csv` and per-model details in `results/model_details.csv`
+- **Visualizations:** Cross-phase figures in `results/figures/` (6 PNG plots covering accuracy, efficiency, latency, training curves)
 
 ---
 

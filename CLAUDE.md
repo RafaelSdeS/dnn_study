@@ -83,7 +83,8 @@ alexnet_rafael/
 ├── results/                 # Output CSVs, JSON summaries, and figures (git-ignored)
 │   ├── baselines_qat_phase1/  # Phase 1 per-model JSONs, final_comparison.csv, experiment_summary.json
 │   ├── alexnet_qat_phase2/    # Phase 2 per-model JSONs, final_comparison.csv, experiment_summary.json
-│   └── figures/               # Generated charts (accuracy_vs_macs.png, fp32_accuracy_bar.png, etc.)
+│   ├── compensation_phase3/   # Phase 3 per-model JSONs, final_comparison.csv, experiment_summary.json
+│   └── figures/               # Generated charts (accuracy_vs_macs.png, fp32_accuracy_bar.png, efficiency_accuracy_per_mb.png, etc.)
 ├── README.md
 ├── AGENTS.md
 ├── TODO.md
@@ -323,32 +324,48 @@ Four implemented model groups, plus future phases defined in `TODO.md`:
 
 ## Experimental Results (Reference)
 
-**Phase 1 — Reference Architectures** (`results/baselines_qat_phase1/`; FP32 only):
+See **`ideas/BEST_MODELS.md`** for comprehensive cross-phase analysis, Pareto rankings, and recommendations.
 
-| Model | Params | FP32 Top-1 | FP32 Top-5 |
-|-------|--------|-----------|-----------|
-| ResNet18 (pretrained) | 11.28M | 46.95% | 73.50% |
-| MobileNetV2 (pretrained) | 2.48M | 45.81% | 73.00% |
-| AlexNet (pretrained) | 57.82M | 19.63% | 45.43% |
-| VGGStyleCNN | 2.41M | 10.64% | 30.42% |
+**Phase 1 — Reference Architectures** (`results/baselines_qat_phase1/`; 79 epochs FP32):
 
-**Phase 2 — Kernel Restriction Study** (`results/alexnet_qat_phase2/`; FP32 + INT8, 57 epochs):
+| Model | Params | FP32 Top-1 | FP32 Top-5 | FP32 Size | QAT Status |
+|-------|--------|-----------|-----------|-----------|------------|
+| MobileNetV2 | 2.48M | 57.99% | 81.51% | 28.75 MB | Partial (FP32 only) |
+| ResNet18 | 11.28M | 53.91% | 77.80% | 129.21 MB | Partial (FP32 only) |
+| VGGStyle | 2.41M | 51.81% | 75.88% | 27.58 MB | ✅ INT8: 51.19% (–0.63pp) |
+| AlexNetTV | 57.82M | 32.89% | 58.22% | 661.75 MB | ✅ INT8: 31.90% (–0.98pp) |
 
-| Model | Params | FP32 Top-1 | INT8 Top-1 | FP32 Size | INT8 Size |
-|-------|--------|-----------|-----------|-----------|-----------|
-| AlexNetSmallKernel | 1.60M | 45.84% | 35.95% | 18.35 MB | 1.56 MB |
-| AlexNetStacked | 60.48M | 44.56% | 42.79% | 692.25 MB | 57.94 MB |
-| AlexNetMixed | 1.75M | 38.74% | 38.00% | 20.04 MB | 1.71 MB |
-| AlexNet3x3 | 57.61M | 35.79% | 36.19% | 659.26 MB | 55.12 MB |
-| AlexNet2x2 | 1.05M | 30.02% | 30.89% | 12.06 MB | 1.04 MB |
-| AlexNet (pretrained, retrained) | 57.82M | 24.29% | 26.28% | 661.75 MB | 55.33 MB |
+**Phase 2 — Kernel Restriction Study** (`results/alexnet_qat_phase2/`; 57 epochs FP32 + 20 epochs QAT):
 
-Key findings:
-- AlexNetSmallKernel reaches 45.84% FP32 Top-1 at 1.6M params (1.56 MB INT8) — competitive with MobileNetV2 and ResNet18 at a fraction of the size.
-- AlexNetStacked is the most quantization-stable (–1.77pp INT8 drop) but at 58× more parameters than AlexNetSmallKernel.
-- 3×3 and mixed kernels recover well post-quantization; 2×2 also recovers (+0.87pp INT8 gain), suggesting quantization acts as regularization at this scale.
-- Per-model summaries: `{RESULTS_DIR}/{arch}_summary.json` (30+ fields: FP32/INT8 accuracy, latency, throughput, MACs/FLOPs, quantization drop). See `make_run_summary()` for full schema.
-- Cross-phase figures in `results/figures/` (accuracy_vs_macs.png, fp32_vs_int8_bar.png, fp32_training_curves.png, etc.).
+| Model | Params | FP32 Top-1 | INT8 Top-1 | QAT Drop | FP32 Size | INT8 Size |
+|-------|--------|-----------|-----------|----------|-----------|-----------|
+| AlexNetSmallKernel | 1.60M | 45.84% | 35.95% | **–9.89pp** ⚠️ | 18.35 MB | 1.56 MB |
+| AlexNetStacked | 60.48M | 44.56% | 42.79% | –1.77pp | 692.25 MB | 57.94 MB |
+| AlexNetMixed | 1.75M | 38.74% | 37.99% | –0.75pp | 20.04 MB | 1.71 MB |
+| AlexNet3x3 | 57.61M | 35.79% | 36.19% | +0.40pp ✓ | 659.26 MB | 55.12 MB |
+| AlexNet2x2 | 1.05M | 30.02% | 30.89% | +0.87pp ✓ | 12.06 MB | 1.04 MB |
+| AlexNetTV (retrained) | 57.82M | 24.29% | 26.28% | –1.99pp | 661.75 MB | 55.33 MB |
+
+**Phase 3a — Compensation Mechanisms** (`results/compensation_phase3/`; 41–95 epochs FP32 + 20–25 epochs QAT):
+
+| Model | Params | FP32 Top-1 | INT8 Top-1 | QAT Drop | Eff. (Acc/MB) | Status |
+|-------|--------|-----------|-----------|----------|---------------|--------|
+| AlexNetBottleneck | 0.39M | 44.62% | 44.54% | **–0.08pp** ✓✓ | **9.93** | **Tier 1** |
+| AlexNetFire | 0.52M | 43.98% | 44.30% | **+0.33pp** ✓✓ | **7.34** | **Tier 1** |
+| AlexNetResidual | 60.67M | 48.01% | 47.27% | –0.74pp ✓ | 0.07 | Tier 2 |
+| AlexNetDepthwiseSep | 0.31M | 44.39% | 41.47% | –2.92pp ⚠️ | **12.15** | Tier 3 |
+| AlexNetFactorized | 57.07M | 42.89% | 42.60% | –0.29pp ✓ | 0.07 | Tier 3 |
+| AlexNetGAP | 2.30M | 38.74% | 37.60% | –1.14pp | 1.47 | Tier 3 |
+| AlexNetGroupConv | 55.92M | 29.18% | 27.71% | –1.47pp | 0.05 | Not Recommended |
+| AlexNetSE | 57.65M | **0.50%** | — | — | — | **Failed** ❌ |
+
+**Key findings across all phases:**
+- **MobileNetV2** (57.99%) remains best overall, but small-kernel variants reach 44–48% at 100–1000× smaller size
+- **AlexNetBottleneck & AlexNetFire** are Pareto-optimal: tiny (4–6 MB), competitive accuracy (43–44%), quantization-rock-solid
+- **AlexNetSmallKernel** has severe QAT issue (–9.89pp drop); investigate per-channel quantization or mixed-precision INT8
+- **AlexNetSE** training failure suggests initialization problem; requires debugging
+- Per-model summaries: `{RESULTS_DIR}/{arch}_summary.json` (30+ fields each); all aggregated in `results/results.csv` and `results/model_details.csv`
+- Cross-phase figures in `results/figures/`: accuracy_vs_macs.png, fp32_vs_int8_bar.png, efficiency_accuracy_per_mb.png, fp32/qat_training_curves.png
 
 ---
 
