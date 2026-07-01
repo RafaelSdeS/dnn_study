@@ -8,3 +8,7 @@ from .tinyhybridnet import (
     FireMobileResidual, TinyHybridNet,
     InvertedResidual, TinyMobileNetV2,
 )
+from .final_architecture import (
+    AlexNetFinalBottleneckFire, AlexNetFinalFireResidual,
+    AlexNetFinalBottleneckResidual, AlexNetFinalDepthwiseFire,
+)
