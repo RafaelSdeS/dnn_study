@@ -1,0 +1,27 @@
+# Phase 4.1 — aggressive compression hyperparameters
+# Loaded in notebooks/compression_phase4_1.ipynb via configs.loader.load_config
+
+# INT4 post-training quantization (no retraining)
+int4_ptq:
+  calibration_samples: 512
+  per_channel: true
+
+# INT4 quantization-aware training (retrained under 4-bit fake-quant)
+int4_qat:
+  epochs: 20
+  lr: 1.0e-5
+  weight_decay: 5.0e-4
+  freeze_bn_epoch: 3
+  disable_observer_epoch: 5
+  per_channel: true
+
+# Mixed precision: top-K sensitive layers INT8, rest INT4
+mixed_precision:
+  int8_ratio: 0.3          # fraction of quantizable layers kept at INT8
+  calibration_samples: 512
+  epochs: 20
+  lr: 1.0e-5
+  weight_decay: 5.0e-4
+  freeze_bn_epoch: 3
+  disable_observer_epoch: 5
+  per_channel: true
