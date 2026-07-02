@@ -154,9 +154,6 @@ These models isolate kernel size as the experimental variable, all based on Alex
 - Establishes the lower bound of receptive field while maintaining other design choices
 - Winograd-compatible kernel size (3×3 is a standard Winograd size)
 
-**Expected Performance:** 8–12% top-1 (from scratch)  
-**Model Size:** 220 MB FP32 / 55 MB INT8
-
 ---
 
 ### AlexNet2x2
@@ -181,9 +178,6 @@ These models isolate kernel size as the experimental variable, all based on Alex
 - Smallest receptive field: two stacked 2×2 = effective RF ~3×3
 - Establishes practical lower limit for Winograd restrictions
 - GAP head reduces overfitting on 200-class task despite small RF
-
-**Expected Performance:** 5–9% top-1 (from scratch)  
-**Model Size:** 3 MB FP32 / 1 MB INT8
 
 ---
 
@@ -210,9 +204,6 @@ These models isolate kernel size as the experimental variable, all based on Alex
 - Isolates whether receptive field or kernel diversity matters more
 - BatchNorm addition tests its impact on small-kernel networks
 
-**Expected Performance:** 12–18% top-1 (from scratch)  
-**Model Size:** 220 MB FP32 / 55 MB INT8
-
 ---
 
 ### AlexNetMixed
@@ -237,9 +228,6 @@ These models isolate kernel size as the experimental variable, all based on Alex
 - Tests if alternating kernel costs differ from pure 2×2 or pure 3×3
 - Lightweight head (GAP) avoids FC bottleneck
 
-**Expected Performance:** 7–12% top-1 (from scratch)  
-**Model Size:** 3 MB FP32 / 1 MB INT8
-
 ---
 
 ### AlexNetSmallKernel
@@ -263,9 +251,6 @@ These models isolate kernel size as the experimental variable, all based on Alex
 - Tests whether narrow channels compensate for small kernels
 - Best candidate for Winograd acceleration: small kernels + small footprint
 - Shows the limits of ultra-compact CNN design on 200-class task
-
-**Expected Performance:** 8–10% top-1 (from scratch)  
-**Model Size:** 6 MB FP32 / 1.6 MB INT8
 
 ---
 
@@ -298,9 +283,6 @@ These models add exactly one architectural mechanism to AlexNet3x3, isolating ea
 **Key Paper:**
 - Szegedy, C., Liu, W., Jia, Y., et al. (2015). "Going Deeper with Convolutions." *CVPR* [[PDF](https://arxiv.org/abs/1409.4842)]
 
-**Expected Performance:** 12–18% top-1 (from scratch)  
-**Model Size:** 50 MB FP32 / 13 MB INT8
-
 ---
 
 ### AlexNetFactorized
@@ -327,9 +309,6 @@ These models add exactly one architectural mechanism to AlexNet3x3, isolating ea
 **Key Paper:**
 - Szegedy, C., Vanhoucke, V., Ioffe, S., Shlyan, J., & Wojna, Z. (2014). "Rethinking the Inception Architecture for Computer Vision." *CVPR* [[PDF](https://arxiv.org/abs/1512.00567)]
 
-**Expected Performance:** 10–15% top-1 (from scratch)  
-**Model Size:** 200 MB FP32 / 50 MB INT8
-
 ---
 
 ### AlexNetGroupConv
@@ -353,9 +332,6 @@ These models add exactly one architectural mechanism to AlexNet3x3, isolating ea
 - Groups=4 splits channels into independent streams, reducing mixing
 - Direct hardware efficiency gain: modern accelerators optimize grouped operations
 - Isolates group convolution as a standalone compensation mechanism
-
-**Expected Performance:** 10–18% top-1 (from scratch)  
-**Model Size:** 60 MB FP32 / 15 MB INT8
 
 ---
 
@@ -385,9 +361,6 @@ These models add exactly one architectural mechanism to AlexNet3x3, isolating ea
 **Key Paper:**
 - Howard, A. G., Zhu, M., Chen, B., et al. (2017). "MobileNets: Efficient Convolutional Neural Networks for Mobile Vision Applications." *arXiv* [[PDF](https://arxiv.org/abs/1704.04861)]
 
-**Expected Performance:** 10–15% top-1 (from scratch)  
-**Model Size:** 8 MB FP32 / 2 MB INT8
-
 ---
 
 ### AlexNetResidual
@@ -415,9 +388,6 @@ These models add exactly one architectural mechanism to AlexNet3x3, isolating ea
 
 **Key Paper:**
 - He, K., Zhang, X., Ren, S., & Sun, J. (2015). "Deep Residual Learning for Image Recognition." *CVPR* [[PDF](https://arxiv.org/abs/1512.03385)]
-
-**Expected Performance:** 20–30% top-1 (from scratch)  
-**Model Size:** 220 MB FP32 / 55 MB INT8
 
 ---
 
@@ -448,9 +418,6 @@ These models add exactly one architectural mechanism to AlexNet3x3, isolating ea
 **Key Paper:**
 - Iandola, F. N., Han, S., Moskewicz, M. W., Ashraf, K., Dally, W. J., & Keutzer, K. (2016). "SqueezeNet: AlexNet-level Accuracy with 50x Fewer Parameters and <0.5MB Model Size." *arXiv* [[PDF](https://arxiv.org/abs/1602.07360)]
 
-**Expected Performance:** 10–16% top-1 (from scratch)  
-**Model Size:** 5 MB FP32 / 1.5 MB INT8
-
 ---
 
 ### AlexNetGAP
@@ -475,10 +442,9 @@ These models add exactly one architectural mechanism to AlexNet3x3, isolating ea
 - Distinguishes backbone capacity from classification head design
 
 **Key Paper:**
-- Lin, M., Chen, Q., & Yan, S. (2013). "Network in Network." *ICLR* [[PDF](https://arxiv.org/abs/1312.4400)]
-
+- Lin, M., Chen, Q., & Yan, S. (
 **Expected Performance:** 8–12% top-1 (from scratch)  
-**Model Size:** 3 MB FP32 / 1 MB INT8
+**Model Size:** 3 MB FP32 / 1 MB INT82013). "Network in Network." *ICLR* [[PDF](https://arxiv.org/abs/1312.4400)]
 
 ---
 
@@ -506,9 +472,6 @@ These models add exactly one architectural mechanism to AlexNet3x3, isolating ea
 
 **Key Paper:**
 - Hu, J., Shen, L., & Sun, G. (2018). "Squeeze-and-Excitation Networks." *CVPR* [[PDF](https://arxiv.org/abs/1709.01507)]
-
-**Expected Performance:** 15–22% top-1 (from scratch)  
-**Model Size:** 220 MB FP32 / INT8 not supported (Sigmoid limitation)
 
 ---
 
@@ -542,9 +505,6 @@ These models combine multiple compensation mechanisms and modern design principl
 - All 3×3 kernels are Winograd-compatible
 - Compact model (reasonable parameters) with strong accuracy potential
 - Demonstrates integration of Phase 3a techniques into cohesive architecture
-
-**Expected Performance:** 35–45% top-1 (from scratch)  
-**Model Size:** ~6 MB FP32 / ~1.5 MB INT8
 
 ---
 
@@ -603,9 +563,6 @@ These models combine multiple compensation mechanisms and modern design principl
 
 **Key Paper:**
 - Sandler, M., Howard, A., Zhu, M., Zhmoginov, A., & Chen, L. C. (2018). "MobileNetV2: Inverted Residuals and Linear Bottlenecks." *CVPR* [[PDF](https://arxiv.org/abs/1801.04381)]
-
-**Expected Performance:** 35–50% top-1 (from scratch)  
-**Model Size:** ~6 MB FP32 / ~1.5 MB INT8
 
 ---
 
@@ -679,6 +636,3 @@ These models combine multiple compensation mechanisms and modern design principl
 - Hu, J., Shen, L., & Sun, G. (2018). "Squeeze-and-Excitation Networks." *CVPR* [[PDF](https://arxiv.org/abs/1709.01507)]
 
 ---
-
-**Last Updated:** June 2026  
-**Project:** alexnet_rafael (Winograd-accelerated CNN research)
