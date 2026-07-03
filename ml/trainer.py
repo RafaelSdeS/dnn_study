@@ -9,7 +9,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
-from .checkpoint import save_checkpoint, load_checkpoint, load_resume_state
+from .checkpoint import save_checkpoint, load_resume_state
 from .config import TrainerConfig
 
 

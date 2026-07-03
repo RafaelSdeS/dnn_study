@@ -38,22 +38,6 @@ def save_checkpoint(
     tmp.rename(path)
 
 
-def load_checkpoint(
-    path: Path | str,
-    model: nn.Module,
-    optimizer: Optional[torch.optim.Optimizer] = None,
-    scheduler=None,
-    device: str = "cpu",
-) -> tuple[int, dict]:
-    ckpt = torch.load(path, map_location=device, weights_only=True)
-    model.load_state_dict(ckpt["model_state_dict"])
-    if optimizer and "optimizer_state_dict" in ckpt:
-        optimizer.load_state_dict(ckpt["optimizer_state_dict"])
-    if scheduler and ckpt.get("scheduler_state_dict"):
-        scheduler.load_state_dict(ckpt["scheduler_state_dict"])
-    return ckpt.get("epoch", 0), ckpt.get("metrics", {})
-
-
 def load_resume_state(
     path: Path | str,
     model: nn.Module,

@@ -6,7 +6,6 @@ import torch.nn as nn
 import torch.ao.quantization as tq
 
 from .registry import MODEL_REGISTRY
-from .checkpoint import load_checkpoint
 
 
 def find_fuse_groups(module: nn.Module, prefix: str = "") -> list:

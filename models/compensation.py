@@ -10,10 +10,7 @@ import torch.ao.quantization as tq
 
 
 def _float_functional():
-    try:
-        return torch.nn.quantized.FloatFunctional()
-    except AttributeError:
-        return tq.FloatFunctional()
+    return torch.nn.quantized.FloatFunctional()
 
 
 # ─── AlexNetBottleneck ────────────────────────────────────────────────────────
