@@ -1,0 +1,7 @@
+phase,model_name,fp32_size_mb,fp32_top1
+Phase 3 - Compensation,alexnet_depthwisesep,3.6540164947509766,44.390010833740234
+Phase 3 - Compensation,alexnet_bottleneck,4.4917449951171875,44.62297856807709
+Phase 4 - Final Architecture,alexnet_final_bottleneck_residual,6.653960227966309,45.09960114955902
+Phase 4 - Final Architecture,alexnet_final_fire_residual,8.093656539916992,49.793291091918945
+Phase 1 - Baselines,vgg_style,27.58481216430664,51.81480646133423
+Phase 1 - Baselines,mobilenetv2,28.751924514770508,57.99558162689209

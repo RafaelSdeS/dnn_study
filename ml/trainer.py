@@ -98,6 +98,7 @@ class Trainer:
         meta_path = self.save_dir / f"{self.run_name}_meta.json"
         train_start = time.time()
 
+        epoch = start_epoch - 1  # ponytail: keeps epoch bound if resume already reached cfg.epochs
         for epoch in range(start_epoch, cfg.epochs):
             epoch_start = time.time()
 

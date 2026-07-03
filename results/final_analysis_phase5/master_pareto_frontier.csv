@@ -1,0 +1,15 @@
+name,size_mb,accuracy,type
+alexnet_depthwisesep (binary_qat),0.0409787893295288,4.683564975857735,Compressed
+alexnet_bottleneck (binary_qat),0.0489997863769531,12.624388933181764,Compressed
+alexnet_fire (binary_qat),0.0641002655029296,15.851357579231262,Compressed
+alexnet_final_fire_residual (binary_qat),0.08721923828125,16.92291498184204,Compressed
+alexnet_bottleneck (ternary_qat),0.094451904296875,31.35175108909607,Compressed
+alexnet_fire (ternary_qat),0.1252632141113281,32.80951976776123,Compressed
+alexnet_depthwisesep (int4_qat),0.1516070365905761,41.32472276687622,Compressed
+alexnet_depthwisesep (mixed),0.1578326225280761,44.2691445350647,Compressed
+alexnet_bottleneck (int4_qat),0.1853561401367187,44.337183237075806,Compressed
+alexnet_bottleneck (mixed),0.2098922729492187,44.60912048816681,Compressed
+alexnet_fire (mixed),0.292266845703125,44.69617307186127,Compressed
+alexnet_final_fire_residual (int8),0.6662979125976562,49.75736141204834,Compressed
+mobilenetv2 (int8),2.365180969238281,55.413031578063965,Compressed
+mobilenetv2,28.751924514770508,57.99558162689209,FP32/INT8

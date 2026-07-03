@@ -12,7 +12,7 @@ Public API:
     calibrate(model, loader, device, n_samples)    → PTQ: freeze observers after calibration
     compute_layer_sensitivity(model, loader, ...)  → per-layer INT4 sensitivity scores
     assign_mixed_precision(model, sensitivities, int8_ratio) → per-module qconfig assignment
-    apply_weight_ptq(model, scheme)                → weight-only binary/ternary PTQ (BWN/TWN)
+    apply_weight_qat(model, scheme)                → weight-only binary/ternary QAT (BWN/TWN, STE)
     theoretical_size_mb(model, w_bits, bits_map)   → packed size in MB
 """
 
@@ -22,6 +22,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 import torch.ao.quantization as tq
+import torch.nn.utils.parametrize as parametrize
 from torch.ao.quantization import QConfig, FakeQuantize
 from torch.ao.quantization.observer import (
     MovingAverageMinMaxObserver,
@@ -171,33 +172,68 @@ def assign_mixed_precision(
     return bits_map
 
 
-def apply_weight_ptq(model: nn.Module, scheme: str) -> nn.Module:
-    """Weight-only PTQ at 1-2 bits, per output channel. Returns a deep copy.
+def _binary_ternary_quant(w: torch.Tensor, scheme: str) -> torch.Tensor:
+    """Per-output-channel binary/ternary quantization of a weight tensor.
 
     scheme="binary"  → {-α, +α}     (XNOR-Net BWN: α = mean|w| per channel)
     scheme="ternary" → {-α, 0, +α}  (TWN: Δ = 0.7·mean|w|, α = mean|w| over |w|>Δ)
+    """
+    flat = w.reshape(w.shape[0], -1)  # [out_ch, fan_in]
+    if scheme == "binary":
+        alpha = flat.abs().mean(dim=1, keepdim=True)
+        q = torch.sign(flat) * alpha
+    elif scheme == "ternary":
+        delta = 0.7 * flat.abs().mean(dim=1, keepdim=True)
+        mask = (flat.abs() > delta).float()
+        alpha = (flat.abs() * mask).sum(dim=1, keepdim=True) / mask.sum(dim=1, keepdim=True).clamp(min=1)
+        q = torch.sign(flat) * mask * alpha
+    else:
+        raise ValueError(f"unknown scheme: {scheme!r} (expected 'binary' or 'ternary')")
+    return q.reshape(w.shape).to(w.dtype)
 
-    Activations stay FP32 — the weight-only setup those papers report. No retraining,
-    so at 1-2 bits accuracy typically collapses without QAT; that is the finding.
+
+class _STEQuantize(torch.autograd.Function):
+    """Straight-through estimator: quantize in forward, pass gradient through unchanged.
+
+    # ponytail: plain STE, no BinaryConnect-style gradient clipping outside [-1,1];
+    # add clipping if binary/ternary QAT training diverges.
+    """
+
+    @staticmethod
+    def forward(ctx, w: torch.Tensor, scheme: str) -> torch.Tensor:
+        return _binary_ternary_quant(w, scheme)
+
+    @staticmethod
+    def backward(ctx, grad_output: torch.Tensor):
+        return grad_output, None
+
+
+class _STEQuant(nn.Module):
+    """Parametrization: forward quantizes, latent `.original` stays FP32 and trainable."""
+
+    def __init__(self, scheme: str):
+        super().__init__()
+        self.scheme = scheme
+
+    def forward(self, w: torch.Tensor) -> torch.Tensor:
+        return _STEQuantize.apply(w, self.scheme)
+
+
+def apply_weight_qat(model: nn.Module, scheme: str) -> nn.Module:
+    """Weight-only binary/ternary QAT via STE parametrization. Returns a deep copy (train mode).
+
+    scheme="binary"  → {-α, +α}     (XNOR-Net BWN)
+    scheme="ternary" → {-α, 0, +α}  (TWN)
+
+    Each Conv/Linear's FP32 weight becomes `<module>.parametrizations.weight.original`
+    (a real Parameter the optimizer updates); forward always sees the quantized weight
+    via `_STEQuantize`. Activations stay FP32 — the weight-only setup those papers report.
     """
     model = copy.deepcopy(model)
     for module in model.modules():
-        if not isinstance(module, _QUANTIZABLE):
-            continue
-        w = module.weight.data
-        flat = w.reshape(w.shape[0], -1)  # [out_ch, fan_in]
-        if scheme == "binary":
-            alpha = flat.abs().mean(dim=1, keepdim=True)
-            q = torch.sign(flat) * alpha
-        elif scheme == "ternary":
-            delta = 0.7 * flat.abs().mean(dim=1, keepdim=True)
-            mask = (flat.abs() > delta).float()
-            alpha = (flat.abs() * mask).sum(dim=1, keepdim=True) / mask.sum(dim=1, keepdim=True).clamp(min=1)
-            q = torch.sign(flat) * mask * alpha
-        else:
-            raise ValueError(f"unknown scheme: {scheme!r} (expected 'binary' or 'ternary')")
-        module.weight.data = q.reshape(w.shape).to(w.dtype)
-    return model
+        if isinstance(module, _QUANTIZABLE):
+            parametrize.register_parametrization(module, "weight", _STEQuant(scheme))
+    return model.train()
 
 
 def theoretical_size_mb(
@@ -246,4 +282,16 @@ if __name__ == "__main__":
     assert len(sens) == 2, sens  # one conv, one linear
     bits = assign_mixed_precision(copy.deepcopy(net), sens, int8_ratio=0.5)
     assert set(bits.values()) <= {4, 8}
+
+    for scheme in ("binary", "ternary"):
+        qnet = apply_weight_qat(net, scheme)
+        conv = qnet[0]
+        before = conv.parametrizations.weight.original.detach().clone()
+        opt = torch.optim.SGD(qnet.parameters(), lr=0.1)
+        loss = qnet(loader[0][0]).sum()
+        loss.backward()
+        opt.step()
+        after = conv.parametrizations.weight.original.detach()
+        assert not torch.equal(before, after), f"{scheme}: latent weight did not update"
+
     print(f"OK — fp32={fp32_mb:.4f}MB int4={int4_mb:.4f}MB sens={sens} bits={bits}")

@@ -25,3 +25,24 @@ mixed_precision:
   freeze_bn_epoch: 3
   disable_observer_epoch: 5
   per_channel: true
+
+# INT2 quantization-aware training (fake-quant, same recipe as int4_qat)
+int2_qat:
+  epochs: 20
+  lr: 1.0e-5
+  weight_decay: 5.0e-4
+  freeze_bn_epoch: 3
+  disable_observer_epoch: 5
+  per_channel: true
+
+# Ternary (TWN) weight-only QAT via straight-through estimator — no observers/fusion
+ternary_qat:
+  epochs: 20
+  lr: 1.0e-5
+  weight_decay: 5.0e-4
+
+# Binary (BWN) weight-only QAT via straight-through estimator — no observers/fusion
+binary_qat:
+  epochs: 20
+  lr: 1.0e-5
+  weight_decay: 5.0e-4

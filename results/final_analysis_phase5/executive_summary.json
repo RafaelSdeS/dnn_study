@@ -1,0 +1,62 @@
+{
+  "phase": "5",
+  "title": "Final Analysis - Cross-Phase Study Summary",
+  "phases_covered": [
+    "Phase 1 - Baselines",
+    "Phase 2 - AlexNet Variants",
+    "Phase 3 - Compensation",
+    "Phase 4 - Final Architecture"
+  ],
+  "best_fp32_overall": {
+    "phase": "Phase 1 - Baselines",
+    "model_name": "mobilenetv2",
+    "fp32_top1": 57.99558162689209,
+    "fp32_top5": 81.51498436927795,
+    "params_m": 2.480072,
+    "fp32_size_mb": 28.751924514770508,
+    "winograd_friendly": false
+  },
+  "best_int8_overall": {
+    "phase": "Phase 1 - Baselines",
+    "model_name": "vgg_style",
+    "int8_top1": 51.188743114471436,
+    "int8_top5": 75.5200743675232,
+    "int8_size_mb": 2.3767032623291016,
+    "quantization_drop_top1": 0.626063346862793,
+    "winograd_friendly": true
+  },
+  "most_quantization_stable": {
+    "phase": "Phase 2 - AlexNet Variants",
+    "model_name": "alexnet_tv",
+    "fp32_top1": 24.28814321756363,
+    "int8_top1": 26.27626061439514,
+    "quantization_drop_top1": -1.9881173968315125,
+    "winograd_friendly": false
+  },
+  "most_size_efficient": {
+    "phase": "Phase 3 - Compensation",
+    "model_name": "alexnet_depthwisesep",
+    "fp32_size_mb": 3.6540164947509766,
+    "int8_size_mb": 0.39975547790527344,
+    "compression_ratio": 9.14062895122312,
+    "param_efficiency_top1_per_m": 141.8181934122133,
+    "accuracy_per_mb_fp32": 12.148278722197022,
+    "winograd_friendly": true
+  },
+  "winograd_group_summary": [
+    {
+      "winograd_friendly": "Not Winograd-friendly",
+      "n": 7,
+      "mean_fp32_top1": 40.10561342750277,
+      "mean_quant_drop": -0.1659432053565979,
+      "mean_acc_per_mb": 11.520072761720371
+    },
+    {
+      "winograd_friendly": "Winograd-friendly",
+      "n": 15,
+      "mean_fp32_top1": 40.5370662920177,
+      "mean_quant_drop": 1.1838184935706002,
+      "mean_acc_per_mb": 49.22839472717
+    }
+  ]
+}

@@ -1,0 +1,3 @@
+winograd_friendly,n,mean_fp32_top1,mean_quant_drop,mean_acc_per_mb
+Not Winograd-friendly,7,40.10561342750277,-0.1659432053565979,11.520072761720371
+Winograd-friendly,15,40.5370662920177,1.1838184935706002,49.22839472717
