@@ -18,5 +18,6 @@ from .quantization_advanced import (
     calibrate,
     compute_layer_sensitivity,
     assign_mixed_precision,
+    apply_weight_ptq,
     theoretical_size_mb,
 )

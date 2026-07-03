@@ -12,6 +12,7 @@ Public API:
     calibrate(model, loader, device, n_samples)    → PTQ: freeze observers after calibration
     compute_layer_sensitivity(model, loader, ...)  → per-layer INT4 sensitivity scores
     assign_mixed_precision(model, sensitivities, int8_ratio) → per-module qconfig assignment
+    apply_weight_ptq(model, scheme)                → weight-only binary/ternary PTQ (BWN/TWN)
     theoretical_size_mb(model, w_bits, bits_map)   → packed size in MB
 """
 
@@ -168,6 +169,35 @@ def assign_mixed_precision(
         module.qconfig = qconfig_int8 if bits == 8 else qconfig_int4
         bits_map[name] = bits
     return bits_map
+
+
+def apply_weight_ptq(model: nn.Module, scheme: str) -> nn.Module:
+    """Weight-only PTQ at 1-2 bits, per output channel. Returns a deep copy.
+
+    scheme="binary"  → {-α, +α}     (XNOR-Net BWN: α = mean|w| per channel)
+    scheme="ternary" → {-α, 0, +α}  (TWN: Δ = 0.7·mean|w|, α = mean|w| over |w|>Δ)
+
+    Activations stay FP32 — the weight-only setup those papers report. No retraining,
+    so at 1-2 bits accuracy typically collapses without QAT; that is the finding.
+    """
+    model = copy.deepcopy(model)
+    for module in model.modules():
+        if not isinstance(module, _QUANTIZABLE):
+            continue
+        w = module.weight.data
+        flat = w.reshape(w.shape[0], -1)  # [out_ch, fan_in]
+        if scheme == "binary":
+            alpha = flat.abs().mean(dim=1, keepdim=True)
+            q = torch.sign(flat) * alpha
+        elif scheme == "ternary":
+            delta = 0.7 * flat.abs().mean(dim=1, keepdim=True)
+            mask = (flat.abs() > delta).float()
+            alpha = (flat.abs() * mask).sum(dim=1, keepdim=True) / mask.sum(dim=1, keepdim=True).clamp(min=1)
+            q = torch.sign(flat) * mask * alpha
+        else:
+            raise ValueError(f"unknown scheme: {scheme!r} (expected 'binary' or 'ternary')")
+        module.weight.data = q.reshape(w.shape).to(w.dtype)
+    return model
 
 
 def theoretical_size_mb(

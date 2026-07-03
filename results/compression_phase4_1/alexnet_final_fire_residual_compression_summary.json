@@ -1,0 +1,58 @@
+{
+  "fp32_baseline": {
+    "top1": 49.793291091918945,
+    "top5": 74.80218410491943,
+    "params_m": 0.698664,
+    "disk_mb": 8.093656539916992,
+    "size_mb_32": 2.6517105102539062,
+    "macs": 55236608
+  },
+  "methods": [
+    {
+      "model": "alexnet_final_fire_residual",
+      "method": "int8",
+      "precision": "int8",
+      "fp32_baseline_acc": 49.793291091918945,
+      "compressed_top1_acc": 49.75736141204834,
+      "top5_acc": 74.84931945800781,
+      "acc_drop_pp": 0.03592967987060547,
+      "compression_ratio": 3.9797670983477036,
+      "fp32_size_mb": 2.6517105102539062,
+      "compressed_size_mb": 0.6662979125976562,
+      "latency_ms": 0.12436256600003616,
+      "throughput_img_s": 8041.004879231176,
+      "params_m": 0.698664,
+      "acc_per_mb": 74.67734848224612,
+      "training_time_hrs": null,
+      "calibration_time_min": 0.005679614033336596,
+      "top1_%": 49.75736141204834,
+      "top5_%": 74.84931945800781,
+      "size_MB": 0.6662979125976562,
+      "notes": "fake-quant W8/A8 PTQ",
+      "bits_map": null
+    },
+    {
+      "model": "alexnet_final_fire_residual",
+      "method": "int4_ptq",
+      "precision": "int4",
+      "fp32_baseline_acc": 49.793291091918945,
+      "compressed_top1_acc": 40.01106917858124,
+      "top5_acc": 66.90070033073425,
+      "acc_drop_pp": 9.782221913337708,
+      "compression_ratio": 7.906212324560406,
+      "fp32_size_mb": 2.6517105102539062,
+      "compressed_size_mb": 0.33539581298828125,
+      "latency_ms": 0.11430412330000764,
+      "throughput_img_s": 8748.590786837636,
+      "params_m": 0.698664,
+      "acc_per_mb": 119.29507653090239,
+      "training_time_hrs": null,
+      "calibration_time_min": 0.005176945733319371,
+      "top1_%": 40.01106917858124,
+      "top5_%": 66.90070033073425,
+      "size_MB": 0.33539581298828125,
+      "notes": "fake-quant W4/A8 PTQ, per-channel",
+      "bits_map": null
+    }
+  ]
+}

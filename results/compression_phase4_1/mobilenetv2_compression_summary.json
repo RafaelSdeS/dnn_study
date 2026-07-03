@@ -1,0 +1,58 @@
+{
+  "fp32_baseline": {
+    "top1": 57.99558162689209,
+    "top5": 81.51498436927795,
+    "params_m": 2.480072,
+    "disk_mb": 28.751924514770508,
+    "size_mb_32": 9.362556457519531,
+    "macs": 25799936
+  },
+  "methods": [
+    {
+      "model": "mobilenetv2",
+      "method": "int8",
+      "precision": "int8",
+      "fp32_baseline_acc": 57.99558162689209,
+      "compressed_top1_acc": 55.413031578063965,
+      "top5_acc": 79.93391156196594,
+      "acc_drop_pp": 2.582550048828125,
+      "compression_ratio": 3.958494753378128,
+      "fp32_size_mb": 9.362556457519531,
+      "compressed_size_mb": 2.3651809692382812,
+      "latency_ms": 0.28945623949994115,
+      "throughput_img_s": 3454.753650249793,
+      "params_m": 2.480072,
+      "acc_per_mb": 23.428664571028584,
+      "training_time_hrs": null,
+      "calibration_time_min": 0.008523605833321806,
+      "top1_%": 55.413031578063965,
+      "top5_%": 79.93391156196594,
+      "size_MB": 2.3651809692382812,
+      "notes": "fake-quant W8/A8 PTQ",
+      "bits_map": null
+    },
+    {
+      "model": "mobilenetv2",
+      "method": "int4_ptq",
+      "precision": "int4",
+      "fp32_baseline_acc": 57.99558162689209,
+      "compressed_top1_acc": 3.5026047378778458,
+      "top5_acc": 11.595746874809265,
+      "acc_drop_pp": 54.492976889014244,
+      "compression_ratio": 7.80895201369401,
+      "fp32_size_mb": 9.362556457519531,
+      "compressed_size_mb": 1.1989517211914062,
+      "latency_ms": 0.28238170869999524,
+      "throughput_img_s": 3541.305860792877,
+      "params_m": 2.480072,
+      "acc_per_mb": 2.9213893069833405,
+      "training_time_hrs": null,
+      "calibration_time_min": 0.008308011516661887,
+      "top1_%": 3.5026047378778458,
+      "top5_%": 11.595746874809265,
+      "size_MB": 1.1989517211914062,
+      "notes": "fake-quant W4/A8 PTQ, per-channel",
+      "bits_map": null
+    }
+  ]
+}
