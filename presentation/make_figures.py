@@ -58,19 +58,19 @@ fig, ax = plt.subplots(figsize=(13.5, 5), facecolor=SURFACE)
 ax.set_facecolor(SURFACE)
 
 models_fig1 = [
-    "vgg_style", "resnet18_tv",
+    "mobilenetv2", "vgg_style", "resnet18_tv",
     "alexnet_3x3", "alexnet_2x2",
     "alexnet_mixed", "alexnet_small_kernel", "alexnet_residual",
     "alexnet_final_fire_residual",
 ]
 labels_fig1 = [
-    "VGG-Style\n(unrestricted)", "ResNet18\n(unrestricted)",
+    "MobileNetV2\n(unrestricted)", "VGG-Style\n(unrestricted)", "ResNet18\n(unrestricted)",
     "3×3 only\n(naive)", "2×2 only\n(naive)",
     "Mixed\n(3×3+2×2)", "SmallKernel\n(optimized)", "Residual\n(compensation)",
     "Fire-Residual\n(Phase 4 hybrid)",
 ]
 colors_fig1 = [
-    COLORS["blue"], COLORS["blue"],
+    COLORS["blue"], COLORS["blue"], COLORS["blue"],
     COLORS["yellow"], COLORS["yellow"],
     COLORS["aqua"], COLORS["aqua"], COLORS["green"],
     COLORS["purple"],

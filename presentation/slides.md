@@ -66,6 +66,30 @@ style: |
   table tbody tr {
     border-bottom: 1px solid #ddd;
   }
+
+  .refs {
+    display: flex;
+    gap: 30px;
+    align-items: flex-start;
+  }
+  .refs > div {
+    flex: 1;
+  }
+  .refs p {
+    font-size: 14px !important;
+    line-height: 1.25 !important;
+    margin: 6px 0 !important;
+  }
+
+  .mini-table table {
+    width: 70% !important;
+    font-size: 13px !important;
+    margin: 8px auto !important;
+  }
+  .mini-table table th,
+  .mini-table table td {
+    padding: 4px 8px !important;
+  }
 ---
 
 <!-- _class: title-slide -->
@@ -103,15 +127,15 @@ Rafael Silva de Souza
 
 ---
 
-## A Restrição de Kernel
+## Restrição de Kernel
 
 ![width:900px](../presentation/figures/kernel_restriction_cost.png)
 
-<div class="smaller">
+<div class="mini-table">
 
 | Modelo | Head | Camadas FC |
 |--------|------|-----------|
-| VGG-Style, ResNet18, 2×2, Mixed, SmallKernel, Fire-Residual | GAP (1×1) | 1 |
+| MobileNetV2, VGG-Style, ResNet18, 2×2, Mixed, SmallKernel, Fire-Residual | GAP (1×1) | 1 |
 | AlexNet 3×3, Residual | AvgPool (6×6) | 3 |
 
 </div>
@@ -122,20 +146,22 @@ Rafael Silva de Souza
 
 ![width:900px](../presentation/figures/kernel_restriction_cost_int8.png)
 
-*ResNet18 omitido — não existe resultado INT8/QAT para esse baseline pré-treinado.*
+*ResNet18 e MobileNetV2 omitidos — sem resultado INT8/QAT válido para esses baselines pré-treinados (somas residuais nativas, incompatíveis com conversão INT8).*
 
 ---
 
 ## Comparação
 
-|  | **SmallKernel** | **Residual** |
-|---|---|---|
-| Mecanismo | Canais mais estreitos (64→128→256→256→256) + cabeça GAP no lugar das FC 4096+4096 + camadas 3×3 para compensar o campo receptivo | 5 blocos residuais [7]: duas conv 3×3+BN+ReLU somadas ao atalho via `FloatFunctional`; canais e cabeça FC iguais ao `AlexNet3x3` |
-| Parâmetros | 1,6M | 57,8M |
-| Tamanho | **18 MB** | 694 MB |
-| FP32 → INT8 | 45,8% → 35,9% | **48,0% → 47,3%** |
+<div class="smaller">
 
-**Leve, porém frágil na quantização** — vs. — **Pesado, porém o mais preciso e estável**
+|  | **SmallKernel** | **Residual** | **Fire-Residual** |
+|---|---|---|---|
+| Mecanismo | Canais estreitos + GAP + 3×3 | Blocos residuais [7] (`FloatFunctional`) | Fire [10] + atalho residual |
+| Parâmetros | 1,6M | 57,8M | 0,7M |
+| Tamanho | 18 MB | 694 MB | 8 MB |
+| FP32 → INT8 | 45,8% → 35,9% | 48,0% → 47,3% | 49,8% → 49,2% |
+
+</div>
 
 ---
 
@@ -159,45 +185,41 @@ Rafael Silva de Souza
 
 ## Referências
 
-<div style="font-size: 0.5em; line-height: 1.4">
+<div class="refs">
 
-**[1]** LE, Y.; YANG, X. *Tiny ImageNet visual recognition challenge*. Stanford: CS231N Course Technical Report, 2015.
+<div>
 
-**[2]** JACOB, B. et al. *Quantization and training of neural networks for efficient integer-arithmetic-only inference*. In: IEEE CONFERENCE ON COMPUTER VISION AND PATTERN RECOGNITION, 2018, Salt Lake City. Proceedings [...]. Piscataway: IEEE, 2018. p. 2704-2713.
+**[1]** LE, Y.; YANG, X. *Tiny ImageNet visual recognition challenge*. Stanford: Stanford University, 2015. (CS231N Course Technical Report).
 
-**[3]** KHUDIA, D. et al. *FBGEMM: enabling high-performance low-precision deep learning inference*. arXiv preprint arXiv:2101.05615, 2021.
+**[2]** JACOB, B. *et al.* Quantization and training of neural networks for efficient integer-arithmetic-only inference. In: IEEE CVPR, 2018, Salt Lake City. *Anais [...]*. Piscataway: IEEE, 2018. p. 2704-2713.
 
-**[4]** PASZKE, A. et al. *PyTorch: an imperative style, high-performance deep learning library*. In: ADVANCES IN NEURAL INFORMATION PROCESSING SYSTEMS, 32., 2019, Vancouver. Proceedings [...]. 2019. p. 8024-8035.
+**[3]** KHUDIA, D. *et al. FBGEMM: enabling high-performance low-precision deep learning inference*. [S. l.]: arXiv, 2021. arXiv:2101.05615.
 
-</div>
-
----
-
-## Referências (cont.)
-
-<div style="font-size: 0.5em; line-height: 1.4">
-
-**[5]** LAVIN, A.; GRAY, S. *Fast algorithms for convolutional neural networks*. In: IEEE CONFERENCE ON COMPUTER VISION AND PATTERN RECOGNITION, 2016, Las Vegas. Proceedings [...]. Piscataway: IEEE, 2016. p. 4013-4021.
-
-**[6]** SANDLER, M.; HOWARD, A.; ZHU, M.; ZHMOGINOV, A.; CHEN, L. *MobileNetV2: inverted residuals and linear bottlenecks*. In: IEEE CONFERENCE ON COMPUTER VISION AND PATTERN RECOGNITION, 2018, Salt Lake City. Proceedings [...]. Piscataway: IEEE, 2018. p. 4510-4520.
-
-**[7]** HE, K.; ZHANG, X.; REN, S.; SUN, J. *Deep residual learning for image recognition*. In: IEEE CONFERENCE ON COMPUTER VISION AND PATTERN RECOGNITION, 2016, Las Vegas. Proceedings [...]. Piscataway: IEEE, 2016. p. 770-778.
-
-**[8]** SIMONYAN, K.; ZISSERMAN, A. *Very deep convolutional networks for large-scale image recognition*. In: INTERNATIONAL CONFERENCE ON LEARNING REPRESENTATIONS, 3., 2015, San Diego. Proceedings [...]. 2015.
+**[4]** PASZKE, A. *et al.* PyTorch: an imperative style, high-performance deep learning library. In: NeurIPS, 32., 2019, Vancouver. *Anais [...]*. [S. l.]: Curran Associates, 2019. p. 8024-8035.
 
 </div>
 
----
+<div>
 
-## Referências (cont.)
+**[5]** LAVIN, A.; GRAY, S. Fast algorithms for convolutional neural networks. In: IEEE CVPR, 2016, Las Vegas. *Anais [...]*. Piscataway: IEEE, 2016. p. 4013-4021.
 
-<div style="font-size: 0.5em; line-height: 1.4">
+**[6]** SANDLER, M. *et al.* MobileNetV2: inverted residuals and linear bottlenecks. In: IEEE CVPR, 2018, Salt Lake City. *Anais [...]*. Piscataway: IEEE, 2018. p. 4510-4520.
 
-**[9]** KRIZHEVSKY, A.; SUTSKEVER, I.; HINTON, G. E. *ImageNet classification with deep convolutional neural networks*. In: ADVANCES IN NEURAL INFORMATION PROCESSING SYSTEMS, 25., 2012. Proceedings [...]. p. 1097-1105.
+**[7]** HE, K. *et al.* Deep residual learning for image recognition. In: IEEE CVPR, 2016, Las Vegas. *Anais [...]*. Piscataway: IEEE, 2016. p. 770-778.
 
-**[10]** IANDOLA, F. N. et al. *SqueezeNet: AlexNet-level accuracy with 50x fewer parameters and <0.5MB model size*. arXiv preprint arXiv:1602.07360, 2016.
+**[8]** SIMONYAN, K.; ZISSERMAN, A. Very deep convolutional networks for large-scale image recognition. In: ICLR, 3., 2015, San Diego. *Anais [...]*. [S. l.: s. n.], 2015.
 
-**[11]** HOWARD, A. G. et al. *MobileNets: efficient convolutional neural networks for mobile vision applications*. arXiv preprint arXiv:1704.04861, 2017.
+</div>
+
+<div>
+
+**[9]** KRIZHEVSKY, A.; SUTSKEVER, I.; HINTON, G. E. ImageNet classification with deep convolutional neural networks. In: NeurIPS, 25., 2012, Lake Tahoe. *Anais [...]*. [S. l.]: Curran Associates, 2012. p. 1097-1105.
+
+**[10]** IANDOLA, F. N. *et al. SqueezeNet: AlexNet-level accuracy with 50x fewer parameters and <0.5MB model size*. [S. l.]: arXiv, 2016. arXiv:1602.07360.
+
+**[11]** HOWARD, A. G. *et al. MobileNets: efficient convolutional neural networks for mobile vision applications*. [S. l.]: arXiv, 2017. arXiv:1704.04861.
+
+</div>
 
 </div>
 
