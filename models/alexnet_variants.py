@@ -233,7 +233,6 @@ class AlexNetSmallKernel(nn.Module):
     Architecture: 5 conv stages (3×3, narrower channels: 64→128→256→256→256),
     AdaptiveAvgPool(1×1), single Linear classifier. ~36× fewer parameters than AlexNet3x3
     (narrow channels + GAP head vs large FC). The most parameter-efficient Phase 2 model.
-    Expected top-1: ~8-10%. Size: ~6 MB FP32 / ~1.6 MB INT8.
     Training speed: fast (GAP head eliminates most parameters).
     QAT: full — flat Sequential, Conv-ReLU pairs fuseable.
     Trade-off: narrow channels + GAP vs wide channels + FC; measures head and width contributions.

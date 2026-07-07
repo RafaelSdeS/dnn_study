@@ -1,11 +1,75 @@
 ---
 marp: true
-theme: default
+theme: gaia
 paginate: true
 size: 16:9
+math: katex
+style: |
+  section { 
+    font-size: 30px;
+    padding: 60px 70px;
+  }
+  img[alt~="center"] {
+    display: block;
+    margin: 0 auto;
+    max-width: 100%;
+    height: auto;
+  }
+  table {
+    margin: 0 auto;
+    font-size: 22px;
+  }
+  .small { font-size: 24px; }
+  .smaller { font-size: 20px; }
+
+  section.title-slide {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    text-align: center;
+    padding: 60px 80px;
+  }
+  .columns {
+    display: flex;
+    gap: 25px;
+    align-items: center;
+  }
+
+  .columns > div {
+    flex: 1;
+  }
+
+  img {
+    display: block;
+    margin: 0 auto 10px auto;
+    max-width: 100%;
+    height: auto;
+    background: transparent;
+  }
+
+  table {
+    width: 95%;
+    border-collapse: collapse;
+    margin: 20px auto !important;
+  }
+
+  table th {
+    padding: 14px 12px;
+    font-weight: 600;
+  }
+
+  table td {
+    padding: 16px 12px;
+    text-align: center;
+  }
+
+  table tbody tr {
+    border-bottom: 1px solid #ddd;
+  }
 ---
 
-<!-- Title Slide -->
+<!-- _class: title-slide -->
+
 # Restrição do Tamanho de Kernel em CNNs e Sua Eficiência
 
 Rafael Silva de Souza
@@ -41,13 +105,22 @@ Rafael Silva de Souza
 
 ## A Restrição de Kernel
 
-![width:700px](../presentation/figures/kernel_restriction_cost.png)
+![width:900px](../presentation/figures/kernel_restriction_cost.png)
+
+<div class="smaller">
+
+| Modelo | Head | Camadas FC |
+|--------|------|-----------|
+| VGG-Style, ResNet18, 2×2, Mixed, SmallKernel, Fire-Residual | GAP (1×1) | 1 |
+| AlexNet 3×3, Residual | AvgPool (6×6) | 3 |
+
+</div>
 
 ---
 
 ## Equivalentes em INT8
 
-![width:700px](../presentation/figures/kernel_restriction_cost_int8.png)
+![width:900px](../presentation/figures/kernel_restriction_cost_int8.png)
 
 *ResNet18 omitido — não existe resultado INT8/QAT para esse baseline pré-treinado.*
 
@@ -68,19 +141,19 @@ Rafael Silva de Souza
 
 ## Compração FP32 vs. INT8
 
-![width:800px](../presentation/figures/best_models_fp32_vs_int8.png)
+![width:950px](../presentation/figures/best_models_fp32_vs_int8.png)
 
 ---
 
 ## Melhores Modelos (até o momento)
 
-![width:750px](../presentation/figures/master_pareto_frontier_all_models.png)
+![width:920px](../presentation/figures/master_pareto_frontier_all_models.png)
 
 ---
 
 ## Compressão Extrema
 
-![width:750px](../presentation/figures/extreme_compression_methods.png)
+![width:920px](../presentation/figures/extreme_compression_methods.png)
 
 ---
 

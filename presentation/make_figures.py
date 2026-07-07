@@ -33,7 +33,7 @@ DARK_COLORS = {
 TEXT_PRIMARY = "#0b0b0b"
 TEXT_SECONDARY = "#52514e"
 MUTED = "#898781"
-SURFACE = "#fcfcfb"
+SURFACE = "#fef5e7"
 GRID = "#e1e0d9"
 
 # Read data
