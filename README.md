@@ -108,8 +108,9 @@ YAML-based configuration loading via `configs/loader.py`:
 | **AlexNetSmallKernel** | 1.60M | 45.84% | 35.95% | –9.89pp ⚠️ | 1.56 MB |
 | **AlexNetStacked** | 60.48M | 44.56% | 42.79% | –1.77pp | 57.94 MB |
 | AlexNetMixed | 1.75M | 38.74% | 37.99% | –0.75pp | 1.71 MB |
-| AlexNet3x3 | 57.61M | 35.79% | 36.19% | +0.40pp ✓ | 55.12 MB |
-| AlexNet2x2 | 1.05M | 30.02% | 30.89% | +0.87pp ✓ | 1.04 MB |
+| AlexNet3x3GAP | 57.61M | 38.74% | 37.60% | –1.14pp | 2.23 MB |
+| AlexNet3x3FC | 57.61M | 35.79% | 36.19% | +0.40pp ✓ | 55.12 MB |
+| AlexNet2x2GAP | 1.05M | 30.02% | 30.89% | +0.87pp ✓ | 1.04 MB |
 
 ### Phase 3 — Compensation Mechanisms (FP32 + QAT INT8, 41–95+20 epochs):
 

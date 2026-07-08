@@ -66,7 +66,9 @@ Results after implementing phases 1, 2, and 3. **Most baselines (MobileNetV2, Re
 | **VGGStyle** | 51.81% | 51.19% | –0.63pp | ✓ Good |
 | **AlexNetStacked** | 44.56% | 42.79% | –1.77pp | ⚠️ Moderate |
 | **AlexNetSmallKernel** | 45.84% | 35.95% | **–9.89pp** | ❌ **Poor** |
-| **AlexNet3x3** | 35.79% | 36.19% | +0.40pp | ✓ Gain |
+| **AlexNet3x3GAP** | 38.74% | 37.60% | –1.14pp | ✓ Good |
+| **AlexNet3x3FC** | 35.79% | 36.19% | +0.40pp | ✓ Gain |
+| **AlexNet2x2GAP** | 30.02% | 30.89% | +0.87pp | ✓ Gain |
 
 **Key insight:** Small-kernel models (**SmallKernel, 2x2, 3x3**) quantize either poorly or counterintuitively. Compensation mechanisms (**Bottleneck, Fire, Residual**) quantize much better, possibly due to richer feature representations.
 
@@ -76,14 +78,16 @@ Results after implementing phases 1, 2, and 3. **Most baselines (MobileNetV2, Re
 
 | Kernel(s) | Model | Accuracy | Drop vs Baseline | Size | Notes |
 |-----------|-------|----------|------------------|------|-------|
-| 3×3 only | **AlexNet3x3** | 35.79% | –48.61pp | 659 MB | Large but poor accuracy |
-| 2×2 only | **AlexNet2x2** | 30.02% | –49.95pp | 12 MB | Severely limited |
+| 3×3 + FC head | **AlexNet3x3FC** | 35.79% | –48.61pp | 659 MB | Large but poor accuracy |
+| 3×3 + GAP head | **AlexNet3x3GAP** | 38.74% | –45.48pp | 2.23 MB | GAP head enables size reduction |
+| 2×2 + GAP head | **AlexNet2x2GAP** | 30.02% | –49.95pp | 1.04 MB | Severely limited by kernel size |
 | 3×3 stacked | **AlexNetStacked** | 44.56% | –26.92pp | 692 MB | Stacked compensates; 60M params |
 | Small kernel mixed | **AlexNetSmallKernel** | 45.84% | –26.74pp | 18 MB | **Best small-kernel result** |
 | Mixed (var. kernel) | **AlexNetMixed** | 38.74% | –41.34pp | 20 MB | Moderate mixed approach |
 
 **Verdict:** 
 - Pure 3×3 or 2×2 restrictions are costly without compensation.
+- **Head type matters:** AlexNet3x3GAP (2.23 MB) vs AlexNet3x3FC (659 MB) shows GAP's 296× compression benefit.
 - **AlexNetSmallKernel** (custom small-kernel design) recovers well and reaches 45.84% at tiny size.
 - Stacking small kernels helps but requires more params.
 
@@ -96,11 +100,12 @@ Results after implementing phases 1, 2, and 3. **Most baselines (MobileNetV2, Re
 | **Bottleneck** | AlexNetBottleneck | 44.62% | 4.49 | 0.39 | 9.93 | –0.08pp | ✓✓ **Best** |
 | **Fire (squeezenet)** | AlexNetFire | 43.98% | 5.99 | 0.52 | 7.34 | +0.33pp | ✓✓ **Excellent** |
 | **Depthwise Sep** | AlexNetDepthwiseSep | 44.39% | 3.65 | 0.31 | 12.15 | –2.92pp | ⚠️ Unstable |
-| **GAP (global avg pool)** | AlexNetGAP | 38.74% | 26.37 | 2.30 | 1.47 | –1.14pp | ✓ Moderate |
 | **Residual** | AlexNetResidual | 48.01% | 694.41 | 60.67 | 0.07 | –0.74pp | ✓ Best overall accuracy |
 | **Factorized** | AlexNetFactorized | 42.89% | 653.15 | 57.07 | 0.07 | –0.29pp | ✓ Good |
 | **Group Conv** | AlexNetGroupConv | 29.18% | 639.99 | 55.92 | 0.05 | –1.47pp | ❌ Poor |
 | **SE (Squeeze-Excite)** | AlexNetSE | **0.50%** | 659.75 | 57.65 | — | — | ❌ **Failed** |
+
+**Note:** **AlexNet3x3GAP** (moved to Phase 2) is a simple head-type variant (GAP vs FC), not a compensation mechanism; see Phase 2 section above.
 
 **Key findings:**
 - **Bottleneck & Fire** are the sweet spot: tiny, competitive accuracy, quantization-stable.
@@ -131,9 +136,8 @@ Results after implementing phases 1, 2, and 3. **Most baselines (MobileNetV2, Re
 
 ### **Not Recommended**
 - **AlexNetSE** — Training failure; do not pursue without debugging.
-- **AlexNet3x3 / AlexNet2x2** — Poor accuracy (30–35%) from kernel restriction alone.
+- **AlexNet3x3FC / AlexNet2x2GAP** — Poor accuracy (30–35%) from naive kernel restriction without compensation.
 - **AlexNetGroupConv** — Negligible benefit, poor QAT.
-- **AlexNetGAP** — Moderate accuracy loss (38.74%) for size savings.
 
 ---
 

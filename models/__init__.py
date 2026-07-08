@@ -1,8 +1,11 @@
 from .baselines import AlexNetTV, VGGStyleCNN, ResNet18TV, MobileNetV2TV
-from .alexnet_variants import AlexNet3x3, AlexNet2x2, AlexNetStacked, AlexNetMixed, AlexNetSmallKernel
+from .alexnet_variants import (
+    AlexNet3x3FC, AlexNet3x3GAP, AlexNet2x2GAP, AlexNet2x2FC,
+    AlexNetStacked, AlexNetMixed, AlexNetSmallKernel,
+)
 from .compensation import (
     AlexNetBottleneck, AlexNetFactorized, AlexNetGroupConv, AlexNetDepthwiseSep,
-    AlexNetResidual, AlexNetFire, AlexNetGAP, AlexNetSE,
+    AlexNetResidual, AlexNetFire, AlexNetSE,
 )
 from .tinyhybridnet import (
     FireMobileResidual, TinyHybridNet,

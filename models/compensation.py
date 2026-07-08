@@ -1,6 +1,6 @@
 """Phase 3 — Compensation Mechanisms: architectural modifications to kernel-restricted AlexNet.
 
-Each model takes AlexNet3x3 as its base and adds exactly one compensation mechanism,
+Each model takes AlexNet3x3FC as its base and adds exactly one compensation mechanism,
 isolating its effect on accuracy, efficiency, and quantization.
 """
 
@@ -80,11 +80,11 @@ class AlexNetFactorized(nn.Module):
     """1×3 + 3×1 asymmetric pairs — Inception-style spatial factorization.
 
     Architecture: each stage replaces a single 3×3 conv with a 1×3 followed by a 3×1 conv.
-    Same channel progression as AlexNet3x3. Factorized convolutions have the same receptive
+    Same channel progression as AlexNet3x3FC. Factorized convolutions have the same receptive
     field as 3×3 but ~33% fewer parameters and FLOPs per stage.
     Expected top-1: ~10-15% (factorization adds asymmetry; may hurt for small images).
     Size: ~200 MB FP32 / ~50 MB INT8.
-    Training speed: similar to AlexNet3x3 (slightly fewer FLOPs per stage).
+    Training speed: similar to AlexNet3x3FC (slightly fewer FLOPs per stage).
     QAT: full — Conv-BN-ReLU fuseable, asymmetric kernels supported by fbgemm.
     Trade-off: parameter efficiency via factorization vs representational completeness.
     """
@@ -149,7 +149,7 @@ class AlexNetGroupConv(nn.Module):
 
     Architecture: 5 stages of 3×3 grouped conv (groups=4 for stages 2-5, groups=1 for
     stage 1 since 3 channels are not divisible by 4), BatchNorm, same channel widths as
-    AlexNet3x3 (all divisible by 4), AdaptiveAvgPool(6×6), 3-layer FC head.
+    AlexNet3x3FC (all divisible by 4), AdaptiveAvgPool(6×6), 3-layer FC head.
     Grouped convolutions partition channels into 4 independent groups, reducing parameter
     count and FLOPs by ~4× at the cost of cross-group information mixing.
     Expected top-1: ~10-18% (grouped conv saves params; cross-group isolation hurts).
@@ -208,7 +208,7 @@ class AlexNetDepthwiseSep(nn.Module):
     """Depthwise separable convolutions — MobileNet-style spatial factorization.
 
     Architecture: 5 stages of DW 3×3 + PW 1×1 (replacing standard 3×3), BatchNorm after
-    each, same channel widths as AlexNet3x3, AdaptiveAvgPool(1×1), single Linear head.
+    each, same channel widths as AlexNet3x3FC, AdaptiveAvgPool(1×1), single Linear head.
     DW separable: ~8-9× fewer FLOPs and params than standard 3×3 per stage. GAP head avoids
     the large FC since parameter savings from DW already justify this change.
     Expected top-1: ~10-15% (DW reduces cross-channel mixing; GAP head is lightweight).
@@ -320,7 +320,7 @@ class AlexNetResidual(nn.Module):
     """Residual skip connections — most impactful single upgrade for small 3×3 CNNs.
 
     Architecture: 5 residual blocks (pair of 3×3 conv + BN + ReLU + FloatFunctional add),
-    same channel widths as AlexNet3x3, AdaptiveAvgPool(6×6), 3-layer FC head.
+    same channel widths as AlexNet3x3FC, AdaptiveAvgPool(6×6), 3-layer FC head.
     Optional SE blocks add channel attention after each residual pair (use_se=True);
     disable for QAT since Sigmoid is not fbgemm-compatible.
     Expected top-1: ~20-30% (residuals are the single most impactful upgrade for small CNNs).
@@ -391,7 +391,7 @@ class AlexNetFire(nn.Module):
     """Fire modules (SqueezeNet-style) — aggressive channel compression with multi-scale expand.
 
     Architecture: 5 Fire stages (1×1 squeeze → parallel 1×1 + 3×3 expand, concatenated),
-    matching AlexNet3x3's channel progression (out: 64→192→384→256→256), GAP head.
+    matching AlexNet3x3FC's channel progression (out: 64→192→384→256→256), GAP head.
     Fire modules compress the squeeze path to 1/4 of output channels, then expand with two
     parallel paths — pure channel mixing (1×1) and spatial mixing (3×3) — concatenated.
     Expected top-1: ~10-16% (compression reduces overfitting; parallel expand adds expressivity).
@@ -430,64 +430,14 @@ class AlexNetFire(nn.Module):
         x = self.dequant(x)
         return x
 
-
-# ─── AlexNetGAP ───────────────────────────────────────────────────────────────
-
-class AlexNetGAP(nn.Module):
-    """AlexNet3x3 with Global Average Pooling head — tests head type as the variable.
-
-    Architecture: identical backbone to AlexNet3x3 (5× 3×3 conv, same channels, no BN),
-    AdaptiveAvgPool(1×1) + single Linear, replacing the 94M-parameter FC head.
-    GAP enforces spatial invariance and eliminates the large FC head entirely, reducing
-    overfitting risk while the backbone is held constant.
-    Expected top-1: ~8-12% (GAP removes FC capacity; may underfit vs AlexNet3x3 on 200 classes).
-    Size: ~3 MB FP32 / ~1 MB INT8 (vs ~220 MB for AlexNet3x3 with large FC).
-    Training speed: fast (same backbone cost as AlexNet3x3; GAP removes most parameters).
-    QAT: full — flat Sequential, Conv-ReLU pairs fuseable (identical fuse_map to AlexNet3x3).
-    Trade-off: GAP spatial invariance + regularization vs FC arbitrary mapping capacity.
-    """
-
-    def __init__(self, num_classes: int = 200):
-        super().__init__()
-        self.quant = tq.QuantStub()
-        self.dequant = tq.DeQuantStub()
-
-        self.features = nn.Sequential(
-            nn.Conv2d(3, 64, 3, stride=2, padding=1),
-            nn.ReLU(inplace=False),
-            nn.MaxPool2d(2),
-            nn.Conv2d(64, 192, 3, padding=1),
-            nn.ReLU(inplace=False),
-            nn.MaxPool2d(2),
-            nn.Conv2d(192, 384, 3, padding=1),
-            nn.ReLU(inplace=False),
-            nn.Conv2d(384, 256, 3, padding=1),
-            nn.ReLU(inplace=False),
-            nn.Conv2d(256, 256, 3, padding=1),
-            nn.ReLU(inplace=False),
-            nn.AdaptiveAvgPool2d(1),
-        )
-        self.classifier = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(256, num_classes),
-        )
-
-    def forward(self, x):
-        x = self.quant(x)
-        x = self.features(x)
-        x = self.classifier(x)
-        x = self.dequant(x)
-        return x
-
-
 # ─── AlexNetSE ────────────────────────────────────────────────────────────────
 
 class AlexNetSE(nn.Module):
     """Squeeze-and-Excitation blocks — global channel recalibration per stage.
 
-    Architecture: identical backbone to AlexNet3x3 (5× 3×3 conv, same channels, no BN),
+    Architecture: identical backbone to AlexNet3x3FC (5× 3×3 conv, same channels, no BN),
     with a _SEBlock (global avg pool → FC squeeze → ReLU → FC excitation → Sigmoid scale)
-    applied after each conv stage. Same AdaptiveAvgPool(6×6) + 3-layer FC head as AlexNet3x3.
+    applied after each conv stage. Same AdaptiveAvgPool(6×6) + 3-layer FC head as AlexNet3x3FC.
     SE recalibrates channel responses by learning per-channel weights from global context,
     compensating for the local-only receptive field of 3×3 kernels.
     Expected top-1: ~15-22% (SE provides global context; modest but consistent improvement).

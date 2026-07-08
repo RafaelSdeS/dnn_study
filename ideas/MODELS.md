@@ -131,7 +131,7 @@ These classical and modern architectures establish performance baselines for the
 
 These models isolate kernel size as the experimental variable, all based on AlexNet architecture.
 
-### AlexNet3x3
+### AlexNet3x3FC
 
 **File:** `models/alexnet_variants.py`
 
@@ -156,7 +156,7 @@ These models isolate kernel size as the experimental variable, all based on Alex
 
 ---
 
-### AlexNet2x2
+### AlexNet2x2GAP
 
 **File:** `models/alexnet_variants.py`
 
@@ -188,7 +188,7 @@ These models isolate kernel size as the experimental variable, all based on Alex
 **Architecture:**
 - 5 stages with 2 stacked 3×3 convolutions per stage (10 conv total)
 - BatchNorm after each conv, ReLU(inplace=False)
-- Same channel widths as AlexNet3x3
+- Same channel widths as AlexNet3x3FC
 - Two stacked 3×3 convs: combined RF ≈ 5×5 (matches original AlexNet 5×5)
 - 3-layer FC head (4096→4096→200)
 - AdaptiveAvgPool(6×6) feature pooling
@@ -224,7 +224,7 @@ These models isolate kernel size as the experimental variable, all based on Alex
 
 **Why Chosen:**
 - Evaluates whether kernel mixing outperforms uniform restriction
-- Bridges AlexNet3x3 and AlexNet2x2 design spaces
+- Bridges AlexNet3x3FC and AlexNet2x2GAP design spaces
 - Tests if alternating kernel costs differ from pure 2×2 or pure 3×3
 - Lightweight head (GAP) avoids FC bottleneck
 
@@ -236,10 +236,10 @@ These models isolate kernel size as the experimental variable, all based on Alex
 
 **Architecture:**
 - 5 convolutional stages, all 3×3 kernels
-- **Narrow channels:** 64→128→256→256→256 (vs 64→192→384→256→256 in AlexNet3x3)
+- **Narrow channels:** 64→128→256→256→256 (vs 64→192→384→256→256 in AlexNet3x3FC)
 - No BatchNorm
 - AdaptiveAvgPool(1×1) + single linear classifier
-- ~36× fewer parameters than AlexNet3x3
+- ~36× fewer parameters than AlexNet3x3FC
 
 **Inspiration:**
 - Combines kernel restriction (3×3) with channel reduction for extreme efficiency
@@ -256,7 +256,7 @@ These models isolate kernel size as the experimental variable, all based on Alex
 
 ## Phase 3a: Compensation Mechanisms
 
-These models add exactly one architectural mechanism to AlexNet3x3, isolating each technique's impact.
+These models add exactly one architectural mechanism to AlexNet3x3FC, isolating each technique's impact.
 
 ### AlexNetBottleneck
 
@@ -420,15 +420,15 @@ These models add exactly one architectural mechanism to AlexNet3x3, isolating ea
 
 ---
 
-### AlexNetGAP
+### AlexNet3x3GAP
 
 **File:** `models/compensation.py`
 
 **Architecture:**
-- Identical backbone to AlexNet3x3 (5× 3×3 conv, no BN, same channels)
+- Identical backbone to AlexNet3x3FC (5× 3×3 conv, no BN, same channels)
 - AdaptiveAvgPool(1×1) replacing the 6×6 pooling
 - Single linear classifier (256→200) replacing 3-layer FC (4096→4096→200)
-- No other changes from AlexNet3x3
+- No other changes from AlexNet3x3FC
 
 **Inspiration:**
 - Global Average Pooling principle (Lin et al., 2013)
@@ -436,9 +436,9 @@ These models add exactly one architectural mechanism to AlexNet3x3, isolating ea
 - Network-in-Network design philosophy
 
 **Why Chosen:**
-- **Isolates head architecture as a single variable** (holds backbone identical to AlexNet3x3)
+- **Isolates head architecture as a single variable** (holds backbone identical to AlexNet3x3FC)
 - Tests whether GAP's regularization effect (spatial averaging, no learnable params) compensates for small kernels
-- Extreme parameter reduction: 3 MB FP32 vs 220 MB for AlexNet3x3 FC head
+- Extreme parameter reduction: 3 MB FP32 vs 220 MB for AlexNet3x3FC head
 - Distinguishes backbone capacity from classification head design
 
 **Key Paper:**
@@ -453,7 +453,7 @@ These models add exactly one architectural mechanism to AlexNet3x3, isolating ea
 **File:** `models/compensation.py`
 
 **Architecture:**
-- Identical backbone to AlexNet3x3 (5× 3×3 conv, no BN, channels: 64→192→384→256→256)
+- Identical backbone to AlexNet3x3FC (5× 3×3 conv, no BN, channels: 64→192→384→256→256)
 - Squeeze-Excitation blocks after each conv stage
 - SE block: Global avg pool → FC squeeze (1/16) → ReLU → FC expand → Sigmoid scale
 - AdaptiveAvgPool(6×6) + 3-layer FC (4096→4096→200)
@@ -599,8 +599,8 @@ These models combine multiple compensation mechanisms and modern design principl
 | **1** | VGGStyleCNN | 2.41M | 5 MB | Pure 3×3, stacked depth |
 | **1** | ResNet18TV | 11.28M | 44 MB | Residual learning, pretrained |
 | **1** | MobileNetV2TV | 2.48M | 14 MB | Depthwise separable, pretrained |
-| **2** | AlexNet3x3 | 57.61M | 220 MB | Uniform 3×3 kernel restriction |
-| **2** | AlexNet2x2 | 1.05M | 12 MB | Ultra-small 2×2 kernels |
+| **2** | AlexNet3x3FC | 57.61M | 220 MB | Uniform 3×3 kernel restriction |
+| **2** | AlexNet2x2GAP | 1.05M | 12 MB | Ultra-small 2×2 kernels |
 | **2** | AlexNetStacked | 60.48M | 230 MB | Double 3×3 stacking |
 | **2** | AlexNetMixed | 1.75M | 20 MB | Alternating 3×3 and 2×2 |
 | **2** | AlexNetSmallKernel | 1.60M | 18 MB | Narrow channels, 3×3, GAP |
@@ -610,7 +610,7 @@ These models combine multiple compensation mechanisms and modern design principl
 | **3a** | AlexNetDepthwiseSep | ↓ | 8 MB | Depthwise separable convolutions |
 | **3a** | AlexNetResidual | ↓ | 220 MB | **Residual skip connections** |
 | **3a** | AlexNetFire | ↓ | 5 MB | Fire squeeze-expand modules |
-| **3a** | AlexNetGAP | ↓ | 3 MB | Global average pooling head |
+| **2** | AlexNet3x3GAP | ↓ | 3 MB | Global average pooling head |
 | **3a** | AlexNetSE | ↓ | 220 MB | Squeeze-excitation channel attention |
 | **3b** | TinyHybridNet | ↓ | 6 MB | Fire + depthwise + residual hybrid |
 | **3b** | TinyMobileNetV2 | ↓ | 6 MB | Inverted residuals (MobileNetV2-style) |
