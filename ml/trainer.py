@@ -36,6 +36,7 @@ class Trainer:
         num_classes: int = 200,
         wandb_run=None,
         epoch_callback: Optional[Callable[[int, nn.Module], None]] = None,
+        metrics_callback: Optional[Callable[[dict], None]] = None,
         log_file: Optional[Path] = None,
     ):
         self.model = model
@@ -48,6 +49,8 @@ class Trainer:
         self.num_classes = num_classes
         self.wandb_run = wandb_run
         self.epoch_callback = epoch_callback
+        self.metrics_callback = metrics_callback
+        self.stop_requested = False
         self.save_dir.mkdir(parents=True, exist_ok=True)
 
         self.logger = logging.getLogger(f"trainer.{run_name}")
@@ -140,6 +143,20 @@ class Trainer:
                     log_dict["grad_norm"] = avg_grad_norm
                 self.wandb_run.log(log_dict, step=epoch + 1)
 
+            if self.metrics_callback is not None:
+                self.metrics_callback({
+                    "epoch": epoch + 1,
+                    "train_loss": train_loss,
+                    "train_acc": train_acc,
+                    "val_loss": val_loss,
+                    "val_acc": val_acc,
+                    "val_top5": val_top5,
+                    "lr": lr,
+                    "epoch_time_s": epoch_time,
+                    "peak_gpu_mem_mb": peak_mem,
+                    "grad_norm": avg_grad_norm,
+                })
+
             # Save resume checkpoint every epoch (full training state for recovery)
             save_checkpoint(
                 resume_path, model, optimizer, scheduler, epoch, {"val_acc": val_acc},
@@ -178,6 +195,10 @@ class Trainer:
                 self.logger.info("Early stopping at epoch %d", epoch + 1)
                 break
 
+            if self.stop_requested:
+                self.logger.info("Stop requested after epoch %d", epoch + 1)
+                break
+
         final_val_top1 = history["val_acc"][-1] if history["val_acc"] else 0.0
         final_val_top5 = history["val_top5"][-1] if history["val_top5"] else 0.0
         total_training_time_s = time.time() - train_start
@@ -210,6 +231,9 @@ class Trainer:
             "history": history,
             "wandb_run_id": wandb_run_id,
         }
+
+    def request_stop(self) -> None:
+        self.stop_requested = True
 
     @torch.no_grad()
     def evaluate(self, loader: Optional[DataLoader] = None, topk: tuple = (1, 5)) -> dict:

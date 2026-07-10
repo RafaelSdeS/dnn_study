@@ -1,0 +1,15 @@
+name: pcad
+root: outputs/pcad
+dataset_root: ${PCAD_DATASET_ROOT}
+device: cuda
+conda_env: alexnet_rafael
+wandb: true
+wandb_mode: offline
+tensorboard: true
+distributed: false
+devices: 1
+launcher: single
+use_kagglehub_fallback: true
+persistent_workers: true
+benchmark_warmup: 100
+quantized_engine: fbgemm

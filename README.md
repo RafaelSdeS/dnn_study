@@ -140,3 +140,44 @@ YAML-based configuration loading via `configs/loader.py`:
 - Model registry usage
 - Checkpoint & config workflows
 - INT8 inference requirements
+
+## PCAD Training Infrastructure
+
+The repo now includes a cluster-friendly runner that reuses the existing `ml/` training code and keeps the same checkpoint/resume flow on both local machines and PCAD.
+
+**Environment setup:**
+```bash
+conda env create -f environment.yml
+conda activate alexnet_rafael
+```
+
+**Local run:**
+```bash
+python -m scripts.train --experiment default --runtime local
+```
+
+**PCAD submission:**
+```bash
+python -m scripts.cluster submit --experiment default --runtime pcad --slurm single_gpu
+```
+
+**Monitor, cancel, resume:**
+```bash
+python -m scripts.cluster status <job_id>
+python -m scripts.cluster cancel <job_id>
+python -m scripts.cluster resume outputs/pcad/default/<model_name>
+```
+
+**Runtime layout:**
+- `outputs/<runtime>/<experiment>/<model>/checkpoints/` for `*_best.pth`, `*_resume.pth`, and INT8 artifacts
+- `outputs/<runtime>/<experiment>/<model>/logs/` for per-run logs
+- `outputs/<runtime>/<experiment>/<model>/tensorboard/` for TensorBoard event files
+- `outputs/<runtime>/<experiment>/<model>/results/` for per-run JSON summaries
+- `outputs/<runtime>/results/` for aggregated comparison CSVs
+
+**PCAD-specific settings:**
+- Edit [configs/runtime/pcad.yaml](configs/runtime/pcad.yaml) for dataset root, conda env, and runtime toggles
+- Edit [configs/slurm/single_gpu.yaml](configs/slurm/single_gpu.yaml) for partition, GPU, CPU, memory, and wall-time settings
+- Set `PCAD_DATASET_ROOT` on the cluster when Tiny ImageNet is staged on shared storage; otherwise the runner falls back to KaggleHub
+
+The default experiment config lives in [configs/experiments/default.yaml](configs/experiments/default.yaml). Duplicate it to create a new reproducible run without changing training code.

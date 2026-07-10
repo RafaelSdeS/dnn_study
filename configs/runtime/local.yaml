@@ -1,0 +1,15 @@
+name: local
+root: outputs/local
+dataset_root: null
+device: cuda
+conda_env: alexnet_rafael
+wandb: true
+wandb_mode: offline
+tensorboard: true
+distributed: false
+devices: 1
+launcher: single
+use_kagglehub_fallback: true
+persistent_workers: false
+benchmark_warmup: 100
+quantized_engine: fbgemm

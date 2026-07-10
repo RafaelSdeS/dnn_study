@@ -1,0 +1,21 @@
+name: alexnet_rafael
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  - pytorch=2.5.1
+  - torchvision=0.20.1
+  - pytorch-cuda=12.1
+  - pyyaml
+  - pandas
+  - tensorboard
+  - pip:
+      - -e .
+      - torchmetrics
+      - torchinfo
+      - fvcore
+      - wandb
+      - kagglehub

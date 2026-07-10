@@ -1,0 +1,10 @@
+job_name: alexnet-train
+partition: gpu
+gres: gpu:1
+nodes: 1
+ntasks: 1
+cpus_per_task: 8
+mem: 32G
+time: 12:00:00
+account: null
+qos: null
