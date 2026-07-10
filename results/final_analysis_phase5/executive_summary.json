@@ -26,12 +26,12 @@
     "winograd_friendly": true
   },
   "most_quantization_stable": {
-    "phase": "Phase 2 - AlexNet Variants",
-    "model_name": "alexnet_tv",
-    "fp32_top1": 24.28814321756363,
-    "int8_top1": 26.27626061439514,
-    "quantization_drop_top1": -1.9881173968315125,
-    "winograd_friendly": false
+    "phase": "Phase 4 - Final Architecture",
+    "model_name": "alexnet_final_bottleneck_fire",
+    "fp32_top1": 42.28608012199402,
+    "int8_top1": 44.00103688240051,
+    "quantization_drop_top1": -1.7149567604064941,
+    "winograd_friendly": true
   },
   "most_size_efficient": {
     "phase": "Phase 3 - Compensation",
@@ -47,16 +47,16 @@
     {
       "winograd_friendly": "Not Winograd-friendly",
       "n": 7,
-      "mean_fp32_top1": 40.10561342750277,
-      "mean_quant_drop": -0.1659432053565979,
-      "mean_acc_per_mb": 11.520072761720371
+      "mean_fp32_top1": 41.23626266207014,
+      "mean_quant_drop": 1.4169657230377197,
+      "mean_acc_per_mb": 11.539812723912537
     },
     {
       "winograd_friendly": "Winograd-friendly",
       "n": 15,
-      "mean_fp32_top1": 40.5370662920177,
-      "mean_quant_drop": 1.1838184935706002,
-      "mean_acc_per_mb": 49.22839472717
+      "mean_fp32_top1": 40.58107101048032,
+      "mean_quant_drop": 1.249992847442627,
+      "mean_acc_per_mb": 49.22914423697956
     }
   ]
 }
