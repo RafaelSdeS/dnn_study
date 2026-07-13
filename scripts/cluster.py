@@ -17,8 +17,15 @@ def _load_yaml(path_or_name: str, subdir: str) -> dict:
     return load_config(f"{subdir}/{path_or_name}.yaml")
 
 
-def _build_sbatch_command(runtime_cfg: dict, slurm_cfg: dict, experiment: str, runtime: str, device: str | None = None) -> list[str]:
-    script = Path(__file__).resolve().parent / "slurm" / "train.sbatch"
+def _build_sbatch_command(
+    runtime_cfg: dict,
+    slurm_cfg: dict,
+    experiment: str,
+    runtime: str,
+    device: str | None = None,
+    script_name: str = "train.sbatch",
+) -> list[str]:
+    script = Path(__file__).resolve().parent / "slurm" / script_name
     output_root = Path(runtime_cfg.get("root", "outputs/pcad")).expanduser().resolve()
     log_dir = output_root / "logs" / experiment
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -66,7 +73,7 @@ def _build_sbatch_command(runtime_cfg: dict, slurm_cfg: dict, experiment: str, r
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Manage PCAD Slurm submissions for training runs.")
+    parser = argparse.ArgumentParser(description="Manage PCAD Slurm submissions for training runs and profiling.")
     sub = parser.add_subparsers(dest="command", required=True)
 
     submit = sub.add_parser("submit", help="Submit a new training job")
@@ -74,6 +81,12 @@ def build_parser() -> argparse.ArgumentParser:
     submit.add_argument("--runtime", default="pcad")
     submit.add_argument("--slurm", default="single_gpu")
     submit.add_argument("--device", default=None)
+
+    profile_submit = sub.add_parser("profile-submit", help="Submit a Phase 6 profiling job")
+    profile_submit.add_argument("--experiment", default="phase6")
+    profile_submit.add_argument("--runtime", default="pcad")
+    profile_submit.add_argument("--slurm", default="tupi_4090", help="SLURM config (default: tupi_4090 for RTX 4090)")
+    profile_submit.add_argument("--resume", action="store_true", help="Resume from last completed config")
 
     status = sub.add_parser("status", help="Show job status")
     status.add_argument("job_id")
@@ -103,6 +116,18 @@ def main() -> int:
         runtime_cfg = _load_yaml(args.runtime, "runtime")
         slurm_cfg = _load_yaml(args.slurm, "slurm")
         cmd = _build_sbatch_command(runtime_cfg, slurm_cfg, args.experiment, args.runtime, args.device)
+        print(subprocess.check_output(cmd, text=True).strip())
+        return 0
+
+    if args.command == "profile-submit":
+        runtime_cfg = _load_yaml(args.runtime, "runtime")
+        slurm_cfg = _load_yaml(args.slurm, "slurm")
+        # Build command with profile.sbatch and optional --resume flag
+        cmd = _build_sbatch_command(
+            runtime_cfg, slurm_cfg, args.experiment, args.runtime, device=None, script_name="profile.sbatch"
+        )
+        if args.resume:
+            cmd += ["--resume"]
         print(subprocess.check_output(cmd, text=True).strip())
         return 0
 

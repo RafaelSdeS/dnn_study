@@ -1,0 +1,38 @@
+# Phase 6 Hardware Profiling Config
+# Profiling is inference-only; no training. Latency and efficiency depend on
+# layer shapes and dtypes, not trained weights.
+
+name: phase6
+
+# Layer profiling sweep parameters
+kernel_sizes: [2, 3, 5, 7, 9, 11]  # Single-layer sweep; 7/9/11 for FFT vs. Winograd crossover
+fft_min_kernel_size: 5              # FFT profiling only for kernel_size >= this (overhead too high for small kernels)
+
+layer_channels: [16, 32, 64, 128]  # Each value used as both in_ch and out_ch
+
+batch_sizes: [1, 8]                 # Batch 1 (latency-critical) + batch 8 (realistic inference)
+input_resolutions: [64, 128]        # Tiny ImageNet (64x64) + intermediate (128x128)
+
+# Layer sweep total: 6 kernels × 4 channels × 2 batch × 2 resolutions × 2 precisions = 192 configs
+# FFT sweep: 3 kernels (>=5) × 4 channels = 12 configs
+# Model sweep: 8 models × 2 precisions = 16 configs
+# Grand total: ~220 configs
+
+# Model profiling sweep parameters
+models:
+  - alexnet_tv
+  - alexnet_depthwisesep
+  - alexnet_bottleneck
+  - alexnet_final_bottleneck_residual
+  - alexnet_final_fire_residual
+  - vgg_style
+  - mobilenetv2
+  - alexnet_fire
+
+precisions: [fp32, int8]  # fp32 on GPU, int8 on CPU
+                          # int8: build_qat_from_model (uncalibrated) + convert_to_int8
+                          # See INT8 Calibration Strategy in PHASE6_PLAN.md
+
+# Profiling parameters
+warmup: 50   # Warmup iterations (not timed)
+iters: 200   # Timed iterations (average)

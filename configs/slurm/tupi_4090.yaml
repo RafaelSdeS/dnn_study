@@ -1,0 +1,7 @@
+# PCAD SLURM config: RTX 4090 node on tupi partition
+partition: tupi
+gres: gpu:1
+nodes: 1
+cpus_per_task: 4
+mem_gb: 32
+time_minutes: 480  # 8 hours (phase 6 profiling is I/O bound but long)
