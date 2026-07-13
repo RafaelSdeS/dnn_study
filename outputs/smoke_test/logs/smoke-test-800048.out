@@ -1,0 +1,3 @@
+device=cuda cuda_available=True
+SMOKE TEST RESULT: 6.25 3.1623988151550293
+SMOKE TEST OK
