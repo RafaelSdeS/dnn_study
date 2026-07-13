@@ -211,29 +211,47 @@ Produce:
 
 ## Phase 6 — Hardware Profiling & Winograd Efficiency Validation
 
-Measure actual latency, memory bandwidth, and power consumption on RTX 4060 to empirically validate Winograd acceleration claims. Compare theoretical vs real-world efficiency gains across kernel sizes.
+Measure actual latency, memory bandwidth, and power consumption on **RTX 4060 (laptop, bandwidth-limited)** and **RTX 4090 (PCAD tupi nodes, compute-rich)** to empirically validate Winograd acceleration claims across contrasting hardware. Compare theoretical vs real-world efficiency gains across kernel sizes, and identify whether small-kernel gains hold on both GPU classes or only on the bandwidth-limited one.
 
-Benchmarks:
+Benchmarks (run on both RTX 4060 and RTX 4090):
 
-- [ ] Profile single-layer latency for Conv(k=2×2), Conv(k=3×3), Conv(k=5×5) on RTX 4060
-- [ ] Measure memory bandwidth utilization (NVIDIA Nsight Compute or similar)
-- [ ] Profile full forward pass for Phase 1–5 reference architectures (AlexNet, MobileNetV2, TinyHybridNet, etc.)
+- [ ] Profile single-layer latency for Conv(k=2×2), Conv(k=3×3), Conv(k=5×5) on RTX 4060 and RTX 4090
+- [ ] Measure memory bandwidth utilization (NVIDIA Nsight Compute or similar) on both GPUs
+- [ ] Profile full forward pass for Phase 1–5 reference architectures (AlexNet, MobileNetV2, TinyHybridNet, etc.) on both GPUs
 - [ ] Profile INT8 vs FP32 inference latency on CPU (fbgemm backend)
-- [ ] Identify which layers contribute most to latency (are Winograd gains concentrated or distributed?)
-- [ ] Measure Winograd reordering overhead (input/output packing costs)
+- [ ] Identify which layers contribute most to latency (are Winograd gains concentrated or distributed?) and whether this differs between the two GPUs
+- [ ] Measure Winograd reordering overhead (input/output packing costs) on both GPUs
 - [ ] Profile power consumption under sustained inference (if HW supports NVIDIA RAPL or equivalent)
 
 Outputs:
 
-- [ ] Latency heatmap: kernel size vs layer depth
-- [ ] Speedup ratio: (Conv 5×5 time) / (Conv 3×3 time)
-- [ ] Winograd feasibility threshold: break-even point for reordering overhead
+- [ ] Latency heatmap: kernel size vs layer depth, per GPU
+- [ ] Speedup ratio: (Conv 5×5 time) / (Conv 3×3 time), RTX 4060 vs RTX 4090
+- [ ] Winograd feasibility threshold: break-even point for reordering overhead, per GPU
 - [ ] CPU INT8 latency ranking (identify bottleneck layers)
+- [ ] Cross-GPU comparison: does small-kernel efficiency hold on compute-rich hardware (RTX 4090), or only on bandwidth-limited hardware (RTX 4060)?
 - [ ] Revised efficiency recommendations based on empirical data
 
 ---
 
-## Phase 7 — Efficient Vision Transformers & Hybrid Attention Architectures
+## Phase 7 — Detection & Segmentation Kernel Study
+
+Extend the kernel-restriction findings (Phases 2–3) to object detection and semantic segmentation, testing whether the accuracy/efficiency trade-off observed in classification holds for denser prediction tasks. Directly addresses the research objective's detection/segmentation scope, which Phases 1–6 (classification only) do not cover.
+
+Models: reuse Phase 3's Pareto-optimal backbones (Bottleneck, Fire) as feature extractors, paired with a lightweight detection head (e.g., SSD-lite/YOLO-tiny) and segmentation head (e.g., small U-Net/DeepLab-lite decoder). Compare against a large-kernel baseline backbone (AlexNetTV or VGGStyle).
+
+- [ ] Pick a detection/segmentation dataset compatible with small-scale training (e.g., Pascal VOC subset, COCO subset, or Cityscapes)
+- [ ] FP32 training (backbone + head)
+- [ ] QAT fine-tuning
+- [ ] INT8 conversion
+- [ ] FP32 vs INT8 evaluation (mAP for detection, mIoU for segmentation)
+- [ ] Compare small-kernel vs large-kernel backbones on mAP/mIoU, latency, and model size
+- [ ] Quantization robustness comparison (does the QAT-stability ranking from Phase 3 transfer to detection/segmentation heads?)
+- [ ] Determine whether the classification kernel-size trade-off transfers to dense prediction tasks
+
+---
+
+## Phase 8 — Efficient Vision Transformers & Hybrid Attention Architectures
 
 Explore whether attention-based models can match or exceed CNN efficiency within Winograd constraints. Investigate local-attention Vision Transformers as an alternative paradigm to small-kernel CNNs.
 
@@ -256,9 +274,9 @@ For each variant:
 
 ---
 
-## Phase 8 — Extended Architecture Search (Future)
+## Phase 9 — Extended Architecture Search (Future)
 
-If Phase 7 yields promising hybrid results, consider automated architecture search (NAS or evolutionary search) to discover optimal kernel-size, depth, width, and attention-ratio combinations under Winograd constraints.
+If Phase 8 yields promising hybrid results, consider automated architecture search (NAS or evolutionary search) to discover optimal kernel-size, depth, width, and attention-ratio combinations under Winograd constraints.
 
 ### Deployment Fine-Tuning (NEW)
 
