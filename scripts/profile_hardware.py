@@ -168,7 +168,11 @@ def profile_layer_sweep(
     iters = config.get("iters", 200)
     fft_min_kernel_size = config.get("fft_min_kernel_size", 5)
 
-    device_tag = sanitize_device_name(torch.cuda.get_device_name(device))
+    device_tag = (
+        sanitize_device_name(torch.cuda.get_device_name(device))
+        if device.type == "cuda"
+        else "cpu"
+    )
 
     total_configs = (
         len(kernel_sizes) * len(layer_channels) * len(batch_sizes) * len(input_resolutions) * len(precisions)
@@ -290,7 +294,11 @@ def profile_model_sweep(
     batch_size = config.get("batch_sizes", [1])[0]  # Use smallest batch size for model profiling
     input_resolution = config.get("input_resolutions", [64])[0]
 
-    device_tag = sanitize_device_name(torch.cuda.get_device_name(device))
+    device_tag = (
+        sanitize_device_name(torch.cuda.get_device_name(device))
+        if device.type == "cuda"
+        else "cpu"
+    )
 
     total_configs = len(models) * len(precisions)
     i = 0
@@ -384,9 +392,13 @@ def main():
     output_dir = Path("outputs") / args.runtime / args.experiment
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    device_tag = sanitize_device_name(
-        torch.cuda.get_device_name(0) if device.type == "cuda" else "cpu"
-    )
+    if device.type == "cuda":
+        try:
+            device_tag = sanitize_device_name(torch.cuda.get_device_name(0))
+        except RuntimeError:
+            device_tag = "cuda_unavailable"
+    else:
+        device_tag = "cpu"
 
     output_path = output_dir / f"{device_tag}_profile.json"
     log_path = output_dir / f"{device_tag}.log"
