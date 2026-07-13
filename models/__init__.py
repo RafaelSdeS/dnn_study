@@ -5,7 +5,7 @@ from .alexnet_variants import (
 )
 from .compensation import (
     AlexNetBottleneck, AlexNetFactorized, AlexNetGroupConv, AlexNetDepthwiseSep,
-    AlexNetResidual, AlexNetFire, AlexNetSE,
+    AlexNetResidual, AlexNetFire, AlexNetSE, AlexNetSmallKernelWithBN,
 )
 from .tinyhybridnet import (
     FireMobileResidual, TinyHybridNet,

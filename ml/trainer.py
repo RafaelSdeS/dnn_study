@@ -78,6 +78,7 @@ class Trainer:
         best_epoch = 0
         patience_counter = 0
         wandb_run_id = self.wandb_run.id if self.wandb_run else None
+        elapsed_time_s = 0.0
         history: dict[str, list] = {
             "train_loss": [], "train_acc": [], "val_loss": [], "val_acc": [], "val_top5": [],
             "epoch_time_s": [], "peak_gpu_mem_mb": [], "lr": [],
@@ -91,6 +92,7 @@ class Trainer:
             best_val_top5 = state["best_val_top5"]
             best_epoch = start_epoch - 1
             patience_counter = state["patience_counter"]
+            elapsed_time_s = state["elapsed_time_s"]
             for k, v in state["history"].items():
                 if k in history:
                     history[k] = v
@@ -166,6 +168,7 @@ class Trainer:
                 history=history,
                 wandb_run_id=wandb_run_id,
                 patience_counter=patience_counter,
+                elapsed_time_s=elapsed_time_s + (time.time() - train_start),
             )
             # Write metadata sidecar for quick access
             meta_path.write_text(json.dumps({"epoch": epoch, "best_val_acc": best_val_acc, "wandb_run_id": wandb_run_id}))
@@ -201,7 +204,7 @@ class Trainer:
 
         final_val_top1 = history["val_acc"][-1] if history["val_acc"] else 0.0
         final_val_top5 = history["val_top5"][-1] if history["val_top5"] else 0.0
-        total_training_time_s = time.time() - train_start
+        total_training_time_s = elapsed_time_s + (time.time() - train_start)
         total_time_str = time.strftime("%H:%M:%S", time.gmtime(total_training_time_s))
 
         self.logger.info(

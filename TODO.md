@@ -14,55 +14,50 @@ Each experiment follows the same pipeline:
 
 ## Notebook Output
 
-* ✅ Reduce notebook output volume.
+- ✅ Reduce notebook output volume.
+  - ✅ Remove or greatly reduce per-batch `print()` statements, but keep it trackable so I know it is running.
+  - ✅ Use `tqdm` progress bars instead of creating new output lines.
 
-  * ✅ Remove or greatly reduce per-batch `print()` statements, but keep it trackable so I know it is running.
-  * ✅ Use `tqdm` progress bars instead of creating new output lines.
+- ✅ Separate logs from notebook output.
+  - ✅ Save training logs to a `.log` file — `Trainer.__init__(log_file=...)` writes timestamped logs.
+  - ✅ Continue logging metrics to Weights & Biases — now includes LR, epoch time, peak GPU memory, `grad_norm` (when `grad_clip_norm` is set).
+  - ✅ Save the final run summary to a JSON or CSV file — per-model summary JSON via `make_run_summary()`.
 
-* ✅ Separate logs from notebook output.
+- ✅ Keep notebooks lightweight.
+  - ✅ Avoid storing thousands of lines of training logs in the notebook.
 
-  * ✅ Save training logs to a `.log` file — `Trainer.__init__(log_file=...)` writes timestamped logs.
-  * ✅ Continue logging metrics to Weights & Biases — now includes LR, epoch time, peak GPU memory, `grad_norm` (when `grad_clip_norm` is set).
-  * ✅ Save the final run summary to a JSON or CSV file — per-model summary JSON via `make_run_summary()`.
+- ✅ Improve experiment reporting.
+  - ✅ Save a concise `run_summary` (Top-1, Top-5, loss, training time, etc.) as a standalone file.
+  - ✅ Aggregate all experiment summaries into a single CSV for easy comparison — comparison CSV still exists; individual summaries are JSON for crash-safety.
 
-* ✅ Keep notebooks lightweight.
+- ✅ Verify notebook execution.
+  - ✅ Ensure execution errors are written to the log file and are easy to locate — `log_file` handler captures all logging.
+  - ✅ Ensure the final run summary is always printed and saved, even if notebook output is collapsed — logged to file + console + W&B.
 
-  * ✅ Avoid storing thousands of lines of training logs in the notebook.
+- ✅ Weights & Biases (W&B)
+  - ✅ Always initialize W&B runs with clear, descriptive names and complete metadata (project, group, tags, config with num_classes/img_size/dataset, model, params).
+  - ✅ Use clear, descriptive, and consistent names for all W&B artifacts so they are easy to identify and distinguish.
 
-* ✅ Improve experiment reporting.
-
-  * ✅ Save a concise `run_summary` (Top-1, Top-5, loss, training time, etc.) as a standalone file.
-  * ✅ Aggregate all experiment summaries into a single CSV for easy comparison — comparison CSV still exists; individual summaries are JSON for crash-safety.
-
-* ✅ Verify notebook execution.
-
-  * ✅ Ensure execution errors are written to the log file and are easy to locate — `log_file` handler captures all logging.
-  * ✅ Ensure the final run summary is always printed and saved, even if notebook output is collapsed — logged to file + console + W&B.
-
-* ✅ Weights & Biases (W&B)
-
-  * ✅ Always initialize W&B runs with clear, descriptive names and complete metadata (project, group, tags, config with num_classes/img_size/dataset, model, params).
-  * ✅ Use clear, descriptive, and consistent names for all W&B artifacts so they are easy to identify and distinguish.
 ---
 
 ## Metrics to Add
 
 ### Efficiency
 
-* ✅ Report FP32 model size (MB) — `disk_mb(SAVE_DIR / f"{name}_best.pth")`.
-* ✅ Report INT8 model size (MB) — `disk_mb(SAVE_DIR / f"{name}.pth")`.
-* ✅ Measure inference latency (ms/image) — `Trainer.benchmark()` returns `latency_ms_per_image`.
-* ✅ Measure throughput (images/s) — `Trainer.benchmark()` returns `throughput_img_per_s`.
-* ✅ Measure memory usage (GPU) — peak GPU memory per epoch tracked in `history["peak_gpu_mem_mb"]`, logged to W&B.
-* ✅ Report MACs/FLOPs — `compute_flops(model)` via fvcore, includes in `make_run_summary()`.
-* ✅ Report parameter count — via `torchinfo.summary()`, included in per-model summaries.
+- ✅ Report FP32 model size (MB) — `disk_mb(SAVE_DIR / f"{name}_best.pth")`.
+- ✅ Report INT8 model size (MB) — `disk_mb(SAVE_DIR / f"{name}.pth")`.
+- ✅ Measure inference latency (ms/image) — `Trainer.benchmark()` returns `latency_ms_per_image`.
+- ✅ Measure throughput (images/s) — `Trainer.benchmark()` returns `throughput_img_per_s`.
+- ✅ Measure memory usage (GPU) — peak GPU memory per epoch tracked in `history["peak_gpu_mem_mb"]`, logged to W&B.
+- ✅ Report MACs/FLOPs — `compute_flops(model)` via fvcore, includes in `make_run_summary()`.
+- ✅ Report parameter count — via `torchinfo.summary()`, included in per-model summaries.
 
 ### Architecture Comparison
 
-* [ ] Estimate receptive field — requires manual calculation per architecture, not yet automated.
-* ✅ Compute parameter efficiency (Top-1 accuracy per million parameters) — `param_efficiency_top1_per_m` in `make_run_summary()`.
-* ✅ Compute accuracy drop from FP32 → INT8 (Top-1 and Top-5) — `quantization_drop_top1`, `int8_top1_top5_gap` in summary.
-* ✅ Report Top-1 / Top-5 gap — `fp32_top1_top5_gap`, `int8_top1_top5_gap` in summary.
+- [ ] Estimate receptive field — requires manual calculation per architecture, not yet automated.
+- ✅ Compute parameter efficiency (Top-1 accuracy per million parameters) — `param_efficiency_top1_per_m` in `make_run_summary()`.
+- ✅ Compute accuracy drop from FP32 → INT8 (Top-1 and Top-5) — `quantization_drop_top1`, `int8_top1_top5_gap` in summary.
+- ✅ Report Top-1 / Top-5 gap — `fp32_top1_top5_gap`, `int8_top1_top5_gap` in summary.
 
 ---
 
@@ -70,44 +65,43 @@ Each experiment follows the same pipeline:
 
 ✅ Per-model summaries implemented via `make_run_summary()`. Includes all fields below, saved to `{RESULTS_DIR}/{name}_summary.json`:
 
-* ✅ Model name
-* ✅ Training mode (FP32 / QAT / INT8 evaluation)
-* ✅ Number of epochs
-* ✅ Best validation Top-1
-* ✅ Best validation Top-5
-* ✅ Final validation Top-1
-* ✅ Final validation Top-5
-* ✅ Best validation loss
-* ✅ Final training loss
-* ✅ FP32 model size (MB)
-* ✅ INT8 model size (MB)
-* ✅ Number of parameters (M)
-* ✅ Compression ratio (FP32 size / INT8 size)
-* ✅ MACs/FLOPs (via fvcore)
-* ✅ Inference latency (ms/image, FP32 GPU + INT8 CPU)
-* ✅ Throughput (images/s, FP32 GPU + INT8 CPU)
-* ✅ Epoch time (average per epoch, seconds)
-* ✅ Total training time (seconds)
-* ✅ Peak GPU memory (MB)
-* ✅ FP32 vs INT8 Top-1 accuracy drop
-* ✅ Top-1 / Top-5 gap (both FP32 and INT8)
-* ✅ Parameter efficiency (Top-1 per M params)
+- ✅ Model name
+- ✅ Training mode (FP32 / QAT / INT8 evaluation)
+- ✅ Number of epochs
+- ✅ Best validation Top-1
+- ✅ Best validation Top-5
+- ✅ Final validation Top-1
+- ✅ Final validation Top-5
+- ✅ Best validation loss
+- ✅ Final training loss
+- ✅ FP32 model size (MB)
+- ✅ INT8 model size (MB)
+- ✅ Number of parameters (M)
+- ✅ Compression ratio (FP32 size / INT8 size)
+- ✅ MACs/FLOPs (via fvcore)
+- ✅ Inference latency (ms/image, FP32 GPU + INT8 CPU)
+- ✅ Throughput (images/s, FP32 GPU + INT8 CPU)
+- ✅ Epoch time (average per epoch, seconds)
+- ✅ Total training time (seconds)
+- ✅ Peak GPU memory (MB)
+- ✅ FP32 vs INT8 Top-1 accuracy drop
+- ✅ Top-1 / Top-5 gap (both FP32 and INT8)
+- ✅ Parameter efficiency (Top-1 per M params)
 
 ---
 
 ## Analysis
 
-* ✅ Generate a single CSV summarizing every experiment — `final_comparison.csv` per phase.
-* ✅ Cross-phase figures in `results/figures/` (accuracy_vs_macs, fp32_vs_int8_bar, efficiency_accuracy_per_mb, training curves, etc.).
-* [ ] Full cross-phase ranking once Phase 3 results are in:
-
-  * [ ] Top-1 accuracy ranking
-  * [ ] Top-5 accuracy ranking
-  * [ ] Model size ranking
-  * [ ] Inference latency ranking
-  * [ ] Parameter efficiency ranking
-  * [ ] Accuracy loss after quantization ranking
-  * [ ] Overall efficiency (accuracy vs compute).
+- ✅ Generate a single CSV summarizing every experiment — `final_comparison.csv` per phase.
+- ✅ Cross-phase figures in `results/figures/` (accuracy_vs_macs, fp32_vs_int8_bar, efficiency_accuracy_per_mb, training curves, etc.).
+- [ X ] Full cross-phase ranking once Phase 3 results are in:
+  - [ X ] Top-1 accuracy ranking
+  - [ X ] Top-5 accuracy ranking
+  - [ X ] Model size ranking
+  - [ X ] Inference latency ranking
+  - [ X ] Parameter efficiency ranking
+  - [ X ] Accuracy loss after quantization ranking
+  - [ X ] Overall efficiency (accuracy vs compute).
 
 ---
 
@@ -117,18 +111,18 @@ Establish baseline performance using representative CNN families.
 
 Models:
 
-* ✅ AlexNet (pretrained)
-* ✅ VGG-style CNN
-* ✅ ResNet-18 (pretrained)
-* ✅ MobileNetV2 (pretrained)
+- ✅ AlexNet (pretrained)
+- ✅ VGG-style CNN
+- ✅ ResNet-18 (pretrained)
+- ✅ MobileNetV2 (pretrained)
 
 For each model:
 
-* ✅ FP32 training — results in `results/baselines_qat_phase1/final_comparison.csv`
-* ✅ QAT fine-tuning (partial — MobileNetV2, ResNet18 skipped; VGGStyle, AlexNetTV completed)
-* ✅ INT8 conversion
-* ✅ FP32 vs INT8 evaluation
-* ✅ Record latency, model size, and quantization accuracy drop
+- ✅ FP32 training — results in `results/baselines_qat_phase1/final_comparison.csv`
+- ✅ QAT fine-tuning (partial — MobileNetV2, ResNet18 skipped; VGGStyle, AlexNetTV completed)
+- ✅ INT8 conversion
+- ✅ FP32 vs INT8 evaluation
+- ✅ Record latency, model size, and quantization accuracy drop
 
 **Results:** MobileNetV2 (57.99%), ResNet18 (53.91%), VGGStyle (51.81%), AlexNetTV (32.88%)
 
@@ -140,19 +134,19 @@ Investigate the impact of restricting convolution kernels while keeping the arch
 
 Models:
 
-* ✅ AlexNet (3×3)
-* ✅ AlexNet (2×2)
-* ✅ AlexNet (stacked 3×3)
-* ✅ AlexNet (mixed kernels)
-* ✅ AlexNetSmallKernel (compact all-small-kernel)
+- ✅ AlexNet (3×3)
+- ✅ AlexNet (2×2)
+- ✅ AlexNet (stacked 3×3)
+- ✅ AlexNet (mixed kernels)
+- ✅ AlexNetSmallKernel (compact all-small-kernel)
 
 For each variant:
 
-* ✅ FP32 training
-* ✅ QAT fine-tuning
-* ✅ INT8 conversion
-* ✅ FP32 vs INT8 comparison
-* ✅ Compare against the original AlexNet
+- ✅ FP32 training
+- ✅ QAT fine-tuning
+- ✅ INT8 conversion
+- ✅ FP32 vs INT8 comparison
+- ✅ Compare against the original AlexNet
 
 Results in `results/alexnet_qat_phase2/` (57 epochs, full QAT + INT8).
 
@@ -164,36 +158,23 @@ Evaluate architectural modifications that compensate for the reduced receptive f
 
 Implemented variants:
 
-* ✅ Bottleneck — **Best**: 44.62% FP32, 9.93 Acc/MB, –0.08pp QAT drop
-* ✅ Factorized convolutions — 42.89% FP32, stable QAT (–0.29pp)
-* ✅ Group convolutions — Poor results (29.18% FP32)
-* ✅ Depthwise separable convolutions — 44.39% FP32, high efficiency (12.15 Acc/MB) but QAT unstable (–2.92pp)
-* ✅ Residual connections — **Best accuracy**: 48.01% FP32, but large (694 MB)
-* ✅ Fire modules — **Excellent**: 43.98% FP32, quantization gain (+0.33pp), tiny (6 MB)
-* ✅ Global Average Pooling — Moderate (38.74% FP32)
-* ✅ Squeeze-and-Excitation (SE) — **Failed** training (collapsed to 0.5%)
+- ✅ Bottleneck — **Best**: 44.62% FP32, 9.93 Acc/MB, –0.08pp QAT drop
+- ✅ Factorized convolutions — 42.89% FP32, stable QAT (–0.29pp)
+- ✅ Group convolutions — Poor results (29.18% FP32)
+- ✅ Depthwise separable convolutions — 44.39% FP32, high efficiency (12.15 Acc/MB) but QAT unstable (–2.92pp)
+- ✅ Residual connections — **Best accuracy**: 48.01% FP32, but large (694 MB)
+- ✅ Fire modules — **Excellent**: 43.98% FP32, quantization gain (+0.33pp), tiny (6 MB)
+- ✅ Global Average Pooling — Moderate (38.74% FP32)
+- ✅ Squeeze-and-Excitation (SE) — **Failed** training (collapsed to 0.5%)
 
 For each variant:
 
-* ✅ FP32 training
-* ✅ QAT fine-tuning
-* ✅ INT8 conversion
-* ✅ FP32 vs INT8 comparison
+- ✅ FP32 training
+- ✅ QAT fine-tuning
+- ✅ INT8 conversion
+- ✅ FP32 vs INT8 comparison
 
 **Results:** See `ideas/BEST_MODELS.md` for comprehensive analysis. Bottleneck & Fire are Pareto-optimal (tiny, competitive accuracy, quantization-stable).
-
----
-
-## Phase 3.5 — Deployment Fine-Tuning (NEW)
-
-Optimize Tier 1 models for real-world deployment scenarios.
-
-* [ ] **Mobile (resource-constrained):** Export AlexNetBottleneck/AlexNetFire to TFLite, measure on-device latency, tune for <50ms/image, <100mA
-* [ ] **Edge (moderate constraints):** Profile AlexNetSmallKernel QAT drop (–9.89pp); investigate per-channel quantization, mixed-precision INT8
-* [ ] **Server (throughput-focused):** Batch optimization for MobileNetV2, measure throughput vs latency trade-off, optional knowledge distillation
-* [ ] **Format conversion:** ONNX, TensorRT, Core ML, ONNX-RT exports for each Tier 1 model
-
-**Expected outcome:** Production-ready model exports and deployment tuning for three scenarios.
 
 ---
 
@@ -203,12 +184,12 @@ Combine the most successful architectural ideas from previous phases into a fina
 
 Tasks:
 
-* [ ] Design the final architecture
-* [ ] FP32 training
-* [ ] QAT fine-tuning
-* [ ] INT8 conversion
-* [ ] Compare with all previous models
-* [ ] Perform complete ablation study
+- [ X ] Design the final architecture
+- [ X ] FP32 training
+- [ X ] QAT fine-tuning
+- [ X ] INT8 conversion
+- [ X ] Compare with all previous models
+- [ X ] Perform complete ablation study
 
 ---
 
@@ -218,13 +199,13 @@ Summarize the complete experimental study.
 
 Produce:
 
-* [ ] FP32 ranking
-* [ ] INT8 ranking
-* [ ] Quantization accuracy-drop analysis
-* [ ] Model size comparison
-* [ ] Latency comparison
-* [ ] Winograd compatibility discussion
-* [ ] Final conclusions and recommendations
+- [ X ] FP32 ranking
+- [ X ] INT8 ranking
+- [ X ] Quantization accuracy-drop analysis
+- [ X ] Model size comparison
+- [ X ] Latency comparison
+- [ X ] Winograd compatibility discussion
+- [ X ] Final conclusions and recommendations
 
 ---
 
@@ -234,21 +215,21 @@ Measure actual latency, memory bandwidth, and power consumption on RTX 4060 to e
 
 Benchmarks:
 
-* [ ] Profile single-layer latency for Conv(k=2×2), Conv(k=3×3), Conv(k=5×5) on RTX 4060
-* [ ] Measure memory bandwidth utilization (NVIDIA Nsight Compute or similar)
-* [ ] Profile full forward pass for Phase 1–5 reference architectures (AlexNet, MobileNetV2, TinyHybridNet, etc.)
-* [ ] Profile INT8 vs FP32 inference latency on CPU (fbgemm backend)
-* [ ] Identify which layers contribute most to latency (are Winograd gains concentrated or distributed?)
-* [ ] Measure Winograd reordering overhead (input/output packing costs)
-* [ ] Profile power consumption under sustained inference (if HW supports NVIDIA RAPL or equivalent)
+- [ ] Profile single-layer latency for Conv(k=2×2), Conv(k=3×3), Conv(k=5×5) on RTX 4060
+- [ ] Measure memory bandwidth utilization (NVIDIA Nsight Compute or similar)
+- [ ] Profile full forward pass for Phase 1–5 reference architectures (AlexNet, MobileNetV2, TinyHybridNet, etc.)
+- [ ] Profile INT8 vs FP32 inference latency on CPU (fbgemm backend)
+- [ ] Identify which layers contribute most to latency (are Winograd gains concentrated or distributed?)
+- [ ] Measure Winograd reordering overhead (input/output packing costs)
+- [ ] Profile power consumption under sustained inference (if HW supports NVIDIA RAPL or equivalent)
 
 Outputs:
 
-* [ ] Latency heatmap: kernel size vs layer depth
-* [ ] Speedup ratio: (Conv 5×5 time) / (Conv 3×3 time)
-* [ ] Winograd feasibility threshold: break-even point for reordering overhead
-* [ ] CPU INT8 latency ranking (identify bottleneck layers)
-* [ ] Revised efficiency recommendations based on empirical data
+- [ ] Latency heatmap: kernel size vs layer depth
+- [ ] Speedup ratio: (Conv 5×5 time) / (Conv 3×3 time)
+- [ ] Winograd feasibility threshold: break-even point for reordering overhead
+- [ ] CPU INT8 latency ranking (identify bottleneck layers)
+- [ ] Revised efficiency recommendations based on empirical data
 
 ---
 
@@ -258,23 +239,34 @@ Explore whether attention-based models can match or exceed CNN efficiency within
 
 Models:
 
-* [ ] Vision Transformer (ViT-Tiny) with local attention windows (e.g., 3×3 or 5×5 patches, local self-attention)
-* [ ] DeiT-Tiny (Knowledge-distilled ViT)
-* [ ] Hybrid CNN-Transformer (small-kernel CNN stem + local transformer blocks)
-* [ ] Lightweight attention variant (linear attention or depthwise attention)
+- [ ] Vision Transformer (ViT-Tiny) with local attention windows (e.g., 3×3 or 5×5 patches, local self-attention)
+- [ ] DeiT-Tiny (Knowledge-distilled ViT)
+- [ ] Hybrid CNN-Transformer (small-kernel CNN stem + local transformer blocks)
+- [ ] Lightweight attention variant (linear attention or depthwise attention)
 
 For each variant:
 
-* [ ] FP32 training
-* [ ] QAT fine-tuning
-* [ ] INT8 conversion
-* [ ] FP32 vs INT8 evaluation
-* [ ] Compare accuracy, latency, model size, and quantization robustness vs Phase 5–6 CNNs
-* [ ] Assess Winograd deployment feasibility (attention ops, memory layout)
-* [ ] Determine whether attention can substitute for large receptive fields in resource-constrained inference
+- [ ] FP32 training
+- [ ] QAT fine-tuning
+- [ ] INT8 conversion
+- [ ] FP32 vs INT8 evaluation
+- [ ] Compare accuracy, latency, model size, and quantization robustness vs Phase 5–6 CNNs
+- [ ] Assess Winograd deployment feasibility (attention ops, memory layout)
+- [ ] Determine whether attention can substitute for large receptive fields in resource-constrained inference
 
 ---
 
 ## Phase 8 — Extended Architecture Search (Future)
 
 If Phase 7 yields promising hybrid results, consider automated architecture search (NAS or evolutionary search) to discover optimal kernel-size, depth, width, and attention-ratio combinations under Winograd constraints.
+
+### Deployment Fine-Tuning (NEW)
+
+Optimize Tier 1 models for real-world deployment scenarios.
+
+- [ ] **Mobile (resource-constrained):** Export AlexNetBottleneck/AlexNetFire to TFLite, measure on-device latency, tune for <50ms/image, <100mA
+- [ ] **Edge (moderate constraints):** Profile AlexNetSmallKernel QAT drop (–9.89pp); investigate per-channel quantization, mixed-precision INT8
+- [ ] **Server (throughput-focused):** Batch optimization for MobileNetV2, measure throughput vs latency trade-off, optional knowledge distillation
+- [ ] **Format conversion:** ONNX, TensorRT, Core ML, ONNX-RT exports for each Tier 1 model
+
+**Expected outcome:** Production-ready model exports and deployment tuning for three scenarios.

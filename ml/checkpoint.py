@@ -18,6 +18,7 @@ def save_checkpoint(
     history: Optional[dict] = None,
     wandb_run_id: Optional[str] = None,
     patience_counter: int = 0,
+    elapsed_time_s: float = 0.0,
 ) -> None:
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     # ponytail: atomic write via tmp → rename avoids corrupt checkpoint on crash
@@ -34,6 +35,7 @@ def save_checkpoint(
         "history": history or {},
         "wandb_run_id": wandb_run_id,
         "patience_counter": patience_counter,
+        "elapsed_time_s": elapsed_time_s,
     }, tmp)
     tmp.rename(path)
 
@@ -54,13 +56,18 @@ def load_resume_state(
         scheduler.load_state_dict(ckpt["scheduler_state_dict"])
     if scaler and ckpt.get("scaler_state_dict"):
         scaler.load_state_dict(ckpt["scaler_state_dict"])
+    history = ckpt.get("history", {})
+    elapsed_time_s = ckpt.get("elapsed_time_s")
+    if elapsed_time_s is None:
+        elapsed_time_s = sum(history.get("epoch_time_s", []))
     return {
         "epoch": ckpt.get("epoch", 0),
         "best_val_acc": ckpt.get("best_val_acc", 0.0),
         "best_val_top5": ckpt.get("best_val_top5", 0.0),
-        "history": ckpt.get("history", {}),
+        "history": history,
         "wandb_run_id": ckpt.get("wandb_run_id"),
         "patience_counter": ckpt.get("patience_counter", 0),
+        "elapsed_time_s": elapsed_time_s,
     }
 
 
