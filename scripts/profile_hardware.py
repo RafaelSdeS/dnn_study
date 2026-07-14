@@ -22,19 +22,16 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from ml.config import DataConfig, TrainerConfig, QATConfig
-from ml.data import create_imagenet_loaders
 from ml.profiling import (
     profile_layer_latency_per_batch_resolution,
     detect_winograd_via_speedup,
-    profile_model_latency,
     profile_model_with_efficiency_metrics,
     profile_kernel_trace,
     profile_layer_conv_fft,
 )
 from ml.quantization import build_qat_from_model, convert_to_int8
 from ml.registry import MODEL_REGISTRY
-from ml.runtime import expand_path, set_global_seed
+from ml.runtime import set_global_seed
 
 
 def sanitize_device_name(device_name: str) -> str:

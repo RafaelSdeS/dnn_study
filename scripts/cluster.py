@@ -31,26 +31,21 @@ def _build_sbatch_command(
     log_dir.mkdir(parents=True, exist_ok=True)
 
     cmd = ["sbatch"]
-    if slurm_cfg.get("job_name"):
-        cmd += ["--job-name", slurm_cfg["job_name"]]
-    if slurm_cfg.get("partition"):
-        cmd += ["--partition", slurm_cfg["partition"]]
-    if slurm_cfg.get("account"):
-        cmd += ["--account", slurm_cfg["account"]]
-    if slurm_cfg.get("qos"):
-        cmd += ["--qos", slurm_cfg["qos"]]
-    if slurm_cfg.get("gres"):
-        cmd += ["--gres", slurm_cfg["gres"]]
-    if slurm_cfg.get("nodes"):
-        cmd += ["--nodes", str(slurm_cfg["nodes"])]
-    if slurm_cfg.get("ntasks"):
-        cmd += ["--ntasks", str(slurm_cfg["ntasks"])]
-    if slurm_cfg.get("cpus_per_task"):
-        cmd += ["--cpus-per-task", str(slurm_cfg["cpus_per_task"])]
-    if slurm_cfg.get("mem"):
-        cmd += ["--mem", str(slurm_cfg["mem"])]
-    if slurm_cfg.get("time"):
-        cmd += ["--time", str(slurm_cfg["time"])]
+    flag_map = {
+        "job_name": "--job-name",
+        "partition": "--partition",
+        "account": "--account",
+        "qos": "--qos",
+        "gres": "--gres",
+        "nodes": "--nodes",
+        "ntasks": "--ntasks",
+        "cpus_per_task": "--cpus-per-task",
+        "mem": "--mem",
+        "time": "--time",
+    }
+    for key, flag in flag_map.items():
+        if slurm_cfg.get(key):
+            cmd += [flag, str(slurm_cfg[key])]
     cmd += ["--output", str(log_dir / "%x-%j.out")]
     cmd += ["--error", str(log_dir / "%x-%j.err")]
 

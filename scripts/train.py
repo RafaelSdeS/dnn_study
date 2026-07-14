@@ -200,7 +200,7 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
             epoch_metrics.append(metrics)
             epoch = metrics.get("epoch")
             for key, value in metrics.items():
-                    if key == "epoch" or value is None or writer is None:
+                if key == "epoch" or value is None or writer is None:
                     continue
                 if isinstance(value, (int, float)):
                     writer.add_scalar(key, value, epoch)
@@ -319,6 +319,7 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
                     checkpoints_dir,
                     f"qat_{model_name}",
                     num_classes=data_cfg.num_classes,
+                    wandb_run=wandb_run,
                     log_file=logs_dir / f"qat_{model_name}_int8.log",
                 )
                 int8_eval = int8_trainer.evaluate(topk=(1, 5))

@@ -118,7 +118,10 @@ def build_comparison_table(rows: list[dict]) -> pd.DataFrame:
     sort_cols = [c for c in ["precision", "top1_%"] if c in df.columns]
     if not sort_cols:
         return df.reset_index(drop=True)
-    return df.sort_values(sort_cols, ascending=[True, False][: len(sort_cols)]).reset_index(drop=True)
+    ascending = [True] * len(sort_cols)
+    if len(sort_cols) > 1 and "top1_%" in sort_cols:
+        ascending[-1] = False
+    return df.sort_values(sort_cols, ascending=ascending).reset_index(drop=True)
 
 
 def create_results_summary(
@@ -126,19 +129,9 @@ def create_results_summary(
     config,
     output_path: str | Path,
 ) -> None:
-    """
-    Save experiment results + config to JSON.
-
-    `config` can be a dataclass (uses asdict), a dict, or any object with
-    a to_dict() method.
-    """
-    if hasattr(config, "__dataclass_fields__"):
-        cfg_dict = asdict(config)
-    else:
-        cfg_dict = dict(config)
-
+    """Save experiment results + config to JSON."""
+    cfg_dict = asdict(config) if hasattr(config, "__dataclass_fields__") else dict(config)
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-
     with open(output_path, "w") as f:
         json.dump({"config": cfg_dict, **results}, f, indent=2, default=str)
