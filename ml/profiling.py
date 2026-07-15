@@ -204,7 +204,7 @@ def profile_model_with_efficiency_metrics(
         try:
             proc = subprocess.Popen(
                 ["nvidia-smi", "--query-gpu=power.draw,utilization.gpu",
-                 "--loop-ms=100", "-l", "1"],
+                 "--format=csv,noheader,nounits", "--loop-ms=100"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL,
                 text=True,
@@ -214,7 +214,7 @@ def profile_model_with_efficiency_metrics(
                     proc.terminate()
                     break
                 try:
-                    parts = line.split()
+                    parts = line.split(",")
                     power_w = float(parts[0])
                     gpu_util_pct = float(parts[1])
                     power_samples.append(power_w)
@@ -262,8 +262,9 @@ def profile_model_with_efficiency_metrics(
     gpu_util_avg = np.mean(gpu_util_samples) if gpu_util_samples else None
     memory_peak_mb = torch.cuda.max_memory_allocated(device) / 1024 / 1024 if device.type == "cuda" else None
 
-    # Compute efficiency: actual GFLOPs / second = (total_flops / latency_ms) / 1e9
-    compute_efficiency = (total_flops / latency_ms) / 1e9 if latency_ms > 0 else None
+    # Compute efficiency: actual GFLOPs / second. latency_ms is milliseconds, so convert to
+    # seconds (/1000) before dividing -- equivalent to total_flops / latency_ms / 1e6.
+    compute_efficiency = (total_flops / (latency_ms / 1000)) / 1e9 if latency_ms > 0 else None
 
     return {
         "latency_ms": latency_ms,

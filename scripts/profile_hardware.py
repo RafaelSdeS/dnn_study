@@ -401,6 +401,7 @@ def main():
     parser.add_argument("--resume", action="store_true", help="Resume from last completed config")
     parser.add_argument("--dry-run", action="store_true", help="Dry run (don't write output)")
     parser.add_argument("--model-split", type=str, help="Split model sweep: 'N:M' runs part N of M (e.g. '1:2' runs first half)")
+    parser.add_argument("--skip-layer-sweep", action="store_true", help="Skip layer/FFT sweep, run model sweep only")
     args = parser.parse_args()
 
     # Set up paths
@@ -447,7 +448,8 @@ def main():
 
     # Run profiling sweeps
     try:
-        profile_layer_sweep(config, device, output_path, completed, logger, args.dry_run)
+        if not args.skip_layer_sweep:
+            profile_layer_sweep(config, device, output_path, completed, logger, args.dry_run)
         profile_model_sweep(config, device, output_path, completed, logger, args.dry_run)
         logger.info("Profiling complete")
     except KeyboardInterrupt:

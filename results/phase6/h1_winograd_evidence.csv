@@ -1,0 +1,13 @@
+model,precision,compute_efficiency_gflops_s,peak_utilization_pct,gpu_utilization_pct,group
+alexnet_bottleneck,fp32,52.70686439017109,0.0638097631842265,2.75,dense (Winograd-eligible)
+alexnet_bottleneck,int8,94.30595529934351,0.11417185871591225,0.3333333333333333,dense (Winograd-eligible)
+alexnet_final_bottleneck_residual,fp32,57.79738142942481,0.06997261674264506,1.0,dense (Winograd-eligible)
+alexnet_final_bottleneck_residual,int8,88.1566391903778,0.10672716609004577,0.75,dense (Winograd-eligible)
+alexnet_final_fire_residual,fp32,61.906140351593216,0.0749469011520499,2.4,dense (Winograd-eligible)
+alexnet_final_fire_residual,int8,98.15890759282641,0.1188364498702499,0.3333333333333333,dense (Winograd-eligible)
+vgg_style,fp32,405.5094631846539,0.49093155349231704,0.0,dense (Winograd-eligible)
+vgg_style,int8,361.96545649870654,0.43821483837615804,0.25,dense (Winograd-eligible)
+alexnet_depthwisesep,fp32,42.73612048903739,0.05173864465985157,0.0,depthwise (not eligible)
+alexnet_depthwisesep,int8,43.65343517889826,0.05284919513183809,0.3333333333333333,depthwise (not eligible)
+mobilenetv2,fp32,37.29096753988814,0.04514644980615998,5.25,depthwise (not eligible)
+mobilenetv2,int8,12.927319665074856,0.015650508069097888,0.2727272727272727,depthwise (not eligible)

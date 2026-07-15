@@ -3,6 +3,7 @@
 import torch.nn as nn
 import torch.ao.quantization as tq
 from torchvision.models import alexnet, resnet18, mobilenet_v2
+from torchvision.models.quantization import mobilenet_v2 as mobilenet_v2_qat
 
 
 def _fix_relu_inplace(module: nn.Module) -> None:
@@ -148,31 +149,26 @@ class MobileNetV2TV(nn.Module):
     """Torchvision MobileNetV2 pretrained on ImageNet, fine-tuned for 200 classes.
 
     Architecture: inverted residual blocks with depthwise separable convolutions,
-    linear bottlenecks, width multiplier 1.0. Replaces final Linear(1280, 1000) with
-    Linear(1280, 200).
+    linear bottlenecks, width multiplier 1.0. Uses quantization-aware version with
+    proper quantized residual additions (FloatFunctional). Replaces final Linear(1280, 1000)
+    with Linear(1280, 200).
     Expected top-1: ~55-65% (pretrained weights; efficient for inference).
     Size: ~14 MB FP32 / ~3.5 MB INT8.
     Training speed: fast (depthwise separable convolutions reduce FLOPs ~8-9×).
-    QAT: partial — QuantStub/DeQuantStub + inplace ReLU fixed. Full INT8 correctness
-    for residual adds requires torchvision.models.quantization.mobilenet_v2().
+    QAT: full — quantization-aware model handles residual adds correctly.
     Trade-off: efficiency via depthwise separable convolutions vs accuracy.
     """
 
     def __init__(self, num_classes: int = 200, pretrained: bool = True):
         super().__init__()
         weights = "IMAGENET1K_V2" if pretrained else None
-        base = mobilenet_v2(weights=weights)
+        base = mobilenet_v2_qat(weights=weights, quantize=False)
         base.classifier[1] = nn.Linear(1280, num_classes)
         _fix_relu_inplace(base)
 
-        self.quant = tq.QuantStub()
         self.base = base
-        self.dequant = tq.DeQuantStub()
 
     def forward(self, x):
-        x = self.quant(x)
-        x = self.base(x)
-        x = self.dequant(x)
-        return x
+        return self.base(x)
 
 
