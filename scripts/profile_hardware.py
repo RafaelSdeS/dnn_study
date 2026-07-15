@@ -42,7 +42,7 @@ def sanitize_device_name(device_name: str) -> str:
 
 
 def get_device_tag(device: torch.device) -> str:
-    """Get device tag with optional SLURM node hostname to avoid collisions on multi-GPU nodes."""
+    """Get device tag with optional hostname to avoid collisions on multi-GPU nodes."""
     try:
         if device.type == "cuda":
             base_tag = sanitize_device_name(torch.cuda.get_device_name(device))
@@ -51,11 +51,15 @@ def get_device_tag(device: torch.device) -> str:
     except RuntimeError:
         base_tag = "cuda_unavailable"
 
-    # Append SLURM node hostname if running under SLURM (prevents collisions when
-    # multiple jobs on the same node/GPU model write to the same output file)
-    slurm_nodename = os.environ.get("SLURMD_NODENAME")
-    if slurm_nodename:
-        base_tag = f"{base_tag}_{sanitize_device_name(slurm_nodename)}"
+    # Append hostname if available (prevents collisions when multiple jobs on the
+    # same node/GPU model write to the same output file). Works in SLURM, local, etc.
+    try:
+        import socket
+        hostname = socket.gethostname()
+        if hostname and hostname != "localhost":
+            base_tag = f"{base_tag}_{sanitize_device_name(hostname)}"
+    except Exception:
+        pass
 
     return base_tag
 
@@ -396,6 +400,7 @@ def main():
     parser.add_argument("--runtime", choices=["local", "pcad"], required=True, help="Runtime profile")
     parser.add_argument("--resume", action="store_true", help="Resume from last completed config")
     parser.add_argument("--dry-run", action="store_true", help="Dry run (don't write output)")
+    parser.add_argument("--model-split", type=str, help="Split model sweep: 'N:M' runs part N of M (e.g. '1:2' runs first half)")
     args = parser.parse_args()
 
     # Set up paths
@@ -419,6 +424,15 @@ def main():
     config_path = Path("configs/profiling.yaml")
     config = load_profiling_config(config_path)
     logger.info(f"Loaded config from {config_path}")
+
+    # Apply model split if specified
+    if args.model_split:
+        part, total = map(int, args.model_split.split(":"))
+        models = config.get("models", [])
+        start = (part - 1) * len(models) // total
+        end = part * len(models) // total
+        config["models"] = models[start:end]
+        logger.info(f"Model split {part}:{total} → running models {start}-{end-1}: {config['models']}")
 
     # Load completed configs if resuming
     completed = load_completed_configs(output_path) if args.resume else set()

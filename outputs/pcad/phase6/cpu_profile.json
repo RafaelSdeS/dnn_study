@@ -1,0 +1,1 @@
+{"kind": "metadata", "pytorch_version": "2.5.1+cu121", "cuda_version": "12.1", "cudnn_version": 90100, "seed": 42, "timestamp": "2026-07-14T22:05:05.315814", "config_file": "configs/profiling.yaml", "device_name": "CPU", "device_capability": null}
