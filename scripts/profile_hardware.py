@@ -30,13 +30,34 @@ from ml.profiling import (
     profile_layer_conv_fft,
 )
 from ml.quantization import build_qat_from_model, convert_to_int8
+from ml.reporting import compute_flops
 from ml.registry import MODEL_REGISTRY
 from ml.runtime import set_global_seed
+import ml.model_registrations  # noqa: F401 — populates MODEL_REGISTRY for the model sweep
 
 
 def sanitize_device_name(device_name: str) -> str:
     """Sanitize device name to snake_case for file names."""
     return device_name.lower().replace(" ", "_").replace("-", "_")
+
+
+def get_device_tag(device: torch.device) -> str:
+    """Get device tag with optional SLURM node hostname to avoid collisions on multi-GPU nodes."""
+    try:
+        if device.type == "cuda":
+            base_tag = sanitize_device_name(torch.cuda.get_device_name(device))
+        else:
+            base_tag = "cpu"
+    except RuntimeError:
+        base_tag = "cuda_unavailable"
+
+    # Append SLURM node hostname if running under SLURM (prevents collisions when
+    # multiple jobs on the same node/GPU model write to the same output file)
+    slurm_nodename = os.environ.get("SLURMD_NODENAME")
+    if slurm_nodename:
+        base_tag = f"{base_tag}_{sanitize_device_name(slurm_nodename)}"
+
+    return base_tag
 
 
 def get_device_metadata(device: torch.device) -> dict:
@@ -165,11 +186,7 @@ def profile_layer_sweep(
     iters = config.get("iters", 200)
     fft_min_kernel_size = config.get("fft_min_kernel_size", 5)
 
-    device_tag = (
-        sanitize_device_name(torch.cuda.get_device_name(device))
-        if device.type == "cuda"
-        else "cpu"
-    )
+    device_tag = get_device_tag(device)
 
     total_configs = (
         len(kernel_sizes) * len(layer_channels) * len(batch_sizes) * len(input_resolutions) * len(precisions)
@@ -291,11 +308,7 @@ def profile_model_sweep(
     batch_size = config.get("batch_sizes", [1])[0]  # Use smallest batch size for model profiling
     input_resolution = config.get("input_resolutions", [64])[0]
 
-    device_tag = (
-        sanitize_device_name(torch.cuda.get_device_name(device))
-        if device.type == "cuda"
-        else "cpu"
-    )
+    device_tag = get_device_tag(device)
 
     total_configs = len(models) * len(precisions)
     i = 0
@@ -320,6 +333,11 @@ def profile_model_sweep(
                     continue
 
                 model = spec["ctor"]()
+                input_size = (batch_size, 3, input_resolution, input_resolution)
+                # FLOPs depend on the op graph, not precision — compute from the FP32
+                # model before any INT8 conversion (fvcore's tracer can't trace a
+                # quantized graph, so this must happen here, not inside the profiler).
+                total_flops = compute_flops(model, input_size=input_size).get("flops", 0)
 
                 # Convert to INT8 if needed
                 if precision == "int8":
@@ -332,9 +350,8 @@ def profile_model_sweep(
                     profile_device = device
 
                 # Profile with efficiency metrics
-                input_size = (batch_size, 3, input_resolution, input_resolution)
                 metrics = profile_model_with_efficiency_metrics(
-                    model, input_size, profile_device, warmup=50, iters=200
+                    model, input_size, profile_device, total_flops, warmup=50, iters=200
                 )
 
                 # Kernel trace for Winograd detection (FP32 only)
@@ -389,13 +406,7 @@ def main():
     output_dir = Path("outputs") / args.runtime / args.experiment
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    if device.type == "cuda":
-        try:
-            device_tag = sanitize_device_name(torch.cuda.get_device_name(0))
-        except RuntimeError:
-            device_tag = "cuda_unavailable"
-    else:
-        device_tag = "cpu"
+    device_tag = get_device_tag(device)
 
     output_path = output_dir / f"{device_tag}_profile.json"
     log_path = output_dir / f"{device_tag}.log"

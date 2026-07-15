@@ -9,8 +9,6 @@ import torch
 import torch.nn as nn
 import torch.profiler
 
-from .reporting import compute_flops
-
 
 def profile_layer_latency(
     kernel_size: int,
@@ -166,6 +164,7 @@ def profile_model_with_efficiency_metrics(
     model: nn.Module,
     input_size: tuple,
     device: torch.device,
+    total_flops: float,
     warmup: int = 50,
     iters: int = 200,
 ) -> dict:
@@ -176,6 +175,9 @@ def profile_model_with_efficiency_metrics(
         model: PyTorch model.
         input_size: (batch, channels, height, width) tuple.
         device: torch.device.
+        total_flops: Precomputed FLOPs (from the FP32 model — fvcore's JIT tracer
+            can't trace quantized graphs, and FLOPs are precision-independent since
+            INT8 conversion doesn't change the op graph, only weight/activation dtype).
         warmup: Warmup iterations.
         iters: Timed iterations.
 
@@ -192,10 +194,6 @@ def profile_model_with_efficiency_metrics(
     """
     model = model.to(device).eval()
     torch.set_grad_enabled(False)
-
-    # Compute FLOPs for efficiency calculation (one-time, no per-iteration cost)
-    flops_dict = compute_flops(model, input_size=input_size)
-    total_flops = flops_dict.get("flops", 0)
 
     # Background power and utilization sampling
     power_samples = []
@@ -229,8 +227,9 @@ def profile_model_with_efficiency_metrics(
     sampler = threading.Thread(target=sample_gpu_metrics, daemon=True)
     sampler.start()
 
-    # Memory measurement
-    torch.cuda.reset_peak_memory_stats(device)
+    # Memory measurement (CUDA only)
+    if device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats(device)
 
     # Warmup + timed forward passes
     input_tensor = torch.randn(input_size, device=device)
@@ -239,14 +238,16 @@ def profile_model_with_efficiency_metrics(
         with torch.no_grad():
             _ = model(input_tensor)
 
-    torch.cuda.synchronize(device)
+    if device.type == "cuda":
+        torch.cuda.synchronize(device)
     start_time = time.time()
 
     for _ in range(iters):
         with torch.no_grad():
             _ = model(input_tensor)
 
-    torch.cuda.synchronize(device)
+    if device.type == "cuda":
+        torch.cuda.synchronize(device)
     elapsed_ms = (time.time() - start_time) * 1000 / iters
 
     stop_sampling.set()
@@ -259,7 +260,7 @@ def profile_model_with_efficiency_metrics(
     power_avg = np.mean(power_samples) if power_samples else None
     power_std = np.std(power_samples) if power_samples else None
     gpu_util_avg = np.mean(gpu_util_samples) if gpu_util_samples else None
-    memory_peak_mb = torch.cuda.max_memory_allocated(device) / 1024 / 1024
+    memory_peak_mb = torch.cuda.max_memory_allocated(device) / 1024 / 1024 if device.type == "cuda" else None
 
     # Compute efficiency: actual GFLOPs / second = (total_flops / latency_ms) / 1e9
     compute_efficiency = (total_flops / latency_ms) / 1e9 if latency_ms > 0 else None
