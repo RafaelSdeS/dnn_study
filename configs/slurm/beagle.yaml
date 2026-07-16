@@ -4,4 +4,4 @@ gres: gpu:1
 nodes: 1
 cpus_per_task: 4
 mem: 16G  # node has 32 GB total DDR3 — leave headroom for the other GPU's job
-time: 08:00:00  # 8 hours, same budget as tupi_4090 (phase 6 profiling is I/O bound but long)
+time: "08:00:00"  # 8 hours, same budget as tupi_4090 (phase 6 profiling is I/O bound but long)

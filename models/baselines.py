@@ -2,8 +2,9 @@
 
 import torch.nn as nn
 import torch.ao.quantization as tq
-from torchvision.models import alexnet, resnet18, mobilenet_v2
+from torchvision.models import alexnet, mobilenet_v2
 from torchvision.models.quantization import mobilenet_v2 as mobilenet_v2_qat
+from torchvision.models.quantization import resnet18 as resnet18_qat
 
 
 def _fix_relu_inplace(module: nn.Module) -> None:
@@ -119,8 +120,11 @@ class ResNet18TV(nn.Module):
     Expected top-1: ~55-65% (pretrained + residual learning significantly helps).
     Size: ~44 MB FP32 / ~11 MB INT8.
     Training speed: fast (lightweight residual blocks).
-    QAT: partial — QuantStub/DeQuantStub added, inplace ReLU fixed. For full INT8
-    with correct residual quantization, use torchvision.models.quantization.resnet18().
+    QAT: full — uses torchvision's quantizable ResNet18 (QuantizableBasicBlock), whose
+    residual add already goes through FloatFunctional.add_relu, so both weights and
+    activations are fake-quantized correctly through the skip connection. QuantStub/
+    DeQuantStub are already built into QuantizableResNet.forward() (same as
+    MobileNetV2TV below) — no external quant/dequant wrapping needed or wanted here.
     Trade-off: residual connections vs no residuals; modern vs classical design.
     Note: 7×7 stem stride=2 + MaxPool reduces 64×64 → 8×8 early, may lose fine detail.
     """
@@ -128,19 +132,14 @@ class ResNet18TV(nn.Module):
     def __init__(self, num_classes: int = 200, pretrained: bool = True):
         super().__init__()
         weights = "IMAGENET1K_V1" if pretrained else None
-        base = resnet18(weights=weights)
+        base = resnet18_qat(weights=weights, quantize=False)
         base.fc = nn.Linear(512, num_classes)
         _fix_relu_inplace(base)
 
-        self.quant = tq.QuantStub()
         self.base = base
-        self.dequant = tq.DeQuantStub()
 
     def forward(self, x):
-        x = self.quant(x)
-        x = self.base(x)
-        x = self.dequant(x)
-        return x
+        return self.base(x)
 
 
 # ─── MobileNetV2TV ────────────────────────────────────────────────────────────

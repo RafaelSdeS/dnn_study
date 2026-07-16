@@ -24,6 +24,7 @@ def _build_sbatch_command(
     runtime: str,
     device: str | None = None,
     script_name: str = "train.sbatch",
+    model: str | None = None,
 ) -> list[str]:
     script = Path(__file__).resolve().parent / "slurm" / script_name
     output_root = Path(runtime_cfg.get("root", "outputs/pcad")).expanduser().resolve()
@@ -42,10 +43,13 @@ def _build_sbatch_command(
         "cpus_per_task": "--cpus-per-task",
         "mem": "--mem",
         "time": "--time",
+        "signal": "--signal",
     }
     for key, flag in flag_map.items():
         if slurm_cfg.get(key):
             cmd += [flag, str(slurm_cfg[key])]
+    if slurm_cfg.get("requeue"):
+        cmd += ["--requeue"]
     cmd += ["--output", str(log_dir / "%x-%j.out")]
     cmd += ["--error", str(log_dir / "%x-%j.err")]
 
@@ -64,6 +68,8 @@ def _build_sbatch_command(
     cmd += ["--export", ",".join(["ALL"] + export_vars), str(script), "--experiment", experiment, "--runtime", runtime]
     if device:
         cmd += ["--device", device]
+    if model:
+        cmd += ["--model", model]
     return cmd
 
 
@@ -76,6 +82,14 @@ def build_parser() -> argparse.ArgumentParser:
     submit.add_argument("--runtime", default="pcad")
     submit.add_argument("--slurm", default="single_gpu")
     submit.add_argument("--device", default=None)
+
+    submit_sweep = sub.add_parser(
+        "submit-sweep", help="Submit one job per model in an experiment's models: list"
+    )
+    submit_sweep.add_argument("--experiment", default="large_scale")
+    submit_sweep.add_argument("--runtime", default="pcad")
+    submit_sweep.add_argument("--slurm", default="tupi_4090")
+    submit_sweep.add_argument("--device", default=None)
 
     profile_submit = sub.add_parser("profile-submit", help="Submit a Phase 6 profiling job")
     profile_submit.add_argument("--experiment", default="phase6")
@@ -112,6 +126,23 @@ def main() -> int:
         slurm_cfg = _load_yaml(args.slurm, "slurm")
         cmd = _build_sbatch_command(runtime_cfg, slurm_cfg, args.experiment, args.runtime, args.device)
         print(subprocess.check_output(cmd, text=True).strip())
+        return 0
+
+    if args.command == "submit-sweep":
+        runtime_cfg = _load_yaml(args.runtime, "runtime")
+        slurm_cfg = _load_yaml(args.slurm, "slurm")
+        experiment_cfg = _load_yaml(args.experiment, "experiments")
+        models = experiment_cfg.get("models")
+        if not models or not isinstance(models, list):
+            raise ValueError(f"Experiment {args.experiment!r} has no models: list to sweep over")
+        base_job_name = slurm_cfg.get("job_name", "train")
+        for model in models:
+            per_model_slurm_cfg = {**slurm_cfg, "job_name": f"{base_job_name}-{model}"}
+            cmd = _build_sbatch_command(
+                runtime_cfg, per_model_slurm_cfg, args.experiment, args.runtime, args.device, model=model
+            )
+            job_id = subprocess.check_output(cmd, text=True).strip()
+            print(f"{model}: {job_id}")
         return 0
 
     if args.command == "profile-submit":

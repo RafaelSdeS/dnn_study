@@ -13,11 +13,15 @@ from models import (
     AlexNetTV,
     VGGStyleCNN,
     MobileNetV2TV,
+    ResNet18TV,
     AlexNetBottleneck,
     AlexNetDepthwiseSep,
     AlexNetFire,
+    AlexNetSmallKernel,
     AlexNetFinalBottleneckResidual,
     AlexNetFinalFireResidual,
+    AlexNetFinalBottleneckFire,
+    AlexNetFinalDepthwiseFire,
 )
 
 # notebooks/training/baselines_qat.ipynb
@@ -32,6 +36,17 @@ FUSE_MAP_VGG = [
 register_model("alexnet_tv", AlexNetTV, fuse_map=FUSE_MAP_ALEXNET_TV, fuse_root_attr="features", lr=3e-4)
 register_model("vgg_style", VGGStyleCNN, fuse_map=FUSE_MAP_VGG, fuse_root_attr="features", lr=1e-3)
 register_model("mobilenetv2", MobileNetV2TV, fuse_map=[], lr=1e-4)
+register_model("resnet18tv", ResNet18TV, fuse_map=[], lr=1e-4)
+
+# large-scale sweep (see configs/experiments/large_scale.yaml)
+FUSE_MAP_ALEXNET_SMALLKERNEL = [["0", "1"], ["3", "4"], ["6", "7"], ["8", "9"], ["10", "11"]]
+register_model(
+    "alexnet_smallkernel",
+    AlexNetSmallKernel,
+    fuse_map=FUSE_MAP_ALEXNET_SMALLKERNEL,
+    fuse_root_attr="features",
+    lr=3e-4,
+)
 
 # notebooks/training/compensation_qat.ipynb
 FUSE_DEPTHWISESEP = [
@@ -56,5 +71,17 @@ register_model(
     "alexnet_final_fire_residual",
     AlexNetFinalFireResidual,
     fuse_map=find_fuse_groups(AlexNetFinalFireResidual()),
+    lr=1e-3,
+)
+register_model(
+    "alexnet_final_bottleneck_fire",
+    AlexNetFinalBottleneckFire,
+    fuse_map=find_fuse_groups(AlexNetFinalBottleneckFire()),
+    lr=1e-3,
+)
+register_model(
+    "alexnet_final_depthwise_fire",
+    AlexNetFinalDepthwiseFire,
+    fuse_map=find_fuse_groups(AlexNetFinalDepthwiseFire()),
     lr=1e-3,
 )
