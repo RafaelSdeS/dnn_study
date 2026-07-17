@@ -15,8 +15,9 @@ dependencies:
   - pip:
       - -e .
       - pytest
-      - torchmetrics
+      - torchmetrics==1.9.0
       - torchinfo
       - fvcore
       - wandb
       - kagglehub
+      - pycocotools==2.0.11
