@@ -5,14 +5,16 @@ VOC 2007+2012 for detection, VOC 2012 for segmentation.
 import os
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Callable, Optional, Tuple
+from typing import Optional, Tuple
 
+import numpy as np
 import torch
 import torchvision.transforms.v2 as transforms
+from PIL import Image
 from torch.utils.data import DataLoader, Dataset, ConcatDataset
 from torchvision.datasets import VOCDetection, VOCSegmentation
-from torchvision.tv_tensors import BoundingBoxes, Mask
-from torchvision.utils import draw_bounding_boxes, draw_segmentation_masks
+from torchvision.tv_tensors import BoundingBoxes
+from torchvision.utils import draw_bounding_boxes
 
 from .config import DetSegDataConfig
 
@@ -25,40 +27,36 @@ VOC_CLASSES = [
 CLASS_NAME_TO_IDX = {name: idx + 1 for idx, name in enumerate(VOC_CLASSES)}  # 1-20, 0 = background
 
 
-def _parse_voc_detection_target(xml_path: str) -> Tuple[list, list]:
-    """Parse VOC XML annotation into (boxes, labels).
+class VOCDetectionDataset(Dataset):
+    """Minimal VOC detection wrapper that parses XML to tv_tensors."""
 
-    Returns:
-        boxes: list of [xmin, ymin, xmax, ymax] (absolute pixels)
-        labels: list of class indices (1-20, 0 reserved for background)
-    """
-    root = ET.parse(xml_path).getroot()
-    boxes = []
-    labels = []
-    for obj in root.findall("object"):
-        name = obj.find("name").text
-        bbox = obj.find("bndbox")
-        xmin = float(bbox.find("xmin").text)
-        ymin = float(bbox.find("ymin").text)
-        xmax = float(bbox.find("xmax").text)
-        ymax = float(bbox.find("ymax").text)
-        boxes.append([xmin, ymin, xmax, ymax])
-        labels.append(CLASS_NAME_TO_IDX[name])
-    return boxes, labels
+    def __init__(self, voc_dataset: VOCDetection, img_size: int = 256):
+        self.voc_dataset = voc_dataset
+        self.img_size = img_size
 
-
-class VOCDetectionWrapper(VOCDetection):
-    """Wrapper around torchvision.datasets.VOCDetection to return tv_tensors."""
+    def __len__(self):
+        return len(self.voc_dataset)
 
     def __getitem__(self, idx: int):
-        image, target = super().__getitem__(idx)
+        image, target = self.voc_dataset[idx]
 
-        # Parse XML annotation
-        image_id = self.ids[idx]
-        anno_path = self.annotations.format(*image_id)
-        boxes, labels = _parse_voc_detection_target(anno_path)
+        # target is a dict with 'annotation' key which is also a dict
+        boxes = []
+        labels = []
+        anno = target.get("annotation")
+        if anno is not None:
+            for obj in anno.get("object", []):
+                name = obj.get("name")
+                bbox = obj.get("bndbox")
+                if name in CLASS_NAME_TO_IDX and bbox is not None:
+                    xmin = float(bbox["xmin"])
+                    ymin = float(bbox["ymin"])
+                    xmax = float(bbox["xmax"])
+                    ymax = float(bbox["ymax"])
+                    boxes.append([xmin, ymin, xmax, ymax])
+                    labels.append(CLASS_NAME_TO_IDX[name])
 
-        # Convert to torch tensors and wrap in tv_tensors
+        # Convert to tensors
         if len(boxes) > 0:
             boxes = torch.tensor(boxes, dtype=torch.float32)
             labels = torch.tensor(labels, dtype=torch.int64)
@@ -66,9 +64,16 @@ class VOCDetectionWrapper(VOCDetection):
             boxes = torch.zeros((0, 4), dtype=torch.float32)
             labels = torch.zeros((0,), dtype=torch.int64)
 
-        boxes = BoundingBoxes(boxes, format="xyxy", canvas_size=image.size[::-1])
+        # Convert PIL to tensor
+        img_w, img_h = image.size
+        image_np = np.array(image)
+        image = torch.from_numpy(image_np).permute(2, 0, 1).float() / 255.0
 
-        image = torch.from_numpy(image).permute(2, 0, 1).float() / 255.0
+        # Resize image and scale boxes
+        image, boxes, labels = _resize_image_and_boxes(image, boxes, labels, self.img_size)
+
+        # Wrap boxes in BoundingBoxes (for consistency, though not strictly needed if not using v2 transforms)
+        boxes = BoundingBoxes(boxes, format="xyxy", canvas_size=(self.img_size, self.img_size))
 
         return image, {"boxes": boxes, "labels": labels}
 
@@ -80,22 +85,23 @@ def _detection_collate_fn(batch):
     return images, targets
 
 
-def _build_detection_transforms(img_size: int, train: bool):
-    """Build v2 transform pipeline for detection."""
-    if train:
-        return transforms.Compose([
-            transforms.ToImage(),
-            transforms.RandomHorizontalFlip(p=0.5),
-            transforms.Resize((img_size, img_size)),
-            transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1),
-            transforms.ToDtype(torch.float32, scale=True),
-        ])
-    else:
-        return transforms.Compose([
-            transforms.ToImage(),
-            transforms.Resize((img_size, img_size)),
-            transforms.ToDtype(torch.float32, scale=True),
-        ])
+def _resize_image_and_boxes(image, boxes, labels, img_size: int):
+    """Resize image and scale boxes proportionally."""
+    # image is tensor float32 (C, H, W), boxes are float32 (N, 4) in [xmin, ymin, xmax, ymax]
+    old_h, old_w = image.shape[1], image.shape[2]
+
+    # Resize image using torch functional
+    image = torch.nn.functional.interpolate(image.unsqueeze(0), size=(img_size, img_size), mode='bilinear', align_corners=False).squeeze(0)
+
+    # Scale boxes
+    if len(boxes) > 0:
+        scale_x = img_size / old_w
+        scale_y = img_size / old_h
+        boxes = boxes.clone()
+        boxes[:, [0, 2]] *= scale_x  # xmin, xmax
+        boxes[:, [1, 3]] *= scale_y  # ymin, ymax
+
+    return image, boxes, labels
 
 
 def create_voc_detection_loaders(cfg: DetSegDataConfig) -> Tuple:
@@ -109,22 +115,22 @@ def create_voc_detection_loaders(cfg: DetSegDataConfig) -> Tuple:
     """
     torch.manual_seed(cfg.seed)
 
-    train_transform = _build_detection_transforms(cfg.img_size, train=True)
-    val_transform = _build_detection_transforms(cfg.img_size, train=False)
-
     # VOC 07+12 trainval for training
-    voc07_train = VOCDetectionWrapper(
-        root=cfg.voc_root, year="2007", image_set="trainval", download=True, transforms=train_transform
+    voc07_raw = VOCDetection(
+        root=cfg.voc_root, year="2007", image_set="trainval", download=True
     )
-    voc12_train = VOCDetectionWrapper(
-        root=cfg.voc_root, year="2012", image_set="trainval", download=True, transforms=train_transform
+    voc12_raw = VOCDetection(
+        root=cfg.voc_root, year="2012", image_set="trainval", download=True
     )
-    train_ds = ConcatDataset([voc07_train, voc12_train])
+    voc07_train_ds = VOCDetectionDataset(voc07_raw, img_size=cfg.img_size)
+    voc12_train_ds = VOCDetectionDataset(voc12_raw, img_size=cfg.img_size)
+    train_ds = ConcatDataset([voc07_train_ds, voc12_train_ds])
 
     # VOC 07 test for evaluation
-    val_ds = VOCDetectionWrapper(
-        root=cfg.voc_root, year="2007", image_set="test", download=True, transforms=val_transform
+    voc07_test_raw = VOCDetection(
+        root=cfg.voc_root, year="2007", image_set="test", download=True
     )
+    val_ds = VOCDetectionDataset(voc07_test_raw, img_size=cfg.img_size)
 
     train_loader = DataLoader(
         train_ds,
