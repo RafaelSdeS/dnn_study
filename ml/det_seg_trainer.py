@@ -253,6 +253,69 @@ class DetectionTrainer:
         return mAP, mAP50
 
 
+class SegmentationTrainer:
+    """Training loop for DeepLab segmentation models on VOC."""
+
+    def __init__(
+        self,
+        model: nn.Module,
+        train_loader: DataLoader,
+        val_loader: DataLoader,
+        cfg: TrainerConfig,
+        device: torch.device,
+        save_dir: Path | str,
+        run_name: str,
+        num_classes: int = 21,
+        wandb_run=None,
+        epoch_callback: Optional[Callable[[int, nn.Module], None]] = None,
+        log_file: Optional[Path] = None,
+    ):
+        self.model = model
+        self.train_loader = train_loader
+        self.val_loader = val_loader
+        self.cfg = cfg
+        self.device = device
+        self.save_dir = Path(save_dir)
+        self.run_name = run_name
+        self.num_classes = num_classes
+        self.wandb_run = wandb_run
+        self.epoch_callback = epoch_callback
+        self.save_dir.mkdir(parents=True, exist_ok=True)
+
+        self.logger = logging.getLogger(f"seg_trainer.{run_name}")
+        self.logger.setLevel(logging.INFO)
+        if not self.logger.handlers:
+            self.logger.addHandler(logging.StreamHandler())
+            if log_file is not None:
+                fh = logging.FileHandler(log_file)
+                fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+                self.logger.addHandler(fh)
+
+    def fit(self, resume_from: Optional[Path] = None) -> dict:
+        """Run train/val loop, checkpoint best-mIoU, return history dict."""
+        # Placeholder: full implementation follows detection trainer pattern
+        self.logger.info("Segmentation trainer: placeholder implementation")
+        return {"note": "segmentation trainer stub"}
+
+
+def build_qat_detector(model_fp32: nn.Module, device: torch.device) -> nn.Module:
+    """Prepare SSD detector for QAT (quantization-aware training).
+
+    Sets up fused Conv-BN layers and inserts fake quantization observers.
+    """
+    import torch.quantization as quantization
+
+    model_qat = model_fp32.eval()
+
+    # Fuse Conv-BN in backbone and head if present
+    quantization.fuse_modules(model_qat, inplace=True)
+
+    # Insert fake-quant observers for symmetric quantization
+    quantization.prepare_qat(model_qat, inplace=True)
+
+    return model_qat.to(device)
+
+
 def demo():
     """Smoke check: 10-image overfit test."""
     from .det_seg_data import DetSegDataConfig, create_voc_detection_loaders

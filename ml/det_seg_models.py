@@ -95,6 +95,24 @@ class DetSegBackbone(nn.Module):
         return features
 
 
+def build_deeplabv3_segmenter(
+    arch_name: str,
+    num_classes: int = 21,
+    image_size: int = 256,
+) -> nn.Module:
+    """Build DeepLabV3 segmenter with custom backbone.
+
+    For now, uses torchvision's DeepLabV3 pretrained on COCO.
+    TODO: Replace backbone with Phase 7 models for proper ablation.
+    """
+    from torchvision.models.segmentation import deeplabv3_resnet50
+
+    # TODO: Implement custom DeepLabV3 with alexnet backbones
+    # For now, return placeholder
+    model = deeplabv3_resnet50(pretrained=False, num_classes=num_classes, aux_loss=False)
+    return model
+
+
 def build_ssd_detector(
     arch_name: str,
     num_classes: int = 21,

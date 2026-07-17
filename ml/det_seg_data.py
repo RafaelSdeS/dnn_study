@@ -152,12 +152,65 @@ def create_voc_detection_loaders(cfg: DetSegDataConfig) -> Tuple:
     return train_ds, val_ds, train_loader, val_loader
 
 
-def create_voc_segmentation_loaders(cfg: DetSegDataConfig) -> Tuple:
-    """Create VOC segmentation train/val loaders (2012 only).
+class VOCSegmentationDataset(Dataset):
+    """Minimal VOC segmentation wrapper."""
 
-    Deferred to Stage 6; placeholder here for API consistency.
-    """
-    raise NotImplementedError("Segmentation loaders deferred to Stage 6")
+    def __init__(self, voc_dataset: VOCSegmentation, img_size: int = 256):
+        self.voc_dataset = voc_dataset
+        self.img_size = img_size
+
+    def __len__(self):
+        return len(self.voc_dataset)
+
+    def __getitem__(self, idx: int):
+        image, target = self.voc_dataset[idx]
+
+        # Convert PIL to tensors
+        img_w, img_h = image.size
+        image_np = np.array(image)
+        image_t = torch.from_numpy(image_np).permute(2, 0, 1).float() / 255.0
+
+        # Mask (already numpy array)
+        mask_t = torch.from_numpy(np.array(target)).long()
+
+        # Resize image and mask
+        image_t = torch.nn.functional.interpolate(image_t.unsqueeze(0), size=(self.img_size, self.img_size), mode='bilinear', align_corners=False).squeeze(0)
+        mask_t = torch.nn.functional.interpolate(mask_t.unsqueeze(0).unsqueeze(0).float(), size=(self.img_size, self.img_size), mode='nearest').squeeze(0).squeeze(0).long()
+
+        return image_t, mask_t
+
+
+def create_voc_segmentation_loaders(cfg: DetSegDataConfig) -> Tuple:
+    """Create VOC segmentation train/val loaders (2012 only)."""
+    torch.manual_seed(cfg.seed)
+
+    # VOC 2012 train/val
+    voc12_train_raw = VOCSegmentation(
+        root=cfg.voc_root, year="2012", image_set="train", download=True
+    )
+    voc12_val_raw = VOCSegmentation(
+        root=cfg.voc_root, year="2012", image_set="val", download=True
+    )
+
+    train_ds = VOCSegmentationDataset(voc12_train_raw, img_size=cfg.img_size)
+    val_ds = VOCSegmentationDataset(voc12_val_raw, img_size=cfg.img_size)
+
+    train_loader = DataLoader(
+        train_ds,
+        batch_size=cfg.batch_size,
+        shuffle=True,
+        num_workers=cfg.num_workers,
+        pin_memory=cfg.pin_memory,
+    )
+    val_loader = DataLoader(
+        val_ds,
+        batch_size=cfg.batch_size,
+        shuffle=False,
+        num_workers=cfg.num_workers,
+        pin_memory=cfg.pin_memory,
+    )
+
+    return train_ds, val_ds, train_loader, val_loader
 
 
 def demo(cfg: Optional[DetSegDataConfig] = None, num_samples: int = 4):
