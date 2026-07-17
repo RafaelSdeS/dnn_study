@@ -8,27 +8,40 @@
 #   bash scripts/submit_phase7_simple.sh           # Submit all 3
 #   bash scripts/submit_phase7_simple.sh bottleneck fire  # Submit specific models
 
-MODELS=${@:-alexnet_bottleneck alexnet_fire alexnet_tv}
+if [ "$#" -eq 0 ]; then
+    MODELS=("alexnet_bottleneck" "alexnet_fire" "alexnet_tv")
+else
+    MODELS=("$@")
+fi
+
+PARTITION="tupi"   # RTX 4090 nodes; alternatives: shared (K20m, weak), grace (L40s), beagle (GTX1080Ti)
+
+mkdir -p runs/phase7/logs
 
 echo "Submitting Phase 7 FP32 training to PCAD..."
-echo "Models: $MODELS"
+echo "Models: ${MODELS[@]}"
+echo "Partition: $PARTITION"
 echo ""
 
 JOB_IDS=()
-for model in $MODELS; do
+for model in "${MODELS[@]}"; do
     echo "Submitting: $model"
 
-    job_id=$(sbatch \
+    output=$(sbatch \
         --job-name="p7_${model:0:8}" \
         --time=12:00:00 \
         --mem=32G \
         --gpus=1 \
-        --partition=gpu \
+        --partition="$PARTITION" \
         --output="runs/phase7/logs/p7_${model}_%j.log" \
-        scripts/slurm/det_seg.sbatch detection "$model" phase7_detection \
-        | awk '{print $NF}')
+        scripts/slurm/det_seg.sbatch detection "$model" phase7_detection 2>&1)
 
-    echo "  Submitted: Job $job_id"
+    job_id=$(echo "$output" | grep -oP 'Submitted batch job \K[0-9]+' || echo "")
+    if [ -z "$job_id" ]; then
+        echo "  ERROR: $output"
+    else
+        echo "  Submitted: Job $job_id"
+    fi
     JOB_IDS+=("$job_id")
 done
 

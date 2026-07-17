@@ -340,14 +340,23 @@ def demo():
     print("Running 10-epoch overfit test...")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     cfg_train = TrainerConfig(epochs=10, lr=1e-3, use_amp=False)
+
+    # Wrap small_loader in DataLoader-like object for access to batch_size
+    class TinyLoader:
+        def __init__(self, batches):
+            self.batches = batches
+            self.batch_size = 2
+        def __iter__(self):
+            return iter(self.batches)
+        def __len__(self):
+            return len(self.batches)
+
+    tiny_loader = TinyLoader(small_loader)
+
     trainer = DetectionTrainer(
-        model, small_loader, small_loader, cfg_train, device,
+        model, tiny_loader, tiny_loader, cfg_train, device,
         save_dir="/tmp/det_smoke_check", run_name="overfit_test"
     )
-
-    # Override loader for this tiny test
-    trainer.train_loader = small_loader
-    trainer.val_loader = small_loader
 
     history = trainer.fit()
 

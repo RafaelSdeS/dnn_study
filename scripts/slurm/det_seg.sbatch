@@ -4,7 +4,7 @@
 #SBATCH --mem=32G
 #SBATCH --gpus=1
 #SBATCH --cpus-per-task=8
-#SBATCH --partition=gpu
+#SBATCH --partition=tupi
 
 set -e
 
