@@ -1,0 +1,127 @@
+{
+  "config": {
+    "experiment": {
+      "name": "large_scale",
+      "models": [
+        "alexnet_final_bottleneck_residual"
+      ],
+      "seed": 42,
+      "stages": [
+        "fp32",
+        "qat",
+        "int8"
+      ],
+      "data": {
+        "batch_size": 64,
+        "num_workers": 4,
+        "pin_memory": true,
+        "train_val_split": 0.9
+      },
+      "training": {
+        "epochs": 1000,
+        "lr": 0.0003,
+        "weight_decay": 0.0005,
+        "label_smoothing": 0.1,
+        "grad_clip_norm": null,
+        "use_amp": true,
+        "early_stopping_patience": 20
+      },
+      "qat": {
+        "epochs": 100,
+        "lr": 1e-05,
+        "weight_decay": 0.0005,
+        "freeze_bn_epoch": 3,
+        "disable_observer_epoch": 5
+      }
+    },
+    "runtime": {
+      "name": "pcad",
+      "root": "outputs/pcad",
+      "dataset_root": "${PCAD_DATASET_ROOT}",
+      "device": "cuda",
+      "conda_env": "alexnet_rafael",
+      "wandb": true,
+      "wandb_mode": "offline",
+      "tensorboard": true,
+      "distributed": false,
+      "devices": 1,
+      "launcher": "single",
+      "use_kagglehub_fallback": true,
+      "persistent_workers": true,
+      "benchmark_warmup": 100,
+      "quantized_engine": "fbgemm"
+    },
+    "data": {
+      "dataset_path": "/home/users/rsdsouza/.cache/kagglehub/datasets/akash2sharma/tiny-imagenet/versions/1/tiny-imagenet-200/train",
+      "img_size": 64,
+      "num_classes": 200,
+      "batch_size": 64,
+      "num_workers": 4,
+      "pin_memory": true,
+      "train_val_split": 0.9,
+      "seed": 42
+    },
+    "training": {
+      "epochs": 1000,
+      "lr": 0.001,
+      "weight_decay": 0.0005,
+      "label_smoothing": 0.1,
+      "grad_clip_norm": null,
+      "use_amp": true,
+      "early_stopping_patience": 20
+    },
+    "qat": {
+      "epochs": 100,
+      "lr": 1e-05,
+      "weight_decay": 0.0005,
+      "freeze_bn_epoch": 3,
+      "disable_observer_epoch": 5
+    },
+    "selected_model": "alexnet_final_bottleneck_residual",
+    "stage_list": [
+      "fp32",
+      "qat",
+      "int8"
+    ]
+  },
+  "model_name": "alexnet_final_bottleneck_residual",
+  "mode": "fp32/qat/int8",
+  "epochs": 74,
+  "best_val_top1": 50.04,
+  "best_val_top5": 74.95,
+  "final_val_top1": 48.97,
+  "final_val_top5": 74.19,
+  "best_val_loss": 2.7735929206848144,
+  "final_train_loss": 2.620147176691004,
+  "fp32_top1": 48.909345269203186,
+  "fp32_top5": 74.20153617858887,
+  "fp32_loss": 2.1716723442077637,
+  "fp32_top1_top5_gap": 25.29219090938568,
+  "int8_top1": 49.51888024806976,
+  "int8_top5": 74.31813478469849,
+  "int8_loss": 2.1375796794891357,
+  "int8_top1_top5_gap": 24.799254536628723,
+  "quantization_drop_top1": -0.6095349788665771,
+  "fp32_size_mb": 6.653960227966309,
+  "int8_size_mb": 0.6352424621582031,
+  "params_m": 0.571304,
+  "compression_ratio": 10.474677976279837,
+  "param_efficiency_top1_per_m": 87.58909442258411,
+  "macs": 54175744,
+  "flops": 108351488,
+  "fp32_latency_ms_per_image": 0.20122504988685253,
+  "fp32_throughput_img_per_s": 4969.560204170869,
+  "int8_latency_ms_per_image": 0.326736621838063,
+  "int8_throughput_img_per_s": 3060.5690735690455,
+  "avg_epoch_time_s": 34.86236774043033,
+  "total_training_time_s": 3397.4520807266235,
+  "peak_gpu_mem_mb": 187.15087890625,
+  "avg_images_per_sec": 2584.9130251048514,
+  "avg_batch_time_s": 0.024795425135441213,
+  "avg_cpu_percent": 8.286315789473687,
+  "avg_ram_used_mb": 4957.870394736842,
+  "avg_gpu_power_w": 61.369176272443895,
+  "avg_gpu_utilization_pct": 9.61477787664736,
+  "avg_gpu_temp_c": 37.583954990218466,
+  "total_gpu_energy_wh": 56.43111557726734
+}
