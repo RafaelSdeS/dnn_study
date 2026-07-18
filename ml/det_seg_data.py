@@ -13,7 +13,7 @@ import torchvision.transforms.v2 as transforms
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset, ConcatDataset
 from torchvision.datasets import VOCDetection, VOCSegmentation
-from torchvision.tv_tensors import BoundingBoxes
+from torchvision.tv_tensors import BoundingBoxes, Image as TVImage
 from torchvision.utils import draw_bounding_boxes
 
 from .config import DetSegDataConfig
@@ -26,13 +26,25 @@ VOC_CLASSES = [
 ]
 CLASS_NAME_TO_IDX = {name: idx + 1 for idx, name in enumerate(VOC_CLASSES)}  # 1-20, 0 = background
 
+# Standard SSD-training augmentations (torchvision's own recipe). Order matters:
+# photometric distort first (pixel-only), then geometry ops, sanitize last to
+# drop boxes degenerated/cropped away by RandomIoUCrop.
+_TRAIN_TRANSFORMS = transforms.Compose([
+    transforms.RandomPhotometricDistort(p=0.5),
+    transforms.RandomZoomOut(fill=0, side_range=(1.0, 3.0), p=0.5),
+    transforms.RandomIoUCrop(),
+    transforms.RandomHorizontalFlip(p=0.5),
+    transforms.SanitizeBoundingBoxes(),
+])
+
 
 class VOCDetectionDataset(Dataset):
     """Minimal VOC detection wrapper that parses XML to tv_tensors."""
 
-    def __init__(self, voc_dataset: VOCDetection, img_size: int = 256):
+    def __init__(self, voc_dataset: VOCDetection, img_size: int = 256, augment: bool = False):
         self.voc_dataset = voc_dataset
         self.img_size = img_size
+        self.augment = augment
 
     def __len__(self):
         return len(self.voc_dataset)
@@ -68,6 +80,12 @@ class VOCDetectionDataset(Dataset):
         img_w, img_h = image.size
         image_np = np.array(image)
         image = torch.from_numpy(image_np).permute(2, 0, 1).float() / 255.0
+
+        if self.augment:
+            image = TVImage(image)
+            boxes_tvt = BoundingBoxes(boxes, format="xyxy", canvas_size=(img_h, img_w))
+            image, aug_target = _TRAIN_TRANSFORMS(image, {"boxes": boxes_tvt, "labels": labels})
+            boxes, labels = aug_target["boxes"], aug_target["labels"]
 
         # Resize image and scale boxes
         image, boxes, labels = _resize_image_and_boxes(image, boxes, labels, self.img_size)
@@ -122,8 +140,8 @@ def create_voc_detection_loaders(cfg: DetSegDataConfig) -> Tuple:
     voc12_raw = VOCDetection(
         root=cfg.voc_root, year="2012", image_set="trainval", download=True
     )
-    voc07_train_ds = VOCDetectionDataset(voc07_raw, img_size=cfg.img_size)
-    voc12_train_ds = VOCDetectionDataset(voc12_raw, img_size=cfg.img_size)
+    voc07_train_ds = VOCDetectionDataset(voc07_raw, img_size=cfg.img_size, augment=True)
+    voc12_train_ds = VOCDetectionDataset(voc12_raw, img_size=cfg.img_size, augment=True)
     train_ds = ConcatDataset([voc07_train_ds, voc12_train_ds])
 
     # VOC 07 test for evaluation
@@ -277,7 +295,7 @@ def demo(cfg: Optional[DetSegDataConfig] = None, num_samples: int = 4):
             img_vis = img
 
         save_path = save_dir / f"sample_{i}.png"
-        transforms.functional.to_image(img_vis).save(str(save_path))
+        transforms.functional.to_pil_image(img_vis).save(str(save_path))
         print(f"Saved: {save_path}")
 
     print(f"\n✓ Visualizations saved to {save_dir}/")
