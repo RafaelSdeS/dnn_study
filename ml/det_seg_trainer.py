@@ -50,7 +50,7 @@ class DetectionTrainer:
         self.save_dir.mkdir(parents=True, exist_ok=True)
 
         # mAP metric (CPU-based, accumulates over batches)
-        self.mAP_metric = MeanAveragePrecision(box_format="xyxy", iou_type="bbox", warn_on_many_detections=False)
+        self.mAP_metric = MeanAveragePrecision(box_format="xyxy", iou_type="bbox")
 
         self.logger = logging.getLogger(f"det_trainer.{run_name}")
         self.logger.setLevel(logging.INFO)
