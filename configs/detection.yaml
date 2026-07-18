@@ -16,3 +16,4 @@ trainer:
   grad_clip_norm: null
   use_amp: false
   early_stopping_patience: 10
+  warmup_epochs: 2

@@ -32,6 +32,7 @@ class TrainerConfig:
     # ── training options ─────────────────────────────────────────────
     use_amp: bool = True         # set False for QAT fine-tuning
     early_stopping_patience: Optional[int] = DEFAULT_EARLY_STOPPING_PATIENCE
+    warmup_epochs: int = 0       # linear LR warmup before cosine decay; 0 disables
 
 
 @dataclass
