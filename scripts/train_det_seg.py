@@ -25,7 +25,7 @@ from ml import (
     DetSegDataConfig, TrainerConfig, DetectionTrainer,
     create_voc_detection_loaders, build_ssd_detector,
 )
-from ml.det_seg_models import build_qat_ssd_detector, convert_ssd_to_int8
+from ml.det_seg_models import build_qat_ssd_detector, convert_ssd_to_int8, compute_anchor_recall
 from ml.quantization import make_qat_callback
 from ml.runtime import expand_path
 
@@ -86,6 +86,16 @@ def run_detection(args):
         print(f"\nBuilding SSD detector ({args.model})...")
         model = build_ssd_detector(args.model, num_classes=21, image_size=256)
         print(f"  Model ready. Parameter count: {sum(p.numel() for p in model.parameters()):,}")
+
+        # Anchor-recall pre-flight gate: mAP is capped regardless of training quality
+        # if ground-truth boxes aren't covered by any default box.
+        if not args.skip_anchor_check:
+            recall = compute_anchor_recall(model, val_loader, iou_threshold=0.5)
+            print(f"  Anchor recall @IoU 0.5: {recall:.3f}")
+            if recall < 0.95:
+                print(f"ABORT: anchor recall {recall:.3f} < 0.95 — fix anchor config first "
+                      f"(or pass --skip-anchor-check to override).")
+                sys.exit(1)
 
         # Train
         print(f"\nStarting FP32 training...")
@@ -214,6 +224,7 @@ def main():
     parser.add_argument("--runtime", choices=["local", "pcad"], default="local", help="Where to run")
     parser.add_argument("--save-dir", default="runs", help="Output directory")
     parser.add_argument("--dry-run", action="store_true", help="Don't train, just show config")
+    parser.add_argument("--skip-anchor-check", action="store_true", help="Skip the anchor-recall pre-flight gate")
 
     args = parser.parse_args()
 

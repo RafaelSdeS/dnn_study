@@ -21,12 +21,12 @@ from .quantization import find_fuse_groups
 
 BACKBONE_FEATURE_CONFIG = {
     "alexnet_bottleneck": {
-        "feature_indices": [3, 6],
+        "feature_indices": [2, 6],
         "out_channels": [192, 256],
         "ctor": AlexNetBottleneck,
     },
     "alexnet_fire": {
-        "feature_indices": [3, 6],
+        "feature_indices": [2, 6],
         "out_channels": [192, 256],
         "ctor": AlexNetFire,
     },
@@ -97,8 +97,14 @@ class DetSegBackbone(nn.Module):
 
         x = self.quant(x)
 
-        # Tap from backbone
+        # Tap from backbone. Stop after the last tapped index — some backbones
+        # (bottleneck/fire) end their .features Sequential in a classification-only
+        # AdaptiveAvgPool2d(1); running past the last tap would collapse the feature
+        # map to 1x1 before extra_blocks ever see it.
+        last_tap = max(self.feature_indices)
         for i, layer in enumerate(self.backbone_full.features):
+            if i > last_tap:
+                break
             x = layer(x)
             if i in self.feature_indices:
                 # Dequantize a copy for the (FP32) SSD head; keep x itself in the
