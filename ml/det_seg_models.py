@@ -259,7 +259,10 @@ def compute_anchor_recall(
                 break
 
             # Get default boxes (anchors) for this batch
-            anchors = model.anchor_generator(images, model.backbone(images))
+            # backbone returns OrderedDict; anchor_generator expects list of tensors
+            features = model.backbone(images)
+            feature_list = [features[str(i)] for i in range(len(features))]
+            anchors = model.anchor_generator(images, feature_list)
 
             for img_anchors, target in zip(anchors, targets):
                 gt_boxes = target["boxes"]
