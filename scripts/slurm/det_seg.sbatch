@@ -8,9 +8,7 @@
 
 set -e
 
-# Load environment
-module load cuda/12.1
-source ~/.bash_profile
+# Load environment (skip module load; venv has CUDA built-in)
 cd $(git rev-parse --show-toplevel)
 source .venv/bin/activate
 
