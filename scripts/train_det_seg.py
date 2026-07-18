@@ -59,7 +59,7 @@ def run_detection(args):
     # Setup paths
     stage_suffix = {"fp32": "fp32", "qat": "qat", "int8": "int8"}[args.stage]
     run_id = f"ssd_{args.model}_{stage_suffix}"
-    run_dir = Path(args.save_dir) / "phase7" / run_id
+    run_dir = Path(args.save_dir) / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
 
     # Save config
@@ -103,7 +103,7 @@ def run_detection(args):
         # Load FP32 checkpoint
         print(f"\nLoading FP32 checkpoint...")
         fp32_run_id = f"ssd_{args.model}_fp32"
-        fp32_ckpt = Path(args.save_dir) / "phase7" / fp32_run_id / f"{fp32_run_id}_best.pth"
+        fp32_ckpt = Path(args.save_dir) / fp32_run_id / f"{fp32_run_id}_best.pth"
         if not fp32_ckpt.exists():
             print(f"ERROR: FP32 checkpoint not found at {fp32_ckpt}")
             print(f"Make sure you run FP32 training first: python {__file__} detection --model {args.model} --stage fp32")
@@ -144,7 +144,7 @@ def run_detection(args):
         # Load QAT checkpoint
         print(f"\nLoading QAT checkpoint...")
         qat_run_id = f"ssd_{args.model}_qat"
-        qat_ckpt = Path(args.save_dir) / "phase7" / qat_run_id / f"{qat_run_id}_best.pth"
+        qat_ckpt = Path(args.save_dir) / qat_run_id / f"{qat_run_id}_best.pth"
         if not qat_ckpt.exists():
             print(f"ERROR: QAT checkpoint not found at {qat_ckpt}")
             print(f"Make sure you run QAT training first: python {__file__} detection --model {args.model} --stage qat")

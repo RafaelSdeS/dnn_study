@@ -28,9 +28,9 @@ class AlexNetTV(nn.Module):
     Trade-off: large kernel sizes vs accuracy; classical vs modern architecture.
     """
 
-    def __init__(self, num_classes: int = 200):
+    def __init__(self, num_classes: int = 200, pretrained: bool = True):
         super().__init__()
-        base = alexnet(weights="IMAGENET1K_V1")
+        base = alexnet(weights="IMAGENET1K_V1" if pretrained else None)
         base.classifier[6] = nn.Linear(4096, num_classes)
         for name, module in base.features.named_children():
             if isinstance(module, nn.ReLU):

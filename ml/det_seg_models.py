@@ -51,12 +51,17 @@ class DetSegBackbone(nn.Module):
         feature_indices = config["feature_indices"]
         out_channels = config["out_channels"]
 
-        # Load backbone (strip classifier head later)
-        self.backbone_full = ctor(num_classes=num_classes)
+        # Load backbone (strip classifier head later).
+        # alexnet_tv only: force random init for a fair cross-backbone comparison
+        # (bottleneck/fire have no pretrained checkpoints available either).
+        if arch_name == "alexnet_tv":
+            self.backbone_full = ctor(num_classes=num_classes, pretrained=False)
+        else:
+            self.backbone_full = ctor(num_classes=num_classes)
 
         # Tap intermediate features
         self.feature_indices = feature_indices
-        self.out_channels = out_channels
+        self.out_channels = list(out_channels)  # copy: _build_extra_blocks appends in place
 
         # Build extra blocks (SSDLite-style depthwise separable)
         self.extra_blocks = self._build_extra_blocks(out_channels[-1], num_extra_blocks)
@@ -247,6 +252,7 @@ def compute_anchor_recall(
     This is a cheap sanity check: if anchor recall is <95%, mAP will be capped regardless of
     how good the backbone/head are.
     """
+    from torchvision.models.detection.image_list import ImageList
     from torchvision.ops import box_iou
 
     total_boxes = 0
@@ -260,9 +266,11 @@ def compute_anchor_recall(
 
             # Get default boxes (anchors) for this batch
             # backbone returns OrderedDict; anchor_generator expects list of tensors
+            # and images wrapped in ImageList (not a raw batched Tensor)
             features = model.backbone(images)
             feature_list = [features[str(i)] for i in range(len(features))]
-            anchors = model.anchor_generator(images, feature_list)
+            image_sizes = [(images.shape[-2], images.shape[-1])] * images.shape[0]
+            anchors = model.anchor_generator(ImageList(images, image_sizes), feature_list)
 
             for img_anchors, target in zip(anchors, targets):
                 gt_boxes = target["boxes"]
