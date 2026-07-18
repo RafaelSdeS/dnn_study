@@ -2,11 +2,13 @@
 Detection/segmentation model assembly for Phase 7.
 Backbone feature extraction + SSD/DeepLab heads.
 """
+import copy
 from collections import OrderedDict
 from functools import partial
 from typing import Dict, List, Optional
 
 import torch
+import torch.ao.quantization as tq
 import torch.nn as nn
 from torchvision.models.detection.ssd import SSD
 from torchvision.models.detection.ssdlite import DefaultBoxGenerator, SSDLiteHead
@@ -14,6 +16,7 @@ from torchvision.ops import nms
 
 from models.compensation import AlexNetBottleneck, AlexNetFire
 from models.baselines import AlexNetTV
+from .quantization import find_fuse_groups
 
 
 BACKBONE_FEATURE_CONFIG = {
@@ -58,6 +61,14 @@ class DetSegBackbone(nn.Module):
         # Build extra blocks (SSDLite-style depthwise separable)
         self.extra_blocks = self._build_extra_blocks(out_channels[-1], num_extra_blocks)
 
+        # QAT stubs: identity in FP32; become real quantize/dequantize ops after
+        # prepare_qat()+convert(). Placed here (not on backbone_full) since forward()
+        # taps backbone_full.features[i] directly, bypassing backbone_full's own
+        # quant/dequant stubs (those exist for backbone_full's standalone classification
+        # QAT pipeline and are unused/inert in this detection path).
+        self.quant = tq.QuantStub()
+        self.dequant = tq.DeQuantStub()
+
     def _build_extra_blocks(self, in_channels: int, num_blocks: int) -> nn.ModuleList:
         """Build SSDLite extra blocks (depthwise separable + stride-2 downsampling)."""
         blocks = nn.ModuleList()
@@ -79,17 +90,21 @@ class DetSegBackbone(nn.Module):
         features = OrderedDict()
         level = 0
 
+        x = self.quant(x)
+
         # Tap from backbone
         for i, layer in enumerate(self.backbone_full.features):
             x = layer(x)
             if i in self.feature_indices:
-                features[str(level)] = x
+                # Dequantize a copy for the (FP32) SSD head; keep x itself in the
+                # (fake-)quantized domain so later taps aren't re-quantized redundantly.
+                features[str(level)] = self.dequant(x)
                 level += 1
 
         # Extra blocks (stride-2 downsampling on deepest feature)
         for block in self.extra_blocks:
             x = block(x)
-            features[str(level)] = x
+            features[str(level)] = self.dequant(x)
             level += 1
 
         return features
@@ -169,6 +184,56 @@ def build_ssd_detector(
     model.score_thresh = confidence_threshold
 
     return model
+
+
+def build_qat_ssd_detector(model_fp32: SSD, device: torch.device) -> SSD:
+    """Prepare a trained FP32 SSD detector for QAT fine-tuning.
+
+    Design decision: only the backbone (Conv-BN-ReLU stack) is quantized. SSDLiteHead's
+    classification/regression convs stay FP32 — per PHASE7_PLAN.md's own fallback for
+    INT8 instability on continuous box-regression outputs (Blocking Issue #2). This is
+    the safe first cut: the backbone's Conv-BN-ReLU pattern is already QAT-validated in
+    Phase 3/6 (same fuse_groups machinery), while quantizing a box-regression head has
+    no precedent in this codebase. If FP32-vs-QAT mAP holds up, quantizing the head too
+    is a natural follow-up, not a blocker for this first pass.
+
+    Args:
+        model_fp32: SSD model with a DetSegBackbone (from build_ssd_detector), already
+            trained to its FP32 best checkpoint.
+        device: CUDA device for QAT fine-tuning (fake-quant training still runs on GPU;
+            only the final convert() step is CPU-only).
+
+    Returns:
+        SSD model with backbone fused + fake-quant-observer-wrapped; head untouched.
+    """
+    model = copy.deepcopy(model_fp32)
+    backbone = model.backbone
+    if not isinstance(backbone, DetSegBackbone):
+        raise TypeError(f"Expected DetSegBackbone, got {type(backbone)}")
+
+    backbone.train()
+    backbone.qconfig = tq.get_default_qat_qconfig("fbgemm")
+
+    # Fuse Conv-BN(-ReLU) triples inside backbone_full (bottleneck/fire only —
+    # alexnet_tv's stock torchvision features have no BatchNorm, so find_fuse_groups
+    # returns [] there and prepare_qat still inserts fake-quant on bare Conv2d/ReLU).
+    fuse_groups = find_fuse_groups(backbone.backbone_full)
+    if fuse_groups:
+        prefixed = [[f"backbone_full.{step}" for step in group] for group in fuse_groups]
+        tq.fuse_modules_qat(backbone, prefixed, inplace=True)
+
+    prepared_backbone = tq.prepare_qat(backbone, inplace=False)
+    model.backbone = prepared_backbone
+
+    return model.to(device)
+
+
+def convert_ssd_to_int8(qat_model: SSD) -> SSD:
+    """Convert a QAT-trained SSD's backbone to real INT8 ops. CPU-only (project convention);
+    head stays FP32 to match build_qat_ssd_detector's design."""
+    qat_model = qat_model.to("cpu").eval()
+    qat_model.backbone = tq.convert(qat_model.backbone, inplace=False)
+    return qat_model
 
 
 def compute_anchor_recall(

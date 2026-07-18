@@ -298,24 +298,6 @@ class SegmentationTrainer:
         return {"note": "segmentation trainer stub"}
 
 
-def build_qat_detector(model_fp32: nn.Module, device: torch.device) -> nn.Module:
-    """Prepare SSD detector for QAT (quantization-aware training).
-
-    Sets up fused Conv-BN layers and inserts fake quantization observers.
-    """
-    import torch.quantization as quantization
-
-    model_qat = model_fp32.eval()
-
-    # Fuse Conv-BN in backbone and head if present
-    quantization.fuse_modules(model_qat, inplace=True)
-
-    # Insert fake-quant observers for symmetric quantization
-    quantization.prepare_qat(model_qat, inplace=True)
-
-    return model_qat.to(device)
-
-
 def demo():
     """Smoke check: 10-image overfit test."""
     from .det_seg_data import DetSegDataConfig, create_voc_detection_loaders

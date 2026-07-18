@@ -66,11 +66,11 @@ for model in "${MODELS[@]}"; do
     log_file="runs/phase7/logs/p7_${model}_fp32_%j.log"
 
     if [ "$DRY_RUN" = true ]; then
-        echo "[DRY-RUN] sbatch --job-name=$job_name --time=$TIME --mem=$MEM --gpus=$GPUS --partition=$PARTITION --output=$log_file scripts/slurm/det_seg.sbatch detection $model $EXPERIMENT"
+        echo "[DRY-RUN] sbatch --job-name=$job_name --time=$TIME --mem=$MEM --gpus=$GPUS --partition=$PARTITION --output=$log_file scripts/slurm/det_seg.sbatch detection fp32 $model $EXPERIMENT"
         fp32_job_ids+=("DRY_RUN_ID")
     else
         echo "Submitting: $job_name"
-        output=$(sbatch --job-name="$job_name" --time="$TIME" --mem="$MEM" --gpus="$GPUS" --partition="$PARTITION" --output="$log_file" scripts/slurm/det_seg.sbatch detection "$model" "$EXPERIMENT" 2>&1)
+        output=$(sbatch --job-name="$job_name" --time="$TIME" --mem="$MEM" --gpus="$GPUS" --partition="$PARTITION" --output="$log_file" scripts/slurm/det_seg.sbatch detection fp32 "$model" "$EXPERIMENT" 2>&1)
         job_id=$(echo "$output" | grep -oP 'Submitted batch job \K[0-9]+' || echo "")
         if [ -z "$job_id" ]; then
             echo "  ERROR submitting $model: $output"
@@ -103,11 +103,11 @@ if [ "$RUN_QAT" = true ]; then
         log_file="runs/phase7/logs/p7_${model}_qat_%j.log"
 
         if [ "$DRY_RUN" = true ]; then
-            echo "[DRY-RUN] sbatch --job-name=$job_name --time=$TIME --mem=$MEM --gpus=$GPUS --partition=$PARTITION --output=$log_file --dependency=afterok:$depend_on scripts/slurm/det_seg.sbatch qat $model $EXPERIMENT"
+            echo "[DRY-RUN] sbatch --job-name=$job_name --time=$TIME --mem=$MEM --gpus=$GPUS --partition=$PARTITION --output=$log_file --dependency=afterok:$depend_on scripts/slurm/det_seg.sbatch detection qat $model $EXPERIMENT"
             qat_job_ids+=("DRY_RUN_ID")
         else
             echo "Submitting: $job_name (depends on FP32 job $depend_on)"
-            output=$(sbatch --job-name="$job_name" --time="$TIME" --mem="$MEM" --gpus="$GPUS" --partition="$PARTITION" --output="$log_file" --dependency="afterok:$depend_on" scripts/slurm/det_seg.sbatch qat "$model" "$EXPERIMENT" 2>&1)
+            output=$(sbatch --job-name="$job_name" --time="$TIME" --mem="$MEM" --gpus="$GPUS" --partition="$PARTITION" --output="$log_file" --dependency="afterok:$depend_on" scripts/slurm/det_seg.sbatch detection qat "$model" "$EXPERIMENT" 2>&1)
             job_id=$(echo "$output" | grep -oP 'Submitted batch job \K[0-9]+' || echo "")
             if [ -z "$job_id" ]; then
                 echo "  ERROR: $output"
@@ -138,10 +138,10 @@ if [ "$RUN_QAT" = true ]; then
             log_file="runs/phase7/logs/p7_${model}_int8_%j.log"
 
             if [ "$DRY_RUN" = true ]; then
-                echo "[DRY-RUN] sbatch --job-name=$job_name --time=$TIME --mem=$MEM --gpus=$GPUS --partition=$PARTITION --output=$log_file --dependency=afterok:$depend_on scripts/slurm/det_seg.sbatch int8 $model $EXPERIMENT"
+                echo "[DRY-RUN] sbatch --job-name=$job_name --time=$TIME --mem=$MEM --gpus=$GPUS --partition=$PARTITION --output=$log_file --dependency=afterok:$depend_on scripts/slurm/det_seg.sbatch detection int8 $model $EXPERIMENT"
             else
                 echo "Submitting: $job_name (depends on QAT job $depend_on)"
-                output=$(sbatch --job-name="$job_name" --time="$TIME" --mem="$MEM" --gpus="$GPUS" --partition="$PARTITION" --output="$log_file" --dependency="afterok:$depend_on" scripts/slurm/det_seg.sbatch int8 "$model" "$EXPERIMENT" 2>&1)
+                output=$(sbatch --job-name="$job_name" --time="$TIME" --mem="$MEM" --gpus="$GPUS" --partition="$PARTITION" --output="$log_file" --dependency="afterok:$depend_on" scripts/slurm/det_seg.sbatch detection int8 "$model" "$EXPERIMENT" 2>&1)
                 job_id=$(echo "$output" | grep -oP 'Submitted batch job \K[0-9]+' || echo "")
                 if [ -z "$job_id" ]; then
                     echo "  ERROR: $output"

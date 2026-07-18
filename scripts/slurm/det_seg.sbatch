@@ -19,11 +19,12 @@ export PYTHONHASHSEED=42
 
 # Training parameters (override as needed)
 TASK=${1:-detection}
-MODEL=${2:-alexnet_bottleneck}
-EXPERIMENT=${3:-phase7_detection}
+STAGE=${2:-fp32}
+MODEL=${3:-alexnet_bottleneck}
+EXPERIMENT=${4:-phase7_detection}
 
 echo "===================================================="
-echo "Phase 7 ${TASK} training"
+echo "Phase 7 ${TASK} training [${STAGE}]"
 echo "Model: ${MODEL}"
 echo "Experiment: ${EXPERIMENT}"
 echo "===================================================="
@@ -31,6 +32,7 @@ echo "===================================================="
 # Run training
 python scripts/train_det_seg.py ${TASK} \
     --model ${MODEL} \
+    --stage ${STAGE} \
     --experiment ${EXPERIMENT} \
     --runtime local \
     --save-dir runs/phase7
