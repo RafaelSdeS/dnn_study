@@ -21,12 +21,12 @@ from .quantization import find_fuse_groups
 
 BACKBONE_FEATURE_CONFIG = {
     "alexnet_bottleneck": {
-        "feature_indices": [2, 6],
+        "feature_indices": [3, 6],
         "out_channels": [192, 256],
         "ctor": AlexNetBottleneck,
     },
     "alexnet_fire": {
-        "feature_indices": [2, 6],
+        "feature_indices": [3, 6],
         "out_channels": [192, 256],
         "ctor": AlexNetFire,
     },
