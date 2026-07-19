@@ -1,0 +1,6 @@
+# Phase 7 smoke test: 3 epochs at 512px to validate config improvements
+# before committing to full 30-epoch sweep.
+# Go/no-go gate: mAP@.5 after 3 epochs should exceed the old 30-epoch baseline's 7.53%
+
+trainer:
+  epochs: 3
