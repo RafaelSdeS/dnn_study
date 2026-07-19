@@ -1,7 +1,7 @@
 # Phase 7 detection training config
 
 data:
-  img_size: 256
+  img_size: 512
   voc_root: ~/.cache/torchvision/datasets
   batch_size: 16
   num_workers: 4

@@ -84,7 +84,7 @@ def run_detection(args):
 
         # Build model
         print(f"\nBuilding SSD detector ({args.model})...")
-        model = build_ssd_detector(args.model, num_classes=21, image_size=256)
+        model = build_ssd_detector(args.model, num_classes=21, image_size=data_cfg.img_size)
         print(f"  Model ready. Parameter count: {sum(p.numel() for p in model.parameters()):,}")
 
         # Anchor-recall pre-flight gate: mAP is capped regardless of training quality
@@ -119,7 +119,7 @@ def run_detection(args):
             print(f"Make sure you run FP32 training first: python {__file__} detection --model {args.model} --stage fp32")
             return
 
-        model = build_ssd_detector(args.model, num_classes=21, image_size=256)
+        model = build_ssd_detector(args.model, num_classes=21, image_size=data_cfg.img_size)
         ckpt_state = torch.load(fp32_ckpt, map_location=device, weights_only=False)
         model.load_state_dict(ckpt_state)
         model.to(device)
@@ -160,7 +160,7 @@ def run_detection(args):
             print(f"Make sure you run QAT training first: python {__file__} detection --model {args.model} --stage qat")
             return
 
-        model_qat = build_ssd_detector(args.model, num_classes=21, image_size=256)
+        model_qat = build_ssd_detector(args.model, num_classes=21, image_size=data_cfg.img_size)
         model_qat = build_qat_ssd_detector(model_qat, device)
         ckpt_state = torch.load(qat_ckpt, map_location=device, weights_only=False)
         model_qat.load_state_dict(ckpt_state)
