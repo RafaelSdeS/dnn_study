@@ -263,12 +263,14 @@ def compute_anchor_recall(
 
     total_boxes = 0
     matched_boxes = 0
+    images_seen = 0
 
     model.eval()
     with torch.no_grad():
         for images, targets in dataloader:
-            if total_boxes >= max_samples * 100:  # ~100 boxes per sample
+            if images_seen >= max_samples:
                 break
+            images_seen += images.shape[0]
 
             # Get default boxes (anchors) for this batch
             # backbone returns OrderedDict; anchor_generator expects list of tensors
