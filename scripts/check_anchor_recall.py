@@ -5,8 +5,10 @@ Usage:
     python scripts/check_anchor_recall.py --model alexnet_bottleneck --img-size 256 512
 """
 import argparse
+import sys
+from pathlib import Path
 
-import torch
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from ml import DetSegDataConfig, build_ssd_detector, compute_anchor_recall, create_voc_detection_loaders
 from ml.runtime import expand_path
