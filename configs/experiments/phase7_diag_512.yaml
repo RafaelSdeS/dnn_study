@@ -1,0 +1,9 @@
+# Diagnostic: matched counterpart to phase7_diag_256.yaml, isolating resolution
+# as the only changed variable. Same [3,6] tap-index + augmentation + warmup,
+# 10 epochs, at 512px.
+data:
+  img_size: 512
+
+trainer:
+  epochs: 10
+  warmup_epochs: 0
