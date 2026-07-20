@@ -6,9 +6,12 @@ Usage:
 """
 import argparse
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+import yaml
 
 from ml import DetSegDataConfig, build_ssd_detector, compute_anchor_recall, create_voc_detection_loaders
 from ml.runtime import expand_path
@@ -19,8 +22,11 @@ parser.add_argument("--img-size", type=int, nargs="+", default=[256, 512])
 parser.add_argument("--max-samples", type=int, default=200)
 args = parser.parse_args()
 
+with open("configs/detection.yaml") as f:
+    base_data_cfg = DetSegDataConfig(**yaml.safe_load(f).get("data", {}))
+
 for img_size in args.img_size:
-    data_cfg = DetSegDataConfig(img_size=img_size)
+    data_cfg = replace(base_data_cfg, img_size=img_size)
     data_cfg.voc_root = expand_path(data_cfg.voc_root)
     _, _, _, val_loader = create_voc_detection_loaders(data_cfg)
 

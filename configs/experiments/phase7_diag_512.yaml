@@ -1,8 +1,11 @@
 # Diagnostic: matched counterpart to phase7_diag_256.yaml, isolating resolution
 # as the only changed variable. Same [3,6] tap-index + augmentation + warmup,
 # 10 epochs, at 512px.
+# num_workers: 1 — job 805529 segfaulted mid-epoch-1 at num_workers=4/512px,
+# likely shared-memory exhaustion from larger tensors crossing worker processes.
 data:
   img_size: 512
+  num_workers: 1
 
 trainer:
   epochs: 10
