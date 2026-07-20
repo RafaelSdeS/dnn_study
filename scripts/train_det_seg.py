@@ -59,6 +59,8 @@ def run_detection(args):
     # Setup paths
     stage_suffix = {"fp32": "fp32", "qat": "qat", "int8": "int8"}[args.stage]
     run_id = f"ssd_{args.model}_{stage_suffix}"
+    if args.experiment:
+        run_id += f"_{args.experiment}"
     run_dir = Path(args.save_dir) / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
 

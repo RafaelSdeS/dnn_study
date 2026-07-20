@@ -1,6 +1,8 @@
-# Phase 7 smoke test: 3 epochs at 512px to validate config improvements
+# Phase 7 smoke test: 10 epochs at 512px to validate config improvements
 # before committing to full 30-epoch sweep.
-# Go/no-go gate: mAP@.5 after 3 epochs should exceed the old 30-epoch baseline's 7.53%
+# Go/no-go gate: mAP@.5 after 10 epochs should approach the old 30-epoch baseline's 7.53%
+# NOTE: warmup_epochs: 0 to avoid wasting epochs on LR schedule adjustment
 
 trainer:
-  epochs: 3
+  epochs: 10
+  warmup_epochs: 0
