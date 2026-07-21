@@ -66,6 +66,7 @@ class DetectionTrainer:
         cfg = self.cfg
         model = self.model.to(self.device)
         optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
+        scaler = torch.amp.GradScaler("cuda") if cfg.use_amp else None
         if cfg.warmup_epochs > 0:
             warmup = torch.optim.lr_scheduler.LinearLR(
                 optimizer, start_factor=0.1, total_iters=cfg.warmup_epochs
@@ -94,7 +95,7 @@ class DetectionTrainer:
 
         # Load state if resuming
         if resume_from is not None and Path(resume_from).exists():
-            state = load_resume_state(resume_from, model, optimizer, scheduler, None, device=str(self.device))
+            state = load_resume_state(resume_from, model, optimizer, scheduler, scaler, device=str(self.device))
             start_epoch = state["epoch"] + 1
             best_val_mAP = state.get("best_val_mAP", 0.0)
             best_epoch = start_epoch - 1
@@ -118,7 +119,7 @@ class DetectionTrainer:
                 torch.cuda.reset_peak_memory_stats(self.device)
 
             with GpuSampler() as gpu_sampler:
-                train_loss_bbox, train_loss_cls = self._train_one_epoch(model, optimizer)
+                train_loss_bbox, train_loss_cls = self._train_one_epoch(model, optimizer, scaler)
                 val_mAP, val_mAP50 = self._validate(model)
 
             gpu_metrics = gpu_sampler.summary()
@@ -185,6 +186,7 @@ class DetectionTrainer:
                 resume_path, model, optimizer, scheduler, epoch,
                 {"best_val_mAP": best_val_mAP, "patience_counter": patience_counter, "history": history,
                  "elapsed_time_s": elapsed_time_s + (time.time() - train_start)},
+                scaler=scaler,
             )
 
             if cfg.early_stopping_patience is not None and patience_counter >= cfg.early_stopping_patience:
@@ -199,9 +201,10 @@ class DetectionTrainer:
         self.logger.info(f"Training complete. Best mAP: {best_val_mAP:.4f} at epoch {best_epoch + 1}")
         return history
 
-    def _train_one_epoch(self, model: nn.Module, optimizer: torch.optim.Optimizer) -> tuple:
+    def _train_one_epoch(self, model: nn.Module, optimizer: torch.optim.Optimizer, scaler=None) -> tuple:
         """Train one epoch, return (loss_bbox, loss_cls)."""
         model.train()
+        cfg = self.cfg
         total_loss_bbox = 0.0
         total_loss_cls = 0.0
         n_batches = 0
@@ -212,17 +215,24 @@ class DetectionTrainer:
 
             optimizer.zero_grad()
 
-            # Forward pass (training mode, SSD computes loss)
-            loss_dict = model(images, targets)
-
-            loss = loss_dict["bbox_regression"] + loss_dict["classification"]
-            loss.backward()
-
-            # Gradient clipping if configured
-            if self.cfg.grad_clip_norm is not None:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), self.cfg.grad_clip_norm)
-
-            optimizer.step()
+            if cfg.use_amp and scaler:
+                with torch.amp.autocast("cuda"):
+                    loss_dict = model(images, targets)
+                    loss = loss_dict["bbox_regression"] + loss_dict["classification"]
+                scaler.scale(loss).backward()
+                if cfg.grad_clip_norm is not None:
+                    scaler.unscale_(optimizer)
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.grad_clip_norm)
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                # Forward pass (training mode, SSD computes loss)
+                loss_dict = model(images, targets)
+                loss = loss_dict["bbox_regression"] + loss_dict["classification"]
+                loss.backward()
+                if cfg.grad_clip_norm is not None:
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.grad_clip_norm)
+                optimizer.step()
 
             total_loss_bbox += loss_dict["bbox_regression"].item()
             total_loss_cls += loss_dict["classification"].item()

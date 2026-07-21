@@ -156,6 +156,7 @@ def create_voc_detection_loaders(cfg: DetSegDataConfig) -> Tuple:
         shuffle=True,
         num_workers=cfg.num_workers,
         pin_memory=cfg.pin_memory,
+        persistent_workers=cfg.num_workers > 0,
         collate_fn=_detection_collate_fn,
     )
     val_loader = DataLoader(
@@ -164,6 +165,7 @@ def create_voc_detection_loaders(cfg: DetSegDataConfig) -> Tuple:
         shuffle=False,
         num_workers=cfg.num_workers,
         pin_memory=cfg.pin_memory,
+        persistent_workers=cfg.num_workers > 0,
         collate_fn=_detection_collate_fn,
     )
 

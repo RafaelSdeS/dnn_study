@@ -1,9 +1,72 @@
 import json
+import time
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import torch
+
+
+def compute_detection_summary(
+    model, image_size: int, val_loader, device, checkpoint_path: str | Path | None = None,
+) -> dict:
+    """Params, FLOPs, disk size, and inference latency/throughput for a trained detection model.
+
+    Mirrors the classification-side fields from make_run_summary (params_m, macs, flops,
+    size, latency/throughput), adapted to detection models' list-of-tensors forward signature.
+    FLOPs/benchmark are best-effort — SSD's custom ops can trip up fvcore, so failures degrade
+    to None rather than crashing a finished training run.
+    """
+    model = model.eval().to(device)
+    params_m = sum(p.numel() for p in model.parameters()) / 1e6
+
+    macs = flops = None
+    try:
+        from fvcore.nn import FlopCountAnalysis
+        dummy = torch.zeros(3, image_size, image_size, device=device)
+        analysis = FlopCountAnalysis(model, ([dummy],))
+        analysis.unsupported_ops_warnings(False)
+        analysis.uncalled_modules_warnings(False)
+        macs = analysis.total()
+        flops = macs * 2
+    except Exception:
+        pass
+
+    latency_ms = throughput = None
+    try:
+        with torch.no_grad():
+            n_warmup = 0
+            for images, _ in val_loader:
+                model([img.to(device) for img in images])
+                n_warmup += len(images)
+                if n_warmup >= 20:
+                    break
+
+            total_images = 0
+            t0 = time.perf_counter()
+            for images, _ in val_loader:
+                model([img.to(device) for img in images])
+                total_images += len(images)
+                if total_images >= 200:
+                    break
+            if device.type == "cuda":
+                torch.cuda.synchronize()
+            elapsed = time.perf_counter() - t0
+        if total_images > 0 and elapsed > 0:
+            latency_ms = (elapsed / total_images) * 1000
+            throughput = total_images / elapsed
+    except Exception:
+        pass
+
+    return {
+        "params_m": params_m,
+        "macs": macs,
+        "flops": flops,
+        "model_size_mb": disk_mb(checkpoint_path) if checkpoint_path else None,
+        "latency_ms_per_image": latency_ms,
+        "throughput_img_per_s": throughput,
+    }
 
 
 def disk_mb(path: str | Path) -> float | None:

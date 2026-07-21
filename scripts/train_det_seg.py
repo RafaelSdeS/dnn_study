@@ -21,12 +21,18 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import torch
 import yaml
 
+# Default 'file_descriptor' sharing strategy exhausts /dev/shm when many workers pass large
+# (512px) tensors between processes — this is what caused job 805529's mid-epoch segfault.
+# 'file_system' avoids the shared-memory limit entirely, letting num_workers scale safely.
+torch.multiprocessing.set_sharing_strategy("file_system")
+
 from ml import (
     DetSegDataConfig, TrainerConfig, DetectionTrainer,
     create_voc_detection_loaders, build_ssd_detector,
 )
 from ml.det_seg_models import build_qat_ssd_detector, convert_ssd_to_int8, compute_anchor_recall
 from ml.quantization import make_qat_callback
+from ml.reporting import compute_detection_summary
 from ml.runtime import expand_path
 
 
@@ -109,6 +115,10 @@ def run_detection(args):
         )
 
         history = trainer.fit(resume_from=run_dir / f"{run_id}_resume.pth")
+        history["summary"] = compute_detection_summary(
+            model, data_cfg.img_size, val_loader, device,
+            checkpoint_path=run_dir / f"{run_id}_best.pth",
+        )
 
     elif args.stage == "qat":
         # ========== QAT Fine-tuning ==========
@@ -150,6 +160,10 @@ def run_detection(args):
         )
 
         history = trainer.fit(resume_from=run_dir / f"{run_id}_resume.pth")
+        history["summary"] = compute_detection_summary(
+            model_qat, data_cfg.img_size, val_loader, device,
+            checkpoint_path=run_dir / f"{run_id}_best.pth",
+        )
 
     elif args.stage == "int8":
         # ========== INT8 Conversion & Evaluation ==========

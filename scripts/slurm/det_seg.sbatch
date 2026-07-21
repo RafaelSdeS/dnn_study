@@ -14,6 +14,7 @@ source .venv/bin/activate
 
 # Set seed for reproducibility
 export PYTHONHASHSEED=42
+export PYTHONUNBUFFERED=1
 
 # Training parameters (override as needed)
 TASK=${1:-detection}
