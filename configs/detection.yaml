@@ -4,7 +4,7 @@ data:
   img_size: 512
   voc_root: ~/.cache/torchvision/datasets
   batch_size: 16
-  num_workers: 4
+  num_workers: 1  # 4 segfaults mid-epoch at 512px (job 805529) — shared-memory exhaustion
   pin_memory: true
   seed: 42
 
