@@ -30,16 +30,41 @@ ml/                       # Core package — notebooks import everything from he
 models/                   # Architectures by phase (see Model Inventory)
   baselines.py alexnet_variants.py compensation.py tinyhybridnet.py final_architecture.py
 configs/                  # YAML hyperparameters, loaded via configs/loader.py → load_config(name)
-  data.yaml training.yaml qat.yaml
+  data.yaml training.yaml qat.yaml experiments/
   models/alexnet_fp32.yaml   # per-model lr overrides (only this one remains)
 notebooks/                # One per phase: baselines_qat, alexnet_qat, compensation_qat,
                           #   tinyhybridnet_qat, compression_phase4_1, final_architecture_qat,
                           #   *_results / results_analysis (figures)
 results/                  # git-ignored CSVs/JSON/figures, one dir per phase + results.csv, model_details.csv
-ideas/BEST_MODELS.md      # cross-phase rankings & recommendations   ideas/MODELS.md — arch notes
+docs/                     # Documentation (flat): PHASE7_QUICKSTART.md, PHASE7_MULTINODE.md, PHASE7_LOG.md
+ideas/                    # Research notes (flat):
+  BEST_MODELS.md          #   cross-phase rankings & recommendations
+  MODELS.md               #   architecture notes & design rationale
+  PHASE6_PLAN.md PHASE7_PLAN.md PHASE8_PLAN.md  # research & execution plans
+outputs/                  # Training artifacts & logs
+  pcad/
+    logs/large_scale/     # 26 SLURM job output files (detection/segmentation runs)
+    large_scale/          # Training outputs from large-scale PCAD runs
+    alexnet_3x3_gap/      # Model checkpoints, results, tensorboard
+    phase6_backfill/      # GPU profiling backfill data
+    etc/                  # Other model runs
+  local/                  # Local machine runs
 ```
 
 Runtime artifacts (git-ignored): `checkpoints/{arch}_best.pth`, `qat_{arch}_best.pth`, `{arch}.pth` (INT8); logs `{arch}.log`, `qat_{arch}.log`.
+
+---
+
+## Recent Changes (2026-07-22)
+
+**Reorganization commits:** `214c20a` (structure), `3ce1ffe` (path fix)
+
+- Moved all 26 SLURM output files from root to `outputs/pcad/logs/large_scale/`
+- Flattened `ideas/` and `docs/` directories (removed subdirectories, all files at root level)
+  - `docs/`: PHASE7_QUICKSTART.md, PHASE7_MULTINODE.md, PHASE7_LOG.md
+  - `ideas/`: BEST_MODELS.md, MODELS.md, PHASE6/7/8_PLAN.md, PHASE7_LOG.md (moved from ideas/)
+- Fixed nested `outputs/pcad/alexnet_3x3_gap/alexnet_3x3_gap/` → flattened to `outputs/pcad/alexnet_3x3_gap/`
+- Verified all path references in notebooks and scripts are correct (no hardcoded breakage)
 
 ---
 
