@@ -46,6 +46,28 @@ statistically meaningful margin (single run, so "meaningful" = larger than the ~
 noise visible between `best_val_top1` and `final_val_top1` in existing summary JSONs), and INT8
 drop stays within the ±1pp band every other Fire/Bottleneck-family model has shown.
 
+**Result — met.** PCAD job 806654 (`configs/experiments/phase9_fire_bypass.yaml`, 66 epochs to
+early-stopping), `outputs/pcad/phase9_fire_bypass/alexnet_fire_bypass/results/alexnet_fire_bypass_summary.json`:
+
+| model | FP32 top-1 | FP32 top-5 | INT8 top-1 | INT8 top-5 | quant Δtop-1 | size FP32→INT8 |
+|---|---|---|---|---|---|---|
+| `alexnet_fire` | 43.98% | 70.43% | 44.30% | 70.88% | −0.33pp (gain) | 5.99→0.55 MB |
+| `alexnet_fire_bypass` | **47.05%** | 73.14% | **47.16%** | 72.71% | −0.11pp (gain) | 5.99→0.55 MB |
+| `alexnet_final_fire_residual` | 49.79% | 74.80% | 49.20% | 74.39% | +0.59pp (drop) | 8.09→0.75 MB |
+
+Same params, same size as `alexnet_fire` (D1 held exactly, as verified pre-training) — this
++3.07pp FP32 / +2.86pp INT8 came from the one skip connection alone, for zero added capacity.
+
+That accounts for **~53% of the FP32 gap and ~58% of the INT8 gap** between `alexnet_fire` and
+`alexnet_final_fire_residual` (+5.81pp / +4.90pp total). The remaining ~47%/42% is the stem
+change plus the other two (non-channel-matched, 1×1-projected) residual pairs Phase 4 adds —
+still an open question, but now a smaller and better-bounded one.
+
+Quantization stability also transfers cleanly: like plain `alexnet_fire`, the bypass variant
+*gains* accuracy on INT8 conversion (−0.11pp) rather than losing it — unlike the full Phase 4
+model's modest +0.59pp drop. That drop, whatever causes it (stem, or the projected shortcuts),
+isn't coming from the bypass mechanism itself.
+
 ---
 
 ### H2: Structured Channel Pruning Trades Size for Accuracy Without Breaking Dense Structure
@@ -151,7 +173,7 @@ is only to tell us whether that investment is worth making.
 
 ---
 
-## Task 1 — `AlexNetFireBypass` (`models/compensation.py`)
+## Task 1 — `AlexNetFireBypass` (`models/compensation.py`) — Done
 
 Add immediately after `AlexNetFire` (`models/compensation.py:420`, right after its `forward`).
 Identical `features` Sequential to `AlexNetFire`, except `fire4`/`fire5` become named submodules
@@ -213,9 +235,10 @@ and `torch.cat` + `FloatFunctional.add` are both QAT-safe (same pattern `_FireRe
 uses in production).
 
 **What this answers:** three-way comparison — `alexnet_fire` (43.98%/44.30%) vs.
-`alexnet_fire_bypass` (new) vs. `alexnet_final_fire_residual` (49.79%/49.20%) — isolates how much
-of Phase 4's gain is bypass alone vs. the stem change (D2) vs. the other two residual pairs Phase
-4 adds that aren't channel-matched.
+`alexnet_fire_bypass` vs. `alexnet_final_fire_residual` (49.79%/49.20%) — isolates how much of
+Phase 4's gain is bypass alone vs. the stem change (D2) vs. the other two residual pairs Phase 4
+adds that aren't channel-matched. **Result: bypass alone accounts for ~53-58% of the gap** — see
+H1's Result above for the full breakdown.
 
 ---
 
@@ -319,17 +342,23 @@ building" signal the phase was scoped to produce.
 
 ## SCOPE & EFFORT
 
-- **Task 1** — small, code done. One class (copy-paste-modify of `AlexNetFire`, ~25 lines) + two
-  registration entries (same pattern as every other Phase 3 model). Only the actual
-  FP32→QAT→INT8 notebook run is outstanding — needs explicit go-ahead per this repo's workflow rule.
-- **Task 3** — small, done. Pure measurement script, no training, no model changes. Had no
-  dependency on Task 1 — ran against `alexnet_fire`'s existing PCAD checkpoint.
+- **Task 1** — done. Ran on PCAD (job 806654, `tupi_4090`, 66 epochs to early-stopping, ~1h23m).
+  Bypass alone accounts for ~53-58% of Phase 4's gain over plain `alexnet_fire`, for zero added
+  parameters — see H1's Result.
+- **Task 3** — done. Pure measurement script, no training, no model changes. Had no dependency on
+  Task 1 — ran against `alexnet_fire`'s existing PCAD checkpoint.
 - **Task 2** — done at this phase's scope (mechanics + one unfine-tuned measurement, scoped to
-  `_AlexBottleneck`'s internal width — see Task 2's scope-refinement note). A *useful* pruned-accuracy
-  result still needs a fine-tuning loop, which is a multi-day effort (new training runs per ratio,
-  per model) and remains future work. Task 3's result (k-means beats gzip at all three cluster
-  counts) makes the compression side worth pursuing further; Task 1's bypass result (pending the
-  training run) is the remaining input for deciding how much further to push Task 2.
+  `_AlexBottleneck`'s internal width — see Task 2's scope-refinement note). A *useful*
+  pruned-accuracy result still needs a fine-tuning loop, which is a multi-day effort (new training
+  runs per ratio, per model) and remains future work.
+
+**Where this leaves Task 2's next step, now that all three inputs are in:** Task 1 shows bypass is
+a real, free (zero-parameter) accuracy lever — worth adding to whatever gets pruned next rather
+than pruning `alexnet_bottleneck`/`alexnet_fire` in isolation. Task 3 shows real weight-sharing
+headroom exists above gzip. Together they suggest the next investment is either (a) generalizing
+`ml/pruning.py` past `_AlexBottleneck` so `alexnet_fire_bypass` itself can be pruned, or (b)
+building the fine-tuning loop to get real pruned-accuracy numbers — both still multi-day, neither
+started here.
 
 ---
 
@@ -367,9 +396,9 @@ correction note.
       516,152, verified
 - [x] `alexnet_fire_bypass` registered identically in `ml/model_registrations.py` and
       `notebooks/training/compensation_qat.ipynb`
-- [ ] FP32→QAT→INT8 run produces a `alexnet_fire_bypass_summary.json` with the same fields as
-      existing Phase 3 summaries (`evaluate(topk=(1,5))` numbers present) — **not run yet**, needs
-      explicit go-ahead per this repo's no-unrequested-training rule
+- [x] FP32→QAT→INT8 run produces a `alexnet_fire_bypass_summary.json` with the same fields as
+      existing Phase 3 summaries (`evaluate(topk=(1,5))` numbers present) — PCAD job 806654,
+      `outputs/pcad/phase9_fire_bypass/alexnet_fire_bypass/results/alexnet_fire_bypass_summary.json`
 - [x] `pytest tests/` passes, in particular `test_registry.py` and `test_quantization.py`, after
       adding the new model/registration
 - [x] `scripts/prune_channels.py --dry-run` prints channel counts without writing files
