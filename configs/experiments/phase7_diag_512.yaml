@@ -1,0 +1,15 @@
+# Diagnostic: matched counterpart to phase7_diag_256.yaml, isolating resolution
+# as the only changed variable. Same [3,6] tap-index + augmentation + warmup.
+# num_workers: 1 — job 805529 segfaulted mid-epoch-1 at num_workers=4/512px,
+# likely shared-memory exhaustion from larger tensors crossing worker processes.
+# epochs bumped 10->30: job 805541 banked a clean 10-epoch checkpoint (1.61% mAP@.5,
+# still climbing, below the 7.53% go/no-go bar at epoch 10). Resuming from that
+# checkpoint to 30 epochs gives an apples-to-apples read against the old 30-epoch
+# baseline before committing to the full Stage 7 sweep.
+data:
+  img_size: 512
+  num_workers: 1
+
+trainer:
+  epochs: 30
+  warmup_epochs: 0

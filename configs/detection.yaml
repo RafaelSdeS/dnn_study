@@ -1,0 +1,19 @@
+# Phase 7 detection training config
+
+data:
+  img_size: 512
+  voc_root: ~/.cache/torchvision/datasets
+  batch_size: 16
+  num_workers: 4  # safe again now that train_det_seg.py sets sharing_strategy="file_system"
+  pin_memory: true
+  seed: 42
+
+trainer:
+  epochs: 30
+  lr: 1.0e-4
+  weight_decay: 4.0e-4
+  label_smoothing: 0.1
+  grad_clip_norm: null
+  use_amp: true
+  early_stopping_patience: 10
+  warmup_epochs: 2

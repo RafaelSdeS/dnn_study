@@ -14,8 +14,10 @@ dependencies:
   - tensorboard
   - pip:
       - -e .
-      - torchmetrics
+      - pytest
+      - torchmetrics==1.9.0
       - torchinfo
       - fvcore
       - wandb
       - kagglehub
+      - pycocotools==2.0.11

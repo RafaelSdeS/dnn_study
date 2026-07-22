@@ -4,6 +4,7 @@ import time
 from pathlib import Path
 from typing import Callable, Optional
 
+import psutil
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -11,6 +12,7 @@ from tqdm.auto import tqdm
 
 from .checkpoint import save_checkpoint, load_resume_state
 from .config import TrainerConfig
+from .profiling import GpuSampler
 
 
 class Trainer:
@@ -82,7 +84,11 @@ class Trainer:
         history: dict[str, list] = {
             "train_loss": [], "train_acc": [], "val_loss": [], "val_acc": [], "val_top5": [],
             "epoch_time_s": [], "peak_gpu_mem_mb": [], "lr": [],
+            "images_per_sec": [], "avg_batch_time_s": [], "cpu_percent": [], "ram_used_mb": [],
+            "gpu_power_avg_w": [], "gpu_utilization_pct": [], "gpu_temp_avg_c": [],
+            "gpu_memory_used_avg_mb": [], "gpu_energy_wh": [],
         }
+        psutil.cpu_percent(interval=None)  # prime the delta-since-last-call counter
 
         # Load full training state if resuming
         if resume_from is not None and Path(resume_from).exists():
@@ -113,8 +119,10 @@ class Trainer:
             if torch.cuda.is_available():
                 torch.cuda.reset_peak_memory_stats(self.device)
 
-            train_loss, train_acc, avg_grad_norm = self._train_one_epoch(model, optimizer, scaler, criterion)
-            val_loss, val_acc, val_top5 = self._validate(model, criterion)
+            with GpuSampler() as gpu_sampler:
+                train_loss, train_acc, avg_grad_norm = self._train_one_epoch(model, optimizer, scaler, criterion)
+                val_loss, val_acc, val_top5 = self._validate(model, criterion)
+            gpu_metrics = gpu_sampler.summary()
             scheduler.step()
             lr = optimizer.param_groups[0]["lr"]
 
@@ -123,6 +131,11 @@ class Trainer:
                 torch.cuda.max_memory_allocated(self.device) / (1024 ** 2)
                 if torch.cuda.is_available() else 0.0
             )
+            n_batches = len(self.train_loader)
+            images_per_sec = (n_batches * self.train_loader.batch_size) / epoch_time if epoch_time > 0 else None
+            avg_batch_time_s = epoch_time / n_batches if n_batches else None
+            cpu_percent = psutil.cpu_percent(interval=None)
+            ram_used_mb = psutil.virtual_memory().used / (1024 ** 2)
 
             history["train_loss"].append(train_loss)
             history["train_acc"].append(train_acc)
@@ -132,32 +145,34 @@ class Trainer:
             history["epoch_time_s"].append(epoch_time)
             history["peak_gpu_mem_mb"].append(peak_mem)
             history["lr"].append(lr)
+            history["images_per_sec"].append(images_per_sec)
+            history["avg_batch_time_s"].append(avg_batch_time_s)
+            history["cpu_percent"].append(cpu_percent)
+            history["ram_used_mb"].append(ram_used_mb)
+            history["gpu_power_avg_w"].append(gpu_metrics["gpu_power_avg_w"])
+            history["gpu_utilization_pct"].append(gpu_metrics["gpu_utilization_pct"])
+            history["gpu_temp_avg_c"].append(gpu_metrics["gpu_temp_avg_c"])
+            history["gpu_memory_used_avg_mb"].append(gpu_metrics["gpu_memory_used_avg_mb"])
+            history["gpu_energy_wh"].append(gpu_metrics["gpu_energy_wh"])
             if avg_grad_norm is not None:
                 history.setdefault("grad_norm", []).append(avg_grad_norm)
 
+            epoch_metrics = {
+                "train_loss": train_loss, "train_acc": train_acc,
+                "val_loss": val_loss, "val_acc": val_acc, "val_top5": val_top5,
+                "lr": lr, "epoch_time_s": epoch_time, "peak_gpu_mem_mb": peak_mem,
+                "images_per_sec": images_per_sec, "avg_batch_time_s": avg_batch_time_s,
+                "cpu_percent": cpu_percent, "ram_used_mb": ram_used_mb,
+                **gpu_metrics,
+            }
+            if avg_grad_norm is not None:
+                epoch_metrics["grad_norm"] = avg_grad_norm
+
             if self.wandb_run is not None:
-                log_dict = {
-                    "train_loss": train_loss, "train_acc": train_acc,
-                    "val_loss": val_loss, "val_acc": val_acc, "val_top5": val_top5,
-                    "lr": lr, "epoch_time_s": epoch_time, "peak_gpu_mem_mb": peak_mem,
-                }
-                if avg_grad_norm is not None:
-                    log_dict["grad_norm"] = avg_grad_norm
-                self.wandb_run.log(log_dict, step=epoch + 1)
+                self.wandb_run.log(epoch_metrics, step=epoch + 1)
 
             if self.metrics_callback is not None:
-                self.metrics_callback({
-                    "epoch": epoch + 1,
-                    "train_loss": train_loss,
-                    "train_acc": train_acc,
-                    "val_loss": val_loss,
-                    "val_acc": val_acc,
-                    "val_top5": val_top5,
-                    "lr": lr,
-                    "epoch_time_s": epoch_time,
-                    "peak_gpu_mem_mb": peak_mem,
-                    "grad_norm": avg_grad_norm,
-                })
+                self.metrics_callback({"epoch": epoch + 1, **epoch_metrics})
 
             # Save resume checkpoint every epoch (full training state for recovery)
             save_checkpoint(

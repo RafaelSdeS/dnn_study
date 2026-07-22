@@ -1,0 +1,28 @@
+# Phase 7 detection experiments — per-backbone configs
+
+# Bottleneck (small-kernel, channel-compressed)
+alexnet_bottleneck:
+  data:
+    batch_size: 16
+  trainer:
+    epochs: 30
+    lr: 1.0e-4
+    early_stopping_patience: 10
+
+# Fire (small-kernel variant)
+alexnet_fire:
+  data:
+    batch_size: 16
+  trainer:
+    epochs: 30
+    lr: 1.0e-4
+    early_stopping_patience: 10
+
+# TV baseline (large-kernel)
+alexnet_tv:
+  data:
+    batch_size: 16
+  trainer:
+    epochs: 30
+    lr: 1.0e-4
+    early_stopping_patience: 10

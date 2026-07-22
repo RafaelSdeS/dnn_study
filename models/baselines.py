@@ -2,7 +2,9 @@
 
 import torch.nn as nn
 import torch.ao.quantization as tq
-from torchvision.models import alexnet, resnet18, mobilenet_v2
+from torchvision.models import alexnet, mobilenet_v2
+from torchvision.models.quantization import mobilenet_v2 as mobilenet_v2_qat
+from torchvision.models.quantization import resnet18 as resnet18_qat
 
 
 def _fix_relu_inplace(module: nn.Module) -> None:
@@ -26,9 +28,9 @@ class AlexNetTV(nn.Module):
     Trade-off: large kernel sizes vs accuracy; classical vs modern architecture.
     """
 
-    def __init__(self, num_classes: int = 200):
+    def __init__(self, num_classes: int = 200, pretrained: bool = True):
         super().__init__()
-        base = alexnet(weights="IMAGENET1K_V1")
+        base = alexnet(weights="IMAGENET1K_V1" if pretrained else None)
         base.classifier[6] = nn.Linear(4096, num_classes)
         for name, module in base.features.named_children():
             if isinstance(module, nn.ReLU):
@@ -118,8 +120,11 @@ class ResNet18TV(nn.Module):
     Expected top-1: ~55-65% (pretrained + residual learning significantly helps).
     Size: ~44 MB FP32 / ~11 MB INT8.
     Training speed: fast (lightweight residual blocks).
-    QAT: partial — QuantStub/DeQuantStub added, inplace ReLU fixed. For full INT8
-    with correct residual quantization, use torchvision.models.quantization.resnet18().
+    QAT: full — uses torchvision's quantizable ResNet18 (QuantizableBasicBlock), whose
+    residual add already goes through FloatFunctional.add_relu, so both weights and
+    activations are fake-quantized correctly through the skip connection. QuantStub/
+    DeQuantStub are already built into QuantizableResNet.forward() (same as
+    MobileNetV2TV below) — no external quant/dequant wrapping needed or wanted here.
     Trade-off: residual connections vs no residuals; modern vs classical design.
     Note: 7×7 stem stride=2 + MaxPool reduces 64×64 → 8×8 early, may lose fine detail.
     """
@@ -127,19 +132,14 @@ class ResNet18TV(nn.Module):
     def __init__(self, num_classes: int = 200, pretrained: bool = True):
         super().__init__()
         weights = "IMAGENET1K_V1" if pretrained else None
-        base = resnet18(weights=weights)
+        base = resnet18_qat(weights=weights, quantize=False)
         base.fc = nn.Linear(512, num_classes)
         _fix_relu_inplace(base)
 
-        self.quant = tq.QuantStub()
         self.base = base
-        self.dequant = tq.DeQuantStub()
 
     def forward(self, x):
-        x = self.quant(x)
-        x = self.base(x)
-        x = self.dequant(x)
-        return x
+        return self.base(x)
 
 
 # ─── MobileNetV2TV ────────────────────────────────────────────────────────────
@@ -148,31 +148,26 @@ class MobileNetV2TV(nn.Module):
     """Torchvision MobileNetV2 pretrained on ImageNet, fine-tuned for 200 classes.
 
     Architecture: inverted residual blocks with depthwise separable convolutions,
-    linear bottlenecks, width multiplier 1.0. Replaces final Linear(1280, 1000) with
-    Linear(1280, 200).
+    linear bottlenecks, width multiplier 1.0. Uses quantization-aware version with
+    proper quantized residual additions (FloatFunctional). Replaces final Linear(1280, 1000)
+    with Linear(1280, 200).
     Expected top-1: ~55-65% (pretrained weights; efficient for inference).
     Size: ~14 MB FP32 / ~3.5 MB INT8.
     Training speed: fast (depthwise separable convolutions reduce FLOPs ~8-9×).
-    QAT: partial — QuantStub/DeQuantStub + inplace ReLU fixed. Full INT8 correctness
-    for residual adds requires torchvision.models.quantization.mobilenet_v2().
+    QAT: full — quantization-aware model handles residual adds correctly.
     Trade-off: efficiency via depthwise separable convolutions vs accuracy.
     """
 
     def __init__(self, num_classes: int = 200, pretrained: bool = True):
         super().__init__()
         weights = "IMAGENET1K_V2" if pretrained else None
-        base = mobilenet_v2(weights=weights)
+        base = mobilenet_v2_qat(weights=weights, quantize=False)
         base.classifier[1] = nn.Linear(1280, num_classes)
         _fix_relu_inplace(base)
 
-        self.quant = tq.QuantStub()
         self.base = base
-        self.dequant = tq.DeQuantStub()
 
     def forward(self, x):
-        x = self.quant(x)
-        x = self.base(x)
-        x = self.dequant(x)
-        return x
+        return self.base(x)
 
 

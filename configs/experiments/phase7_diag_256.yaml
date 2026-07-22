@@ -1,0 +1,10 @@
+# Diagnostic: bisect the 512px regression. Same [3,6] tap-index + augmentation +
+# warmup as the current pipeline, but back at the original 256px baseline resolution.
+# Short run (10 epochs, no warmup burn-off) — just need a fast read on whether mAP
+# tracks toward the old 7.53% baseline or stays near-zero like the 512px runs.
+data:
+  img_size: 256
+
+trainer:
+  epochs: 10
+  warmup_epochs: 0

@@ -9,7 +9,78 @@ import torch
 import torch.nn as nn
 import torch.profiler
 
-from .reporting import compute_flops
+
+class GpuSampler:
+    """Background nvidia-smi sampler for power/utilization/temperature/memory.
+
+    Use as a context manager around any block of work; call summary() after exit.
+    Degrades to all-None fields when nvidia-smi is unavailable (e.g. CPU-only boxes) —
+    same graceful-degradation behavior this sampling logic has always had.
+    """
+
+    _QUERY = "power.draw,utilization.gpu,temperature.gpu,memory.used"
+
+    def __init__(self, interval_ms: int = 200):
+        self._interval_ms = interval_ms
+        self._samples: list[tuple[float, float, float, float]] = []
+        self._stop = threading.Event()
+        self._thread = None
+        self._proc = None
+        self._elapsed_s = 0.0
+
+    def __enter__(self) -> "GpuSampler":
+        self._t0 = time.time()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self._stop.set()
+        if self._proc is not None:
+            self._proc.terminate()
+        if self._thread is not None:
+            self._thread.join(timeout=2.0)
+        self._elapsed_s = time.time() - self._t0
+
+    def _run(self) -> None:
+        try:
+            self._proc = subprocess.Popen(
+                ["nvidia-smi", f"--query-gpu={self._QUERY}",
+                 "--format=csv,noheader,nounits", f"--loop-ms={self._interval_ms}"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+            )
+            for line in self._proc.stdout:
+                if self._stop.is_set():
+                    break
+                try:
+                    power, util, temp, mem = (float(x) for x in line.split(","))
+                    self._samples.append((power, util, temp, mem))
+                except (ValueError, IndexError):
+                    pass
+        except FileNotFoundError:
+            pass  # nvidia-smi not available; continue without metrics.
+
+    def summary(self) -> dict:
+        """Return averaged power/util/temp/memory and total energy (Wh) over the sampled window."""
+        if not self._samples:
+            return {
+                "gpu_power_avg_w": None, "gpu_power_std_w": None,
+                "gpu_utilization_pct": None, "gpu_temp_avg_c": None,
+                "gpu_memory_used_avg_mb": None, "gpu_energy_wh": None,
+            }
+        arr = np.array(self._samples)
+        power, util, temp, mem = arr[:, 0], arr[:, 1], arr[:, 2], arr[:, 3]
+        energy_wh = float(power.mean()) * (self._elapsed_s / 3600.0) if self._elapsed_s else None
+        return {
+            "gpu_power_avg_w": float(power.mean()),
+            "gpu_power_std_w": float(power.std()),
+            "gpu_utilization_pct": float(util.mean()),
+            "gpu_temp_avg_c": float(temp.mean()),
+            "gpu_memory_used_avg_mb": float(mem.mean()),
+            "gpu_energy_wh": energy_wh,
+        }
 
 
 def profile_layer_latency(
@@ -166,6 +237,7 @@ def profile_model_with_efficiency_metrics(
     model: nn.Module,
     input_size: tuple,
     device: torch.device,
+    total_flops: float,
     warmup: int = 50,
     iters: int = 200,
 ) -> dict:
@@ -176,6 +248,9 @@ def profile_model_with_efficiency_metrics(
         model: PyTorch model.
         input_size: (batch, channels, height, width) tuple.
         device: torch.device.
+        total_flops: Precomputed FLOPs (from the FP32 model — fvcore's JIT tracer
+            can't trace quantized graphs, and FLOPs are precision-independent since
+            INT8 conversion doesn't change the op graph, only weight/activation dtype).
         warmup: Warmup iterations.
         iters: Timed iterations.
 
@@ -193,84 +268,51 @@ def profile_model_with_efficiency_metrics(
     model = model.to(device).eval()
     torch.set_grad_enabled(False)
 
-    # Compute FLOPs for efficiency calculation (one-time, no per-iteration cost)
-    flops_dict = compute_flops(model, input_size=input_size)
-    total_flops = flops_dict.get("flops", 0)
+    # Memory measurement (CUDA only)
+    if device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats(device)
 
-    # Background power and utilization sampling
-    power_samples = []
-    gpu_util_samples = []
-    stop_sampling = threading.Event()
-
-    def sample_gpu_metrics():
-        try:
-            proc = subprocess.Popen(
-                ["nvidia-smi", "--query-gpu=power.draw,utilization.gpu",
-                 "--loop-ms=100", "-l", "1"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-                text=True,
-            )
-            for line in proc.stdout:
-                if stop_sampling.is_set():
-                    proc.terminate()
-                    break
-                try:
-                    parts = line.split()
-                    power_w = float(parts[0])
-                    gpu_util_pct = float(parts[1])
-                    power_samples.append(power_w)
-                    gpu_util_samples.append(gpu_util_pct)
-                except (ValueError, IndexError):
-                    pass
-        except FileNotFoundError:
-            pass  # nvidia-smi not available; continue without metrics.
-
-    sampler = threading.Thread(target=sample_gpu_metrics, daemon=True)
-    sampler.start()
-
-    # Memory measurement
-    torch.cuda.reset_peak_memory_stats(device)
-
-    # Warmup + timed forward passes
     input_tensor = torch.randn(input_size, device=device)
 
-    for _ in range(warmup):
-        with torch.no_grad():
-            _ = model(input_tensor)
+    with GpuSampler(interval_ms=100) as sampler:
+        for _ in range(warmup):
+            with torch.no_grad():
+                _ = model(input_tensor)
 
-    torch.cuda.synchronize(device)
-    start_time = time.time()
+        if device.type == "cuda":
+            torch.cuda.synchronize(device)
+        start_time = time.time()
 
-    for _ in range(iters):
-        with torch.no_grad():
-            _ = model(input_tensor)
+        for _ in range(iters):
+            with torch.no_grad():
+                _ = model(input_tensor)
 
-    torch.cuda.synchronize(device)
-    elapsed_ms = (time.time() - start_time) * 1000 / iters
+        if device.type == "cuda":
+            torch.cuda.synchronize(device)
+        elapsed_ms = (time.time() - start_time) * 1000 / iters
 
-    stop_sampling.set()
-    sampler.join(timeout=2.0)
+    gpu_metrics = sampler.summary()
 
     # Aggregate metrics
     latency_ms = elapsed_ms
     batch_size = input_size[0]
     throughput_img_s = (batch_size * 1000.0) / latency_ms
-    power_avg = np.mean(power_samples) if power_samples else None
-    power_std = np.std(power_samples) if power_samples else None
-    gpu_util_avg = np.mean(gpu_util_samples) if gpu_util_samples else None
-    memory_peak_mb = torch.cuda.max_memory_allocated(device) / 1024 / 1024
+    memory_peak_mb = torch.cuda.max_memory_allocated(device) / 1024 / 1024 if device.type == "cuda" else None
 
-    # Compute efficiency: actual GFLOPs / second = (total_flops / latency_ms) / 1e9
-    compute_efficiency = (total_flops / latency_ms) / 1e9 if latency_ms > 0 else None
+    # Compute efficiency: actual GFLOPs / second. latency_ms is milliseconds, so convert to
+    # seconds (/1000) before dividing -- equivalent to total_flops / latency_ms / 1e6.
+    compute_efficiency = (total_flops / (latency_ms / 1000)) / 1e9 if latency_ms > 0 else None
 
     return {
         "latency_ms": latency_ms,
         "throughput_img_s": throughput_img_s,
-        "power_draw_avg_w": power_avg,
-        "power_draw_std_w": power_std,
-        "gpu_utilization_pct": gpu_util_avg,
+        "power_draw_avg_w": gpu_metrics["gpu_power_avg_w"],
+        "power_draw_std_w": gpu_metrics["gpu_power_std_w"],
+        "gpu_utilization_pct": gpu_metrics["gpu_utilization_pct"],
         "gpu_memory_peak_mb": memory_peak_mb,
+        "gpu_temp_avg_c": gpu_metrics["gpu_temp_avg_c"],
+        "gpu_memory_used_avg_mb": gpu_metrics["gpu_memory_used_avg_mb"],
+        "gpu_energy_wh": gpu_metrics["gpu_energy_wh"],
         "compute_efficiency_gflops_s": compute_efficiency,
     }
 

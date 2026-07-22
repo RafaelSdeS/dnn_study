@@ -32,6 +32,7 @@ class TrainerConfig:
     # ── training options ─────────────────────────────────────────────
     use_amp: bool = True         # set False for QAT fine-tuning
     early_stopping_patience: Optional[int] = DEFAULT_EARLY_STOPPING_PATIENCE
+    warmup_epochs: int = 0       # linear LR warmup before cosine decay; 0 disables
 
 
 @dataclass
@@ -43,3 +44,13 @@ class QATConfig:
     # ── observer / BN freeze schedule ────────────────────────────────
     freeze_bn_epoch: int = 3     # freeze BN running stats after this epoch
     disable_observer_epoch: int = 5  # disable fake-quant observers after this
+
+
+@dataclass
+class DetSegDataConfig:
+    img_size: int = 256
+    voc_root: str = ""  # set at runtime, e.g. ~/.cache/torchvision/datasets/voc
+    batch_size: int = 16
+    num_workers: int = 4
+    pin_memory: bool = True
+    seed: int = 42

@@ -145,7 +145,61 @@ Results after implementing phases 1, 2, and 3. **Most baselines (MobileNetV2, Re
 
 1. **Investigate AlexNetSmallKernel QAT** — Why the 9.89pp drop? Recalibrate batch norm or try different QAT schedules.
 2. **Debug AlexNetSE** — Was initialization the issue? Try different seeds or training hyperparameters.
-3. **Benchmark Winograd compatibility** — Verify that Bottleneck & Fire leverage small-kernel acceleration on actual hardware.
+3. ~~**Benchmark Winograd compatibility** — Verify that Bottleneck & Fire leverage small-kernel acceleration on actual hardware.~~ **Done — see Phase 6 below.**
 4. **Architecture search** — AutoML over compensation mechanisms for Pareto-optimal size/accuracy/quantization trade-offs.
 4. **Task transfer** — Test best models on object detection and semantic segmentation (Phase 4–5 scope).
 6. **Fine-tune Tier 1 models** for deployment scenarios (mobile, edge, server).
+
+---
+
+## Phase 6 — Hardware Profiling (Winograd Efficiency)
+
+Measured on a real RTX 4090 (PCAD `tupi5`), batch=1, 64×64 input — the first phase to check hardware
+behavior directly instead of relying on FLOPs/params as a proxy. Full methodology, statistical tests, and
+data-quality corrections in `notebooks/analysis/hardware_profiling_phase6.ipynb`;
+hypotheses/acceptance-criteria source in `ideas/PHASE6_PLAN.md`.
+
+| Model | Winograd-eligible | FP32 Latency (ms) | INT8 Latency (ms) | FP32 GFLOP/s | FP32 Top-1 | Efficiency (Acc/ms) |
+|---|---|---|---|---|---|---|
+| `alexnet_tv` | ⚠️ Only trailing 3×3 layers | 0.49 | 0.98 | 390.1 | 32.89% | 67.6 |
+| `alexnet_depthwisesep` | ❌ None (depthwise) | 0.96 | 0.94 | 42.7 | 44.39% | 46.3 |
+| `alexnet_bottleneck` | ✅ Dense 3×3 branch | 1.54 | 0.86 | 52.7 | 44.62% | 28.9 |
+| `alexnet_final_bottleneck_residual` | ✅ Dense 3×3 branch | 1.93 | 1.27 | 57.8 | 45.10% | 23.4 |
+| `alexnet_final_fire_residual` | ✅ Fire expand branch | 1.81 | 1.14 | 61.9 | 49.79% | 27.5 |
+| `vgg_style` | ✅ Fully (every conv) | 1.15 | 1.29 | 405.5 | 51.81% | 45.2 |
+| `mobilenetv2` | ❌ None (depthwise) | 1.47 | 4.24 | 37.3 | 57.99% | 39.4* |
+| `alexnet_fire` | ✅ Fire expand branch | 1.65 | 0.79 | 218.1 | 43.98% | 26.6 |
+
+\*`mobilenetv2` INT8 top-1 accuracy is unmeasured (Phase 1–4 training gap, unrelated to Phase 6) — its
+INT8 latency (4.24ms) is unusually high, plausibly an uncalibrated-quantization fusion penalty specific
+to its inverted-residual/depthwise structure; efficiency column is FP32-only for this model.
+
+**Hypothesis results** (full statistical detail in the notebook):
+
+- **H1 (dense 3×3 gets Winograd acceleration): PARTIAL.** A paired Wilcoxon test across 32 layer-config
+  groups confirms 3×3 is *systematically* faster than 5×5 (p=4.7e-10) — a real, structural effect, not
+  noise. But the stricter per-group signal (3×3 beats 2×2 *and* clears a 1.8× margin vs. 5×5) only holds
+  in 31% of groups, well under a 60% bar — the effect is real but inconsistent across batch/resolution
+  combinations, likely because larger batches/resolutions become memory-bound rather than compute-bound.
+  The kernel-name trace detector (`profile_kernel_trace`) never fired at all — best-effort as documented,
+  provides no confirmation either way.
+- **H2 (depthwise doesn't benefit): PASS (n=2, case-study level).** `alexnet_depthwisesep`/`mobilenetv2`
+  median 40.0 GFLOP/s vs. 91.2 GFLOP/s for the dense-conv group.
+- **H3 (Pareto frontier beats baseline on accuracy/latency): 4/5 PASS.** `alexnet_bottleneck`,
+  `alexnet_final_bottleneck_residual`, `alexnet_final_fire_residual`, and `vgg_style` all beat
+  `alexnet_tv`'s accuracy/latency ratio. `mobilenetv2` does not — `alexnet_tv`'s FP32 latency turned out
+  to be the fastest of all 16 profiled configs (0.49ms despite a 662MB model), and `mobilenetv2`'s INT8
+  accuracy can't be checked (unmeasured). Not smoothed over — see notebook for full discussion.
+- **H4 (INT8 preserves latency ranking vs. FP32): PASS, unambiguous.** Spearman ρ=0.9999 (n=96 layer
+  configs) — FP32 latency is a reliable proxy for INT8 latency ranking.
+
+**Practical takeaway:** kernel size alone doesn't predict Winograd-friendliness — `alexnet_depthwisesep`
+and `mobilenetv2` use 3×3 kernels but see none of the acceleration `vgg_style`/the bottleneck-fire hybrids
+show, because Winograd requires *dense* (`groups=1`) convolutions. `alexnet_fire` (INT8: 456 GFLOP/s) and
+`alexnet_tv` (FP32: 390 GFLOP/s) post the highest raw compute throughput in this sweep, though `vgg_style`
+is the most consistently Winograd-eligible architecture (100% dense 3×3).
+
+**Known limitations:** single-GPU (RTX 4090 only, no RTX 4060 cross-comparison yet); uncalibrated INT8
+observers (±5–10% latency bias per `PHASE6_PLAN.md`); `winograd_speedup_info` in the raw JSONL is not
+per-kernel-size (see notebook Phase 1 for the correction applied). Full details in the notebook's
+Limitations section.

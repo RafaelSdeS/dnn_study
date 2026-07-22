@@ -2,6 +2,8 @@
 partition: tupi
 gres: gpu:1
 nodes: 1
-cpus_per_task: 4
-mem_gb: 32
-time_minutes: 480  # 8 hours (phase 6 profiling is I/O bound but long)
+cpus_per_task: 8  # headroom over data.yaml's num_workers=4 + the main training process
+mem: 32G
+time: "24:00:00"  # 24h cap for the large-scale FP32(<=1000ep)+QAT(<=100ep) sweep, patience=20 usually stops well short
+requeue: true
+signal: "B:USR1@300"  # SIGUSR1 to the batch shell 300s before the wall-clock limit; see train.sbatch
