@@ -23,6 +23,7 @@ from ml import (
     auto_resume_path,
     build_qat,
     build_runtime_paths,
+    compress_checkpoint,
     compute_flops,
     convert_to_int8,
     create_imagenet_loaders,
@@ -332,6 +333,9 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
         flops_results = compute_flops(fp32_model)
         fp32_size_mb = disk_mb(best_model_path)
         int8_size_mb = disk_mb(int8_path) if int8_path.exists() else None
+        compress_checkpoint(best_model_path)
+        if int8_path.exists():
+            compress_checkpoint(int8_path)
         fp32_gzip_mb = gzip_mb(best_model_path)
         int8_gzip_mb = gzip_mb(int8_path) if int8_path.exists() else None
 

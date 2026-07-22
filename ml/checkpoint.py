@@ -1,3 +1,5 @@
+import gzip
+import shutil
 from pathlib import Path
 from typing import Optional
 
@@ -75,3 +77,18 @@ def auto_resume_path(save_dir: Path | str, run_name: str) -> Optional[Path]:
     """Return path to resume checkpoint if it exists, else None. Enables notebook auto-detection."""
     p = Path(save_dir) / f"{run_name}_resume.pth"
     return p if p.exists() else None
+
+
+def compress_checkpoint(path: Path | str) -> Optional[Path]:
+    """Gzip a finished checkpoint file to <path>.gz — a real compressed artifact, not just a
+    size estimate. Call once, after a checkpoint is done being written (final FP32 best model,
+    converted INT8 model) — not from the per-epoch resume-checkpoint path, which is rewritten
+    too often for re-gzipping every epoch to be worthwhile. Returns the .gz path, or None if
+    the source file doesn't exist."""
+    p = Path(path)
+    if not p.exists():
+        return None
+    gz_path = p.with_suffix(p.suffix + ".gz")
+    with open(p, "rb") as src, gzip.open(gz_path, "wb") as dst:
+        shutil.copyfileobj(src, dst)
+    return gz_path
