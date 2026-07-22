@@ -580,3 +580,125 @@ class AlexNetSmallKernelWithBN(nn.Module):
         return x
 
 
+# ─── AlexNetDilatedFC ─────────────────────────────────────────────────────────
+
+class AlexNetDilatedFC(nn.Module):
+    """All-3×3 AlexNet with dilation=2 in stages 4–5, FC head — receptive field compensation via dilation.
+
+    Architecture: 5 conv stages (all 3×3, dense groups=1), stages 4–5 use dilation=2 with
+    padding=2 to recover receptive field lost to kernel restriction. BatchNorm after each Conv
+    (stabilizes activation ranges). AdaptiveAvgPool(6×6), 3-layer FC classifier. Paired with
+    AlexNetDilatedGAP (same backbone, GAP head) to isolate head type.
+
+    Motivation: Phase 7's H4 hypothesis tests whether dilated convs (dense 3×3 at dilation>1)
+    retain Winograd acceleration on cuDNN, vs. the documented expectation that dilation causes
+    fallback to implicit-GEMM. Classification backbone test of this hypothesis, extending Phase 6's
+    H2 (depthwise ≠ Winograd) and Phase 7's H4 (which only tested dilated in detection heads).
+
+    Expected FP32 top-1: ~42–48% (dilation trades spatial compression for receptive field).
+    INT8 drop: ~2–4pp (dilation+BN should be QAT-stable, similar to AlexNet3x3FC).
+    Size: ~220 MB FP32 / ~55 MB INT8 (same channels as AlexNet3x3FC; large FC head dominates).
+    QAT: full — Conv-BN-ReLU triples fuseable; flat Sequential with hand-written fuse_map.
+    Trade-off: receptive field (dilation) vs. spatial compression (kernel size alone).
+    """
+
+    def __init__(self, num_classes: int = 200):
+        super().__init__()
+        self.quant = tq.QuantStub()
+        self.dequant = tq.DeQuantStub()
+
+        self.features = nn.Sequential(
+            nn.Conv2d(3, 64, 3, stride=2, padding=1, bias=False),     # 0: stage 1
+            nn.BatchNorm2d(64),                                         # 1
+            nn.ReLU(inplace=False),                                     # 2
+            nn.MaxPool2d(2),                                            # 3
+            nn.Conv2d(64, 192, 3, padding=1, bias=False),               # 4: stage 2
+            nn.BatchNorm2d(192),                                        # 5
+            nn.ReLU(inplace=False),                                     # 6
+            nn.MaxPool2d(2),                                            # 7
+            nn.Conv2d(192, 384, 3, padding=1, bias=False),              # 8: stage 3
+            nn.BatchNorm2d(384),                                        # 9
+            nn.ReLU(inplace=False),                                     # 10
+            nn.Conv2d(384, 256, 3, padding=2, dilation=2, bias=False),  # 11: stage 4 dilated
+            nn.BatchNorm2d(256),                                        # 12
+            nn.ReLU(inplace=False),                                     # 13
+            nn.Conv2d(256, 256, 3, padding=2, dilation=2, bias=False),  # 14: stage 5 dilated
+            nn.BatchNorm2d(256),                                        # 15
+            nn.ReLU(inplace=False),                                     # 16
+            nn.AdaptiveAvgPool2d((6, 6)),                               # 17
+        )
+        self.classifier = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(256 * 6 * 6, 4096),
+            nn.ReLU(inplace=False),
+            nn.Linear(4096, 4096),
+            nn.ReLU(inplace=False),
+            nn.Linear(4096, num_classes),
+        )
+
+    def forward(self, x):
+        x = self.quant(x)
+        x = self.features(x)
+        x = self.classifier(x)
+        x = self.dequant(x)
+        return x
+
+
+# ─── AlexNetDilatedGAP ────────────────────────────────────────────────────────
+
+class AlexNetDilatedGAP(nn.Module):
+    """All-3×3 AlexNet with dilation=2 in stages 4–5, GAP head — receptive field compensation via dilation.
+
+    Architecture: 5 conv stages (all 3×3, dense groups=1), stages 4–5 use dilation=2 with
+    padding=2 to recover receptive field lost to kernel restriction. BatchNorm after each Conv.
+    AdaptiveAvgPool(1×1), single Linear classifier. Paired with AlexNetDilatedFC (same backbone,
+    FC head) to isolate head type. Same backbone as AlexNetDilatedFC; this variant plugs directly
+    into Phase 6 profiling (configs/profiling.yaml) for Winograd eligibility testing.
+
+    Motivation: Same as AlexNetDilatedFC — test whether dense dilated 3×3 convs trigger Winograd
+    acceleration or fall back to implicit-GEMM (Phase 7's H4 hypothesis).
+
+    Expected FP32 top-1: ~42–48% (same backbone as FC variant; head type is orthogonal variable).
+    INT8 drop: ~2–4pp (same stabilization via dilation+BN as FC variant).
+    Size: ~2.5 MB FP32 / ~0.6 MB INT8 (GAP head eliminates large FC; same conv backbone).
+    QAT: full — Conv-BN-ReLU triples fuseable; flat Sequential with hand-written fuse_map.
+    Trade-off: receptive field (dilation) vs. spatial compression (kernel size alone).
+    """
+
+    def __init__(self, num_classes: int = 200):
+        super().__init__()
+        self.quant = tq.QuantStub()
+        self.dequant = tq.DeQuantStub()
+
+        self.features = nn.Sequential(
+            nn.Conv2d(3, 64, 3, stride=2, padding=1, bias=False),     # 0: stage 1
+            nn.BatchNorm2d(64),                                         # 1
+            nn.ReLU(inplace=False),                                     # 2
+            nn.MaxPool2d(2),                                            # 3
+            nn.Conv2d(64, 192, 3, padding=1, bias=False),               # 4: stage 2
+            nn.BatchNorm2d(192),                                        # 5
+            nn.ReLU(inplace=False),                                     # 6
+            nn.MaxPool2d(2),                                            # 7
+            nn.Conv2d(192, 384, 3, padding=1, bias=False),              # 8: stage 3
+            nn.BatchNorm2d(384),                                        # 9
+            nn.ReLU(inplace=False),                                     # 10
+            nn.Conv2d(384, 256, 3, padding=2, dilation=2, bias=False),  # 11: stage 4 dilated
+            nn.BatchNorm2d(256),                                        # 12
+            nn.ReLU(inplace=False),                                     # 13
+            nn.Conv2d(256, 256, 3, padding=2, dilation=2, bias=False),  # 14: stage 5 dilated
+            nn.BatchNorm2d(256),                                        # 15
+            nn.ReLU(inplace=False),                                     # 16
+            nn.AdaptiveAvgPool2d(1),                                    # 17
+        )
+        self.classifier = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(256, num_classes),
+        )
+
+    def forward(self, x):
+        x = self.quant(x)
+        x = self.features(x)
+        x = self.classifier(x)
+        x = self.dequant(x)
+        return x
+

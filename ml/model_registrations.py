@@ -22,6 +22,8 @@ from models import (
     AlexNetFinalFireResidual,
     AlexNetFinalBottleneckFire,
     AlexNetFinalDepthwiseFire,
+    AlexNetDilatedFC,
+    AlexNetDilatedGAP,
 )
 
 # notebooks/training/baselines_qat.ipynb
@@ -56,9 +58,16 @@ FUSE_DEPTHWISESEP = [
     ["20", "21", "22"], ["23", "24", "25"],
     ["26", "27", "28"], ["29", "30", "31"],
 ]
+FUSE_MAP_DILATED = [
+    ["0", "1", "2"], ["4", "5", "6"],
+    ["8", "9", "10"], ["11", "12", "13"],
+    ["14", "15", "16"],
+]
 register_model("alexnet_bottleneck", AlexNetBottleneck, fuse_map=find_fuse_groups(AlexNetBottleneck()), lr=1e-3)
 register_model("alexnet_depthwisesep", AlexNetDepthwiseSep, fuse_map=FUSE_DEPTHWISESEP, fuse_root_attr="features", lr=1e-3)
 register_model("alexnet_fire", AlexNetFire, fuse_map=find_fuse_groups(AlexNetFire()), lr=1e-3)
+register_model("alexnet_dilated_fc", AlexNetDilatedFC, fuse_map=FUSE_MAP_DILATED, fuse_root_attr="features", lr=1e-3)
+register_model("alexnet_dilated_gap", AlexNetDilatedGAP, fuse_map=FUSE_MAP_DILATED, fuse_root_attr="features", lr=1e-3)
 
 # notebooks/training/final_architecture_qat.ipynb
 register_model(
