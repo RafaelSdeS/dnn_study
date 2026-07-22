@@ -8,63 +8,75 @@ For non-trivial changes: inspect the relevant files, give a short plan, wait for
 
 Deep-learning research on how **convolutional kernel-size restriction** affects CNNs. Motivation: **Winograd accelerators** are efficient for small kernels (2×2, 3×3) but scale poorly for large filters. We measure the accuracy/efficiency trade-off to recommend Winograd-friendly architectures.
 
-**Scope:** Classification on **Tiny ImageNet-200** (64×64 RGB, 200 classes), FP32 training → **QAT → INT8**. Phases 1–3 compare AlexNet-style vs. efficient (MobileNet-style) architectures; Phase 4 builds and compresses final hybrid designs. Detection/segmentation are future work (`TODO.md`).
+**Scope:** Classification on **Tiny ImageNet-200** (64×64 RGB, 200 classes), FP32 training → **QAT → INT8**. Phases 1–3 compare AlexNet-style vs. efficient (MobileNet-style) architectures; Phase 4 builds and compresses final hybrid designs; Phase 5 is cross-phase results analysis; Phase 6 profiles hardware (latency/power/GPU utilization) for the best models; **Phase 7 (done/ongoing)** tests whether classification's compensation findings transfer to dense prediction — SSD detection + segmentation on PASCAL VOC (`ml/det_seg_data.py`, `det_seg_models.py`, `det_seg_trainer.py`, driven by `scripts/train_det_seg.py`, results under `runs/phase7/`). Phase 8 (efficient ViT / hybrid-attention) is planned only — see `ideas/PHASE8_PLAN.md` — no code yet.
 
-Questions: how kernel size affects accuracy/efficiency/quantization robustness; whether small-kernel CNNs match pretrained models; the FP32→INT8 drop per architecture family.
+Questions: how kernel size affects accuracy/efficiency/quantization robustness; whether small-kernel CNNs match pretrained models; the FP32→INT8 drop per architecture family; whether classification-derived compensation mechanisms (bottleneck, Fire, depthwise) transfer to detection/segmentation.
 
 ---
 
 ## Layout
 
 ```
-ml/                       # Core package — notebooks import everything from here
+ml/                       # Core package — notebooks and scripts import everything from here
   config.py               # DataConfig, TrainerConfig, QATConfig dataclasses (defaults explicit)
   data.py                 # create_imagenet_loaders(cfg)
-  checkpoint.py           # save/load_checkpoint, load_resume_state, auto_resume_path
+  det_seg_data.py         # Phase 7: create_voc_detection_loaders / create_voc_segmentation_loaders
+  det_seg_models.py       # Phase 7: build_ssd_detector, build_qat_ssd_detector, convert_ssd_to_int8, compute_anchor_recall
+  det_seg_trainer.py      # Phase 7: DetectionTrainer (subclasses the Trainer loop for box/mask losses)
+  checkpoint.py           # save/load_checkpoint, load_resume_state, auto_resume_path, compress_checkpoint (.pth.gz)
   registry.py             # MODEL_REGISTRY + register_model()
+  model_registrations.py  # Populates MODEL_REGISTRY for standalone scripts (mirrors notebook registrations — keep in sync)
   trainer.py              # Trainer: fit(), evaluate(), benchmark()
   quantization.py         # find_fuse_groups, build_qat, convert_to_int8, load_best_model, make_qat_callback
   quantization_advanced.py# Mixed-precision / sub-INT8 PTQ: make_qconfig, prepare_sim, calibrate,
                           #   compute_layer_sensitivity, assign_mixed_precision, apply_weight_ptq, theoretical_size_mb
+  profiling.py            # Phase 6: GpuSampler (nvidia-smi power/util/temp/mem sampling), latency/throughput profiling
+  runtime.py              # RuntimePaths, set_global_seed — shared by scripts/train.py and scripts/train_det_seg.py
   reporting.py            # build_comparison_table, create_results_summary, disk_mb, compute_flops, make_run_summary
 models/                   # Architectures by phase (see Model Inventory)
   baselines.py alexnet_variants.py compensation.py tinyhybridnet.py final_architecture.py
 configs/                  # YAML hyperparameters, loaded via configs/loader.py → load_config(name)
-  data.yaml training.yaml qat.yaml experiments/
+  data.yaml training.yaml qat.yaml profiling.yaml compression.yaml detection.yaml
+  runtime/                # local.yaml, pcad.yaml — dataset root, conda env, per-runtime toggles
+  slurm/                  # single_gpu.yaml, tupi_4090.yaml, beagle.yaml — partition/GPU/CPU/wall-time
+  experiments/            # default.yaml + per-run overrides (alexnet_3x3_gap, phase7_detection, phase7_diag_*, phase7_smoke, large_scale, ...)
   models/alexnet_fp32.yaml   # per-model lr overrides (only this one remains)
-notebooks/                # One per phase: baselines_qat, alexnet_qat, compensation_qat,
-                          #   tinyhybridnet_qat, compression_phase4_1, final_architecture_qat,
-                          #   *_results / results_analysis (figures)
+scripts/                  # CLI entry points (used instead of notebooks for PCAD/cluster runs)
+  train.py                # `python -m scripts.train --experiment ... --runtime local|pcad` — classification FP32→QAT→INT8
+  cluster.py               # `python -m scripts.cluster submit|status|cancel|resume` — SLURM submission/monitoring
+  train_det_seg.py         # Phase 7 detection/segmentation CLI, mirrors train.py
+  profile_hardware.py      # Phase 6 hardware profiling CLI
+  phase7_analysis.py       # Joins detection/segmentation results to Phase 3 classification results, tests H1-H4
+  aggregate_results.py     # Aggregates per-model summary JSONs from a cluster submit-sweep into one CSV
+  winograd_quant_error.py  # Phase 6 extension: INT8 quantization error from Winograd F(2x2,3x3) transforms
+  check_anchor_recall.py / diag_stage7.py / backfill_gzip.py  # one-off Phase 7 diagnostics / backfill tools
+  slurm/*.sbatch           # sbatch templates submitted by cluster.py
+tests/                    # pytest: test_registry, test_checkpoint, test_config, test_trainer_smoke,
+                          #   test_quantization, test_profiling, test_train_cli
+notebooks/
+  training/                # baselines_qat, alexnet_qat, compensation_qat, tinyhybridnet_qat,
+                          #   compression_phase4_1, final_architecture_qat
+  analysis/                # results_analysis, final_analysis_phase5, final_architecture_results,
+                          #   hardware_profiling_phase6, pcad_results_analysis
 results/                  # git-ignored CSVs/JSON/figures, one dir per phase + results.csv, model_details.csv
+presentation/             # slides.md/slides.pdf + figures/ (generated by presentation/make_figures.py)
 docs/                     # Documentation (flat): PHASE7_QUICKSTART.md, PHASE7_MULTINODE.md, PHASE7_LOG.md
 ideas/                    # Research notes (flat):
   BEST_MODELS.md          #   cross-phase rankings & recommendations
   MODELS.md               #   architecture notes & design rationale
-  PHASE6_PLAN.md PHASE7_PLAN.md PHASE8_PLAN.md  # research & execution plans
+  PHASE6_PLAN.md PHASE7_PLAN.md PHASE8_PLAN.md  # research & execution plans (6/7 executed, 8 planned only)
+runs/                     # Phase 7 detection/segmentation run outputs (SSD checkpoints/logs per model+config)
 outputs/                  # Training artifacts & logs
   pcad/
-    logs/large_scale/     # 26 SLURM job output files (detection/segmentation runs)
-    large_scale/          # Training outputs from large-scale PCAD runs
-    alexnet_3x3_gap/      # Model checkpoints, results, tensorboard
-    phase6_backfill/      # GPU profiling backfill data
-    etc/                  # Other model runs
+    logs/large_scale/     # SLURM job output files (detection/segmentation runs)
+    large_scale/          # Training outputs from large-scale PCAD runs (one dir per model)
+    phase6/ phase6_backfill/  # GPU profiling data
+    alexnet_3x3_gap/ alexnet_3x3_fc/  # per-model checkpoints, results, tensorboard
   local/                  # Local machine runs
+  smoke_test/             # Quick validation runs
 ```
 
-Runtime artifacts (git-ignored): `checkpoints/{arch}_best.pth`, `qat_{arch}_best.pth`, `{arch}.pth` (INT8); logs `{arch}.log`, `qat_{arch}.log`.
-
----
-
-## Recent Changes (2026-07-22)
-
-**Reorganization commits:** `214c20a` (structure), `3ce1ffe` (path fix)
-
-- Moved all 26 SLURM output files from root to `outputs/pcad/logs/large_scale/`
-- Flattened `ideas/` and `docs/` directories (removed subdirectories, all files at root level)
-  - `docs/`: PHASE7_QUICKSTART.md, PHASE7_MULTINODE.md, PHASE7_LOG.md
-  - `ideas/`: BEST_MODELS.md, MODELS.md, PHASE6/7/8_PLAN.md, PHASE7_LOG.md (moved from ideas/)
-- Fixed nested `outputs/pcad/alexnet_3x3_gap/alexnet_3x3_gap/` → flattened to `outputs/pcad/alexnet_3x3_gap/`
-- Verified all path references in notebooks and scripts are correct (no hardcoded breakage)
+Runtime artifacts (git-ignored): `checkpoints/{arch}_best.pth`, `qat_{arch}_best.pth`, `{arch}.pth` (INT8, plus `.pth.gz` compressed copy via `ml/checkpoint.py`); logs `{arch}.log`, `qat_{arch}.log`.
 
 ---
 
@@ -131,18 +143,34 @@ QAT cfg is typically `replace(fp32_cfg, epochs=20, lr=1e-5, use_amp=False)`.
 |-------|------|--------|
 | 1 — Reference | `baselines.py` | AlexNetTV, VGGStyleCNN, ResNet18TV, MobileNetV2TV (pretrained) |
 | 2 — Kernel restriction | `alexnet_variants.py` | AlexNet3x3FC, AlexNet3x3GAP, AlexNet2x2GAP, AlexNet2x2FC, AlexNetStacked, AlexNetMixed, AlexNetSmallKernel |
-| 3a — Compensation | `compensation.py` | AlexNet{Bottleneck, Factorized, GroupConv, DepthwiseSep, Residual, Fire, SE} |
+| 3a — Compensation | `compensation.py` | AlexNet{Bottleneck, Factorized, GroupConv, DepthwiseSep, Residual, Fire, SE, SmallKernelWithBN, DilatedFC, DilatedGAP} |
 | 3b — Efficient hybrids | `tinyhybridnet.py` | TinyHybridNet, TinyMobileNetV2, FireMobileResidual, InvertedResidual |
 | 4 — Final architectures | `final_architecture.py` | AlexNetFinal{BottleneckFire, FireResidual, BottleneckResidual, DepthwiseFire} |
+| 6 — Hardware profiling | (reuses Phase 1–4 models) | `ml/profiling.py` + `scripts/profile_hardware.py`; dilated variants added to test whether dilated 3×3 retains Winograd acceleration |
+| 7 — Detection/segmentation | `ml/det_seg_models.py` | Bottleneck/Fire/AlexNetTV backbones + SSD head on PASCAL VOC, via `scripts/train_det_seg.py` |
 
-**Results & rankings:** see `ideas/BEST_MODELS.md` (Pareto tiers, recommendations) and `results/results.csv` / `results/model_details.csv`. Headlines: MobileNetV2 best overall (~58% top-1); AlexNetBottleneck/AlexNetFire are Pareto-optimal (43–44%, 4–6 MB, quantization-stable). Known issues: AlexNetSmallKernel severe QAT drop (~–10pp), AlexNetSE training failure.
+**Results & rankings:** see `ideas/BEST_MODELS.md` (Pareto tiers, recommendations) and `results/results.csv` / `results/model_details.csv`. Headlines: MobileNetV2 best overall (~58% top-1); AlexNetBottleneck/AlexNetFire are Pareto-optimal (43–44%, 4–6 MB, quantization-stable). Known issues: AlexNetSmallKernel severe QAT drop (~–10pp), AlexNetSE training failure. Phase 7 hypotheses (H1–H4, does compensation transfer to dense prediction) and progress: `ideas/PHASE7_PLAN.md`, `docs/PHASE7_LOG.md`.
 
 ---
 
 ## Running
 
+**Notebooks** (Phases 1–5, exploratory):
 ```bash
 source .venv/bin/activate
 jupyter lab
 ```
 Tiny ImageNet-200 downloads via `kagglehub` on first run (cached in `~/.cache/kagglehub/`). Before INT8 convert/inference: `model.eval()` and move to CPU.
+
+**CLI / cluster runs** (Phases 6–7, reproducible local or PCAD SLURM runs):
+```bash
+conda env create -f environment.yml && conda activate alexnet_rafael
+python -m scripts.train --experiment default --runtime local        # classification, local
+python -m scripts.cluster submit --experiment default --runtime pcad --slurm single_gpu
+python -m scripts.cluster status <job_id>   # / cancel / resume
+python -m scripts.train_det_seg detection --model alexnet_bottleneck --dry-run   # Phase 7
+python -m scripts.profile_hardware --experiment phase6 --runtime local           # Phase 6
+```
+Edit `configs/runtime/pcad.yaml` (dataset root, conda env) and `configs/slurm/single_gpu.yaml` (partition/GPU/wall-time) for cluster settings; duplicate `configs/experiments/default.yaml` for a new reproducible run.
+
+**Tests:** `pytest tests/`
