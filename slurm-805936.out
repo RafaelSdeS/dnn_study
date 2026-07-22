@@ -1,0 +1,6 @@
+====================================================
+Phase 7 detection training [fp32]
+Model: alexnet_fire
+Experiment: phase7_detection
+====================================================
+slurmstepd: error: *** JOB 805936 ON tupi1 CANCELLED AT 2026-07-21T09:46:39 ***

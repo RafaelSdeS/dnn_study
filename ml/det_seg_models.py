@@ -169,7 +169,7 @@ def build_ssd_detector(
     aspect_ratios = [[2, 3]] * len(backbone.out_channels)
     anchor_generator = DefaultBoxGenerator(
         aspect_ratios=aspect_ratios,
-        min_ratio=0.2,
+        min_ratio=0.1,
         max_ratio=0.95,
     )
     num_anchors = anchor_generator.num_anchors_per_location()[0]

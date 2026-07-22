@@ -1,0 +1,16 @@
+data:
+  batch_size: 16
+  img_size: 256
+  num_workers: 4
+  pin_memory: true
+  seed: 42
+  voc_root: ~/.cache/torchvision/datasets
+stage: qat
+trainer:
+  early_stopping_patience: 10
+  epochs: 15
+  grad_clip_norm: null
+  label_smoothing: 0.1
+  lr: 1.0e-05
+  use_amp: false
+  weight_decay: 0.0004

@@ -1,0 +1,8 @@
+====================================================
+Phase 7 detection training [fp32]
+Model: alexnet_bottleneck
+Experiment: phase7_smoke
+====================================================
+/home/users/rsdsouza/dnn_study/.venv/lib/python3.11/site-packages/torch/cuda/__init__.py:129: UserWarning: CUDA initialization: The NVIDIA driver on your system is too old (found version 11000). Please update your GPU driver by downloading and installing a new version from the URL: http://www.nvidia.com/Download/index.aspx Alternatively, go to: https://pytorch.org to install a PyTorch version that has been compiled with your version of the CUDA driver. (Triggered internally at ../c10/cuda/CUDAFunctions.cpp:108.)
+  return torch._C._cuda_getDeviceCount() > 0
+slurmstepd: error: *** JOB 804676 ON draco2 CANCELLED AT 2026-07-19T09:15:03 ***

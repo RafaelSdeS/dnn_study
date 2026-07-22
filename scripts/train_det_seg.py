@@ -55,6 +55,8 @@ def run_detection(args):
     # Override from experiment config if provided
     if args.experiment:
         exp_cfg = load_yaml(f"configs/experiments/{args.experiment}.yaml")
+        if args.model in exp_cfg:  # per-model-keyed format (e.g. phase7_detection.yaml)
+            exp_cfg = exp_cfg[args.model]
         data_cfg = replace(data_cfg, **exp_cfg.get("data", {}))
         trainer_cfg = replace(trainer_cfg, **exp_cfg.get("trainer", {}))
 

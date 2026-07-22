@@ -17,7 +17,7 @@ from ml import DetSegDataConfig, build_ssd_detector, compute_anchor_recall, crea
 from ml.runtime import expand_path
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--model", default="alexnet_bottleneck")
+parser.add_argument("--model", nargs="+", default=["alexnet_bottleneck"])
 parser.add_argument("--img-size", type=int, nargs="+", default=[256, 512])
 parser.add_argument("--max-samples", type=int, default=200)
 args = parser.parse_args()
@@ -28,8 +28,9 @@ with open("configs/detection.yaml") as f:
 for img_size in args.img_size:
     data_cfg = replace(base_data_cfg, img_size=img_size)
     data_cfg.voc_root = expand_path(data_cfg.voc_root)
-    _, _, _, val_loader = create_voc_detection_loaders(data_cfg)
+    _, _, _, val_loader = create_voc_detection_loaders(data_cfg)  # shared across models below
 
-    model = build_ssd_detector(args.model, num_classes=21, image_size=img_size)
-    recall = compute_anchor_recall(model, val_loader, iou_threshold=0.5, max_samples=args.max_samples)
-    print(f"img_size={img_size}: anchor recall @IoU 0.5 = {recall:.3f}  ({args.max_samples} images)")
+    for model_name in args.model:
+        model = build_ssd_detector(model_name, num_classes=21, image_size=img_size)
+        recall = compute_anchor_recall(model, val_loader, iou_threshold=0.5, max_samples=args.max_samples)
+        print(f"{model_name} img_size={img_size}: anchor recall @IoU 0.5 = {recall:.3f}  ({args.max_samples} images)")

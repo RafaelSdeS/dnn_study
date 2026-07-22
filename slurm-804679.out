@@ -1,0 +1,25 @@
+====================================================
+Phase 7 detection training [fp32]
+Model: alexnet_bottleneck
+Experiment: phase7_smoke
+====================================================
+
+============================================================
+DETECTION EXPERIMENT: alexnet_bottleneck [FP32]
+============================================================
+
+Config saved to runs/phase7/ssd_alexnet_bottleneck_fp32/config.yaml
+
+Loading VOC detection data...
+Using downloaded and verified file: /home/users/rsdsouza/.cache/torchvision/datasets/VOCtrainval_06-Nov-2007.tar
+Extracting /home/users/rsdsouza/.cache/torchvision/datasets/VOCtrainval_06-Nov-2007.tar to /home/users/rsdsouza/.cache/torchvision/datasets
+Using downloaded and verified file: /home/users/rsdsouza/.cache/torchvision/datasets/VOCtrainval_11-May-2012.tar
+Extracting /home/users/rsdsouza/.cache/torchvision/datasets/VOCtrainval_11-May-2012.tar to /home/users/rsdsouza/.cache/torchvision/datasets
+Using downloaded and verified file: /home/users/rsdsouza/.cache/torchvision/datasets/VOCtest_06-Nov-2007.tar
+Extracting /home/users/rsdsouza/.cache/torchvision/datasets/VOCtest_06-Nov-2007.tar to /home/users/rsdsouza/.cache/torchvision/datasets
+  Train: 16551 | Val: 4952
+
+Building SSD detector (alexnet_bottleneck)...
+  Model ready. Parameter count: 977,472
+  Anchor recall @IoU 0.5: 0.698
+ABORT: anchor recall 0.698 < 0.95 — fix anchor config first (or pass --skip-anchor-check to override).

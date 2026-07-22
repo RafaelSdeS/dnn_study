@@ -1,0 +1,55 @@
+============================================================
+1. compute_detection_summary() smoke test
+============================================================
+Using downloaded and verified file: /home/users/rsdsouza/.cache/torchvision/datasets/VOCtrainval_06-Nov-2007.tar
+Extracting /home/users/rsdsouza/.cache/torchvision/datasets/VOCtrainval_06-Nov-2007.tar to /home/users/rsdsouza/.cache/torchvision/datasets
+Using downloaded and verified file: /home/users/rsdsouza/.cache/torchvision/datasets/VOCtrainval_11-May-2012.tar
+Extracting /home/users/rsdsouza/.cache/torchvision/datasets/VOCtrainval_11-May-2012.tar to /home/users/rsdsouza/.cache/torchvision/datasets
+Using downloaded and verified file: /home/users/rsdsouza/.cache/torchvision/datasets/VOCtest_06-Nov-2007.tar
+Extracting /home/users/rsdsouza/.cache/torchvision/datasets/VOCtest_06-Nov-2007.tar to /home/users/rsdsouza/.cache/torchvision/datasets
+/home/users/rsdsouza/dnn_study/.venv/lib/python3.11/site-packages/torchvision/ops/boxes.py:166: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  boxes_x = torch.min(boxes_x, torch.tensor(width, dtype=boxes.dtype, device=boxes.device))
+/home/users/rsdsouza/dnn_study/.venv/lib/python3.11/site-packages/torchvision/ops/boxes.py:168: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  boxes_y = torch.min(boxes_y, torch.tensor(height, dtype=boxes.dtype, device=boxes.device))
+/home/users/rsdsouza/dnn_study/.venv/lib/python3.11/site-packages/torchvision/models/detection/transform.py:308: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  torch.tensor(s, dtype=torch.float32, device=boxes.device)
+/home/users/rsdsouza/dnn_study/.venv/lib/python3.11/site-packages/torchvision/models/detection/transform.py:309: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  / torch.tensor(s_orig, dtype=torch.float32, device=boxes.device)
+  params_m: 0.977472
+  macs: 874676224
+  flops: 1749352448
+  model_size_mb: None
+  latency_ms_per_image: 4.964709025807679
+  throughput_img_per_s: 201.42167341565724
+  ✓ all fields populated
+
+============================================================
+2. Anchor scale vs. GT box size distribution
+============================================================
+
+alexnet_bottleneck: anchor scales (fraction of image) = [0.2, 0.45, 0.7, 0.95, 1.0]
+  -> smallest anchor covers objects >= 20.0% of image side
+
+alexnet_fire: anchor scales (fraction of image) = [0.2, 0.45, 0.7, 0.95, 1.0]
+  -> smallest anchor covers objects >= 20.0% of image side
+
+alexnet_tv: anchor scales (fraction of image) = [0.2, 0.45, 0.7, 0.95, 1.0]
+  -> smallest anchor covers objects >= 20.0% of image side
+Using downloaded and verified file: /home/users/rsdsouza/.cache/torchvision/datasets/VOCtrainval_06-Nov-2007.tar
+Extracting /home/users/rsdsouza/.cache/torchvision/datasets/VOCtrainval_06-Nov-2007.tar to /home/users/rsdsouza/.cache/torchvision/datasets
+Using downloaded and verified file: /home/users/rsdsouza/.cache/torchvision/datasets/VOCtrainval_11-May-2012.tar
+Extracting /home/users/rsdsouza/.cache/torchvision/datasets/VOCtrainval_11-May-2012.tar to /home/users/rsdsouza/.cache/torchvision/datasets
+Using downloaded and verified file: /home/users/rsdsouza/.cache/torchvision/datasets/VOCtest_06-Nov-2007.tar
+Extracting /home/users/rsdsouza/.cache/torchvision/datasets/VOCtest_06-Nov-2007.tar to /home/users/rsdsouza/.cache/torchvision/datasets
+
+VOC07-test GT boxes: n=14976
+  p5: 0.054
+  p10: 0.073
+  p25: 0.129
+  p50: 0.265
+  p75: 0.494
+  p90: 0.724
+  p95: 0.834
+
+Fraction of GT boxes with side-ratio < min_ratio=0.2: 39.9%
+(these boxes are structurally too small for ANY anchor to reach IoU 0.5 — recall on them is 0% regardless of training or image resolution)

@@ -1,0 +1,18 @@
+====================================================
+Phase 7 detection training [fp32]
+Model: alexnet_bottleneck
+Experiment: phase7_smoke
+====================================================
+Traceback (most recent call last):
+  File "/home/users/rsdsouza/dnn_study/scripts/train_det_seg.py", line 21, in <module>
+    import torch
+  File "/home/users/rsdsouza/dnn_study/.venv/lib/python3.11/site-packages/torch/__init__.py", line 366, in <module>
+    _load_global_deps()
+  File "/home/users/rsdsouza/dnn_study/.venv/lib/python3.11/site-packages/torch/__init__.py", line 322, in _load_global_deps
+    raise err
+  File "/home/users/rsdsouza/dnn_study/.venv/lib/python3.11/site-packages/torch/__init__.py", line 300, in _load_global_deps
+    ctypes.CDLL(global_deps_lib_path, mode=ctypes.RTLD_GLOBAL)
+  File "/usr/lib/python3.11/ctypes/__init__.py", line 376, in __init__
+    self._handle = _dlopen(self._name, mode)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+OSError: /home/users/rsdsouza/dnn_study/.venv/lib/python3.11/site-packages/torch/lib/libtorch_global_deps.so: cannot open shared object file: No such file or directory

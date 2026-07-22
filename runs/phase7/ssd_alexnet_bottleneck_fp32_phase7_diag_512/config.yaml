@@ -1,0 +1,17 @@
+data:
+  batch_size: 16
+  img_size: 512
+  num_workers: 1
+  pin_memory: true
+  seed: 42
+  voc_root: ~/.cache/torchvision/datasets
+stage: fp32
+trainer:
+  early_stopping_patience: 10
+  epochs: 30
+  grad_clip_norm: null
+  label_smoothing: 0.1
+  lr: 0.0001
+  use_amp: false
+  warmup_epochs: 0
+  weight_decay: 0.0004
