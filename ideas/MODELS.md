@@ -475,6 +475,68 @@ These models add exactly one architectural mechanism to AlexNet3x3FC, isolating 
 
 ---
 
+### AlexNetDilatedFC
+
+**File:** `models/compensation.py`
+
+**Architecture:**
+- 5 convolutional stages, all 3×3 kernels
+- **Stages 4–5 use dilation=2, padding=2** to recover receptive field lost to kernel restriction
+- Stages 1–3: standard stride=1, padding=1 (same as AlexNet3x3FC)
+- BatchNorm after each conv (stabilizes activation ranges for QAT)
+- Channel widths: 3→64→192→384→256→256
+- AdaptiveAvgPool(6×6) + 3-layer FC (4096→4096→200)
+
+**Inspiration:**
+- Dilated convolutions / atrous convolution (Yu & Koltun, 2015)
+- Recovers receptive field without increasing kernel size or model depth
+- **Phase 7 H4 hypothesis test:** whether dilated 3×3 convs fall back to implicit-GEMM (not Winograd) vs dense 3×3
+
+**Why Chosen:**
+- Tests receptive field compensation via dilation (distinct from bottleneck/group/depthwise techniques)
+- Dilated convs stay parameter-efficient while expanding RF: two stacked dilated 3×3 @ dilation=2 ≈ 9×9 RF
+- Paired with AlexNetDilatedGAP (same backbone, different head) to isolate head architecture
+- **Winograd H4 validation:** expected to show near-zero Winograd kernel usage despite dense groups=1, confirming that cuDNN falls back to implicit-GEMM for dilated convs
+- Extends Phase 6's findings (depthwise ≠ Winograd, H2) and Phase 7's findings (detection-head ASPP ≠ Winograd, H4) to classification backbones
+
+**Expected Performance:** 42–48% top-1 (dilation trades spatial compression for receptive field)  
+**INT8 drop:** ~2–4pp (dilation+BN is QAT-stable)  
+**Model Size:** 220 MB FP32 / 55 MB INT8 (same channels as AlexNet3x3FC; large FC dominates)  
+**QAT:** Full — Conv-BN-ReLU triples fuseable; hand-written fuse_map for flat Sequential
+
+**Key Paper:**
+- Yu, F., & Koltun, V. (2015). "Multi-scale Context Aggregation by Dilated Convolutions." *ICLR* [[PDF](https://arxiv.org/abs/1511.07122)]
+
+---
+
+### AlexNetDilatedGAP
+
+**File:** `models/compensation.py`
+
+**Architecture:**
+- Identical backbone to AlexNetDilatedFC (5× 3×3 conv, stages 4–5 dilated, same channels)
+- BatchNorm after each conv (QAT stabilization)
+- AdaptiveAvgPool(1×1) replacing the 6×6 pooling
+- Single linear classifier (256→200) replacing 3-layer FC (4096→4096→200)
+
+**Inspiration:**
+- Same as AlexNetDilatedFC, but with Global Average Pooling head (following Phase 2 convention)
+- Isolates backbone dilation effect independent of classifier head
+
+**Why Chosen:**
+- **Wired into Phase 6 profiling** (`configs/profiling.yaml`) for Winograd eligibility testing
+- Paired with AlexNetDilatedFC to control for head architecture as variable
+- GAP head reduces model size dramatically (2.5 MB FP32 vs 220 MB FC variant)
+- Same backbone dilation study as FC variant; cleaner comparison with other Phase 6 models (most use GAP)
+- Directly comparable to AlexNetBottleneck/AlexNetFire in Phase 6 latency/Winograd profiling
+
+**Expected Performance:** 42–48% top-1 (same backbone as FC variant; head type is orthogonal)  
+**INT8 drop:** ~2–4pp (same dilation+BN stabilization)  
+**Model Size:** 2.5 MB FP32 / 0.6 MB INT8 (GAP eliminates FC; same conv backbone)  
+**QAT:** Full — Conv-BN-ReLU triples fuseable; hand-written fuse_map
+
+---
+
 ## Phase 3b: Efficient Hybrids
 
 These models combine multiple compensation mechanisms and modern design principles for practical efficiency.
@@ -612,6 +674,8 @@ These models combine multiple compensation mechanisms and modern design principl
 | **3a** | AlexNetFire | ↓ | 5 MB | Fire squeeze-expand modules |
 | **2** | AlexNet3x3GAP | ↓ | 3 MB | Global average pooling head |
 | **3a** | AlexNetSE | ↓ | 220 MB | Squeeze-excitation channel attention |
+| **3a** | AlexNetDilatedFC | ↓ | 220 MB | Dilated 3×3 (stages 4–5), FC head |
+| **3a** | AlexNetDilatedGAP | ↓ | 2.5 MB | Dilated 3×3 (stages 4–5), GAP head |
 | **3b** | TinyHybridNet | ↓ | 6 MB | Fire + depthwise + residual hybrid |
 | **3b** | TinyMobileNetV2 | ↓ | 6 MB | Inverted residuals (MobileNetV2-style) |
 
@@ -628,6 +692,7 @@ These models combine multiple compensation mechanisms and modern design principl
 - Howard, A. G., Zhu, M., Chen, B., et al. (2017). "MobileNets: Efficient Convolutional Neural Networks for Mobile Vision Applications." *arXiv* [[PDF](https://arxiv.org/abs/1704.04861)]
 - Sandler, M., Howard, A., Zhu, M., Zhmoginov, A., & Chen, L. C. (2018). "MobileNetV2: Inverted Residuals and Linear Bottlenecks." *CVPR* [[PDF](https://arxiv.org/abs/1801.04381)]
 - Iandola, F. N., Han, S., Moskewicz, M. W., Ashraf, K., Dally, W. J., & Keutzer, K. (2016). "SqueezeNet: AlexNet-level Accuracy with 50x Fewer Parameters and <0.5MB Model Size." *arXiv* [[PDF](https://arxiv.org/abs/1602.07360)]
+- Yu, F., & Koltun, V. (2015). "Multi-scale Context Aggregation by Dilated Convolutions." *ICLR* [[PDF](https://arxiv.org/abs/1511.07122)]
 
 ### Modern Attention & Architectural Components
 - Szegedy, C., Liu, W., Jia, Y., et al. (2015). "Going Deeper with Convolutions." *CVPR* [[PDF](https://arxiv.org/abs/1409.4842)]
