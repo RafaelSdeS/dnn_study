@@ -17,6 +17,7 @@ from models import (
     AlexNetBottleneck,
     AlexNetDepthwiseSep,
     AlexNetFire,
+    AlexNetFireBypass,
     AlexNetSmallKernel,
     AlexNetFinalBottleneckResidual,
     AlexNetFinalFireResidual,
@@ -66,6 +67,7 @@ FUSE_MAP_DILATED = [
 register_model("alexnet_bottleneck", AlexNetBottleneck, fuse_map=find_fuse_groups(AlexNetBottleneck()), lr=1e-3)
 register_model("alexnet_depthwisesep", AlexNetDepthwiseSep, fuse_map=FUSE_DEPTHWISESEP, fuse_root_attr="features", lr=1e-3)
 register_model("alexnet_fire", AlexNetFire, fuse_map=find_fuse_groups(AlexNetFire()), lr=1e-3)
+register_model("alexnet_fire_bypass", AlexNetFireBypass, fuse_map=find_fuse_groups(AlexNetFireBypass()), lr=1e-3)
 register_model("alexnet_dilated_fc", AlexNetDilatedFC, fuse_map=FUSE_MAP_DILATED, fuse_root_attr="features", lr=1e-3)
 register_model("alexnet_dilated_gap", AlexNetDilatedGAP, fuse_map=FUSE_MAP_DILATED, fuse_root_attr="features", lr=1e-3)
 

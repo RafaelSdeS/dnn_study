@@ -430,6 +430,48 @@ class AlexNetFire(nn.Module):
         x = self.dequant(x)
         return x
 
+
+class AlexNetFireBypass(nn.Module):
+    """AlexNetFire + one identity bypass (fire4 -> fire5), isolating bypass from Phase 4's stem change.
+
+    Architecture: identical to AlexNetFire (3->64->192->384->256->256, same 5 Fire stages),
+    except fire4 and fire5 (the one channel-matched, no-pool-between pair: 256->256) are
+    connected by a FloatFunctional identity add — SqueezeNet's "simple bypass," no 1x1
+    projection needed since channels already match. See ideas/PHASE9_PLAN.md D1/D2.
+    """
+
+    def __init__(self, num_classes: int = 200):
+        super().__init__()
+        self.quant = tq.QuantStub()
+        self.dequant = tq.DeQuantStub()
+
+        self.stem = nn.Sequential(
+            _FireModule(3,   16,  32),   # out: 64
+            nn.MaxPool2d(2),
+            _FireModule(64,  48,  96),   # out: 192
+            nn.MaxPool2d(2),
+            _FireModule(192, 96, 192),   # out: 384
+        )
+        self.fire4 = _FireModule(384, 64, 128)  # out: 256
+        self.fire5 = _FireModule(256, 64, 128)  # out: 256 (channel-matched -> bypass target)
+        self.skip_add = _float_functional()
+        self.pool = nn.AdaptiveAvgPool2d(1)
+        self.classifier = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(256, num_classes),
+        )
+
+    def forward(self, x):
+        x = self.quant(x)
+        x = self.stem(x)
+        f4 = self.fire4(x)
+        x = self.skip_add.add(self.fire5(f4), f4)
+        x = self.pool(x)
+        x = self.classifier(x)
+        x = self.dequant(x)
+        return x
+
+
 # ─── AlexNetSE ────────────────────────────────────────────────────────────────
 
 class AlexNetSE(nn.Module):
