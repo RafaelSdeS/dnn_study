@@ -118,6 +118,7 @@ def load_completed_configs(output_path: Path) -> set:
                             record.get("batch_size", 1),
                             record.get("input_resolution", 64),
                             record["precision"],
+                            record.get("groups_mode", "dense"),
                         )
                     elif record["kind"] == "model":
                         key = ("model", record["model"], record["precision"])
@@ -186,6 +187,7 @@ def profile_layer_sweep(
     batch_sizes = config.get("batch_sizes", [1])
     input_resolutions = config.get("input_resolutions", [64])
     precisions = config.get("precisions", ["fp32"])
+    groups_modes = config.get("groups_modes", ["dense"])
     warmup = config.get("warmup", 50)
     iters = config.get("iters", 200)
     fft_min_kernel_size = config.get("fft_min_kernel_size", 5)
@@ -193,7 +195,8 @@ def profile_layer_sweep(
     device_tag = get_device_tag(device)
 
     total_configs = (
-        len(kernel_sizes) * len(layer_channels) * len(batch_sizes) * len(input_resolutions) * len(precisions)
+        len(kernel_sizes) * len(layer_channels) * len(batch_sizes) * len(input_resolutions)
+        * len(precisions) * len(groups_modes)
         + len([k for k in kernel_sizes if k >= fft_min_kernel_size]) * len(layer_channels)
     )
 
@@ -205,61 +208,70 @@ def profile_layer_sweep(
             for batch_size in batch_sizes:
                 for input_resolution in input_resolutions:
                     for precision in precisions:
-                        i += 1
+                        for groups_mode in groups_modes:
+                            i += 1
 
-                        key = (
-                            "layer",
-                            kernel_size,
-                            in_ch,
-                            in_ch,
-                            batch_size,
-                            input_resolution,
-                            precision,
-                        )
+                            groups = in_ch if groups_mode == "depthwise" else 1
 
-                        if key in completed:
-                            logger.info(f"[{i}/{total_configs}] Skipping layer config {key}")
-                            continue
-
-                        try:
-                            input_shape = (batch_size, in_ch, input_resolution, input_resolution)
-                            latency_ms = profile_layer_latency_per_batch_resolution(
+                            key = (
+                                "layer",
                                 kernel_size,
                                 in_ch,
                                 in_ch,
                                 batch_size,
                                 input_resolution,
-                                device,
-                                warmup=warmup,
-                                iters=iters,
+                                precision,
+                                groups_mode,
                             )
 
-                            # Winograd detection
-                            winograd_info = detect_winograd_via_speedup(
-                                in_ch, in_ch, input_shape, device, warmup=warmup // 2, iters=iters // 2
-                            )
+                            if key in completed:
+                                logger.info(f"[{i}/{total_configs}] Skipping layer config {key}")
+                                continue
 
-                            result = {
-                                "kind": "layer",
-                                "kernel_size": kernel_size,
-                                "in_ch": in_ch,
-                                "out_ch": in_ch,
-                                "batch_size": batch_size,
-                                "input_resolution": input_resolution,
-                                "precision": precision,
-                                "latency_ms": latency_ms,
-                                "winograd_speedup_info": winograd_info,
-                                "device": device_tag,
-                            }
+                            try:
+                                input_shape = (batch_size, in_ch, input_resolution, input_resolution)
+                                latency_ms = profile_layer_latency_per_batch_resolution(
+                                    kernel_size,
+                                    in_ch,
+                                    in_ch,
+                                    batch_size,
+                                    input_resolution,
+                                    device,
+                                    warmup=warmup,
+                                    iters=iters,
+                                    groups=groups,
+                                )
 
-                            if not dry_run:
-                                append_result_atomic(output_path, result)
+                                # Winograd detection
+                                winograd_info = detect_winograd_via_speedup(
+                                    in_ch, in_ch, input_shape, device, warmup=warmup // 2, iters=iters // 2,
+                                    groups=groups,
+                                )
 
-                            logger.info(f"[{i}/{total_configs}] layer k={kernel_size} ch={in_ch} "
-                                       f"b={batch_size} res={input_resolution} {precision}: {latency_ms:.3f}ms")
+                                result = {
+                                    "kind": "layer",
+                                    "kernel_size": kernel_size,
+                                    "in_ch": in_ch,
+                                    "out_ch": in_ch,
+                                    "batch_size": batch_size,
+                                    "input_resolution": input_resolution,
+                                    "precision": precision,
+                                    "groups": groups,
+                                    "groups_mode": groups_mode,
+                                    "latency_ms": latency_ms,
+                                    "winograd_speedup_info": winograd_info,
+                                    "device": device_tag,
+                                }
 
-                        except Exception as e:
-                            logger.error(f"[{i}/{total_configs}] Error profiling layer config {key}: {e}")
+                                if not dry_run:
+                                    append_result_atomic(output_path, result)
+
+                                logger.info(f"[{i}/{total_configs}] layer k={kernel_size} ch={in_ch} "
+                                           f"b={batch_size} res={input_resolution} {precision} "
+                                           f"groups={groups_mode}: {latency_ms:.3f}ms")
+
+                            except Exception as e:
+                                logger.error(f"[{i}/{total_configs}] Error profiling layer config {key}: {e}")
 
     # FFT convolution sweep (FP32 only, kernel_size >= fft_min_kernel_size)
     logger.info("Starting FFT convolution sweep")

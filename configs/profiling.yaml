@@ -13,10 +13,16 @@ layer_channels: [16, 32, 64, 128]  # Each value used as both in_ch and out_ch
 batch_sizes: [1, 8]                 # Batch 1 (latency-critical) + batch 8 (realistic inference)
 input_resolutions: [64, 128]        # Tiny ImageNet (64x64) + intermediate (128x128)
 
-# Layer sweep total: 6 kernels × 4 channels × 2 batch × 2 resolutions × 2 precisions = 192 configs
-# FFT sweep: 3 kernels (>=5) × 4 channels = 12 configs
+groups_modes: ["dense", "depthwise"]  # dense: groups=1. depthwise: groups=in_ch (valid since
+                                       # in_ch==out_ch throughout this sweep). Tests whether
+                                       # Winograd speedup (H1) requires groups=1, or also shows
+                                       # up on depthwise convs (H2) -- layer-level, not just the
+                                       # n=2 whole-model case study.
+
+# Layer sweep total: 6 kernels × 4 channels × 2 batch × 2 resolutions × 2 precisions × 2 groups_modes = 384 configs
+# FFT sweep: 3 kernels (>=5) × 4 channels = 12 configs (dense only)
 # Model sweep: 8 models × 2 precisions = 16 configs
-# Grand total: ~220 configs
+# Grand total: ~412 configs
 
 # Model profiling sweep parameters
 models:

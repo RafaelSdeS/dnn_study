@@ -91,6 +91,7 @@ def profile_layer_latency(
     device: torch.device,
     warmup: int = 50,
     iters: int = 200,
+    groups: int = 1,
 ) -> float:
     """
     Profile latency of a bare Conv2d layer.
@@ -102,13 +103,14 @@ def profile_layer_latency(
         device: torch.device for profiling.
         warmup: Warmup iterations (not timed).
         iters: Timed iterations.
+        groups: Conv2d groups (1 = dense, in_ch = depthwise).
 
     Returns:
         Latency in milliseconds (per iteration).
     """
     conv = nn.Conv2d(
         in_ch, out_ch, kernel_size, stride=1,
-        padding=(kernel_size - 1) // 2, bias=False
+        padding=(kernel_size - 1) // 2, bias=False, groups=groups
     )
     conv = conv.to(device).eval()
     torch.set_grad_enabled(False)
@@ -119,14 +121,16 @@ def profile_layer_latency(
         with torch.no_grad():
             _ = conv(input_tensor)
 
-    torch.cuda.synchronize(device)
+    if device.type == "cuda":
+        torch.cuda.synchronize(device)
     start_time = time.time()
 
     for _ in range(iters):
         with torch.no_grad():
             _ = conv(input_tensor)
 
-    torch.cuda.synchronize(device)
+    if device.type == "cuda":
+        torch.cuda.synchronize(device)
     elapsed_ms = (time.time() - start_time) * 1000 / iters
 
     return elapsed_ms
@@ -141,6 +145,7 @@ def profile_layer_latency_per_batch_resolution(
     device: torch.device,
     warmup: int = 50,
     iters: int = 200,
+    groups: int = 1,
 ) -> float:
     """
     Profile latency with specified batch size and input resolution.
@@ -148,13 +153,14 @@ def profile_layer_latency_per_batch_resolution(
     Args:
         batch_size: Batch size for inference.
         input_resolution: Spatial size (assumes square input_resolution x input_resolution).
+        groups: Conv2d groups (1 = dense, in_ch = depthwise).
 
     Returns:
         Latency in milliseconds per iteration.
     """
     input_shape = (batch_size, in_ch, input_resolution, input_resolution)
     return profile_layer_latency(
-        kernel_size, in_ch, out_ch, input_shape, device, warmup, iters
+        kernel_size, in_ch, out_ch, input_shape, device, warmup, iters, groups=groups
     )
 
 
@@ -166,6 +172,7 @@ def detect_winograd_via_speedup(
     warmup: int = 50,
     iters: int = 200,
     speedup_threshold: float = 1.8,
+    groups: int = 1,
 ) -> dict:
     """
     Empirical Winograd detection: compare 3x3 vs. 5x5 latency.
@@ -173,14 +180,19 @@ def detect_winograd_via_speedup(
     Winograd only accelerates 3x3, not 5x5. If 3x3 is significantly faster
     than 5x5, Winograd is likely active.
 
+    Args:
+        groups: Conv2d groups (1 = dense, in_ch = depthwise) — must match the
+            row this comparison is attached to, since Winograd eligibility
+            depends on groups=1.
+
     Returns:
         {
             "speedup_ratio": float (5x5_latency / 3x3_latency),
             "winograd_inferred": bool (ratio > threshold),
         }
     """
-    latency_3x3 = profile_layer_latency(3, in_ch, out_ch, input_shape, device, warmup, iters)
-    latency_5x5 = profile_layer_latency(5, in_ch, out_ch, input_shape, device, warmup, iters)
+    latency_3x3 = profile_layer_latency(3, in_ch, out_ch, input_shape, device, warmup, iters, groups=groups)
+    latency_5x5 = profile_layer_latency(5, in_ch, out_ch, input_shape, device, warmup, iters, groups=groups)
 
     ratio = latency_5x5 / latency_3x3 if latency_3x3 > 0 else 0
     winograd_inferred = ratio > speedup_threshold

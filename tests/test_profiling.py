@@ -1,7 +1,18 @@
 """GpuSampler must degrade to all-None fields when nvidia-smi is unavailable."""
 import time
 
-from ml.profiling import GpuSampler
+import torch
+
+from ml.profiling import GpuSampler, profile_layer_latency
+
+
+def test_profile_layer_latency_groups_runs_dense_and_depthwise():
+    # Smoke-tests that the `groups` kwarg reaches nn.Conv2d without shape errors:
+    # groups=1 (dense) and groups=in_ch (depthwise) must both build and run.
+    device = torch.device("cpu")
+    dense_ms = profile_layer_latency(3, 16, 16, (1, 16, 8, 8), device, warmup=0, iters=1, groups=1)
+    depthwise_ms = profile_layer_latency(3, 16, 16, (1, 16, 8, 8), device, warmup=0, iters=1, groups=16)
+    assert dense_ms > 0 and depthwise_ms > 0
 
 
 def test_gpu_sampler_degrades_gracefully_without_nvidia_smi():
