@@ -1,0 +1,78 @@
+=== alexnet_bottleneck ===
+
+============================================================
+DETECTION EXPERIMENT: alexnet_bottleneck [FP32]
+============================================================
+
+Config saved to /tmp/verify_override/ssd_alexnet_bottleneck_fp32_phase7_detection/config.yaml
+
+[DRY-RUN] Would run FP32 detection. Exiting.
+data:
+  batch_size: 16
+  img_size: 512
+  num_workers: 4
+  pin_memory: true
+  seed: 42
+  voc_root: ~/.cache/torchvision/datasets
+stage: fp32
+trainer:
+  early_stopping_patience: 10
+  epochs: 30
+  grad_clip_norm: null
+  label_smoothing: 0.1
+  lr: 0.0001
+  use_amp: true
+  warmup_epochs: 2
+  weight_decay: 0.0004
+=== alexnet_fire ===
+
+============================================================
+DETECTION EXPERIMENT: alexnet_fire [FP32]
+============================================================
+
+Config saved to /tmp/verify_override/ssd_alexnet_fire_fp32_phase7_detection/config.yaml
+
+[DRY-RUN] Would run FP32 detection. Exiting.
+data:
+  batch_size: 16
+  img_size: 512
+  num_workers: 4
+  pin_memory: true
+  seed: 42
+  voc_root: ~/.cache/torchvision/datasets
+stage: fp32
+trainer:
+  early_stopping_patience: 10
+  epochs: 30
+  grad_clip_norm: null
+  label_smoothing: 0.1
+  lr: 0.0001
+  use_amp: true
+  warmup_epochs: 2
+  weight_decay: 0.0004
+=== alexnet_tv ===
+
+============================================================
+DETECTION EXPERIMENT: alexnet_tv [FP32]
+============================================================
+
+Config saved to /tmp/verify_override/ssd_alexnet_tv_fp32_phase7_detection/config.yaml
+
+[DRY-RUN] Would run FP32 detection. Exiting.
+data:
+  batch_size: 16
+  img_size: 512
+  num_workers: 4
+  pin_memory: true
+  seed: 42
+  voc_root: ~/.cache/torchvision/datasets
+stage: fp32
+trainer:
+  early_stopping_patience: 10
+  epochs: 30
+  grad_clip_norm: null
+  label_smoothing: 0.1
+  lr: 0.0001
+  use_amp: true
+  warmup_epochs: 2
+  weight_decay: 0.0004

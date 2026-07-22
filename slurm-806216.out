@@ -1,0 +1,9 @@
+Using downloaded and verified file: /home/users/rsdsouza/.cache/torchvision/datasets/VOCtrainval_06-Nov-2007.tar
+Extracting /home/users/rsdsouza/.cache/torchvision/datasets/VOCtrainval_06-Nov-2007.tar to /home/users/rsdsouza/.cache/torchvision/datasets
+Using downloaded and verified file: /home/users/rsdsouza/.cache/torchvision/datasets/VOCtrainval_11-May-2012.tar
+Extracting /home/users/rsdsouza/.cache/torchvision/datasets/VOCtrainval_11-May-2012.tar to /home/users/rsdsouza/.cache/torchvision/datasets
+Using downloaded and verified file: /home/users/rsdsouza/.cache/torchvision/datasets/VOCtest_06-Nov-2007.tar
+Extracting /home/users/rsdsouza/.cache/torchvision/datasets/VOCtest_06-Nov-2007.tar to /home/users/rsdsouza/.cache/torchvision/datasets
+alexnet_bottleneck img_size=512: anchor recall @IoU 0.5 = 0.797  (200 images)
+alexnet_fire img_size=512: anchor recall @IoU 0.5 = 0.799  (200 images)
+alexnet_tv img_size=512: anchor recall @IoU 0.5 = 0.797  (200 images)

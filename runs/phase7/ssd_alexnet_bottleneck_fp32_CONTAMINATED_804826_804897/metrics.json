@@ -1,0 +1,17 @@
+{
+  "train_loss_bbox": [],
+  "train_loss_cls": [],
+  "train_loss_total": [],
+  "val_mAP": [],
+  "val_mAP50": [],
+  "epoch_time_s": [],
+  "peak_gpu_mem_mb": [],
+  "lr": [],
+  "images_per_sec": [],
+  "avg_batch_time_s": [],
+  "cpu_percent": [],
+  "ram_used_mb": [],
+  "total_time_s": 1.6689300537109375e-06,
+  "best_epoch": 29,
+  "best_val_mAP": 0.0
+}

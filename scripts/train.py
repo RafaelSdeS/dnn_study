@@ -12,6 +12,7 @@ import torch
 import yaml
 from torch.utils.tensorboard import SummaryWriter
 
+import ml.model_registrations  # noqa: F401 — populates MODEL_REGISTRY
 from configs.loader import load_config
 from ml import (
     MODEL_REGISTRY,
@@ -220,6 +221,7 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
 
         signal.signal(signal.SIGTERM, _request_stop)
         signal.signal(signal.SIGINT, _request_stop)
+        signal.signal(signal.SIGUSR1, _request_stop)  # Slurm pre-timeout warning (see train.sbatch)
 
         fp32_fit = {}
         fp32_eval = {}
@@ -360,6 +362,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--experiment", default="default", help="Experiment config file name or path")
     parser.add_argument("--runtime", default="local", help="Runtime profile name or path")
     parser.add_argument("--device", default=None, help="Override device, e.g. cuda or cpu")
+    parser.add_argument("--model", default=None, help="Restrict the experiment to a single registered model name")
     parser.add_argument("--dry-run", action="store_true", help="Load configs and print the resolved run plan")
     return parser
 
@@ -370,6 +373,8 @@ def main() -> int:
     runtime_cfg = _load_runtime_config(args.runtime)
     if args.device:
         runtime_cfg["device"] = args.device
+    if args.model:
+        experiment_cfg["models"] = [args.model]
     if args.dry_run:
         print(json.dumps({"experiment": experiment_cfg, "runtime": runtime_cfg}, indent=2, default=str))
         return 0

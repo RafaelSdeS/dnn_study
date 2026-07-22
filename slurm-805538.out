@@ -1,0 +1,12 @@
+Traceback (most recent call last):
+  File "/home/users/rsdsouza/dnn_study/scripts/check_anchor_recall.py", line 25, in <module>
+    _, _, _, val_loader = create_voc_detection_loaders(data_cfg)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/users/rsdsouza/dnn_study/ml/det_seg_data.py", line 137, in create_voc_detection_loaders
+    voc07_raw = VOCDetection(
+                ^^^^^^^^^^^^^
+  File "/home/users/rsdsouza/dnn_study/.venv/lib/python3.11/site-packages/torchvision/datasets/voc.py", line 95, in __init__
+    voc_root = os.path.join(self.root, base_dir)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen posixpath>", line 76, in join
+TypeError: expected str, bytes or os.PathLike object, not NoneType
