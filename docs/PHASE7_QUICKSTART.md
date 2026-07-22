@@ -94,7 +94,7 @@ Results saved to `runs/phase7/ssd_<model>_fp32/`:
 ## Reference
 
 - **Blueprint:** `ideas/PHASE7_PLAN.md` (detailed research hypotheses H1-H4)
-- **Log:** `ideas/PHASE7_LOG.md` (per-stage decisions)
+- **Log:** `docs/PHASE7_LOG.md` (per-stage decisions)
 - **CLAUDE.md:** project conventions (reproducibility, trainer patterns)
 
 ---
