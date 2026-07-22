@@ -1,3 +1,4 @@
+import gzip
 import json
 import time
 from dataclasses import asdict
@@ -75,6 +76,15 @@ def disk_mb(path: str | Path) -> float | None:
     return p.stat().st_size / (1024 ** 2) if p.exists() else None
 
 
+def gzip_mb(path: str | Path) -> float | None:
+    """Gzip-compressed size in MB (lossless, Deep Compression-style entropy coding on top of
+    whatever precision the checkpoint is already saved at); None if file doesn't exist."""
+    p = Path(path)
+    if not p.exists():
+        return None
+    return len(gzip.compress(p.read_bytes())) / (1024 ** 2)
+
+
 def compute_flops(model, input_size: tuple = (1, 3, 64, 64)) -> dict:
     """MACs and FLOPs via fvcore. Returns {"macs": int, "flops": int}."""
     from fvcore.nn import FlopCountAnalysis
@@ -117,6 +127,8 @@ def make_run_summary(
     flops_results: dict,
     int8_eval: dict | None = None,
     int8_benchmark: dict | None = None,
+    fp32_gzip_mb: float | None = None,
+    int8_gzip_mb: float | None = None,
 ) -> dict:
     """Assemble the full per-model run summary with FP32 and INT8 metrics."""
     history = fit_results.get("history", {})
@@ -137,6 +149,12 @@ def make_run_summary(
         fp32_size_mb / int8_size_mb
         if int8_size_mb and int8_size_mb > 0
         else None
+    )
+    fp32_gzip_ratio = (
+        fp32_size_mb / fp32_gzip_mb if fp32_gzip_mb and fp32_gzip_mb > 0 else None
+    )
+    int8_gzip_ratio = (
+        int8_size_mb / int8_gzip_mb if int8_gzip_mb and int8_gzip_mb > 0 else None
     )
     best_top1 = fit_results.get("best_val_top1", fp32_eval.get("top1"))
     param_efficiency = best_top1 / params_m if (best_top1 and params_m) else None
@@ -179,6 +197,11 @@ def make_run_summary(
         "int8_size_mb": int8_size_mb,
         "params_m": params_m,
         "compression_ratio": compression_ratio,
+        # Gzip (lossless entropy coding on top of the saved precision)
+        "fp32_gzip_mb": fp32_gzip_mb,
+        "int8_gzip_mb": int8_gzip_mb,
+        "fp32_gzip_ratio": fp32_gzip_ratio,
+        "int8_gzip_ratio": int8_gzip_ratio,
         "param_efficiency_top1_per_m": param_efficiency,
         # FLOPs
         "macs": flops_results.get("macs"),

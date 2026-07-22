@@ -28,6 +28,7 @@ from ml import (
     create_imagenet_loaders,
     create_results_summary,
     disk_mb,
+    gzip_mb,
     expand_path,
     make_qat_callback,
     make_run_summary,
@@ -331,6 +332,8 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
         flops_results = compute_flops(fp32_model)
         fp32_size_mb = disk_mb(best_model_path)
         int8_size_mb = disk_mb(int8_path) if int8_path.exists() else None
+        fp32_gzip_mb = gzip_mb(best_model_path)
+        int8_gzip_mb = gzip_mb(int8_path) if int8_path.exists() else None
 
         summary = make_run_summary(
             name=model_name,
@@ -344,6 +347,8 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
             flops_results=flops_results,
             int8_eval=int8_eval,
             int8_benchmark=int8_benchmark,
+            fp32_gzip_mb=fp32_gzip_mb,
+            int8_gzip_mb=int8_gzip_mb,
         )
         create_results_summary(summary, resolved_config, results_dir / f"{model_name}_summary.json")
         results_rows.append(summary)
