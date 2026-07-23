@@ -33,7 +33,7 @@ def aggregate(experiment: str, runtime: str) -> Path:
         raise FileNotFoundError(f"No summary JSONs found under {root / experiment}/*/results/")
 
     rows = [json.loads(p.read_text()) for p in summary_paths]
-    output_path = root / "results" / f"{experiment}_final_comparison.csv"
+    output_path = root / "results_aggregate" / f"{experiment}_final_comparison.csv"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(rows).to_csv(output_path, index=False)
     return output_path
