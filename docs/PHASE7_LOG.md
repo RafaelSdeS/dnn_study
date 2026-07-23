@@ -103,13 +103,24 @@ Phase 7.
 
 ## Implementation Status
 
-**Complete:** All 8 stages infrastructure is in place and smoke-tested.
+**Infrastructure:** All 8 stages complete and smoke-tested.
 
-**Pending:** 
-1. User runs `python scripts/train_det_sg.py detection --model alexnet_bottleneck --runtime pcad` (or local with `--dry-run` first)
-2. Monitor FP32 mAP results against Phase 3 classification accuracy
-3. Run QAT/INT8 if FP32 results are good (H2 hypothesis requires this)
-4. Full segmentation if detection is stable
+**Training:** FP32/QAT/INT8 have all been run (`python scripts/train_det_seg.py detection --model
+<name> --runtime pcad`) across multiple configs (`phase7_detection`, `_minratio02` anchor-config
+retry, `_diag_256`, `_diag_512`) for all 3 backbones.
+
+**Blocked:** Validation mAP is 0.4–7.1% across every run — far below a working SSD's expected
+40–70%+ on VOC. This is consistent with the anchor-recall check deferred back in Stage 4 (line 58
+above) never actually being run to completion/confirmation before full training — exactly the
+failure mode `PHASE7_QUICKSTART.md`'s own troubleshooting section anticipated. See
+`ideas/BEST_MODELS.md`'s Phase 7 section for the full breakdown and `ideas/PHASE7_PLAN.md` line 869
+("Blocking #1", still unchecked). QAT/INT8 conversion also ran on top of these broken FP32
+checkpoints, so those results inherit the same problem — not separately diagnostic.
+
+**Next:**
+1. Run `scripts/check_anchor_recall.py` to completion, confirm >95% recall for all 3 backbones.
+2. Retrain FP32 detection with a corrected anchor configuration.
+3. Only then: compare mAP across backbones (H1), re-run QAT/INT8 (H2), consider segmentation.
 
 **Ground Rules Applied:**
 - ✓ Context hygiene: all decisions logged here for `/compact` recovery

@@ -1,6 +1,10 @@
 # Phase 7 — Detection/Segmentation Implementation ✓
 
-**Status:** All infrastructure complete. Ready for training.
+**Status:** Infrastructure complete, training has run (FP32/QAT/INT8, all 3 backbones, several
+configs) — but results are currently unreliable. Validation mAP came back at 0.4–7.1% across every
+run, consistent with the anchor-recall check below never being run to confirmed completion before
+training. See `ideas/BEST_MODELS.md`'s Phase 7 section and `docs/PHASE7_LOG.md`'s Implementation
+Status before launching more training or trusting any existing mAP number.
 
 ## What's Been Built (8 Stages)
 
@@ -62,12 +66,18 @@ Results saved to `outputs/detection_segmentation/phase7/ssd_<model>_fp32/`:
 - Training time / inference latency
 - Comparison to Phase 3 classification accuracy
 
-## Next Steps After FP32
+## Next Steps
 
-1. **Compare mAP across backbones** (H1: does compensation transfer?)
-2. **Run QAT/INT8** (H2: is quantization robustness stable?)
-3. **Extend to segmentation** (reuse same trainer pattern)
-4. **Cross-phase analysis** (run `python scripts/phase7_analysis.py`)
+1. **Fix the anchor-recall blocker** — run `compute_anchor_recall()` / `scripts/check_anchor_recall.py`
+   to completion, confirm >95% for all 3 backbones (currently unconfirmed — the likely root cause
+   of the mAP results below 10%).
+2. **Retrain FP32 detection** with the corrected anchor config.
+3. **Compare mAP across backbones** (H1: does compensation transfer?)
+4. **Re-run QAT/INT8** (H2: is quantization robustness stable?) — already run once, but on top of
+   the broken FP32 checkpoints, so not yet diagnostic.
+5. **Extend to segmentation** (reuse same trainer pattern) — no training run yet, infrastructure only.
+6. **Cross-phase analysis** (`python scripts/phase7_analysis.py`) — currently prints H1–H4 against
+   the unreliable mAP data; rerun once FP32 is fixed.
 
 ## Ground Rules Enforced
 
@@ -99,4 +109,4 @@ Results saved to `outputs/detection_segmentation/phase7/ssd_<model>_fp32/`:
 
 ---
 
-**Phase 7 is ready. Launch training when you're ready!**
+**Phase 7 infrastructure is ready and has been used — fix the anchor-recall blocker before launching more training.**
