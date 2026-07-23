@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Run this ON PCAD after `git pull`, from the repo root.
-# Moves gitignored files (*.pth, *.log, wandb/) left behind in old
-# outputs/pcad/ folder names into the new reorganized structure.
+# Run this after `git pull`, from the repo root, on ANY machine that has
+# gitignored artifacts (*.pth, *.log, wandb/) sitting in the old pre-reorg
+# folder names — PCAD (outputs/pcad/) and/or wherever the Phase 1-4
+# notebooks were run (top-level checkpoints/). Each move is a no-op if its
+# source folder doesn't exist on this machine.
 # Safe to re-run — skips anything already moved or missing.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -31,4 +33,11 @@ move "$ROOT/phase9_fire_bypass_large_scale"    "$ROOT/phase_9_bypass_ablation/fi
 move "$ROOT/figures"                           "$ROOT/figures_generated"
 move "$ROOT/logs"                              "$ROOT/logs_by_phase/all_slurm_jobs"
 
-echo "Done. Any leftover empty old folders under $ROOT can be removed manually."
+# Top-level checkpoints/ (Phase 1-4 notebook runs — *.pth is gitignored)
+move "checkpoints/baselines_qat_phase1"        "checkpoints/phase_1_baseline_training"
+move "checkpoints/alexnet_qat_phase2"          "checkpoints/phase_2_kernel_restriction_training"
+move "checkpoints/compensation_phase3"         "checkpoints/phase_3_compensation_and_hybrids_training"
+move "checkpoints/compression_phase4_1"        "checkpoints/phase_4_compression_and_final_architecture_training"
+move "checkpoints/final_architecture_phase4"   "checkpoints/phase_4_compression_and_final_architecture_training"
+
+echo "Done. Any leftover empty old folders can be removed manually."
