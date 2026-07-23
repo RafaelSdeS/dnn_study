@@ -40,4 +40,8 @@ move "checkpoints/compensation_phase3"         "checkpoints/phase_3_compensation
 move "checkpoints/compression_phase4_1"        "checkpoints/phase_4_compression_and_final_architecture_training"
 move "checkpoints/final_architecture_phase4"   "checkpoints/phase_4_compression_and_final_architecture_training"
 
+# Top-level runs/phase7/ (Phase 7 detection/segmentation — *.pth is gitignored)
+move "runs/phase7"                             "outputs/detection_segmentation/phase7"
+rmdir "runs" 2>/dev/null || true
+
 echo "Done. Any leftover empty old folders can be removed manually."

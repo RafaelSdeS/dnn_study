@@ -54,7 +54,7 @@ echo "=========================================="
 echo ""
 
 # Create log directory
-mkdir -p runs/phase7/logs
+mkdir -p outputs/detection_segmentation/phase7/logs
 
 echo "Submitting FP32 detection training (3 nodes, parallel)..."
 echo ""
@@ -63,7 +63,7 @@ echo ""
 fp32_job_ids=()
 for model in "${MODELS[@]}"; do
     job_name="p7_${model:0:8}_fp32"
-    log_file="runs/phase7/logs/p7_${model}_fp32_%j.log"
+    log_file="outputs/detection_segmentation/phase7/logs/p7_${model}_fp32_%j.log"
 
     if [ "$DRY_RUN" = true ]; then
         echo "[DRY-RUN] sbatch --job-name=$job_name --time=$TIME --mem=$MEM --gpus=$GPUS --partition=$PARTITION --output=$log_file scripts/slurm/det_seg.sbatch detection fp32 $model $EXPERIMENT"
@@ -100,7 +100,7 @@ if [ "$RUN_QAT" = true ]; then
         fi
 
         job_name="p7_${model:0:8}_qat"
-        log_file="runs/phase7/logs/p7_${model}_qat_%j.log"
+        log_file="outputs/detection_segmentation/phase7/logs/p7_${model}_qat_%j.log"
 
         if [ "$DRY_RUN" = true ]; then
             echo "[DRY-RUN] sbatch --job-name=$job_name --time=$TIME --mem=$MEM --gpus=$GPUS --partition=$PARTITION --output=$log_file --dependency=afterok:$depend_on scripts/slurm/det_seg.sbatch detection qat $model $EXPERIMENT"
@@ -135,7 +135,7 @@ if [ "$RUN_QAT" = true ]; then
             fi
 
             job_name="p7_${model:0:8}_int8"
-            log_file="runs/phase7/logs/p7_${model}_int8_%j.log"
+            log_file="outputs/detection_segmentation/phase7/logs/p7_${model}_int8_%j.log"
 
             if [ "$DRY_RUN" = true ]; then
                 echo "[DRY-RUN] sbatch --job-name=$job_name --time=$TIME --mem=$MEM --gpus=$GPUS --partition=$PARTITION --output=$log_file --dependency=afterok:$depend_on scripts/slurm/det_seg.sbatch detection int8 $model $EXPERIMENT"
@@ -161,6 +161,6 @@ else
     echo "SUBMISSION COMPLETE"
     echo "Monitor with: squeue -u $USER"
     echo "Check dependencies: squeue -u $USER --long"
-    echo "Logs: runs/phase7/logs/"
+    echo "Logs: outputs/detection_segmentation/phase7/logs/"
 fi
 echo "=========================================="

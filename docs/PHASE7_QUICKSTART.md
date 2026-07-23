@@ -44,7 +44,7 @@ sbatch scripts/slurm/det_seg.sbatch detection alexnet_bottleneck phase7_detectio
 
 ## Output Structure
 
-Results saved to `runs/phase7/ssd_<model>_fp32/`:
+Results saved to `outputs/detection_segmentation/phase7/ssd_<model>_fp32/`:
 ```
 ├── config.yaml         # Full config (reproducible)
 ├── git_hash.txt        # Commit hash at run start

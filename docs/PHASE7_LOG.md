@@ -108,7 +108,7 @@ Decision continuity across `/compact` boundaries. Append per stage.
 
 **Ground Rules Applied:**
 - ✓ Context hygiene: all decisions logged here for `/compact` recovery
-- ✓ Reproducibility: `runs/phase7/<exp>/config.yaml` + `git_hash.txt` per run
+- ✓ Reproducibility: `outputs/detection_segmentation/phase7/<exp>/config.yaml` + `git_hash.txt` per run
 - ✓ Failure triage framework in place (distinguish bugs, limitations, real findings)
 - ✓ Budgeting: FP32 max 30 epochs, patience 10; QAT 10-15 epochs
 - ✓ No abstraction creep: reused existing trainer/data patterns

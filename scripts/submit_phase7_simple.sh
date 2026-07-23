@@ -16,7 +16,7 @@ fi
 
 PARTITION="tupi"   # RTX 4090 nodes; alternatives: shared (K20m, weak), grace (L40s), beagle (GTX1080Ti)
 
-mkdir -p runs/phase7/logs
+mkdir -p outputs/detection_segmentation/phase7/logs
 
 echo "Submitting Phase 7 FP32 training to PCAD..."
 echo "Models: ${MODELS[@]}"
@@ -33,7 +33,7 @@ for model in "${MODELS[@]}"; do
         --mem=32G \
         --gpus=1 \
         --partition="$PARTITION" \
-        --output="runs/phase7/logs/p7_${model}_%j.log" \
+        --output="outputs/detection_segmentation/phase7/logs/p7_${model}_%j.log" \
         scripts/slurm/det_seg.sbatch detection "$model" phase7_detection 2>&1)
 
     job_id=$(echo "$output" | grep -oP 'Submitted batch job \K[0-9]+' || echo "")
@@ -53,5 +53,5 @@ for i in "${!MODELS[@]}"; do
 done
 echo ""
 echo "Monitor: squeue -u $USER"
-echo "Logs: runs/phase7/logs/"
+echo "Logs: outputs/detection_segmentation/phase7/logs/"
 echo "=========================================="

@@ -34,8 +34,8 @@ python scripts/train_det_seg.py ${TASK} \
     --stage ${STAGE} \
     --experiment ${EXPERIMENT} \
     --runtime local \
-    --save-dir runs/phase7
+    --save-dir outputs/detection_segmentation/phase7
 
 echo "===================================================="
-echo "Training complete. Results in runs/phase7/"
+echo "Training complete. Results in outputs/detection_segmentation/phase7/"
 echo "===================================================="

@@ -15,5 +15,5 @@ sbatch scripts/slurm/det_seg.sbatch detection fp32 alexnet_tv phase7_detection
 echo "✓ alexnet_tv submitted"
 
 echo ""
-echo "Stage 7 sweep in progress. Results in: runs/phase7/"
+echo "Stage 7 sweep in progress. Results in: outputs/detection_segmentation/phase7/"
 echo "Monitor with: squeue -u rsdsouza"

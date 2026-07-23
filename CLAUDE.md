@@ -8,7 +8,7 @@ For non-trivial changes: inspect the relevant files, give a short plan, wait for
 
 Deep-learning research on how **convolutional kernel-size restriction** affects CNNs. Motivation: **Winograd accelerators** are efficient for small kernels (2×2, 3×3) but scale poorly for large filters. We measure the accuracy/efficiency trade-off to recommend Winograd-friendly architectures.
 
-**Scope:** Classification on **Tiny ImageNet-200** (64×64 RGB, 200 classes), FP32 training → **QAT → INT8**. Phases 1–3 compare AlexNet-style vs. efficient (MobileNet-style) architectures; Phase 4 builds and compresses final hybrid designs; Phase 5 is cross-phase results analysis; Phase 6 profiles hardware (latency/power/GPU utilization) for the best models; **Phase 7 (done/ongoing)** tests whether classification's compensation findings transfer to dense prediction — SSD detection + segmentation on PASCAL VOC (`ml/det_seg_data.py`, `det_seg_models.py`, `det_seg_trainer.py`, driven by `scripts/train_det_seg.py`, results under `runs/phase7/`). Phase 8 (efficient ViT / hybrid-attention) is planned only — see `ideas/PHASE8_PLAN.md` — no code yet.
+**Scope:** Classification on **Tiny ImageNet-200** (64×64 RGB, 200 classes), FP32 training → **QAT → INT8**. Phases 1–3 compare AlexNet-style vs. efficient (MobileNet-style) architectures; Phase 4 builds and compresses final hybrid designs; Phase 5 is cross-phase results analysis; Phase 6 profiles hardware (latency/power/GPU utilization) for the best models; **Phase 7 (done/ongoing)** tests whether classification's compensation findings transfer to dense prediction — SSD detection + segmentation on PASCAL VOC (`ml/det_seg_data.py`, `det_seg_models.py`, `det_seg_trainer.py`, driven by `scripts/train_det_seg.py`, results under `outputs/detection_segmentation/phase7/`). Phase 8 (efficient ViT / hybrid-attention) is planned only — see `ideas/PHASE8_PLAN.md` — no code yet.
 
 Questions: how kernel size affects accuracy/efficiency/quantization robustness; whether small-kernel CNNs match pretrained models; the FP32→INT8 drop per architecture family; whether classification-derived compensation mechanisms (bottleneck, Fire, depthwise) transfer to detection/segmentation.
 
@@ -68,8 +68,9 @@ ideas/                    # Research notes (flat):
   BEST_MODELS.md          #   cross-phase rankings & recommendations
   MODELS.md               #   architecture notes & design rationale
   PHASE6_PLAN.md PHASE7_PLAN.md PHASE8_PLAN.md  # research & execution plans (6/7 executed, 8 planned only)
-runs/                     # Phase 7 detection/segmentation run outputs (SSD checkpoints/logs per model+config)
 outputs/                  # Training artifacts & logs
+  detection_segmentation/ # Phase 7 detection/segmentation run outputs (SSD checkpoints/logs per model+config)
+    phase7/
   pcad/
     phase_6_hardware_profiling/ # GPU profiling data (runs/, backfill/)
     phase_9_bypass_ablation/    # Phase 9 runs (fire_bypass/, fire_bypass_large_scale/)

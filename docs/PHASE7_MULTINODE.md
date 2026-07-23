@@ -24,7 +24,7 @@ bash scripts/submit_phase7_multinode.sh --dry-run # Preview without submitting
 - **Submits:** 3 parallel FP32 detection jobs (one per backbone)
 - **Nodes:** Each job gets its own GPU node (no sharing)
 - **Walltime:** 12 hours per job
-- **Output:** Logs to `runs/phase7/logs/p7_<model>_<jobid>.log`
+- **Output:** Logs to `outputs/detection_segmentation/phase7/logs/p7_<model>_<jobid>.log`
 
 ```bash
 # Example: submit only bottleneck and fire
@@ -52,8 +52,8 @@ squeue -u $USER -j 12345           # Specific job
 
 ### View logs
 ```bash
-tail -f runs/phase7/logs/p7_bottleneck_*.log   # Real-time log for bottleneck
-cat runs/phase7/logs/p7_*.log                   # All logs
+tail -f outputs/detection_segmentation/phase7/logs/p7_bottleneck_*.log   # Real-time log for bottleneck
+cat outputs/detection_segmentation/phase7/logs/p7_*.log                   # All logs
 ```
 
 ### Cancel jobs
@@ -82,7 +82,7 @@ GPUS=1
 
 Results appear in:
 ```
-runs/phase7/
+outputs/detection_segmentation/phase7/
 ├── ssd_alexnet_bottleneck_fp32/
 │   ├── config.yaml
 │   ├── git_hash.txt

@@ -4,7 +4,7 @@ Joins detection/segmentation results to Phase 3 classification results
 and tests hypotheses H1-H4.
 
 Usage:
-    python scripts/phase7_analysis.py --phase7-dir runs/phase7 --results-dir results
+    python scripts/phase7_analysis.py --phase7-dir outputs/detection_segmentation/phase7 --results-dir results
 """
 import argparse
 import json
@@ -131,7 +131,7 @@ def test_hypothesis_h4(phase3_df: pd.DataFrame, phase7_df: pd.DataFrame):
 
 def main():
     parser = argparse.ArgumentParser(description="Phase 7 cross-phase analysis")
-    parser.add_argument("--phase7-dir", default="runs/phase7", help="Phase 7 results directory")
+    parser.add_argument("--phase7-dir", default="outputs/detection_segmentation/phase7", help="Phase 7 results directory")
     parser.add_argument("--results-dir", default="results", help="Previous phases results directory")
 
     args = parser.parse_args()
@@ -152,7 +152,7 @@ def main():
     test_hypothesis_h4(phase3_df, phase7_df)
 
     print("\n" + "="*60)
-    print("Analysis complete. See runs/phase7/ for detailed results.")
+    print("Analysis complete. See outputs/detection_segmentation/phase7/ for detailed results.")
     print("="*60)
 
 

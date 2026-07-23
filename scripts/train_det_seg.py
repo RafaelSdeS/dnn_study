@@ -240,7 +240,7 @@ def main():
     parser.add_argument("--stage", choices=["fp32", "qat", "int8"], default="fp32", help="Training stage")
     parser.add_argument("--experiment", help="Experiment config name (optional)")
     parser.add_argument("--runtime", choices=["local", "pcad"], default="local", help="Where to run")
-    parser.add_argument("--save-dir", default="runs", help="Output directory")
+    parser.add_argument("--save-dir", default="outputs/detection_segmentation", help="Output directory")
     parser.add_argument("--dry-run", action="store_true", help="Don't train, just show config")
     parser.add_argument("--skip-anchor-check", action="store_true", help="Skip the anchor-recall pre-flight gate")
 
