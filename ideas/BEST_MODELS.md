@@ -156,7 +156,7 @@ Results after implementing phases 1, 2, and 3. **Most baselines (MobileNetV2, Re
 
 Measured on a real RTX 4090 (PCAD `tupi5`), batch=1, 64×64 input — the first phase to check hardware
 behavior directly instead of relying on FLOPs/params as a proxy. Full methodology, statistical tests, and
-data-quality corrections in `notebooks/analysis/hardware_profiling_phase6.ipynb`;
+data-quality corrections in `notebooks/phase_6_hardware_profiling_analysis/hardware_profiling_phase6.ipynb`;
 hypotheses/acceptance-criteria source in `ideas/PHASE6_PLAN.md`.
 
 | Model | Winograd-eligible | FP32 Latency (ms) | INT8 Latency (ms) | FP32 GFLOP/s | FP32 Top-1 | Efficiency (Acc/ms) |
