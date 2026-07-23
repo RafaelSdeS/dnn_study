@@ -93,7 +93,7 @@ Each experiment follows the same pipeline:
 ## Analysis
 
 - ✅ Generate a single CSV summarizing every experiment — `final_comparison.csv` per phase.
-- ✅ Cross-phase figures in `results/figures/` (accuracy_vs_macs, fp32_vs_int8_bar, efficiency_accuracy_per_mb, training curves, etc.).
+- ✅ Cross-phase figures in `results/figures_generated/` (accuracy_vs_macs, fp32_vs_int8_bar, efficiency_accuracy_per_mb, training curves, etc.).
 - [ X ] Full cross-phase ranking once Phase 3 results are in:
   - [ X ] Top-1 accuracy ranking
   - [ X ] Top-5 accuracy ranking
@@ -118,7 +118,7 @@ Models:
 
 For each model:
 
-- ✅ FP32 training — results in `results/baselines_qat_phase1/final_comparison.csv`
+- ✅ FP32 training — results in `results/phase_1_baseline_training/final_comparison.csv`
 - ✅ QAT fine-tuning (partial — MobileNetV2, ResNet18 skipped; VGGStyle, AlexNetTV completed)
 - ✅ INT8 conversion
 - ✅ FP32 vs INT8 evaluation
@@ -148,7 +148,7 @@ For each variant:
 - ✅ FP32 vs INT8 comparison
 - ✅ Compare against the original AlexNet
 
-Results in `results/alexnet_qat_phase2/` (57 epochs, full QAT + INT8).
+Results in `results/phase_2_kernel_restriction_training/` (57 epochs, full QAT + INT8).
 
 ---
 
@@ -209,45 +209,60 @@ Produce:
 
 ---
 
-## Phase 6 — Hardware Profiling & Winograd Efficiency Validation
+## Phase 6 — Hardware Profiling & Winograd Efficiency Validation ✅ (RTX 4090 only)
+
+**Status:** Executed on RTX 4090 (PCAD `tupi5`) only. The RTX 4060 cross-GPU comparison below was
+never collected — flagged as an open limitation in the Phase 6 notebook itself, not silently
+dropped. Results test hypotheses H1–H4 (Winograd signal on dense 3×3, absence on depthwise,
+Pareto-frontier accuracy-vs-latency, FP32→INT8 latency-ranking stability). See
+`notebooks/phase_6_hardware_profiling_analysis/hardware_profiling_phase6.ipynb`,
+`results/phase_6_hardware_profiling_analysis/`, `ideas/PHASE6_PLAN.md`.
 
 Measure actual latency, memory bandwidth, and power consumption on **RTX 4060 (laptop, bandwidth-limited)** and **RTX 4090 (PCAD tupi nodes, compute-rich)** to empirically validate Winograd acceleration claims across contrasting hardware. Compare theoretical vs real-world efficiency gains across kernel sizes, and identify whether small-kernel gains hold on both GPU classes or only on the bandwidth-limited one.
 
 Benchmarks (run on both RTX 4060 and RTX 4090):
 
-- [ ] Profile single-layer latency for Conv(k=2×2), Conv(k=3×3), Conv(k=5×5) on RTX 4060 and RTX 4090
-- [ ] Measure memory bandwidth utilization (NVIDIA Nsight Compute or similar) on both GPUs
-- [ ] Profile full forward pass for Phase 1–5 reference architectures (AlexNet, MobileNetV2, TinyHybridNet, etc.) on both GPUs
-- [ ] Profile INT8 vs FP32 inference latency on CPU (fbgemm backend)
-- [ ] Identify which layers contribute most to latency (are Winograd gains concentrated or distributed?) and whether this differs between the two GPUs
-- [ ] Measure Winograd reordering overhead (input/output packing costs) on both GPUs
-- [ ] Profile power consumption under sustained inference (if HW supports NVIDIA RAPL or equivalent)
+- ✅ Profile single-layer latency for Conv(k=2×2), Conv(k=3×3), Conv(k=5×5) — RTX 4090 only, not RTX 4060
+- [ ] Measure memory bandwidth utilization (NVIDIA Nsight Compute or similar) — not done, GpuSampler uses nvidia-smi (util/power/temp/mem), not Nsight Compute
+- ✅ Profile full forward pass for Phase 1–5 reference architectures (AlexNet, MobileNetV2, TinyHybridNet, etc.) — RTX 4090 only
+- ✅ Profile INT8 vs FP32 inference latency on CPU (fbgemm backend) — H4, Spearman rank-correlation test
+- ✅ Identify which layers contribute most to latency (Winograd signal concentrated/distributed) — RTX 4090 only; cross-GPU differential not addressed
+- [ ] Measure Winograd reordering overhead (input/output packing costs) — figures use a synthetic estimate, not a direct packing-cost measurement
+- ✅ Profile power consumption under sustained inference — via nvidia-smi `GpuSampler`, not RAPL
 
 Outputs:
 
-- [ ] Latency heatmap: kernel size vs layer depth, per GPU
-- [ ] Speedup ratio: (Conv 5×5 time) / (Conv 3×3 time), RTX 4060 vs RTX 4090
-- [ ] Winograd feasibility threshold: break-even point for reordering overhead, per GPU
-- [ ] CPU INT8 latency ranking (identify bottleneck layers)
+- ✅ Latency heatmap: kernel size vs layer depth — RTX 4090 only
+- [ ] Speedup ratio: (Conv 5×5 time) / (Conv 3×3 time), RTX 4060 vs RTX 4090 — no RTX 4060 data
+- [ ] Winograd feasibility threshold: break-even point for reordering overhead, per GPU — not formally computed
+- ✅ CPU INT8 latency ranking (identify bottleneck layers)
 - [ ] Cross-GPU comparison: does small-kernel efficiency hold on compute-rich hardware (RTX 4090), or only on bandwidth-limited hardware (RTX 4060)?
-- [ ] Revised efficiency recommendations based on empirical data
+- ✅ Revised efficiency recommendations based on empirical data — H1–H4 verdicts + Limitations section in the Phase 6 notebook
 
 ---
 
-## Phase 7 — Detection & Segmentation Kernel Study
+## Phase 7 — Detection & Segmentation Kernel Study ✅ (detection done, segmentation infrastructure-only)
+
+**Status:** Detection is trained and evaluated end-to-end (FP32 → QAT → INT8) on PASCAL VOC with
+an SSD head over 3 backbones. Segmentation has data-loading + trainer scaffolding built
+(`create_voc_segmentation_loaders`, `docs/PHASE7_LOG.md` Stage 6) but no actual segmentation
+training run yet — "Full segmentation if detection is stable" is still an open follow-on per that
+log. CLI: `scripts/train_det_seg.py`. Results: `outputs/detection_segmentation/phase7/`. Analysis
+joining detection to Phase 3 classification: `scripts/phase7_analysis.py`, `ideas/PHASE7_PLAN.md`,
+`docs/PHASE7_LOG.md`, `docs/PHASE7_QUICKSTART.md`, `docs/PHASE7_MULTINODE.md`.
 
 Extend the kernel-restriction findings (Phases 2–3) to object detection and semantic segmentation, testing whether the accuracy/efficiency trade-off observed in classification holds for denser prediction tasks. Directly addresses the research objective's detection/segmentation scope, which Phases 1–6 (classification only) do not cover.
 
 Models: reuse Phase 3's Pareto-optimal backbones (Bottleneck, Fire) as feature extractors, paired with a lightweight detection head (e.g., SSD-lite/YOLO-tiny) and segmentation head (e.g., small U-Net/DeepLab-lite decoder). Compare against a large-kernel baseline backbone (AlexNetTV or VGGStyle).
 
-- [ ] Pick a detection/segmentation dataset compatible with small-scale training (e.g., Pascal VOC subset, COCO subset, or Cityscapes)
-- [ ] FP32 training (backbone + head)
-- [ ] QAT fine-tuning
-- [ ] INT8 conversion
-- [ ] FP32 vs INT8 evaluation (mAP for detection, mIoU for segmentation)
-- [ ] Compare small-kernel vs large-kernel backbones on mAP/mIoU, latency, and model size
-- [ ] Quantization robustness comparison (does the QAT-stability ranking from Phase 3 transfer to detection/segmentation heads?)
-- [ ] Determine whether the classification kernel-size trade-off transfers to dense prediction tasks
+- ✅ Pick a detection/segmentation dataset compatible with small-scale training — PASCAL VOC (2007+2012 detection, 2012 segmentation)
+- ✅ FP32 training (backbone + head) — detection, 3 backbones (Bottleneck, Fire, AlexNetTV)
+- ✅ QAT fine-tuning — detection
+- ✅ INT8 conversion — detection
+- ✅ FP32 vs INT8 evaluation (mAP for detection) — segmentation mIoU not yet run
+- ✅ Compare small-kernel vs large-kernel backbones on mAP, latency, and model size
+- ✅ Quantization robustness comparison (does the QAT-stability ranking from Phase 3 transfer to detection heads?) — H1–H4 in `scripts/phase7_analysis.py`
+- ✅ Determine whether the classification kernel-size trade-off transfers to dense prediction tasks — detection only; segmentation still open
 
 ---
 
@@ -271,6 +286,28 @@ For each variant:
 - [ ] Compare accuracy, latency, model size, and quantization robustness vs Phase 5–6 CNNs
 - [ ] Assess Winograd deployment feasibility (attention ops, memory layout)
 - [ ] Determine whether attention can substitute for large receptive fields in resource-constrained inference
+
+---
+
+## Phase 9 — SqueezeNet-Style Bypass Ablation + Structured Compression ✅ (Task 1) / 🔧 (Tasks 2–3, tooling only)
+
+Isolates whether Phase 4's `AlexNetFinalFireResidual` accuracy gain over Phase 3's `AlexNetFire`
+comes from the residual bypass alone, or requires its stem change too — the two were previously
+changed simultaneously, so the gain couldn't be attributed. Separately measures structured
+(channel-level, Winograd-safe) pruning and weight-compression headroom beyond plain gzip. Full
+plan: `ideas/PHASE9_PLAN.md`.
+
+- ✅ **Task 1 — Bypass ablation:** `AlexNetFireBypass` (Fire + identity shortcut only, no stem
+  change) trained and compared against `AlexNetFire` and `AlexNetFinalFireResidual`. **Result:
+  bypass alone accounts for ~55% of Phase 4's full gain.** Runs:
+  `outputs/pcad/phase_9_bypass_ablation/`, results CSVs:
+  `outputs/pcad/results_aggregate/results_phase_9_fire_bypass*.csv`.
+- 🔧 **Task 2 — Structured channel pruning** (`scripts/prune_channels.py`): CLI built, prunes
+  `_AlexBottleneck`'s internal squeeze width, mechanics-only (forward-pass + shape validation, no
+  fine-tuning). No saved pruning results yet — not yet run to produce final numbers.
+- 🔧 **Task 3 — Compression measurement** (`scripts/measure_compression.py`): CLI built, compares
+  nominal INT8 vs Shannon-entropy vs k-means weight-clustering (16/32/64 clusters) bits/weight,
+  measurement-only (no changes to `ml/checkpoint.py`). No saved results yet.
 
 ---
 

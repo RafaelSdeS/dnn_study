@@ -19,11 +19,17 @@ jupyter lab
 ```
 
 **Notebooks (in order of execution):**
-1. `notebooks/baselines_qat.ipynb` — Phase 1: Reference pretrained models (ResNet18, MobileNetV2, AlexNet, VGG-style)
-2. `notebooks/alexnet_qat.ipynb` — Phase 2: AlexNet kernel-restriction variants (3×3, 2×2, stacked, mixed, small-kernel)
-3. `notebooks/compensation_qat.ipynb` — Phase 3a: Compensation mechanisms (bottleneck, residual, factorized, etc.)
-4. `notebooks/tinyhybridnet_qat.ipynb` — Phase 3b: Efficient hybrids (TinyHybridNet, TinyMobileNetV2)
-5. `notebooks/results_analysis.ipynb` — Cross-phase results analysis and figure generation (5 visualizations: FP32 accuracy, FP32 vs INT8, accuracy vs size, accuracy vs MACs, **efficiency per MB**, plus training curves)
+1. `notebooks/phase_1_baseline_training/baselines_qat.ipynb` — Phase 1: Reference pretrained models (ResNet18, MobileNetV2, AlexNet, VGG-style)
+2. `notebooks/phase_2_kernel_restriction_training/alexnet_qat.ipynb` — Phase 2: AlexNet kernel-restriction variants (3×3, 2×2, stacked, mixed, small-kernel)
+3. `notebooks/phase_3_compensation_and_hybrids_training/compensation_qat.ipynb` — Phase 3a: Compensation mechanisms (bottleneck, residual, factorized, etc.)
+4. `notebooks/phase_3_compensation_and_hybrids_training/tinyhybridnet_qat.ipynb` — Phase 3b: Efficient hybrids (TinyHybridNet, TinyMobileNetV2)
+5. `notebooks/phase_4_compression_and_final_architecture_training/compression_phase4_1.ipynb` — Phase 4.1: Aggressive compression (INT4/INT2/ternary/binary) of the best Phase 1–3 models
+6. `notebooks/phase_4_compression_and_final_architecture_training/final_architecture_qat.ipynb` — Phase 4: Combines Phase 3's best mechanisms into final hybrid architectures
+7. `notebooks/phase_5_cross_phase_results_analysis/final_analysis_phase5.ipynb` — Phase 5: Cross-phase results analysis and figure generation
+8. `notebooks/phase_6_hardware_profiling_analysis/hardware_profiling_phase6.ipynb` — Phase 6: Hardware profiling & Winograd efficiency validation (RTX 4090)
+9. `notebooks/phase_9_pcad_bypass_ablation_analysis/pcad_results_analysis.ipynb` — Phase 9: Cross-phase PCAD results (bypass ablation, large-scale runs)
+
+Phase 7 (detection/segmentation) has no notebook — it's CLI-only via `scripts/train_det_seg.py`; see `docs/PHASE7_QUICKSTART.md`. Phase 8 is planned only (`ideas/PHASE8_PLAN.md`), no code yet. Full model/phase inventory: `CLAUDE.md`.
 
 ---
 
@@ -59,15 +65,19 @@ All notebooks import from `ml/`:
 | 2 — Kernel Restriction | `alexnet_variants.py` | AlexNet variants with kernel constraints (3×3, 2×2, stacked, mixed, small-kernel) |
 | 3a — Compensation | `compensation.py` | Architectural compensations for small kernels (bottleneck, residual, SE, etc.) |
 | 3b — Efficient Hybrids | `tinyhybridnet.py` | TinyHybridNet, TinyMobileNetV2 (MobileNet-style efficient CNNs) |
-| 4+ — Future | — | See `TODO.md` |
+| 4 — Final Architecture | `final_architecture.py` | Combines Phase 3's best mechanisms into final hybrid models |
+
+Phases 6–9 (hardware profiling, detection/segmentation, bypass ablation) reuse these model files rather than adding new ones. Full model inventory + per-phase file map: `CLAUDE.md`.
 
 ### `configs/` — Hyperparameter Defaults
 
-YAML-based configuration loading via `configs/loader.py`:
+YAML-based configuration loading via `configs/loader.py`. Full list in `CLAUDE.md`; the core ones:
 - `data.yaml` — Dataset, augmentation, normalization
 - `training.yaml` — Epochs, batch size, learning rate
 - `qat.yaml` — QAT-specific settings
-- `models/` — Per-architecture learning rate overrides
+- `experiments/` — Per-run overrides (one YAML per experiment, `default.yaml` as the template)
+- `runtime/` — `local.yaml` / `pcad.yaml` — dataset root, conda env per runtime
+- `slurm/` — Partition/GPU/wall-time per cluster profile
 
 ---
 
@@ -127,8 +137,10 @@ YAML-based configuration loading via `configs/loader.py`:
 - **Tier 1 models (Bottleneck, Fire) are Pareto-optimal:** Tiny (4–6 MB), competitive accuracy (43–44%), quantization-stable
 - **Small kernels face QAT challenges:** AlexNetSmallKernel's –9.89pp drop suggests aggressive quantization sensitivity
 - **Compensation mechanisms work:** Bottleneck & Fire achieve high efficiency (7–10 Acc/MB) while maintaining accuracy
-- **Model efficiency summary:** Results in `results/results.csv` and per-model details in `results/model_details.csv`
-- **Visualizations:** Cross-phase figures in `results/figures/` (6 PNG plots covering accuracy, efficiency, latency, training curves)
+- **Model efficiency summary:** Results in `results/results_aggregate/results_cross_phase.csv` and per-model details in `results/results_aggregate/model_details_cross_phase.csv`
+- **Visualizations:** Cross-phase figures in `results/figures_generated/phase_1_2_3_baseline_and_kernels/` and `phase_5_cross_phase_analysis/`
+
+Phases 4–9 have since completed — see `CLAUDE.md`'s Model Inventory and `ideas/BEST_MODELS.md` (currently scoped to Phases 1–3; not yet updated with later-phase rankings).
 
 ---
 
@@ -173,7 +185,9 @@ python -m scripts.cluster resume outputs/pcad/default/<model_name>
 - `outputs/<runtime>/<experiment>/<model>/logs/` for per-run logs
 - `outputs/<runtime>/<experiment>/<model>/tensorboard/` for TensorBoard event files
 - `outputs/<runtime>/<experiment>/<model>/results/` for per-run JSON summaries
-- `outputs/<runtime>/results/` for aggregated comparison CSVs
+- `outputs/<runtime>/results_aggregate/` for aggregated comparison CSVs (via `scripts/aggregate_results.py`)
+
+Detection/segmentation (Phase 7) uses a separate layout: `outputs/detection_segmentation/phase7/<run>/` — see `docs/PHASE7_QUICKSTART.md`.
 
 **PCAD-specific settings:**
 - Edit [configs/runtime/pcad.yaml](configs/runtime/pcad.yaml) for dataset root, conda env, and runtime toggles
