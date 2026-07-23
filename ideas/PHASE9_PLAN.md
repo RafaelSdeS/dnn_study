@@ -68,6 +68,28 @@ Quantization stability also transfers cleanly: like plain `alexnet_fire`, the by
 model's modest +0.59pp drop. That drop, whatever causes it (stem, or the projected shortcuts),
 isn't coming from the bypass mechanism itself.
 
+**Result — revised at large-scale budget (supersedes the comparison above).** The run above used
+early-stopped budgets that turned out to be unfair: `alexnet_fire_bypass` stopped at 66 epochs and
+`alexnet_final_fire_residual` at 82, well short of convergence (`alexnet_fire` itself needed 174
+epochs at the same patience). Re-run at the project's standard large-scale budget
+(`configs/experiments/phase9_fire_bypass_large_scale.yaml`, `configs/experiments/large_scale_fire_residual_resume.yaml`,
+patience 20 / 50 respectively) closes almost the entire gap:
+
+| model | FP32 top-1 | QAT top-1 | INT8 top-1 | quant Δtop-1 (QAT→INT8) |
+|---|---|---|---|---|
+| `alexnet_fire` (174 ep) | 50.59% | — | — | — |
+| `alexnet_fire_bypass` (152 ep FP32 → 50 ep QAT) | 50.46% | 51.76% | 49.86% | −1.90pp |
+| `alexnet_final_fire_residual` (319 ep FP32 → 92 ep QAT) | 51.22% | **51.77%** | 50.04% | −1.73pp |
+
+Post-QAT, bypass and full-residual are statistically tied (51.76% vs 51.77%, well inside
+run-to-run noise), and both sit within ~1pp of plain `alexnet_fire`. The "~53%/58% of the gap"
+figure above was a training-budget artifact, not an architectural finding: the early-stopped
+comparison undertrained the two higher-capacity models more than it undertrained the baseline,
+manufacturing a gap that a fair budget mostly erases. The stem change and the other two
+1×1-projected residual pairs in Phase 4's full model do **not** meaningfully outperform the single
+bypass shortcut once both are trained to convergence — bypass alone gets essentially all of the
+achievable gain for zero added parameters over `alexnet_fire`.
+
 ---
 
 ### H2: Structured Channel Pruning Trades Size for Accuracy Without Breaking Dense Structure
