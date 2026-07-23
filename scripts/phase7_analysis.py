@@ -29,7 +29,7 @@ class PhaseResult:
 
 def load_phase3_results(results_dir: Path) -> pd.DataFrame:
     """Load Phase 3 classification results."""
-    csv_path = results_dir / "model_details.csv"
+    csv_path = results_dir / "results_aggregate" / "model_details_cross_phase.csv"
     if not csv_path.exists():
         print(f"Warning: {csv_path} not found. Skipping Phase 3 data.")
         return pd.DataFrame()

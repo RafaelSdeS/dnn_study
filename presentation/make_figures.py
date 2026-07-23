@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Generate 3 simplified matplotlib figures for the Marp presentation.
-Data source: results/results.csv + results/final_analysis_phase5/executive_summary.json
+Data source: results/results_aggregate/results_cross_phase.csv + results/phase_5_cross_phase_results_analysis/executive_summary.json
 """
 
 import json
@@ -37,12 +37,12 @@ SURFACE = "#fef5e7"
 GRID = "#e1e0d9"
 
 # Read data
-df = pd.read_csv("results/results.csv")
-with open("results/final_analysis_phase5/executive_summary.json") as f:
+df = pd.read_csv("results/results_aggregate/results_cross_phase.csv")
+with open("results/phase_5_cross_phase_results_analysis/executive_summary.json") as f:
     exec_summary = json.load(f)
 
-# alexnet_final_fire_residual (Phase 4 hybrid) isn't in results.csv (Phase 1-3 only) — pull it in from its own comparison table
-_p4 = pd.read_csv("results/final_architecture_phase4/final_comparison.csv")
+# alexnet_final_fire_residual (Phase 4 hybrid) isn't in results_cross_phase.csv (Phase 1-3 only) — pull it in from its own comparison table
+_p4 = pd.read_csv("results/phase_4_compression_and_final_architecture_training/final_comparison.csv")
 _fire_residual_row = pd.DataFrame([{
     "base_model": "alexnet_final_fire_residual",
     "top1_%_FP32": _p4.loc[_p4["model"] == "alexnet_final_fire_residual", "top1_%"].iloc[0],
@@ -404,7 +404,7 @@ plt.close()
 # Combines FP32 + INT8 main-phase results with the full extreme-quantization grid
 # (int4/int2/ternary/binary/mixed, all models — not just a pre-filtered subset)
 # to show the true accuracy-vs-size Pareto frontier.
-COMPRESSION_DIR = Path("results/compression_phase4_1")
+COMPRESSION_DIR = Path("results/phase_4_compression_and_final_architecture_training")
 
 points = []  # (name, size_mb, accuracy, category)
 for _, row in df.dropna(subset=["top1_%_FP32", "size_MB_FP32"]).iterrows():
