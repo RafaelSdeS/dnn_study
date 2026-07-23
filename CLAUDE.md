@@ -31,6 +31,7 @@ ml/                       # Core package — notebooks and scripts import everyt
   quantization_advanced.py# Mixed-precision / sub-INT8 PTQ: make_qconfig, prepare_sim, calibrate,
                           #   compute_layer_sensitivity, assign_mixed_precision, apply_weight_ptq, theoretical_size_mb
   profiling.py            # Phase 6: GpuSampler (nvidia-smi power/util/temp/mem sampling), latency/throughput profiling
+  pruning.py              # Phase 9: prune_model_channels — structured (whole-channel) pruning, stays Winograd-dense
   runtime.py              # RuntimePaths, set_global_seed — shared by scripts/train.py and scripts/train_det_seg.py
   reporting.py            # build_comparison_table, create_results_summary, disk_mb, compute_flops, make_run_summary
 models/                   # Architectures by phase (see Model Inventory)
