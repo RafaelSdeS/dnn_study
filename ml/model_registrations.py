@@ -27,7 +27,7 @@ from models import (
     AlexNetDilatedGAP,
 )
 
-# notebooks/training/baselines_qat.ipynb
+# notebooks/phase_1_baseline_training/baselines_qat.ipynb
 FUSE_MAP_ALEXNET_TV = [["0", "1"], ["3", "4"], ["6", "7"], ["8", "9"], ["10", "11"]]
 FUSE_MAP_VGG = [
     ["0", "1", "2"], ["3", "4", "5"],
@@ -51,7 +51,7 @@ register_model(
     lr=3e-4,
 )
 
-# notebooks/training/compensation_qat.ipynb
+# notebooks/phase_3_compensation_and_hybrids_training/compensation_qat.ipynb
 FUSE_DEPTHWISESEP = [
     ["0", "1", "2"], ["3", "4", "5"],
     ["7", "8", "9"], ["10", "11", "12"],
@@ -71,7 +71,7 @@ register_model("alexnet_fire_bypass", AlexNetFireBypass, fuse_map=find_fuse_grou
 register_model("alexnet_dilated_fc", AlexNetDilatedFC, fuse_map=FUSE_MAP_DILATED, fuse_root_attr="features", lr=1e-3)
 register_model("alexnet_dilated_gap", AlexNetDilatedGAP, fuse_map=FUSE_MAP_DILATED, fuse_root_attr="features", lr=1e-3)
 
-# notebooks/training/final_architecture_qat.ipynb
+# notebooks/phase_4_compression_and_final_architecture_training/final_architecture_qat.ipynb
 register_model(
     "alexnet_final_bottleneck_residual",
     AlexNetFinalBottleneckResidual,
