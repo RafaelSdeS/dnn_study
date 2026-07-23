@@ -43,14 +43,18 @@ configs/                  # YAML hyperparameters, loaded via configs/loader.py �
   models/alexnet_fp32.yaml   # per-model lr overrides (only this one remains)
 scripts/                  # CLI entry points (used instead of notebooks for PCAD/cluster runs)
   train.py                # `python -m scripts.train --experiment ... --runtime local|pcad` — classification FP32→QAT→INT8
-  cluster.py               # `python -m scripts.cluster submit|status|cancel|resume` — SLURM submission/monitoring
+  cluster.py               # `python -m scripts.cluster submit|status|cancel|resume` — submits slurm/train.sbatch or profile.sbatch
   train_det_seg.py         # Phase 7 detection/segmentation CLI, mirrors train.py
   profile_hardware.py      # Phase 6 hardware profiling CLI
   phase7_analysis.py       # Joins detection/segmentation results to Phase 3 classification results, tests H1-H4
   aggregate_results.py     # Aggregates per-model summary JSONs from a cluster submit-sweep into one CSV
   winograd_quant_error.py  # Phase 6 extension: INT8 quantization error from Winograd F(2x2,3x3) transforms
+  measure_compression.py   # Phase 9 Task 3: entropy/k-means weight-compression headroom above plain gzip
+  prune_channels.py        # Phase 9 Task 2: structured (channel) pruning CLI, mechanics-only (no fine-tuning)
   check_anchor_recall.py / diag_stage7.py / backfill_gzip.py  # one-off Phase 7 diagnostics / backfill tools
-  slurm/*.sbatch           # sbatch templates submitted by cluster.py
+  migrate_pcad_gitignored.sh  # merges gitignored artifacts (*.pth, *.log) left in pre-reorg folder names after a pull
+  submit_phase7_simple.sh / submit_phase7_multinode.sh  # PCAD multi-node Phase 7 submission (simple vs FP32→QAT→INT8 chaining) — see docs/PHASE7_MULTINODE.md
+  slurm/*.sbatch           # sbatch templates — train.sbatch/profile.sbatch submitted by cluster.py, det_seg.sbatch by the submit_phase7_*.sh scripts, others called directly
 tests/                    # pytest: test_registry, test_checkpoint, test_config, test_trainer_smoke,
                           #   test_quantization, test_profiling, test_train_cli
 notebooks/                # Organized by phase + purpose

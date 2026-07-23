@@ -2,6 +2,11 @@
 
 Decision continuity across `/compact` boundaries. Append per stage.
 
+Note: "Stage N" below numbers Phase 7's own internal build-out steps (data
+pipeline, model heads, trainer, CLI integration, ...) — unrelated to the
+project's Phase 1-9 numbering in `CLAUDE.md`. Every stage here belongs to
+Phase 7.
+
 ---
 
 ## Stage 1 — VOC Detection Data Pipeline ✓
