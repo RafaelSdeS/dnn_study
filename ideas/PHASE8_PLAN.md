@@ -68,7 +68,7 @@ model) at size ≤ 2× `alexnet_fire`'s 5.99 MB, and ≥ pure-Swin-Pico's accura
 size used in its attention stages.
 
 **Evidence to Collect:** FP32 top-1, size (MB), params, FLOPs for the hybrid vs. `alexnet_fire`/
-`alexnet_bottleneck` (`results/model_details.csv`) and vs. Phase 8's own pure-Swin variant.
+`alexnet_bottleneck` (`results/results_aggregate/model_details_cross_phase.csv`) and vs. Phase 8's own pure-Swin variant.
 
 **Acceptance Criterion:** Hybrid strictly dominates (higher accuracy, ≤ comparable size) at least
 one of the two pure paradigms (pure-CNN or pure-attention) it's built from; report the trade-off
@@ -84,7 +84,7 @@ QAT pipeline), attention-based models end up as **mixed-precision** models where
 layers convert to INT8. This caps the achievable compression ratio and introduces FP32↔INT8
 dequant/requant boundaries at every attention block — a structurally different (and likely worse)
 quantization profile than Phase 3's fully-INT8-convertible Bottleneck/Fire (`−0.08pp`/`+0.33pp`
-drop, `results/model_details.csv`).
+drop, `results/results_aggregate/model_details_cross_phase.csv`).
 
 **Expected Outcome:** INT8 compression ratio (FP32 size / INT8 size) for all four Phase 8 models
 is well below Phase 3's Bottleneck/Fire ratios (~4× typical for a fully-INT8 Conv-BN model, since
@@ -718,7 +718,7 @@ without error for the six non-distillation models; one short local run (2–3 ep
 
 ## Task 7 — Cross-Phase Analysis Notebook
 
-**What:** `notebooks/analysis/phase8_results_analysis.ipynb` — joins Phase 8's results to Phase
+**What:** `notebooks/phase_8_efficient_vit_hybrid_attention_analysis/phase8_results_analysis.ipynb` — joins Phase 8's results to Phase
 2/3's classification results and Phase 6's profiling infrastructure (reused directly on the new
 models per H5) to test H1–H5.
 
@@ -739,14 +739,15 @@ models per H5) to test H1–H5.
 - Produce `results/phase8_comparison.csv` (same convention as every prior phase) and update
   `ideas/BEST_MODELS.md`/`TODO.md`.
 
-**Inputs:** `results/model_details.csv`, Phase 6's profiling JSON, Phase 8's own comparison CSV.
+**Inputs:** `results/results_aggregate/model_details_cross_phase.csv`, Phase 6's profiling JSON, Phase 8's own comparison CSV.
 
-**Outputs:** Figures (`results/figures/phase8_*`), `results/phase8_comparison.csv`, updated
+**Outputs:** Figures (`results/figures_generated/phase_8_efficient_vit_hybrid_attention/phase8_*`),
+`results/phase_8_efficient_vit_hybrid_attention_analysis/phase8_comparison.csv`, updated
 `TODO.md`/`ideas/BEST_MODELS.md`.
 
 **Dependencies:** Tasks 1–6 complete with at least FP32+INT8 results for all seven models.
 
-**Deliverables:** `notebooks/analysis/phase8_results_analysis.ipynb`.
+**Deliverables:** `notebooks/phase_8_efficient_vit_hybrid_attention_analysis/phase8_results_analysis.ipynb`.
 
 **Pitfalls / Alternatives:** With 3–6 points per hypothesis, correlation statistics have limited
 power — same caveat Phase 6/7 already state explicitly; report raw numbers prominently.
@@ -800,7 +801,7 @@ publishable result.
 ### 6. `vgg_style` as a Fifth CNN Comparison Point
 Phase 6's profiling table already includes `vgg_style` (fully Winograd-eligible, all-dense-3×3) —
 adding it to Phase 8's H2/H5 comparison plots (no new training needed, results already exist in
-`results/model_details.csv`) would sharpen the "does attention beat the *best* CNN, not just the
+`results/results_aggregate/model_details_cross_phase.csv`) would sharpen the "does attention beat the *best* CNN, not just the
 smallest one" framing.
 
 ### 7. Full RTX 4090/PCAD Profiling of All Seven Phase 8 Models

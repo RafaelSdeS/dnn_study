@@ -1,8 +1,8 @@
 # Phase 9 — SqueezeNet-Style Bypass Ablation + Structured Compression (Implementation Plan)
 
 Phase 4's `alexnet_final_fire_residual` (FP32 49.79%/INT8 49.20%, 8.09→0.75 MB,
-`results/final_architecture_phase4/alexnet_final_fire_residual_summary.json`) beats Phase 3's
-`alexnet_fire` (FP32 43.98%/INT8 44.30%, 5.99→0.55 MB, `results/model_details.csv:19`) by
+`results/phase_4_compression_and_final_architecture_training/alexnet_final_fire_residual_summary.json`) beats Phase 3's
+`alexnet_fire` (FP32 43.98%/INT8 44.30%, 5.99→0.55 MB, `results/results_aggregate/model_details_cross_phase.csv:19`) by
 +5.81pp FP32 / +4.90pp INT8. But `AlexNetFinalFireResidual` changes two things at once versus
 `AlexNetFire`: it adds a 3×3 stride-2 stem *and* wraps every Fire stage in a residual shortcut
 (`models/final_architecture.py:97-124`, `_FireResBlock` at `models/final_architecture.py:15-28`).
@@ -39,7 +39,7 @@ achieves, not the whole thing.
 
 **Evidence to Collect:** FP32/INT8 top-1/top-5, quantization drop, param count, FP32/INT8 size —
 same fields as `make_run_summary` produces for every other Phase 3/4 model, so it drops straight
-into `results/model_details.csv`-style comparison.
+into `results/results_aggregate/model_details_cross_phase.csv`-style comparison.
 
 **Acceptance Criterion:** `alexnet_fire_bypass` FP32 top-1 > `alexnet_fire` FP32 top-1 by a
 statistically meaningful margin (single run, so "meaningful" = larger than the ~0.3-0.5pp run-to-run
@@ -47,7 +47,7 @@ noise visible between `best_val_top1` and `final_val_top1` in existing summary J
 drop stays within the ±1pp band every other Fire/Bottleneck-family model has shown.
 
 **Result — met.** PCAD job 806654 (`configs/experiments/phase9_fire_bypass.yaml`, 66 epochs to
-early-stopping), `outputs/pcad/phase9_fire_bypass/alexnet_fire_bypass/results/alexnet_fire_bypass_summary.json`:
+early-stopping), `outputs/pcad/phase_9_bypass_ablation/fire_bypass/alexnet_fire_bypass/results/alexnet_fire_bypass_summary.json`:
 
 | model | FP32 top-1 | FP32 top-5 | INT8 top-1 | INT8 top-5 | quant Δtop-1 | size FP32→INT8 |
 |---|---|---|---|---|---|---|
@@ -224,7 +224,7 @@ Reuses `_FireModule` (`models/compensation.py:367-386`) and `_float_functional()
 **Registration** (two places, mirroring the existing `alexnet_fire` entries exactly):
 - `ml/model_registrations.py:68` area:
   `register_model("alexnet_fire_bypass", AlexNetFireBypass, fuse_map=find_fuse_groups(AlexNetFireBypass()), lr=1e-3)`
-- `notebooks/training/compensation_qat.ipynb` registration cell: add
+- `notebooks/phase_3_compensation_and_hybrids_training/compensation_qat.ipynb` registration cell: add
   `FUSE_FIRE_BYPASS = find_fuse_groups(AlexNetFireBypass())` next to `FUSE_FIRE`, add
   `register_model("alexnet_fire_bypass", AlexNetFireBypass, fuse_map=FUSE_FIRE_BYPASS, lr=1e-3)`
   to the `MODEL_REGISTRY.clear()` block, and add the same entry to the notebook's `CTORS` dict
@@ -268,7 +268,7 @@ work if this scoped version proves useful.
    `--evaluate` additionally runs `Trainer.evaluate()` on the real Tiny-ImageNet val set.
 
 **Verification — done, against the real PCAD-trained checkpoint**
-(`outputs/pcad/large_scale/alexnet_bottleneck/checkpoints/alexnet_bottleneck_best.pth`), ratio 0.4:
+(`outputs/pcad/archive_legacy_phases/phase_4_5_large_scale/alexnet_bottleneck/checkpoints/alexnet_bottleneck_best.pth`), ratio 0.4:
 
 ```
 features.0   mid_ch   32 ->   19
@@ -320,7 +320,7 @@ only read raw file bytes, never unpickle, so the on-disk context line works rega
 weights-only entropy/k-means numbers use the FP32 checkpoint instead (a plain state dict —
 robust), simulating INT8 quantization in-script rather than depending on that fragile pickle.
 
-**Results — `alexnet_fire`, from `outputs/pcad/large_scale/alexnet_fire/checkpoints/`:**
+**Results — `alexnet_fire`, from `outputs/pcad/archive_legacy_phases/phase_4_5_large_scale/alexnet_fire/checkpoints/`:**
 
 | method | bits/weight | size (MB) |
 |---|---|---|
@@ -395,16 +395,16 @@ correction note.
 - [x] `AlexNetFireBypass` param count == `AlexNetFire` param count (Blocking Issue 1) — 516,152 ==
       516,152, verified
 - [x] `alexnet_fire_bypass` registered identically in `ml/model_registrations.py` and
-      `notebooks/training/compensation_qat.ipynb`
+      `notebooks/phase_3_compensation_and_hybrids_training/compensation_qat.ipynb`
 - [x] FP32→QAT→INT8 run produces a `alexnet_fire_bypass_summary.json` with the same fields as
       existing Phase 3 summaries (`evaluate(topk=(1,5))` numbers present) — PCAD job 806654,
-      `outputs/pcad/phase9_fire_bypass/alexnet_fire_bypass/results/alexnet_fire_bypass_summary.json`
+      `outputs/pcad/phase_9_bypass_ablation/fire_bypass/alexnet_fire_bypass/results/alexnet_fire_bypass_summary.json`
 - [x] `pytest tests/` passes, in particular `test_registry.py` and `test_quantization.py`, after
       adding the new model/registration
 - [x] `scripts/prune_channels.py --dry-run` prints channel counts without writing files
 - [x] Pruned model forward-passes at `(1,3,64,64)` and every remaining `Conv2d.groups == 1`
 - [x] `Trainer.evaluate()` runs without shape errors on the pruned (unfine-tuned) model — real run
-      against `outputs/pcad/large_scale/alexnet_bottleneck`, see Task 2 results
+      against `outputs/pcad/archive_legacy_phases/phase_4_5_large_scale/alexnet_bottleneck`, see Task 2 results
 - [x] Task 3's entropy numbers are ≤ 8 bits/weight (sanity bound — INT8 range width) — 7.19,
       asserted in-script
 - [x] Task 3's comparison table (entropy, 16/32/64-cluster sizes, gzip ratio) recorded in this

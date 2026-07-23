@@ -38,7 +38,7 @@ smaller backbone size, mirroring the classification result (44.6%/44.0% vs. 32.9
   necessary but not sufficient condition, since size doesn't change between tasks, only the head does.
 
 **Evidence to Collect:** `mAP@[.5:.95]`, `mAP@.5`, `mIoU`, `pixel_accuracy` per backbone, plus
-backbone-only parameter/size counts (already known from Phase 3/`results/model_details.csv`).
+backbone-only parameter/size counts (already known from Phase 3/`results/results_aggregate/model_details_cross_phase.csv`).
 
 **Acceptance Criterion:** Backbone accuracy-per-parameter ranking (Bottleneck/Fire > AlexNetTV)
 from Phase 3 reproduces in both detection and segmentation, allowing for a wider absolute accuracy
@@ -666,7 +666,7 @@ argmax for the segmenter) and ground truth, per validation batch.
 straight into `make_run_summary()`-style JSON, adding new fields
 (`fp32_map`, `int8_map`, `map_drop`, or `fp32_miou`/`int8_miou`/`miou_drop`) alongside the existing
 schema rather than repurposing the classification-specific `top1`/`top5` field names, to keep
-`results/results.csv`'s cross-phase schema honest about what was actually measured.
+`results/results_aggregate/results_cross_phase.csv`'s cross-phase schema honest about what was actually measured.
 
 **Dependencies:** `pip install pycocotools torchmetrics` (or confirm/upgrade existing
 `torchmetrics` install — see D6; **verify the exact installed version supports
@@ -747,7 +747,16 @@ before submitting the full PCAD job.
 
 ## Task 9 — Cross-Backbone, Cross-Phase, and Winograd-Latency Analysis
 
-**What:** `notebooks/analysis/phase7_results_analysis.ipynb` — joins Phase 7's mAP/mIoU results to
+**Status: partially implemented, as a script instead of a notebook, with a narrower scope than
+planned below.** `scripts/phase7_analysis.py` exists and does join Phase 3 classification to Phase
+7 detection results and test H1–H4 — but it only prints to console (no `phase7_comparison.csv`
+saved, no figures, no notebook-based visualizations as this task originally specified). It's also
+currently blocked by the anchor-recall issue documented in `ideas/BEST_MODELS.md`'s Phase 7
+section — any H1–H4 conclusions it prints are not yet trustworthy. If this task is picked back up,
+follow the current repo convention: a notebook (if still wanted) would live under
+`notebooks/phase_7_detection_segmentation_analysis/`, not `notebooks/analysis/`.
+
+**What (original plan):** `notebooks/phase_7_detection_segmentation_analysis/phase7_results_analysis.ipynb` — joins Phase 7's mAP/mIoU results to
 Phase 3's classification accuracy and Phase 6's latency/Winograd-eligibility data (`model_details.csv`,
 `final_comparison.csv`, Phase 6's `{device_tag}_profile.json`) on backbone name, to directly test
 H1–H4.
@@ -775,16 +784,18 @@ finding transfer" is a comparison question, not something a single phase's numbe
   convention) and update `ideas/BEST_MODELS.md`/`TODO.md` with Phase 7's checked-off items and
   headline findings, following the exact pattern Phases 1–6 already use in `TODO.md`.
 
-**Inputs:** `results/model_details.csv`, `results/final_architecture_phase4/final_comparison.csv`,
+**Inputs:** `results/results_aggregate/model_details_cross_phase.csv`, `results/phase_4_compression_and_final_architecture_training/final_comparison.csv`,
 Phase 6's profiling JSON outputs, Phase 7's own `phase7_detection_comparison.csv`/
 `phase7_segmentation_comparison.csv` (Task 8 output).
 
-**Outputs:** Figures (`results/figures/phase7_*`), `results/phase7_comparison.csv`, updated
+**Outputs (as planned; not produced by the actual `scripts/phase7_analysis.py` implementation):**
+Figures (`results/figures_generated/phase_7_detection_segmentation/phase7_*`),
+`results/phase_7_detection_segmentation_analysis/phase7_comparison.csv`, updated
 `TODO.md`/`ideas/BEST_MODELS.md` entries.
 
 **Dependencies:** Tasks 1–8 complete with at least FP32+INT8 results for all 3 backbones × 2 tasks.
 
-**Deliverables:** `notebooks/analysis/phase7_results_analysis.ipynb`.
+**Deliverables (as planned):** `notebooks/phase_7_detection_segmentation_analysis/phase7_results_analysis.ipynb`.
 
 **Pitfalls / Alternatives:** With only 3 backbones, any correlation/ranking statistic (Spearman ρ,
 etc.) has very limited statistical power — report raw numbers prominently alongside any summary

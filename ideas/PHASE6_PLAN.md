@@ -83,7 +83,7 @@ The following hypotheses drive Phase 6 experiments. Each is testable via measure
 
 ## Selected models
 
-Computed the actual Pareto frontier (FP32 top-1 accuracy vs. size-MB, from `results/model_details.csv`
+Computed the actual Pareto frontier (FP32 top-1 accuracy vs. size-MB, from `results/results_aggregate/model_details_cross_phase.csv`
 + Phase 4's `final_architecture_phase4/final_comparison.csv` — a model is on the frontier if no other
 model has both higher accuracy *and* smaller-or-equal size) instead of eyeballing it from
 `ideas/BEST_MODELS.md`. Every frontier model is included, plus two off-frontier models kept for a
@@ -187,7 +187,7 @@ Output JSON shape (flat, one record per run — matches what a `pandas.read_json
 - Memory: `gpu_memory_peak_mb` (peak allocated during forward pass; FFT and Winograd use scratch buffers).
 - Compute efficiency: `compute_efficiency_gflops_s` (theoretical FLOPs / latency; indicates hardware utilization vs. peak).
 
-`kind: model` rows carry latency only — accuracy is **not** re-measured here (these are untrained/random-init forward passes; see top of file). Kernel-size-vs-accuracy was already answered in Phases 2–4 and lives in `results/model_details.csv` (`fp32_top1`, `int8_top1`) and `results/final_architecture_phase4/final_comparison.csv`. The analysis notebook joins Phase 6's `model` rows to those existing accuracy columns on `model_name` — no retraining, just a merge — so the final plot is accuracy vs. latency-per-accuracy-point and **energy-per-accuracy-point** (latency × power) per model, not latency alone.
+`kind: model` rows carry latency only — accuracy is **not** re-measured here (these are untrained/random-init forward passes; see top of file). Kernel-size-vs-accuracy was already answered in Phases 2–4 and lives in `results/results_aggregate/model_details_cross_phase.csv` (`fp32_top1`, `int8_top1`) and `results/phase_4_compression_and_final_architecture_training/final_comparison.csv`. The analysis notebook joins Phase 6's `model` rows to those existing accuracy columns on `model_name` — no retraining, just a merge — so the final plot is accuracy vs. latency-per-accuracy-point and **energy-per-accuracy-point** (latency × power) per model, not latency alone.
 
 **`configs/slurm/tupi_4090.yaml`** — `partition: tupi`, `gres: gpu:1`, to pin PCAD submissions to an RTX 4090 node instead of whatever `single_gpu.yaml` lands on.
 
@@ -195,7 +195,7 @@ Output JSON shape (flat, one record per run — matches what a `pandas.read_json
 
 **`scripts/cluster.py`** — add a `profile-submit` subcommand reusing `_build_sbatch_command`, parameterized with the new sbatch script path instead of the hardcoded `train.sbatch`.
 
-**`notebooks/analysis/hardware_profiling_phase6.ipynb`** — loads the RTX 4060 (local) and RTX 4090 (PCAD tupi) JSON outputs side by side; joins `kind: model` rows to `results/model_details.csv` accuracy columns on model name; builds the TODO.md outputs: latency heatmap (kernel size × layer depth), speedup ratio (5×5 / 3×3 time) per GPU, Winograd feasibility threshold, CPU INT8 latency ranking, cross-GPU comparison, **plus an accuracy-vs-latency scatter (the actual efficiency/quality trade-off this whole project is measuring)**.
+**`notebooks/phase_6_hardware_profiling_analysis/hardware_profiling_phase6.ipynb`** — loads the RTX 4060 (local) and RTX 4090 (PCAD tupi) JSON outputs side by side; joins `kind: model` rows to `results/results_aggregate/model_details_cross_phase.csv` accuracy columns on model name; builds the TODO.md outputs: latency heatmap (kernel size × layer depth), speedup ratio (5×5 / 3×3 time) per GPU, Winograd feasibility threshold, CPU INT8 latency ranking, cross-GPU comparison, **plus an accuracy-vs-latency scatter (the actual efficiency/quality trade-off this whole project is measuring)**.
 
 **Reused as-is:** `configs/runtime/local.yaml`, `configs/runtime/pcad.yaml`, `ml/runtime.py` (`set_global_seed`, `expand_path`), `ml/reporting.py` (`disk_mb`, `compute_flops`), `MODEL_REGISTRY`, `ml/quantization.py` (`build_qat_from_model`, `convert_to_int8` — specifically **not** `build_qat`, see checkpoint note above).
 
