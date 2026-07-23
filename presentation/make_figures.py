@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Generate 3 simplified matplotlib figures for the Marp presentation.
+Generate matplotlib figures for the Marp presentation (slides.md uses a subset).
 Data source: results/results_aggregate/results_cross_phase.csv + results/phase_5_cross_phase_results_analysis/executive_summary.json
 """
 
