@@ -274,7 +274,9 @@ For each variant:
 
 ---
 
-## Phase 9 — Extended Architecture Search (Future)
+## Phase 10 — Extended Architecture Search (Future)
+
+Note: Phase 9 is already executed — see `ideas/PHASE9_PLAN.md` (bypass ablation, structured pruning, compression measurement). This section was originally numbered "Phase 9" before that work existed; renumbered to avoid collision.
 
 If Phase 8 yields promising hybrid results, consider automated architecture search (NAS or evolutionary search) to discover optimal kernel-size, depth, width, and attention-ratio combinations under Winograd constraints.
 

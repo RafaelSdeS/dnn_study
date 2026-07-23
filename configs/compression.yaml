@@ -1,5 +1,5 @@
 # Phase 4.1 — aggressive compression hyperparameters
-# Loaded in notebooks/compression_phase4_1.ipynb via configs.loader.load_config
+# Loaded in notebooks/phase_4_compression_and_final_architecture_training/compression_phase4_1.ipynb via configs.loader.load_config
 
 # INT4 post-training quantization (no retraining)
 int4_ptq:
