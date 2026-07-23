@@ -23,7 +23,7 @@
       "label_smoothing": 0.1,
       "grad_clip_norm": null,
       "use_amp": true,
-      "early_stopping_patience": 20
+      "early_stopping_patience": 50
     },
     "qat": {
       "epochs": 100,
@@ -67,7 +67,8 @@
     "label_smoothing": 0.1,
     "grad_clip_norm": null,
     "use_amp": true,
-    "early_stopping_patience": 20
+    "early_stopping_patience": 50,
+    "warmup_epochs": 0
   },
   "qat": {
     "epochs": 100,
