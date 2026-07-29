@@ -21,6 +21,7 @@ TASK=${1:-detection}
 STAGE=${2:-fp32}
 MODEL=${3:-alexnet_bottleneck}
 EXPERIMENT=${4:-phase7_detection}
+EXTRA_ARGS=${5:-}
 
 echo "===================================================="
 echo "Phase 7 ${TASK} training [${STAGE}]"
@@ -34,7 +35,8 @@ python scripts/train_det_seg.py ${TASK} \
     --stage ${STAGE} \
     --experiment ${EXPERIMENT} \
     --runtime local \
-    --save-dir outputs/detection_segmentation/phase7
+    --save-dir outputs/detection_segmentation/phase7 \
+    ${EXTRA_ARGS}
 
 echo "===================================================="
 echo "Training complete. Results in outputs/detection_segmentation/phase7/"

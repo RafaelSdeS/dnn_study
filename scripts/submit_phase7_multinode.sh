@@ -17,7 +17,7 @@ cd "$PROJECT_ROOT"
 MODELS=("alexnet_bottleneck" "alexnet_fire" "alexnet_tv")
 EXPERIMENT="phase7_detection"
 PARTITION="tupi"   # RTX 4090 nodes; alternatives: shared (K20m, weak), grace (L40s), beagle (GTX1080Ti)
-TIME="12:00:00"
+TIME="24:00:00"
 MEM="32G"
 GPUS=1
 
@@ -64,13 +64,15 @@ fp32_job_ids=()
 for model in "${MODELS[@]}"; do
     job_name="p7_${model:0:8}_fp32"
     log_file="outputs/detection_segmentation/phase7/logs/p7_${model}_fp32_%j.log"
+    extra_args=""
+    [ "$model" = "alexnet_tv" ] && extra_args="--skip-anchor-check"
 
     if [ "$DRY_RUN" = true ]; then
-        echo "[DRY-RUN] sbatch --job-name=$job_name --time=$TIME --mem=$MEM --gpus=$GPUS --partition=$PARTITION --output=$log_file scripts/slurm/det_seg.sbatch detection fp32 $model $EXPERIMENT"
+        echo "[DRY-RUN] sbatch --job-name=$job_name --time=$TIME --mem=$MEM --gpus=$GPUS --partition=$PARTITION --output=$log_file scripts/slurm/det_seg.sbatch detection fp32 $model $EXPERIMENT $extra_args"
         fp32_job_ids+=("DRY_RUN_ID")
     else
         echo "Submitting: $job_name"
-        output=$(sbatch --job-name="$job_name" --time="$TIME" --mem="$MEM" --gpus="$GPUS" --partition="$PARTITION" --output="$log_file" scripts/slurm/det_seg.sbatch detection fp32 "$model" "$EXPERIMENT" 2>&1)
+        output=$(sbatch --job-name="$job_name" --time="$TIME" --mem="$MEM" --gpus="$GPUS" --partition="$PARTITION" --output="$log_file" scripts/slurm/det_seg.sbatch detection fp32 "$model" "$EXPERIMENT" "$extra_args" 2>&1)
         job_id=$(echo "$output" | grep -oP 'Submitted batch job \K[0-9]+' || echo "")
         if [ -z "$job_id" ]; then
             echo "  ERROR submitting $model: $output"
