@@ -101,32 +101,82 @@ Phase 7.
 
 ---
 
+## Stage 9 — Anchor-Recall Diagnosis & Fix (A1–A3) ✓
+
+**Commit:** (uncommitted this session)
+
+- **A1 (diagnose):** Ran `scripts/check_anchor_recall.py` to completion for all 3 backbones at both
+  256px and 512px (previously never finished — earlier attempts were killed by SIGKILL/OOM on the
+  dev laptop, unrelated to the anchor logic itself). Confirmed recall well below the 95% bar at
+  every combination (0.76–0.80) and resolution-independent — ruling out "just use bigger images"
+  and confirming the anchor-generator config itself was the root cause of the 0.4–7.1% mAP below.
+- **A2 (fix):** Root-caused two independent bugs:
+  1. Tap-index bug — `alexnet_bottleneck`/`alexnet_fire` tapped `[3,6]`, producing two pyramid
+     levels at the *same* spatial resolution instead of 4 genuinely distinct ones. `alexnet_tv`'s
+     `[2,12]` had the opposite problem: its deepest level collapsed to a near-degenerate 2×2 grid
+     once extra SSDLite blocks stacked on top of an already-deep tap.
+  2. Anchor-scale bug — `DefaultBoxGenerator`'s `min_ratio`/`max_ratio` linear interpolation left a
+     large scale gap (0.1→0.383) exactly where most VOC objects live (median GT box side-ratio
+     0.265).
+
+  Fixed: tap indices (`bottleneck`/`fire` → `[2,6]`; `alexnet_tv` → `[2,5]` + `out_channels`
+  `[64,192]`), `num_extra_blocks` 2→3, and replaced `min_ratio`/`max_ratio` with explicit
+  percentile-matched `scales=[0.03,0.08,0.16,0.3,0.55,1.0]` + wider `aspect_ratios=[1.5,2,3,4]`.
+
+  Result @512px: anchor recall 0.797/0.799/0.797 → **0.991/0.991/0.932**
+  (bottleneck/fire/alexnet_tv). Bottleneck/fire comfortably clear 95%; `alexnet_tv`'s ~93% is an
+  accepted residual gap from its structurally coarser native pyramid, not chased further
+  (diminishing returns — closing it would mean yet more asymmetric backbone treatment). Note: the
+  undocumented `_minratio02` retry below had already tried tuning `min_ratio` and failed (0.96% vs
+  1.17% mAP) — but was never validated against the anchor-recall check itself, only against
+  expensive final mAP. This fix is empirically confirmed at the recall-check level first.
+- **A3 (re-enable gate):** Uncommented the anchor-recall pre-flight abort in
+  `scripts/train_det_seg.py`. The original "hangs 120+s" complaint that got it disabled was
+  actually the unbounded-`max_samples` bug, separately fixed earlier (`82ed115`) — confirmed the
+  gate now runs end-to-end in ~56s and correctly aborts for `alexnet_tv` (recall 0.925 < 0.95)
+  before training starts. `alexnet_tv` needs `--skip-anchor-check` passed explicitly for A4 given
+  the accepted tradeoff above.
+- **Budget bump:** `configs/experiments/phase7_detection.yaml` epochs 30→1000,
+  `early_stopping_patience` 10→50 (all 3 models); `scripts/train_det_seg.py`'s QAT stage epochs
+  15→100 — matching the actual PCAD budget planned for A4.
+- **Environment note:** this diagnostic work ran on the local laptop (not PCAD) as a workaround
+  while PCAD's frontend node had CPU problems. `.venv` had drifted from `requirements.txt` (missing
+  `sympy` + several other pinned packages) — resynced via `pip install -r requirements.txt`.
+  `scripts/check_anchor_recall.py` gained a `--num-workers` override (yaml default is 4, but the
+  laptop needed 0 to avoid OOM at 512px — a milder version of the same `num_workers`-at-512px
+  fragility already noted in `configs/experiments/phase7_diag_512.yaml`'s comment about job
+  805529's segfault).
+
+---
+
 ## Implementation Status
 
-**Infrastructure:** All 8 stages complete and smoke-tested.
+**Infrastructure:** All 9 stages complete and smoke-tested.
 
-**Training:** FP32/QAT/INT8 have all been run (`python scripts/train_det_seg.py detection --model
-<name> --runtime pcad`) across multiple configs (`phase7_detection`, `_minratio02` anchor-config
-retry, `_diag_256`, `_diag_512`) for all 3 backbones.
-
-**Blocked:** Validation mAP is 0.4–7.1% across every run — far below a working SSD's expected
-40–70%+ on VOC. This is consistent with the anchor-recall check deferred back in Stage 4 (line 58
-above) never actually being run to completion/confirmation before full training — exactly the
-failure mode `PHASE7_QUICKSTART.md`'s own troubleshooting section anticipated. See
-`ideas/BEST_MODELS.md`'s Phase 7 section for the full breakdown and `ideas/PHASE7_PLAN.md` line 869
-("Blocking #1", still unchecked). QAT/INT8 conversion also ran on top of these broken FP32
-checkpoints, so those results inherit the same problem — not separately diagnostic.
+**Superseded:** The FP32/QAT/INT8 runs below (`phase7_detection`, `_minratio02` anchor-config
+retry, `_diag_256`, `_diag_512`) all trained against the broken anchor config fixed in Stage 9.
+Validation mAP was 0.4–7.1% across every one of them — far below a working SSD's expected
+40–70%+ on VOC, consistent with the anchor-recall check never having been run to completion before
+those runs (see Stage 9 for the root cause). **Do not cite these numbers; they are invalid, not
+just low.** New training with the Stage 9 fix has not happened yet.
 
 **Next:**
-1. Run `scripts/check_anchor_recall.py` to completion, confirm >95% recall for all 3 backbones.
-2. Retrain FP32 detection with a corrected anchor configuration.
-3. Only then: compare mAP across backbones (H1), re-run QAT/INT8 (H2), consider segmentation.
+1. **A4** — retrain FP32→QAT→INT8 on PCAD for all 3 backbones with the corrected config (1000/100
+   epochs, patience 50 — Stage 9). Needs its own explicit go-ahead separate from the Stage 9
+   diagnostic work (real, multi-hour GPU training) and needs to run on PCAD, not locally.
+   `alexnet_tv` needs `--skip-anchor-check`.
+2. **A5** — re-run `scripts/phase7_analysis.py` against the new results to actually test H1–H4.
+3. Segmentation (Part B) is unstarted: `build_deeplabv3_segmenter()` is still a hardcoded
+   placeholder ignoring the project's own backbones, `SegmentationTrainer.fit()` is still a
+   one-line stub, and the CLI's `run_segmentation()` still just prints "not yet implemented."
+   B1–B7 (real DeepLabV3 head → QAT/INT8 → real trainer → CLI → reporting → cross-phase analysis
+   extension → PCAD runs) all remain, deferred until after A4/A5 land.
 
 **Ground Rules Applied:**
 - ✓ Context hygiene: all decisions logged here for `/compact` recovery
 - ✓ Reproducibility: `outputs/detection_segmentation/phase7/<exp>/config.yaml` + `git_hash.txt` per run
 - ✓ Failure triage framework in place (distinguish bugs, limitations, real findings)
-- ✓ Budgeting: FP32 max 30 epochs, patience 10; QAT 10-15 epochs
+- ✓ Budgeting: FP32 max 1000 epochs, patience 50; QAT 100 epochs (Stage 9 bump)
 - ✓ No abstraction creep: reused existing trainer/data patterns
 - ✓ Baseline mandatory: all three backbones wired + tested
 

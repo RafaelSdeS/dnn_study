@@ -21,18 +21,22 @@ from .quantization import find_fuse_groups
 
 BACKBONE_FEATURE_CONFIG = {
     "alexnet_bottleneck": {
-        "feature_indices": [3, 6],
+        "feature_indices": [2, 6],
         "out_channels": [192, 256],
         "ctor": AlexNetBottleneck,
     },
     "alexnet_fire": {
-        "feature_indices": [3, 6],
+        "feature_indices": [2, 6],
         "out_channels": [192, 256],
         "ctor": AlexNetFire,
     },
     "alexnet_tv": {
-        "feature_indices": [2, 12],
-        "out_channels": [64, 256],
+        # [2, 12] (native stride 8/32) left the deepest pyramid level nearly
+        # degenerate (2x2 @ 256px) once 2-3 extra SSDLite blocks stacked on top of
+        # an already-coarse tap; [2, 5] (stride 8/17) keeps the post-extra-block
+        # pyramid comparable in coarseness to the other two backbones.
+        "feature_indices": [2, 5],
+        "out_channels": [64, 192],
         "ctor": AlexNetTV,
     },
 }
@@ -159,20 +163,19 @@ def build_ssd_detector(
     if arch_name not in BACKBONE_FEATURE_CONFIG:
         raise ValueError(f"Unknown arch: {arch_name}")
 
-    config = BACKBONE_FEATURE_CONFIG[arch_name]
-    out_channels = config["out_channels"] + config["out_channels"][-1:] * 2  # +2 extra blocks
-
     # Backbone
-    backbone = DetSegBackbone(arch_name, num_classes=200, num_extra_blocks=2)
+    backbone = DetSegBackbone(arch_name, num_classes=200, num_extra_blocks=3)
 
-    # Anchor generator
-    aspect_ratios = [[2, 3]] * len(backbone.out_channels)
+    # Anchor generator — explicit scales (not min/max_ratio) placed at VOC's actual
+    # GT-box-size percentiles. DefaultBoxGenerator's min/max_ratio interpolates scales
+    # linearly, which left a large gap (0.1 -> 0.383 under the old min=0.1/max=0.95)
+    # exactly where most VOC boxes live (median GT box side-ratio 0.265) — anchor
+    # recall was ~0.78-0.80 regardless of image resolution. See check_anchor_recall.py.
+    aspect_ratios = [[1.5, 2, 3, 4]] * len(backbone.out_channels)
     anchor_generator = DefaultBoxGenerator(
         aspect_ratios=aspect_ratios,
-        min_ratio=0.1,
-        max_ratio=0.95,
+        scales=[0.03, 0.08, 0.16, 0.3, 0.55, 1.0],
     )
-    num_anchors = anchor_generator.num_anchors_per_location()[0]
 
     # Head
     head = SSDLiteHead(

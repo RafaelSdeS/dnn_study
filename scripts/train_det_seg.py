@@ -62,7 +62,7 @@ def run_detection(args):
 
     # Adjust trainer config for QAT (shorter epochs, lower lr, no AMP)
     if args.stage == "qat":
-        trainer_cfg = replace(trainer_cfg, epochs=15, lr=1e-5, use_amp=False)
+        trainer_cfg = replace(trainer_cfg, epochs=100, lr=1e-5, use_amp=False)
 
     # Setup paths
     stage_suffix = {"fp32": "fp32", "qat": "qat", "int8": "int8"}[args.stage]
@@ -97,15 +97,18 @@ def run_detection(args):
         model = build_ssd_detector(args.model, num_classes=21, image_size=data_cfg.img_size)
         print(f"  Model ready. Parameter count: {sum(p.numel() for p in model.parameters()):,}")
 
-        # Anchor-recall pre-flight gate disabled: compute_anchor_recall() is too slow on large val sets.
-        # TODO: implement efficient caching or sampling-based recall check.
-        # if not args.skip_anchor_check:
-        #     recall = compute_anchor_recall(model, val_loader, iou_threshold=0.5)
-        #     print(f"  Anchor recall @IoU 0.5: {recall:.3f}")
-        #     if recall < 0.95:
-        #         print(f"ABORT: anchor recall {recall:.3f} < 0.95 — fix anchor config first "
-        #               f"(or pass --skip-anchor-check to override).")
-        #         sys.exit(1)
+        # Anchor-recall pre-flight gate: mAP is capped regardless of training quality
+        # if ground-truth boxes aren't covered by any default box. max_samples=1000
+        # (compute_anchor_recall's default) keeps this to a few seconds even on the
+        # full VOC07-test val set — the earlier "too slow" complaint was actually an
+        # unbounded max_samples check, since fixed.
+        if not args.skip_anchor_check:
+            recall = compute_anchor_recall(model, val_loader, iou_threshold=0.5)
+            print(f"  Anchor recall @IoU 0.5: {recall:.3f}")
+            if recall < 0.95:
+                print(f"ABORT: anchor recall {recall:.3f} < 0.95 — fix anchor config first "
+                      f"(or pass --skip-anchor-check to override).")
+                sys.exit(1)
 
         # Train
         print(f"\nStarting FP32 training...")

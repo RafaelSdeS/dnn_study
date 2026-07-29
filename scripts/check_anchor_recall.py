@@ -20,10 +20,13 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--model", nargs="+", default=["alexnet_bottleneck"])
 parser.add_argument("--img-size", type=int, nargs="+", default=[256, 512])
 parser.add_argument("--max-samples", type=int, default=200)
+parser.add_argument("--num-workers", type=int, default=None, help="Override configs/detection.yaml num_workers (e.g. 0 on memory-constrained hosts)")
 args = parser.parse_args()
 
 with open("configs/detection.yaml") as f:
     base_data_cfg = DetSegDataConfig(**yaml.safe_load(f).get("data", {}))
+if args.num_workers is not None:
+    base_data_cfg = replace(base_data_cfg, num_workers=args.num_workers)
 
 for img_size in args.img_size:
     data_cfg = replace(base_data_cfg, img_size=img_size)

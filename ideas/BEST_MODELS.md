@@ -275,12 +275,12 @@ further work. Full per-model breakdown: `.../pareto_frontier.csv`.
 
 ---
 
-## Phase 7 — Detection & Segmentation: results NOT yet reliable, blocked on anchor recall
+## Phase 7 — Detection & Segmentation: anchor-recall bug fixed, retraining not yet run
 
-**Status: do not cite these numbers as a backbone comparison.** Detection trains end-to-end
-(FP32 → QAT → INT8) for 3 backbones on PASCAL VOC via `scripts/train_det_seg.py`, producing real
-loss curves and checkpoints — but validation mAP is 0.4–7.1% across every configuration tried
-(`phase7_detection`, the `_minratio02` anchor-config retry, `_diag_256`, `_diag_512`):
+**Status: the table below is invalid, not just low — do not cite it.** Detection trains
+end-to-end (FP32 → QAT → INT8) for 3 backbones on PASCAL VOC via `scripts/train_det_seg.py`,
+producing real loss curves and checkpoints — but every one of these runs trained against a broken
+anchor-generator config, capping mAP regardless of backbone quality:
 
 | Model | Config | Best val mAP | Best epoch |
 |---|---|---|---|
@@ -289,17 +289,18 @@ loss curves and checkpoints — but validation mAP is 0.4–7.1% across every co
 | alexnet_bottleneck | phase7_detection_minratio02 | 0.96% | 28 |
 | alexnet_fire | phase7_detection | 0.50% | 25 |
 
-A working SSD on VOC typically scores 40–70%+ mAP — these numbers indicate a training/configuration
-problem, not a real backbone comparison. `ideas/PHASE7_PLAN.md` (line 869) flags the anchor-recall
-sanity check ("for every ground-truth box, does *some* default anchor achieve IoU > 0.5?") as
-**"Blocking #1"** and **the single most likely cause** of exactly this failure mode — and that
-checkbox is still unchecked. The `_minratio02` run was one anchor-config fix attempt; it didn't
-resolve the issue (0.96% vs. 1.17% baseline). Segmentation has data-loading + trainer scaffolding
-built (`docs/PHASE7_LOG.md` Stage 6) but no training run at all yet.
+**Root cause found and fixed** (`docs/PHASE7_LOG.md` Stage 9): anchor recall was confirmed at
+0.76–0.80 for all 3 backbones (well under the 95% acceptance bar), caused by two bugs — a
+tap-index bug producing duplicate/degenerate pyramid levels, and `DefaultBoxGenerator`'s
+`min_ratio`/`max_ratio` linear scale interpolation badly mismatched to VOC's actual box-size
+distribution. Fixed via corrected tap indices + explicit percentile-matched anchor scales; recall
+is now 0.991/0.991/0.932 (bottleneck/fire/alexnet_tv) at 512px. The anchor-recall pre-flight gate
+in `scripts/train_det_seg.py` is re-enabled and confirmed working. Segmentation has data-loading +
+trainer scaffolding built (`docs/PHASE7_LOG.md` Stage 6) but no training run at all yet, and the
+segmenter/trainer/CLI are all still placeholders (Stage 9's "Next" section, Part B).
 
-**Before trusting any Phase 7 ranking:** run `scripts/check_anchor_recall.py` to completion and
-confirm >95% recall for all 3 backbones — `ideas/PHASE7_PLAN.md`'s own acceptance criterion — then
-retrain.
+**Before trusting any Phase 7 ranking:** retrain FP32→QAT→INT8 on PCAD with the corrected config
+(A4 in `docs/PHASE7_LOG.md` Stage 9) and replace the table above.
 
 ---
 
