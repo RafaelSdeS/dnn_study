@@ -27,10 +27,14 @@ import yaml
 torch.multiprocessing.set_sharing_strategy("file_system")
 
 from ml import (
-    DetSegDataConfig, TrainerConfig, DetectionTrainer,
-    create_voc_detection_loaders, build_ssd_detector,
+    DetSegDataConfig, TrainerConfig, DetectionTrainer, SegmentationTrainer,
+    create_voc_detection_loaders, create_voc_segmentation_loaders,
+    build_ssd_detector, build_deeplabv3_segmenter,
 )
-from ml.det_seg_models import build_qat_ssd_detector, convert_ssd_to_int8, compute_anchor_recall
+from ml.det_seg_models import (
+    build_qat_ssd_detector, convert_ssd_to_int8, compute_anchor_recall,
+    build_qat_deeplabv3_segmenter, convert_deeplabv3_to_int8,
+)
 from ml.quantization import make_qat_callback
 from ml.reporting import compute_detection_summary
 from ml.runtime import expand_path
@@ -200,9 +204,12 @@ def run_detection(args):
         print(f"  Train: {len(train_ds)} | Val: {len(val_ds)}")
 
         # Evaluate INT8 model
+        # INT8 convert/inference is CPU-only (project convention) — model_int8 already lives on
+        # CPU post-conversion, so the eval trainer must target CPU too, not the module-level
+        # `device` (which is CUDA when available and would send images to the wrong device).
         print(f"\nEvaluating INT8 model...")
         trainer = DetectionTrainer(
-            model_int8, train_loader, val_loader, trainer_cfg, device,
+            model_int8, train_loader, val_loader, trainer_cfg, torch.device("cpu"),
             save_dir=run_dir, run_name=run_id,
             num_classes=21,
             log_file=run_dir / f"{run_id}.log"
@@ -229,11 +236,161 @@ def run_detection(args):
 
 
 def run_segmentation(args):
-    """Run segmentation training (placeholder)."""
+    """Run segmentation training (FP32, QAT, or INT8 stage)."""
     print(f"\n{'='*60}")
-    print(f"SEGMENTATION EXPERIMENT: {args.model} (PLACEHOLDER)")
+    print(f"SEGMENTATION EXPERIMENT: {args.model} [{args.stage.upper()}]")
     print(f"{'='*60}\n")
-    print("[PLACEHOLDER] Segmentation training not yet implemented")
+
+    # Load configs
+    data_cfg = DetSegDataConfig(**load_yaml("configs/segmentation.yaml").get("data", {}))
+    trainer_cfg = TrainerConfig(**load_yaml("configs/segmentation.yaml").get("trainer", {}))
+
+    # Override from experiment config if provided
+    if args.experiment:
+        exp_cfg = load_yaml(f"configs/experiments/{args.experiment}.yaml")
+        if args.model in exp_cfg:  # per-model-keyed format (e.g. phase7_segmentation.yaml)
+            exp_cfg = exp_cfg[args.model]
+        data_cfg = replace(data_cfg, **exp_cfg.get("data", {}))
+        trainer_cfg = replace(trainer_cfg, **exp_cfg.get("trainer", {}))
+
+    # Adjust trainer config for QAT (shorter epochs, lower lr, no AMP)
+    if args.stage == "qat":
+        trainer_cfg = replace(trainer_cfg, epochs=100, lr=1e-5, use_amp=False)
+
+    # Setup paths
+    stage_suffix = {"fp32": "fp32", "qat": "qat", "int8": "int8"}[args.stage]
+    run_id = f"seg_{args.model}_{stage_suffix}"
+    if args.experiment:
+        run_id += f"_{args.experiment}"
+    run_dir = Path(args.save_dir) / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    # Save config
+    config_out = run_dir / "config.yaml"
+    with open(config_out, "w") as f:
+        yaml.dump({"data": asdict(data_cfg), "trainer": asdict(trainer_cfg), "stage": args.stage}, f)
+    print(f"Config saved to {config_out}")
+
+    if args.dry_run:
+        print(f"\n[DRY-RUN] Would run {args.stage.upper()} segmentation. Exiting.")
+        return
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    if args.stage == "fp32":
+        # ========== FP32 Training ==========
+        print(f"\nLoading VOC segmentation data...")
+        data_cfg.voc_root = expand_path(data_cfg.voc_root)
+        train_ds, val_ds, train_loader, val_loader = create_voc_segmentation_loaders(data_cfg)
+        print(f"  Train: {len(train_ds)} | Val: {len(val_ds)}")
+
+        print(f"\nBuilding DeepLabV3 segmenter ({args.model})...")
+        model = build_deeplabv3_segmenter(args.model, num_classes=21, image_size=data_cfg.img_size)
+        print(f"  Model ready. Parameter count: {sum(p.numel() for p in model.parameters()):,}")
+
+        print(f"\nStarting FP32 training...")
+        trainer = SegmentationTrainer(
+            model, train_loader, val_loader, trainer_cfg, device,
+            save_dir=run_dir, run_name=run_id,
+            num_classes=21,
+            log_file=run_dir / f"{run_id}.log"
+        )
+
+        history = trainer.fit(resume_from=run_dir / f"{run_id}_resume.pth")
+        # history["summary"] = compute_segmentation_summary(...) — deferred to B6 (out of scope)
+
+    elif args.stage == "qat":
+        # ========== QAT Fine-tuning ==========
+        print(f"\nLoading FP32 checkpoint...")
+        fp32_run_id = f"seg_{args.model}_fp32"
+        fp32_ckpt = Path(args.save_dir) / fp32_run_id / f"{fp32_run_id}_best.pth"
+        if not fp32_ckpt.exists():
+            print(f"ERROR: FP32 checkpoint not found at {fp32_ckpt}")
+            print(f"Make sure you run FP32 training first: python {__file__} segmentation --model {args.model} --stage fp32")
+            return
+
+        model = build_deeplabv3_segmenter(args.model, num_classes=21, image_size=data_cfg.img_size)
+        ckpt_state = torch.load(fp32_ckpt, map_location=device, weights_only=False)
+        model.load_state_dict(ckpt_state)
+        model.to(device)
+        print(f"  ✓ Loaded FP32 checkpoint: {fp32_ckpt}")
+
+        print(f"Preparing model for QAT...")
+        model_qat = build_qat_deeplabv3_segmenter(model, device)
+        print(f"  ✓ Model prepared with fused Conv-BN and fake-quant observers")
+
+        print(f"\nLoading VOC segmentation data...")
+        data_cfg.voc_root = expand_path(data_cfg.voc_root)
+        train_ds, val_ds, train_loader, val_loader = create_voc_segmentation_loaders(data_cfg)
+        print(f"  Train: {len(train_ds)} | Val: {len(val_ds)}")
+
+        print(f"\nStarting QAT fine-tuning...")
+        epoch_callback = make_qat_callback(freeze_bn_epoch=3, disable_observer_epoch=8)
+        trainer = SegmentationTrainer(
+            model_qat, train_loader, val_loader, trainer_cfg, device,
+            save_dir=run_dir, run_name=run_id,
+            num_classes=21,
+            epoch_callback=epoch_callback,
+            log_file=run_dir / f"{run_id}.log"
+        )
+
+        history = trainer.fit(resume_from=run_dir / f"{run_id}_resume.pth")
+
+    elif args.stage == "int8":
+        # ========== INT8 Conversion & Evaluation ==========
+        print(f"\nLoading QAT checkpoint...")
+        qat_run_id = f"seg_{args.model}_qat"
+        qat_ckpt = Path(args.save_dir) / qat_run_id / f"{qat_run_id}_best.pth"
+        if not qat_ckpt.exists():
+            print(f"ERROR: QAT checkpoint not found at {qat_ckpt}")
+            print(f"Make sure you run QAT training first: python {__file__} segmentation --model {args.model} --stage qat")
+            return
+
+        model_qat = build_deeplabv3_segmenter(args.model, num_classes=21, image_size=data_cfg.img_size)
+        model_qat = build_qat_deeplabv3_segmenter(model_qat, device)
+        ckpt_state = torch.load(qat_ckpt, map_location=device, weights_only=False)
+        model_qat.load_state_dict(ckpt_state)
+        model_qat.to(device)
+        print(f"  ✓ Loaded QAT checkpoint: {qat_ckpt}")
+
+        print(f"Converting to INT8...")
+        model_int8 = convert_deeplabv3_to_int8(model_qat)
+        print(f"  ✓ INT8 conversion complete (backbone on CPU)")
+
+        print(f"\nLoading VOC segmentation data...")
+        data_cfg.voc_root = expand_path(data_cfg.voc_root)
+        train_ds, val_ds, train_loader, val_loader = create_voc_segmentation_loaders(data_cfg)
+        print(f"  Train: {len(train_ds)} | Val: {len(val_ds)}")
+
+        # INT8 convert/inference is CPU-only (project convention) — model_int8 already lives on
+        # CPU post-conversion, so the eval trainer must target CPU too, not the module-level
+        # `device` (which is CUDA when available and would send images to the wrong device).
+        print(f"\nEvaluating INT8 model...")
+        trainer = SegmentationTrainer(
+            model_int8, train_loader, val_loader, trainer_cfg, torch.device("cpu"),
+            save_dir=run_dir, run_name=run_id,
+            num_classes=21,
+            log_file=run_dir / f"{run_id}.log"
+        )
+
+        # Run validation only (no training)
+        val_loss, val_mIoU = trainer._validate(model_int8)
+        history = {
+            "val_loss": [val_loss],
+            "val_mIoU": [val_mIoU],
+            "note": "INT8 evaluation only (no training)"
+        }
+        print(f"  INT8 val loss: {val_loss:.4f}")
+        print(f"  INT8 mIoU: {val_mIoU:.4f}")
+
+    # Save final results
+    results_path = run_dir / "metrics.json"
+    with open(results_path, "w") as f:
+        json.dump(history, f, indent=2)
+    print(f"\nResults saved to {results_path}")
+
+    # Save git hash for reproducibility
+    os.system(f"git rev-parse HEAD > {run_dir / 'git_hash.txt'}")
 
 
 def main():

@@ -5,7 +5,7 @@ data:
   pin_memory: true
   seed: 42
   voc_root: ~/.cache/torchvision/datasets
-stage: fp32
+stage: int8
 trainer:
   early_stopping_patience: 50
   epochs: 1000

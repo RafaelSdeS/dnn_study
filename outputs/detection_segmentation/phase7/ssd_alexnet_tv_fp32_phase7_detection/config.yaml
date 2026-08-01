@@ -7,8 +7,8 @@ data:
   voc_root: ~/.cache/torchvision/datasets
 stage: fp32
 trainer:
-  early_stopping_patience: 10
-  epochs: 30
+  early_stopping_patience: 50
+  epochs: 1000
   grad_clip_norm: null
   label_smoothing: 0.1
   lr: 0.0001

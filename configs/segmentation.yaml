@@ -1,0 +1,21 @@
+# Phase 7 segmentation training config
+# Provisional defaults — VOC 2012 segmentation is ~10x smaller than detection
+# (~1.5K/1.5K images vs ~16.5K/4.9K), no real training-budget decision made yet.
+
+data:
+  img_size: 256
+  voc_root: ~/.cache/torchvision/datasets
+  batch_size: 16
+  num_workers: 4
+  pin_memory: true
+  seed: 42
+
+trainer:
+  epochs: 50
+  lr: 1.0e-4
+  weight_decay: 4.0e-4
+  label_smoothing: 0.1
+  grad_clip_norm: null
+  use_amp: true
+  early_stopping_patience: 15
+  warmup_epochs: 2

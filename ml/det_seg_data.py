@@ -103,6 +103,17 @@ def _detection_collate_fn(batch):
     return images, targets
 
 
+def _needs_download(voc_root: str, year: str) -> bool:
+    """True if VOCdevkit/VOC<year> isn't extracted yet.
+
+    torchvision's download=True re-extracts the full tar unconditionally even
+    when the data is already present — safe for a single run, but concurrent
+    multi-node jobs racing to re-extract onto the same shared dataset dir
+    corrupt each other's in-flight reads. Skip it once we already have the data.
+    """
+    return not (Path(voc_root) / "VOCdevkit" / f"VOC{year}").is_dir()
+
+
 def _resize_image_and_boxes(image, boxes, labels, img_size: int):
     """Resize image and scale boxes proportionally."""
     # image is tensor float32 (C, H, W), boxes are float32 (N, 4) in [xmin, ymin, xmax, ymax]
@@ -135,10 +146,12 @@ def create_voc_detection_loaders(cfg: DetSegDataConfig) -> Tuple:
 
     # VOC 07+12 trainval for training
     voc07_raw = VOCDetection(
-        root=cfg.voc_root, year="2007", image_set="trainval", download=True
+        root=cfg.voc_root, year="2007", image_set="trainval",
+        download=_needs_download(cfg.voc_root, "2007"),
     )
     voc12_raw = VOCDetection(
-        root=cfg.voc_root, year="2012", image_set="trainval", download=True
+        root=cfg.voc_root, year="2012", image_set="trainval",
+        download=_needs_download(cfg.voc_root, "2012"),
     )
     voc07_train_ds = VOCDetectionDataset(voc07_raw, img_size=cfg.img_size, augment=True)
     voc12_train_ds = VOCDetectionDataset(voc12_raw, img_size=cfg.img_size, augment=True)
@@ -146,7 +159,8 @@ def create_voc_detection_loaders(cfg: DetSegDataConfig) -> Tuple:
 
     # VOC 07 test for evaluation
     voc07_test_raw = VOCDetection(
-        root=cfg.voc_root, year="2007", image_set="test", download=True
+        root=cfg.voc_root, year="2007", image_set="test",
+        download=_needs_download(cfg.voc_root, "2007"),
     )
     val_ds = VOCDetectionDataset(voc07_test_raw, img_size=cfg.img_size)
 
@@ -206,10 +220,12 @@ def create_voc_segmentation_loaders(cfg: DetSegDataConfig) -> Tuple:
 
     # VOC 2012 train/val
     voc12_train_raw = VOCSegmentation(
-        root=cfg.voc_root, year="2012", image_set="train", download=True
+        root=cfg.voc_root, year="2012", image_set="train",
+        download=_needs_download(cfg.voc_root, "2012"),
     )
     voc12_val_raw = VOCSegmentation(
-        root=cfg.voc_root, year="2012", image_set="val", download=True
+        root=cfg.voc_root, year="2012", image_set="val",
+        download=_needs_download(cfg.voc_root, "2012"),
     )
 
     train_ds = VOCSegmentationDataset(voc12_train_raw, img_size=cfg.img_size)

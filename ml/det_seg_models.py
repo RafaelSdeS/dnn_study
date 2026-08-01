@@ -10,8 +10,10 @@ from typing import Dict, List, Optional
 import torch
 import torch.ao.quantization as tq
 import torch.nn as nn
+import torch.nn.functional as F
 from torchvision.models.detection.ssd import SSD
 from torchvision.models.detection.ssdlite import DefaultBoxGenerator, SSDLiteHead
+from torchvision.models.segmentation.deeplabv3 import DeepLabHead
 from torchvision.ops import nms
 
 from models.compensation import AlexNetBottleneck, AlexNetFire
@@ -125,22 +127,73 @@ class DetSegBackbone(nn.Module):
         return features
 
 
+class DeepLabV3Segmenter(nn.Module):
+    """DeepLabV3-style segmenter: DetSegBackbone (deepest tap only) + DeepLabHead + upsample."""
+
+    def __init__(self, arch_name: str, num_classes: int = 21):
+        super().__init__()
+        self.backbone = DetSegBackbone(arch_name, num_classes=200, num_extra_blocks=0)
+        self.head = DeepLabHead(self.backbone.out_channels[-1], num_classes)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        features = self.backbone(x)
+        deepest = features[str(len(self.backbone.feature_indices) - 1)]
+        logits = self.head(deepest)
+        return F.interpolate(logits, size=x.shape[-2:], mode="bilinear", align_corners=False)
+
+
 def build_deeplabv3_segmenter(
     arch_name: str,
     num_classes: int = 21,
     image_size: int = 256,
-) -> nn.Module:
-    """Build DeepLabV3 segmenter with custom backbone.
+) -> DeepLabV3Segmenter:
+    """Assemble DeepLabV3-style segmenter: backbone (deepest tap) + DeepLabHead.
 
-    For now, uses torchvision's DeepLabV3 pretrained on COCO.
-    TODO: Replace backbone with Phase 7 models for proper ablation.
+    Args:
+        arch_name: One of ["alexnet_bottleneck", "alexnet_fire", "alexnet_tv"]
+        num_classes: 21 for VOC (20 + background), same convention as build_ssd_detector
+        image_size: kept for call-site parity with build_ssd_detector; forward() upsamples
+            to the actual input tensor's spatial size, not this constant.
     """
-    from torchvision.models.segmentation import deeplabv3_resnet50
+    if arch_name not in BACKBONE_FEATURE_CONFIG:
+        raise ValueError(f"Unknown arch: {arch_name}")
+    return DeepLabV3Segmenter(arch_name, num_classes=num_classes)
 
-    # TODO: Implement custom DeepLabV3 with alexnet backbones
-    # For now, return placeholder
-    model = deeplabv3_resnet50(pretrained=False, num_classes=num_classes, aux_loss=False)
-    return model
+
+def build_qat_deeplabv3_segmenter(model_fp32: DeepLabV3Segmenter, device: torch.device) -> DeepLabV3Segmenter:
+    """Prepare a trained FP32 DeepLabV3 segmenter for QAT fine-tuning.
+
+    Design decision: only the backbone is quantized, mirroring build_qat_ssd_detector.
+    DeepLabHead (ASPP + classifier) stays FP32 — its atrous/dilated convs plus ASPPPooling's
+    global-context branch (AdaptiveAvgPool2d + dynamic interpolate) have no quantization
+    precedent in this codebase, same category of decision as leaving SSDLiteHead FP32 for
+    detection. If FP32-vs-QAT mIoU holds up, quantizing the head is a natural follow-up,
+    not a blocker for this first pass.
+    """
+    model = copy.deepcopy(model_fp32)
+    backbone = model.backbone
+    if not isinstance(backbone, DetSegBackbone):
+        raise TypeError(f"Expected DetSegBackbone, got {type(backbone)}")
+
+    backbone.train()
+    backbone.qconfig = tq.get_default_qat_qconfig("fbgemm")
+
+    fuse_groups = find_fuse_groups(backbone.backbone_full)
+    if fuse_groups:
+        prefixed = [[f"backbone_full.{step}" for step in group] for group in fuse_groups]
+        tq.fuse_modules_qat(backbone, prefixed, inplace=True)
+
+    prepared_backbone = tq.prepare_qat(backbone, inplace=False)
+    model.backbone = prepared_backbone
+    return model.to(device)
+
+
+def convert_deeplabv3_to_int8(qat_model: DeepLabV3Segmenter) -> DeepLabV3Segmenter:
+    """Convert a QAT-trained DeepLabV3 segmenter's backbone to real INT8 ops. CPU-only
+    (project convention); head stays FP32 to match build_qat_deeplabv3_segmenter's design."""
+    qat_model = qat_model.to("cpu").eval()
+    qat_model.backbone = tq.convert(qat_model.backbone, inplace=False)
+    return qat_model
 
 
 def build_ssd_detector(

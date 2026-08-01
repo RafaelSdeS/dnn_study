@@ -146,6 +146,23 @@ Phase 7.
   laptop needed 0 to avoid OOM at 512px — a milder version of the same `num_workers`-at-512px
   fragility already noted in `configs/experiments/phase7_diag_512.yaml`'s comment about job
   805529's segfault).
+- **A4 attempt 1 (failed, PCAD, jobs 809066-809074):** First post-fix retrain submission
+  (`bash scripts/submit_phase7_multinode.sh qat int8`) crashed all 3 FP32 jobs immediately after
+  the anchor-recall check (which passed) — `RuntimeError` on `load_state_dict` inside
+  `trainer.fit(resume_from=...)`. Root cause: `ml/det_seg_trainer.py`'s `fit()` unconditionally
+  auto-resumes from `<run_dir>/<run_id>_resume.pth` if the path exists (`ml/checkpoint.py`'s
+  `auto_resume_path` pattern), and the 3 target run dirs
+  (`ssd_alexnet_{bottleneck,fire,tv}_fp32_phase7_detection/`) still held `_resume.pth`/`_best.pth`
+  from **pre-Stage-9** runs — old anchor config, so old checkpoints had 126/24 anchors per location
+  vs. the new 210/40, a head-shape mismatch. Downstream QAT/INT8 jobs sat `PENDING` with SLURM
+  reason `DependencyNeverSatisfied` (permanently stuck, not queue congestion — distinct from the
+  normal `(Priority)`/`(Resources)` reasons other cluster users' jobs show).
+  Fix: `scancel`'d the 6 stuck QAT/INT8 jobs, deleted the stale `_resume.pth`/`_best.pth`/`.log` in
+  the 3 run dirs (gitignored; `config.yaml`/`metrics.json` are tracked and get overwritten by the
+  next run regardless, so left alone), resubmitted the same chain fresh.
+- **A4 attempt 2 (in progress, PCAD, jobs 809701-809709):** FP32 809701-703 → QAT 809704-706 → INT8
+  809707-709, queued cleanly (no `DependencyNeverSatisfied`). Not yet confirmed past first epoch as
+  of this log entry — cluster (`tupi` partition) had other users' jobs ahead in queue.
 
 ---
 
@@ -162,9 +179,8 @@ just low.** New training with the Stage 9 fix has not happened yet.
 
 **Next:**
 1. **A4** — retrain FP32→QAT→INT8 on PCAD for all 3 backbones with the corrected config (1000/100
-   epochs, patience 50 — Stage 9). Needs its own explicit go-ahead separate from the Stage 9
-   diagnostic work (real, multi-hour GPU training) and needs to run on PCAD, not locally.
-   `alexnet_tv` needs `--skip-anchor-check`.
+   epochs, patience 50 — Stage 9). In progress: attempt 2 running as jobs 809701-809709 (see Stage 9
+   log above); not yet confirmed complete.
 2. **A5** — re-run `scripts/phase7_analysis.py` against the new results to actually test H1–H4.
 3. Segmentation (Part B) is unstarted: `build_deeplabv3_segmenter()` is still a hardcoded
    placeholder ignoring the project's own backbones, `SegmentationTrainer.fit()` is still a

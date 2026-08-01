@@ -62,7 +62,7 @@ echo ""
 # Submit all FP32 jobs in parallel
 fp32_job_ids=()
 for model in "${MODELS[@]}"; do
-    job_name="p7_${model:0:8}_fp32"
+    job_name="p7_${model#alexnet_}_fp32"
     log_file="outputs/detection_segmentation/phase7/logs/p7_${model}_fp32_%j.log"
     extra_args=""
     [ "$model" = "alexnet_tv" ] && extra_args="--skip-anchor-check"
@@ -101,7 +101,7 @@ if [ "$RUN_QAT" = true ]; then
             continue
         fi
 
-        job_name="p7_${model:0:8}_qat"
+        job_name="p7_${model#alexnet_}_qat"
         log_file="outputs/detection_segmentation/phase7/logs/p7_${model}_qat_%j.log"
 
         if [ "$DRY_RUN" = true ]; then
@@ -136,7 +136,7 @@ if [ "$RUN_QAT" = true ]; then
                 continue
             fi
 
-            job_name="p7_${model:0:8}_int8"
+            job_name="p7_${model#alexnet_}_int8"
             log_file="outputs/detection_segmentation/phase7/logs/p7_${model}_int8_%j.log"
 
             if [ "$DRY_RUN" = true ]; then
