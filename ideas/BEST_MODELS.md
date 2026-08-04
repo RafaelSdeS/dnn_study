@@ -328,7 +328,20 @@ FireResidual drops –0.59pp under QAT).
 
 **Practical implication:** the stem change in `AlexNetFinalFireResidual` contributes comparatively
 little once training is run to completion — a plain Fire backbone plus one residual shortcut gets
-nearly all of the benefit at Fire's exact parameter count, and quantizes better doing it. Structured
-pruning (`scripts/prune_channels.py`) and weight-compression headroom measurement
-(`scripts/measure_compression.py`) tooling also exists for this phase but has no saved results yet
-(Tasks 2–3, `ideas/PHASE9_PLAN.md`).
+nearly all of the benefit at Fire's exact parameter count, and quantizes better doing it.
+
+**Task 2 — structured channel pruning** (`scripts/prune_channels.py`, `alexnet_bottleneck`,
+ratio 0.4): 385,000 → 207,399 params (53.9%), forward-passes cleanly, every remaining `Conv2d`
+stays `groups=1` (Winograd-eligible by construction). Unfine-tuned accuracy collapses as expected
+(top1=0.50%, top5=2.35%) — this is a mechanics/Winograd-eligibility check, not a competitive
+pruned-accuracy result; a fine-tuning loop to recover accuracy is future work.
+
+**Task 3 — compression headroom** (`scripts/measure_compression.py`, `alexnet_fire`): real INT8
+weights use 7.19 bits/weight (vs. 8.00 nominal); k-means weight-sharing at 16/32/64 clusters
+(4/5/6-bit) all beat the real on-disk gzip ratio (1.18×), with up to ~2.2× headroom at 16 clusters
+(weights-only) — gzip's DEFLATE is only capturing a fraction of the achievable compression on top
+of INT8. H3's acceptance criterion is met; per D6 no changes were made to `ml/checkpoint.py`, this
+is a measurement-only signal that a real weight-sharing pipeline would be worth building.
+
+Full tables and methodology: `ideas/PHASE9_PLAN.md` (Tasks 1–3). Reproducible analysis notebook:
+`notebooks/phase_9_pcad_bypass_ablation_analysis/phase9_ablation_analysis.ipynb`.

@@ -27,7 +27,7 @@ jupyter lab
 6. `notebooks/phase_4_compression_and_final_architecture_training/final_architecture_qat.ipynb` — Phase 4: Combines Phase 3's best mechanisms into final hybrid architectures
 7. `notebooks/phase_5_cross_phase_results_analysis/final_analysis_phase5.ipynb` — Phase 5: Cross-phase results analysis and figure generation
 8. `notebooks/phase_6_hardware_profiling_analysis/hardware_profiling_phase6.ipynb` — Phase 6: Hardware profiling & Winograd efficiency validation (RTX 4090)
-9. `notebooks/phase_9_pcad_bypass_ablation_analysis/pcad_results_analysis.ipynb` — Phase 9: Cross-phase PCAD results (bypass ablation, large-scale runs)
+9. `notebooks/phase_9_pcad_bypass_ablation_analysis/phase9_ablation_analysis.ipynb` — Phase 9: Cross-phase PCAD results (bypass ablation, large-scale runs)
 
 Phase 7 (detection/segmentation) has no notebook — it's CLI-only via `scripts/train_det_seg.py`; see `docs/PHASE7_QUICKSTART.md`. Phase 8 is planned only (`ideas/PHASE8_PLAN.md`), no code yet. Full model/phase inventory: `CLAUDE.md`.
 
