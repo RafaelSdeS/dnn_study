@@ -1,0 +1,427 @@
+[2026-08-04 11:33:46,632] INFO: Starting Phase 6 profiling run on cuda
+[2026-08-04 11:33:46,633] INFO: Output: outputs/pcad/phase6/nvidia_geforce_gtx_1080_ti_beagle_profile.json
+[2026-08-04 11:33:46,737] INFO: Loaded config from configs/profiling.yaml
+[2026-08-04 11:33:46,738] INFO: Resuming: 0 configs already completed
+[2026-08-04 11:33:46,893] INFO: Metadata: {'kind': 'metadata', 'pytorch_version': '2.5.1+cu121', 'cuda_version': '12.1', 'cudnn_version': 90100, 'seed': 42, 'timestamp': '2026-08-04T11:33:46.887190', 'config_file': 'configs/profiling.yaml', 'device_name': 'NVIDIA GeForce GTX 1080 Ti', 'device_capability': [6, 1]}
+[2026-08-04 11:33:46,893] INFO: Starting layer profiling sweep (400 configs)
+[2026-08-04 11:33:49,470] INFO: [1/400] layer k=2 ch=16 b=1 res=64 fp32 groups=dense: 0.192ms
+[2026-08-04 11:33:49,688] INFO: [2/400] layer k=2 ch=16 b=1 res=64 fp32 groups=depthwise: 0.161ms
+[2026-08-04 11:33:49,797] INFO: [3/400] layer k=2 ch=16 b=1 res=64 int8 groups=dense: 0.192ms
+[2026-08-04 11:33:49,884] INFO: [4/400] layer k=2 ch=16 b=1 res=64 int8 groups=depthwise: 0.159ms
+[2026-08-04 11:33:50,008] INFO: [5/400] layer k=2 ch=16 b=1 res=128 fp32 groups=dense: 0.219ms
+[2026-08-04 11:33:50,095] INFO: [6/400] layer k=2 ch=16 b=1 res=128 fp32 groups=depthwise: 0.160ms
+[2026-08-04 11:33:50,209] INFO: [7/400] layer k=2 ch=16 b=1 res=128 int8 groups=dense: 0.218ms
+[2026-08-04 11:33:50,296] INFO: [8/400] layer k=2 ch=16 b=1 res=128 int8 groups=depthwise: 0.160ms
+[2026-08-04 11:33:50,411] INFO: [9/400] layer k=2 ch=16 b=8 res=64 fp32 groups=dense: 0.216ms
+[2026-08-04 11:33:50,482] INFO: [10/400] layer k=2 ch=16 b=8 res=64 fp32 groups=depthwise: 0.127ms
+[2026-08-04 11:33:50,575] INFO: [11/400] layer k=2 ch=16 b=8 res=64 int8 groups=dense: 0.174ms
+[2026-08-04 11:33:50,646] INFO: [12/400] layer k=2 ch=16 b=8 res=64 int8 groups=depthwise: 0.128ms
+[2026-08-04 11:33:50,772] INFO: [13/400] layer k=2 ch=16 b=8 res=128 fp32 groups=dense: 0.174ms
+[2026-08-04 11:33:50,965] INFO: [14/400] layer k=2 ch=16 b=8 res=128 fp32 groups=depthwise: 0.187ms
+[2026-08-04 11:33:51,070] INFO: [15/400] layer k=2 ch=16 b=8 res=128 int8 groups=dense: 0.145ms
+[2026-08-04 11:33:51,274] INFO: [16/400] layer k=2 ch=16 b=8 res=128 int8 groups=depthwise: 0.191ms
+[2026-08-04 11:33:51,453] INFO: [17/400] layer k=2 ch=32 b=1 res=64 fp32 groups=dense: 0.138ms
+[2026-08-04 11:33:51,513] INFO: [18/400] layer k=2 ch=32 b=1 res=64 fp32 groups=depthwise: 0.107ms
+[2026-08-04 11:33:51,590] INFO: [19/400] layer k=2 ch=32 b=1 res=64 int8 groups=dense: 0.138ms
+[2026-08-04 11:33:51,650] INFO: [20/400] layer k=2 ch=32 b=1 res=64 int8 groups=depthwise: 0.107ms
+[2026-08-04 11:33:51,753] INFO: [21/400] layer k=2 ch=32 b=1 res=128 fp32 groups=dense: 0.145ms
+[2026-08-04 11:33:51,823] INFO: [22/400] layer k=2 ch=32 b=1 res=128 fp32 groups=depthwise: 0.106ms
+[2026-08-04 11:33:51,899] INFO: [23/400] layer k=2 ch=32 b=1 res=128 int8 groups=dense: 0.145ms
+[2026-08-04 11:33:51,963] INFO: [24/400] layer k=2 ch=32 b=1 res=128 int8 groups=depthwise: 0.091ms
+[2026-08-04 11:33:52,048] INFO: [25/400] layer k=2 ch=32 b=8 res=64 fp32 groups=dense: 0.124ms
+[2026-08-04 11:33:52,119] INFO: [26/400] layer k=2 ch=32 b=8 res=64 fp32 groups=depthwise: 0.091ms
+[2026-08-04 11:33:52,199] INFO: [27/400] layer k=2 ch=32 b=8 res=64 int8 groups=dense: 0.124ms
+[2026-08-04 11:33:52,269] INFO: [28/400] layer k=2 ch=32 b=8 res=64 int8 groups=depthwise: 0.092ms
+[2026-08-04 11:33:52,447] INFO: [29/400] layer k=2 ch=32 b=8 res=128 fp32 groups=dense: 0.151ms
+[2026-08-04 11:33:52,812] INFO: [30/400] layer k=2 ch=32 b=8 res=128 fp32 groups=depthwise: 0.354ms
+[2026-08-04 11:33:52,993] INFO: [31/400] layer k=2 ch=32 b=8 res=128 int8 groups=dense: 0.150ms
+[2026-08-04 11:33:53,368] INFO: [32/400] layer k=2 ch=32 b=8 res=128 int8 groups=depthwise: 0.373ms
+[2026-08-04 11:33:53,433] INFO: [33/400] layer k=2 ch=64 b=1 res=64 fp32 groups=dense: 0.094ms
+[2026-08-04 11:33:53,473] INFO: [34/400] layer k=2 ch=64 b=1 res=64 fp32 groups=depthwise: 0.069ms
+[2026-08-04 11:33:53,535] INFO: [35/400] layer k=2 ch=64 b=1 res=64 int8 groups=dense: 0.095ms
+[2026-08-04 11:33:53,574] INFO: [36/400] layer k=2 ch=64 b=1 res=64 int8 groups=depthwise: 0.069ms
+[2026-08-04 11:33:53,675] INFO: [37/400] layer k=2 ch=64 b=1 res=128 fp32 groups=dense: 0.095ms
+[2026-08-04 11:33:53,780] INFO: [38/400] layer k=2 ch=64 b=1 res=128 fp32 groups=depthwise: 0.094ms
+[2026-08-04 11:33:53,880] INFO: [39/400] layer k=2 ch=64 b=1 res=128 int8 groups=dense: 0.095ms
+[2026-08-04 11:33:53,982] INFO: [40/400] layer k=2 ch=64 b=1 res=128 int8 groups=depthwise: 0.092ms
+[2026-08-04 11:33:54,150] INFO: [41/400] layer k=2 ch=64 b=8 res=64 fp32 groups=dense: 0.123ms
+[2026-08-04 11:33:54,280] INFO: [42/400] layer k=2 ch=64 b=8 res=64 fp32 groups=depthwise: 0.157ms
+[2026-08-04 11:33:54,444] INFO: [43/400] layer k=2 ch=64 b=8 res=64 int8 groups=dense: 0.122ms
+[2026-08-04 11:33:54,577] INFO: [44/400] layer k=2 ch=64 b=8 res=64 int8 groups=depthwise: 0.159ms
+[2026-08-04 11:33:55,192] INFO: [45/400] layer k=2 ch=64 b=8 res=128 fp32 groups=dense: 0.460ms
+[2026-08-04 11:33:55,912] INFO: [46/400] layer k=2 ch=64 b=8 res=128 fp32 groups=depthwise: 0.675ms
+[2026-08-04 11:33:56,498] INFO: [47/400] layer k=2 ch=64 b=8 res=128 int8 groups=dense: 0.456ms
+[2026-08-04 11:33:57,214] INFO: [48/400] layer k=2 ch=64 b=8 res=128 int8 groups=depthwise: 0.682ms
+[2026-08-04 11:33:57,319] INFO: [49/400] layer k=2 ch=128 b=1 res=64 fp32 groups=dense: 0.094ms
+[2026-08-04 11:33:57,367] INFO: [50/400] layer k=2 ch=128 b=1 res=64 fp32 groups=depthwise: 0.069ms
+[2026-08-04 11:33:57,470] INFO: [51/400] layer k=2 ch=128 b=1 res=64 int8 groups=dense: 0.094ms
+[2026-08-04 11:33:57,517] INFO: [52/400] layer k=2 ch=128 b=1 res=64 int8 groups=depthwise: 0.069ms
+[2026-08-04 11:33:57,848] INFO: [53/400] layer k=2 ch=128 b=1 res=128 fp32 groups=dense: 0.262ms
+[2026-08-04 11:33:58,040] INFO: [54/400] layer k=2 ch=128 b=1 res=128 fp32 groups=depthwise: 0.185ms
+[2026-08-04 11:33:58,364] INFO: [55/400] layer k=2 ch=128 b=1 res=128 int8 groups=dense: 0.261ms
+[2026-08-04 11:33:58,558] INFO: [56/400] layer k=2 ch=128 b=1 res=128 int8 groups=depthwise: 0.185ms
+[2026-08-04 11:33:59,139] INFO: [57/400] layer k=2 ch=128 b=8 res=64 fp32 groups=dense: 0.456ms
+[2026-08-04 11:33:59,396] INFO: [58/400] layer k=2 ch=128 b=8 res=64 fp32 groups=depthwise: 0.314ms
+[2026-08-04 11:33:59,977] INFO: [59/400] layer k=2 ch=128 b=8 res=64 int8 groups=dense: 0.448ms
+[2026-08-04 11:34:00,235] INFO: [60/400] layer k=2 ch=128 b=8 res=64 int8 groups=depthwise: 0.314ms
+[2026-08-04 11:34:02,804] INFO: [61/400] layer k=2 ch=128 b=8 res=128 fp32 groups=dense: 1.768ms
+[2026-08-04 11:34:04,229] INFO: [62/400] layer k=2 ch=128 b=8 res=128 fp32 groups=depthwise: 1.405ms
+[2026-08-04 11:34:06,493] INFO: [63/400] layer k=2 ch=128 b=8 res=128 int8 groups=dense: 1.806ms
+[2026-08-04 11:34:07,922] INFO: [64/400] layer k=2 ch=128 b=8 res=128 int8 groups=depthwise: 1.343ms
+[2026-08-04 11:34:07,974] INFO: [65/400] layer k=3 ch=16 b=1 res=64 fp32 groups=dense: 0.091ms
+[2026-08-04 11:34:08,013] INFO: [66/400] layer k=3 ch=16 b=1 res=64 fp32 groups=depthwise: 0.069ms
+[2026-08-04 11:34:08,065] INFO: [67/400] layer k=3 ch=16 b=1 res=64 int8 groups=dense: 0.092ms
+[2026-08-04 11:34:08,104] INFO: [68/400] layer k=3 ch=16 b=1 res=64 int8 groups=depthwise: 0.069ms
+[2026-08-04 11:34:08,155] INFO: [69/400] layer k=3 ch=16 b=1 res=128 fp32 groups=dense: 0.092ms
+[2026-08-04 11:34:08,198] INFO: [70/400] layer k=3 ch=16 b=1 res=128 fp32 groups=depthwise: 0.070ms
+[2026-08-04 11:34:08,249] INFO: [71/400] layer k=3 ch=16 b=1 res=128 int8 groups=dense: 0.092ms
+[2026-08-04 11:34:08,292] INFO: [72/400] layer k=3 ch=16 b=1 res=128 int8 groups=depthwise: 0.070ms
+[2026-08-04 11:34:08,345] INFO: [73/400] layer k=3 ch=16 b=8 res=64 fp32 groups=dense: 0.091ms
+[2026-08-04 11:34:08,391] INFO: [74/400] layer k=3 ch=16 b=8 res=64 fp32 groups=depthwise: 0.070ms
+[2026-08-04 11:34:08,445] INFO: [75/400] layer k=3 ch=16 b=8 res=64 int8 groups=dense: 0.095ms
+[2026-08-04 11:34:08,491] INFO: [76/400] layer k=3 ch=16 b=8 res=64 int8 groups=depthwise: 0.072ms
+[2026-08-04 11:34:08,592] INFO: [77/400] layer k=3 ch=16 b=8 res=128 fp32 groups=dense: 0.125ms
+[2026-08-04 11:34:08,831] INFO: [78/400] layer k=3 ch=16 b=8 res=128 fp32 groups=depthwise: 0.379ms
+[2026-08-04 11:34:08,932] INFO: [79/400] layer k=3 ch=16 b=8 res=128 int8 groups=dense: 0.126ms
+[2026-08-04 11:34:09,175] INFO: [80/400] layer k=3 ch=16 b=8 res=128 int8 groups=depthwise: 0.386ms
+[2026-08-04 11:34:09,227] INFO: [81/400] layer k=3 ch=32 b=1 res=64 fp32 groups=dense: 0.091ms
+[2026-08-04 11:34:09,267] INFO: [82/400] layer k=3 ch=32 b=1 res=64 fp32 groups=depthwise: 0.069ms
+[2026-08-04 11:34:09,324] INFO: [83/400] layer k=3 ch=32 b=1 res=64 int8 groups=dense: 0.091ms
+[2026-08-04 11:34:09,364] INFO: [84/400] layer k=3 ch=32 b=1 res=64 int8 groups=depthwise: 0.070ms
+[2026-08-04 11:34:09,428] INFO: [85/400] layer k=3 ch=32 b=1 res=128 fp32 groups=dense: 0.092ms
+[2026-08-04 11:34:09,490] INFO: [86/400] layer k=3 ch=32 b=1 res=128 fp32 groups=depthwise: 0.087ms
+[2026-08-04 11:34:09,545] INFO: [87/400] layer k=3 ch=32 b=1 res=128 int8 groups=dense: 0.091ms
+[2026-08-04 11:34:09,606] INFO: [88/400] layer k=3 ch=32 b=1 res=128 int8 groups=depthwise: 0.087ms
+[2026-08-04 11:34:09,676] INFO: [89/400] layer k=3 ch=32 b=8 res=64 fp32 groups=dense: 0.091ms
+[2026-08-04 11:34:09,752] INFO: [90/400] layer k=3 ch=32 b=8 res=64 fp32 groups=depthwise: 0.112ms
+[2026-08-04 11:34:09,820] INFO: [91/400] layer k=3 ch=32 b=8 res=64 int8 groups=dense: 0.091ms
+[2026-08-04 11:34:09,896] INFO: [92/400] layer k=3 ch=32 b=8 res=64 int8 groups=depthwise: 0.112ms
+[2026-08-04 11:34:10,090] INFO: [93/400] layer k=3 ch=32 b=8 res=128 fp32 groups=dense: 0.237ms
+[2026-08-04 11:34:10,551] INFO: [94/400] layer k=3 ch=32 b=8 res=128 fp32 groups=depthwise: 0.734ms
+[2026-08-04 11:34:10,744] INFO: [95/400] layer k=3 ch=32 b=8 res=128 int8 groups=dense: 0.237ms
+[2026-08-04 11:34:11,205] INFO: [96/400] layer k=3 ch=32 b=8 res=128 int8 groups=depthwise: 0.741ms
+[2026-08-04 11:34:11,268] INFO: [97/400] layer k=3 ch=64 b=1 res=64 fp32 groups=dense: 0.092ms
+[2026-08-04 11:34:11,308] INFO: [98/400] layer k=3 ch=64 b=1 res=64 fp32 groups=depthwise: 0.070ms
+[2026-08-04 11:34:11,369] INFO: [99/400] layer k=3 ch=64 b=1 res=64 int8 groups=dense: 0.092ms
+[2026-08-04 11:34:11,457] INFO: [100/400] layer k=3 ch=64 b=1 res=64 int8 groups=depthwise: 0.164ms
+[2026-08-04 11:34:11,608] INFO: [101/400] layer k=3 ch=64 b=1 res=128 fp32 groups=dense: 0.213ms
+[2026-08-04 11:34:11,753] INFO: [102/400] layer k=3 ch=64 b=1 res=128 fp32 groups=depthwise: 0.192ms
+[2026-08-04 11:34:11,901] INFO: [103/400] layer k=3 ch=64 b=1 res=128 int8 groups=dense: 0.213ms
+[2026-08-04 11:34:12,025] INFO: [104/400] layer k=3 ch=64 b=1 res=128 int8 groups=depthwise: 0.185ms
+[2026-08-04 11:34:12,212] INFO: [105/400] layer k=3 ch=64 b=8 res=64 fp32 groups=dense: 0.182ms
+[2026-08-04 11:34:12,366] INFO: [106/400] layer k=3 ch=64 b=8 res=64 fp32 groups=depthwise: 0.241ms
+[2026-08-04 11:34:12,553] INFO: [107/400] layer k=3 ch=64 b=8 res=64 int8 groups=dense: 0.151ms
+[2026-08-04 11:34:12,720] INFO: [108/400] layer k=3 ch=64 b=8 res=64 int8 groups=depthwise: 0.265ms
+[2026-08-04 11:34:13,349] INFO: [109/400] layer k=3 ch=64 b=8 res=128 fp32 groups=dense: 0.626ms
+[2026-08-04 11:34:14,244] INFO: [110/400] layer k=3 ch=64 b=8 res=128 fp32 groups=depthwise: 1.394ms
+[2026-08-04 11:34:14,903] INFO: [111/400] layer k=3 ch=64 b=8 res=128 int8 groups=dense: 0.705ms
+[2026-08-04 11:34:15,808] INFO: [112/400] layer k=3 ch=64 b=8 res=128 int8 groups=depthwise: 1.381ms
+[2026-08-04 11:34:15,910] INFO: [113/400] layer k=3 ch=128 b=1 res=64 fp32 groups=dense: 0.096ms
+[2026-08-04 11:34:15,958] INFO: [114/400] layer k=3 ch=128 b=1 res=64 fp32 groups=depthwise: 0.070ms
+[2026-08-04 11:34:16,062] INFO: [115/400] layer k=3 ch=128 b=1 res=64 int8 groups=dense: 0.092ms
+[2026-08-04 11:34:16,127] INFO: [116/400] layer k=3 ch=128 b=1 res=64 int8 groups=depthwise: 0.070ms
+[2026-08-04 11:34:16,474] INFO: [117/400] layer k=3 ch=128 b=1 res=128 fp32 groups=dense: 0.271ms
+[2026-08-04 11:34:16,719] INFO: [118/400] layer k=3 ch=128 b=1 res=128 fp32 groups=depthwise: 0.355ms
+[2026-08-04 11:34:17,081] INFO: [119/400] layer k=3 ch=128 b=1 res=128 int8 groups=dense: 0.262ms
+[2026-08-04 11:34:17,332] INFO: [120/400] layer k=3 ch=128 b=1 res=128 int8 groups=depthwise: 0.376ms
+[2026-08-04 11:34:17,992] INFO: [121/400] layer k=3 ch=128 b=8 res=64 fp32 groups=dense: 0.546ms
+[2026-08-04 11:34:18,334] INFO: [122/400] layer k=3 ch=128 b=8 res=64 fp32 groups=depthwise: 0.455ms
+[2026-08-04 11:34:18,981] INFO: [123/400] layer k=3 ch=128 b=8 res=64 int8 groups=dense: 0.571ms
+[2026-08-04 11:34:19,274] INFO: [124/400] layer k=3 ch=128 b=8 res=64 int8 groups=depthwise: 0.477ms
+[2026-08-04 11:34:21,672] INFO: [125/400] layer k=3 ch=128 b=8 res=128 fp32 groups=dense: 2.305ms
+[2026-08-04 11:34:23,443] INFO: [126/400] layer k=3 ch=128 b=8 res=128 fp32 groups=depthwise: 2.688ms
+[2026-08-04 11:34:25,849] INFO: [127/400] layer k=3 ch=128 b=8 res=128 int8 groups=dense: 2.303ms
+[2026-08-04 11:34:27,632] INFO: [128/400] layer k=3 ch=128 b=8 res=128 int8 groups=depthwise: 2.692ms
+[2026-08-04 11:34:27,685] INFO: [129/400] layer k=5 ch=16 b=1 res=64 fp32 groups=dense: 0.095ms
+[2026-08-04 11:34:27,733] INFO: [130/400] layer k=5 ch=16 b=1 res=64 fp32 groups=depthwise: 0.070ms
+[2026-08-04 11:34:27,790] INFO: [131/400] layer k=5 ch=16 b=1 res=64 int8 groups=dense: 0.094ms
+[2026-08-04 11:34:27,830] INFO: [132/400] layer k=5 ch=16 b=1 res=64 int8 groups=depthwise: 0.070ms
+[2026-08-04 11:34:27,896] INFO: [133/400] layer k=5 ch=16 b=1 res=128 fp32 groups=dense: 0.095ms
+[2026-08-04 11:34:27,947] INFO: [134/400] layer k=5 ch=16 b=1 res=128 fp32 groups=depthwise: 0.096ms
+[2026-08-04 11:34:28,001] INFO: [135/400] layer k=5 ch=16 b=1 res=128 int8 groups=dense: 0.098ms
+[2026-08-04 11:34:28,051] INFO: [136/400] layer k=5 ch=16 b=1 res=128 int8 groups=depthwise: 0.096ms
+[2026-08-04 11:34:28,110] INFO: [137/400] layer k=5 ch=16 b=8 res=64 fp32 groups=dense: 0.109ms
+[2026-08-04 11:34:28,168] INFO: [138/400] layer k=5 ch=16 b=8 res=64 fp32 groups=depthwise: 0.120ms
+[2026-08-04 11:34:28,227] INFO: [139/400] layer k=5 ch=16 b=8 res=64 int8 groups=dense: 0.109ms
+[2026-08-04 11:34:28,285] INFO: [140/400] layer k=5 ch=16 b=8 res=64 int8 groups=depthwise: 0.117ms
+[2026-08-04 11:34:28,455] INFO: [141/400] layer k=5 ch=16 b=8 res=128 fp32 groups=dense: 0.389ms
+[2026-08-04 11:34:28,791] INFO: [142/400] layer k=5 ch=16 b=8 res=128 fp32 groups=depthwise: 0.769ms
+[2026-08-04 11:34:28,962] INFO: [143/400] layer k=5 ch=16 b=8 res=128 int8 groups=dense: 0.389ms
+[2026-08-04 11:34:29,300] INFO: [144/400] layer k=5 ch=16 b=8 res=128 int8 groups=depthwise: 0.775ms
+[2026-08-04 11:34:29,353] INFO: [145/400] layer k=5 ch=32 b=1 res=64 fp32 groups=dense: 0.094ms
+[2026-08-04 11:34:29,393] INFO: [146/400] layer k=5 ch=32 b=1 res=64 fp32 groups=depthwise: 0.070ms
+[2026-08-04 11:34:29,445] INFO: [147/400] layer k=5 ch=32 b=1 res=64 int8 groups=dense: 0.094ms
+[2026-08-04 11:34:29,485] INFO: [148/400] layer k=5 ch=32 b=1 res=64 int8 groups=depthwise: 0.070ms
+[2026-08-04 11:34:29,546] INFO: [149/400] layer k=5 ch=32 b=1 res=128 fp32 groups=dense: 0.118ms
+[2026-08-04 11:34:29,640] INFO: [150/400] layer k=5 ch=32 b=1 res=128 fp32 groups=depthwise: 0.190ms
+[2026-08-04 11:34:29,703] INFO: [151/400] layer k=5 ch=32 b=1 res=128 int8 groups=dense: 0.119ms
+[2026-08-04 11:34:29,790] INFO: [152/400] layer k=5 ch=32 b=1 res=128 int8 groups=depthwise: 0.190ms
+[2026-08-04 11:34:29,897] INFO: [153/400] layer k=5 ch=32 b=8 res=64 fp32 groups=dense: 0.233ms
+[2026-08-04 11:34:30,010] INFO: [154/400] layer k=5 ch=32 b=8 res=64 fp32 groups=depthwise: 0.247ms
+[2026-08-04 11:34:30,118] INFO: [155/400] layer k=5 ch=32 b=8 res=64 int8 groups=dense: 0.234ms
+[2026-08-04 11:34:30,229] INFO: [156/400] layer k=5 ch=32 b=8 res=64 int8 groups=depthwise: 0.244ms
+[2026-08-04 11:34:30,569] INFO: [157/400] layer k=5 ch=32 b=8 res=128 fp32 groups=dense: 0.818ms
+[2026-08-04 11:34:31,227] INFO: [158/400] layer k=5 ch=32 b=8 res=128 fp32 groups=depthwise: 1.507ms
+[2026-08-04 11:34:31,566] INFO: [159/400] layer k=5 ch=32 b=8 res=128 int8 groups=dense: 0.821ms
+[2026-08-04 11:34:32,229] INFO: [160/400] layer k=5 ch=32 b=8 res=128 int8 groups=depthwise: 1.521ms
+[2026-08-04 11:34:32,309] INFO: [161/400] layer k=5 ch=64 b=1 res=64 fp32 groups=dense: 0.158ms
+[2026-08-04 11:34:32,349] INFO: [162/400] layer k=5 ch=64 b=1 res=64 fp32 groups=depthwise: 0.070ms
+[2026-08-04 11:34:32,429] INFO: [163/400] layer k=5 ch=64 b=1 res=64 int8 groups=dense: 0.158ms
+[2026-08-04 11:34:32,469] INFO: [164/400] layer k=5 ch=64 b=1 res=64 int8 groups=depthwise: 0.070ms
+[2026-08-04 11:34:32,668] INFO: [165/400] layer k=5 ch=64 b=1 res=128 fp32 groups=dense: 0.480ms
+[2026-08-04 11:34:32,847] INFO: [166/400] layer k=5 ch=64 b=1 res=128 fp32 groups=depthwise: 0.415ms
+[2026-08-04 11:34:33,044] INFO: [167/400] layer k=5 ch=64 b=1 res=128 int8 groups=dense: 0.466ms
+[2026-08-04 11:34:33,220] INFO: [168/400] layer k=5 ch=64 b=1 res=128 int8 groups=depthwise: 0.399ms
+[2026-08-04 11:34:33,567] INFO: [169/400] layer k=5 ch=64 b=8 res=64 fp32 groups=dense: 0.863ms
+[2026-08-04 11:34:33,772] INFO: [170/400] layer k=5 ch=64 b=8 res=64 fp32 groups=depthwise: 0.464ms
+[2026-08-04 11:34:34,120] INFO: [171/400] layer k=5 ch=64 b=8 res=64 int8 groups=dense: 0.874ms
+[2026-08-04 11:34:34,336] INFO: [172/400] layer k=5 ch=64 b=8 res=64 int8 groups=depthwise: 0.493ms
+[2026-08-04 11:34:35,671] INFO: [173/400] layer k=5 ch=64 b=8 res=128 fp32 groups=dense: 3.119ms
+[2026-08-04 11:34:36,968] INFO: [174/400] layer k=5 ch=64 b=8 res=128 fp32 groups=depthwise: 2.973ms
+[2026-08-04 11:34:38,221] INFO: [175/400] layer k=5 ch=64 b=8 res=128 int8 groups=dense: 3.082ms
+[2026-08-04 11:34:39,533] INFO: [176/400] layer k=5 ch=64 b=8 res=128 int8 groups=depthwise: 2.995ms
+[2026-08-04 11:34:39,738] INFO: [177/400] layer k=5 ch=128 b=1 res=64 fp32 groups=dense: 0.461ms
+[2026-08-04 11:34:39,798] INFO: [178/400] layer k=5 ch=128 b=1 res=64 fp32 groups=depthwise: 0.120ms
+[2026-08-04 11:34:39,999] INFO: [179/400] layer k=5 ch=128 b=1 res=64 int8 groups=dense: 0.456ms
+[2026-08-04 11:34:40,061] INFO: [180/400] layer k=5 ch=128 b=1 res=64 int8 groups=depthwise: 0.127ms
+[2026-08-04 11:34:40,769] INFO: [181/400] layer k=5 ch=128 b=1 res=128 fp32 groups=dense: 1.746ms
+[2026-08-04 11:34:41,110] INFO: [182/400] layer k=5 ch=128 b=1 res=128 fp32 groups=depthwise: 0.794ms
+[2026-08-04 11:34:41,788] INFO: [183/400] layer k=5 ch=128 b=1 res=128 int8 groups=dense: 1.701ms
+[2026-08-04 11:34:42,134] INFO: [184/400] layer k=5 ch=128 b=1 res=128 int8 groups=depthwise: 0.805ms
+[2026-08-04 11:34:43,425] INFO: [185/400] layer k=5 ch=128 b=8 res=64 fp32 groups=dense: 3.127ms
+[2026-08-04 11:34:43,830] INFO: [186/400] layer k=5 ch=128 b=8 res=64 fp32 groups=depthwise: 0.915ms
+[2026-08-04 11:34:45,086] INFO: [187/400] layer k=5 ch=128 b=8 res=64 int8 groups=dense: 3.127ms
+[2026-08-04 11:34:45,494] INFO: [188/400] layer k=5 ch=128 b=8 res=64 int8 groups=depthwise: 0.933ms
+[2026-08-04 11:34:50,472] INFO: [189/400] layer k=5 ch=128 b=8 res=128 fp32 groups=dense: 12.396ms
+[2026-08-04 11:34:53,099] INFO: [190/400] layer k=5 ch=128 b=8 res=128 fp32 groups=depthwise: 5.947ms
+[2026-08-04 11:34:58,097] INFO: [191/400] layer k=5 ch=128 b=8 res=128 int8 groups=dense: 12.454ms
+[2026-08-04 11:35:00,744] INFO: [192/400] layer k=5 ch=128 b=8 res=128 int8 groups=depthwise: 5.947ms
+[2026-08-04 11:35:00,799] INFO: [193/400] layer k=7 ch=16 b=1 res=64 fp32 groups=dense: 0.095ms
+[2026-08-04 11:35:00,840] INFO: [194/400] layer k=7 ch=16 b=1 res=64 fp32 groups=depthwise: 0.070ms
+[2026-08-04 11:35:00,893] INFO: [195/400] layer k=7 ch=16 b=1 res=64 int8 groups=dense: 0.095ms
+[2026-08-04 11:35:00,936] INFO: [196/400] layer k=7 ch=16 b=1 res=64 int8 groups=depthwise: 0.075ms
+[2026-08-04 11:35:01,000] INFO: [197/400] layer k=7 ch=16 b=1 res=128 fp32 groups=dense: 0.125ms
+[2026-08-04 11:35:01,067] INFO: [198/400] layer k=7 ch=16 b=1 res=128 fp32 groups=depthwise: 0.161ms
+[2026-08-04 11:35:01,129] INFO: [199/400] layer k=7 ch=16 b=1 res=128 int8 groups=dense: 0.125ms
+[2026-08-04 11:35:01,245] INFO: [200/400] layer k=7 ch=16 b=1 res=128 int8 groups=depthwise: 0.163ms
+[2026-08-04 11:35:01,353] INFO: [201/400] layer k=7 ch=16 b=8 res=64 fp32 groups=dense: 0.254ms
+[2026-08-04 11:35:01,431] INFO: [202/400] layer k=7 ch=16 b=8 res=64 fp32 groups=depthwise: 0.190ms
+[2026-08-04 11:35:01,556] INFO: [203/400] layer k=7 ch=16 b=8 res=64 int8 groups=dense: 0.244ms
+[2026-08-04 11:35:01,634] INFO: [204/400] layer k=7 ch=16 b=8 res=64 int8 groups=depthwise: 0.188ms
+[2026-08-04 11:35:01,923] INFO: [205/400] layer k=7 ch=16 b=8 res=128 fp32 groups=dense: 0.850ms
+[2026-08-04 11:35:02,376] INFO: [206/400] layer k=7 ch=16 b=8 res=128 fp32 groups=depthwise: 1.231ms
+[2026-08-04 11:35:02,660] INFO: [207/400] layer k=7 ch=16 b=8 res=128 int8 groups=dense: 0.851ms
+[2026-08-04 11:35:03,129] INFO: [208/400] layer k=7 ch=16 b=8 res=128 int8 groups=depthwise: 1.276ms
+[2026-08-04 11:35:03,197] INFO: [209/400] layer k=7 ch=32 b=1 res=64 fp32 groups=dense: 0.148ms
+[2026-08-04 11:35:03,237] INFO: [210/400] layer k=7 ch=32 b=1 res=64 fp32 groups=depthwise: 0.070ms
+[2026-08-04 11:35:03,304] INFO: [211/400] layer k=7 ch=32 b=1 res=64 int8 groups=dense: 0.148ms
+[2026-08-04 11:35:03,343] INFO: [212/400] layer k=7 ch=32 b=1 res=64 int8 groups=depthwise: 0.070ms
+[2026-08-04 11:35:03,439] INFO: [213/400] layer k=7 ch=32 b=1 res=128 fp32 groups=dense: 0.240ms
+[2026-08-04 11:35:03,567] INFO: [214/400] layer k=7 ch=32 b=1 res=128 fp32 groups=depthwise: 0.338ms
+[2026-08-04 11:35:03,663] INFO: [215/400] layer k=7 ch=32 b=1 res=128 int8 groups=dense: 0.241ms
+[2026-08-04 11:35:03,788] INFO: [216/400] layer k=7 ch=32 b=1 res=128 int8 groups=depthwise: 0.335ms
+[2026-08-04 11:35:03,964] INFO: [217/400] layer k=7 ch=32 b=8 res=64 fp32 groups=dense: 0.509ms
+[2026-08-04 11:35:04,112] INFO: [218/400] layer k=7 ch=32 b=8 res=64 fp32 groups=depthwise: 0.394ms
+[2026-08-04 11:35:04,289] INFO: [219/400] layer k=7 ch=32 b=8 res=64 int8 groups=dense: 0.515ms
+[2026-08-04 11:35:04,434] INFO: [220/400] layer k=7 ch=32 b=8 res=64 int8 groups=depthwise: 0.381ms
+[2026-08-04 11:35:04,998] INFO: [221/400] layer k=7 ch=32 b=8 res=128 fp32 groups=dense: 1.676ms
+[2026-08-04 11:35:05,893] INFO: [222/400] layer k=7 ch=32 b=8 res=128 fp32 groups=depthwise: 2.424ms
+[2026-08-04 11:35:06,438] INFO: [223/400] layer k=7 ch=32 b=8 res=128 int8 groups=dense: 1.674ms
+[2026-08-04 11:35:07,679] INFO: [224/400] layer k=7 ch=32 b=8 res=128 int8 groups=depthwise: 2.481ms
+[2026-08-04 11:35:07,836] INFO: [225/400] layer k=7 ch=64 b=1 res=64 fp32 groups=dense: 0.374ms
+[2026-08-04 11:35:07,919] INFO: [226/400] layer k=7 ch=64 b=1 res=64 fp32 groups=depthwise: 0.142ms
+[2026-08-04 11:35:08,082] INFO: [227/400] layer k=7 ch=64 b=1 res=64 int8 groups=dense: 0.374ms
+[2026-08-04 11:35:08,171] INFO: [228/400] layer k=7 ch=64 b=1 res=64 int8 groups=depthwise: 0.164ms
+[2026-08-04 11:35:08,514] INFO: [229/400] layer k=7 ch=64 b=1 res=128 fp32 groups=dense: 0.994ms
+[2026-08-04 11:35:08,769] INFO: [230/400] layer k=7 ch=64 b=1 res=128 fp32 groups=depthwise: 0.627ms
+[2026-08-04 11:35:09,102] INFO: [231/400] layer k=7 ch=64 b=1 res=128 int8 groups=dense: 0.994ms
+[2026-08-04 11:35:09,334] INFO: [232/400] layer k=7 ch=64 b=1 res=128 int8 groups=depthwise: 0.620ms
+[2026-08-04 11:35:09,916] INFO: [233/400] layer k=7 ch=64 b=8 res=64 fp32 groups=dense: 1.790ms
+[2026-08-04 11:35:10,200] INFO: [234/400] layer k=7 ch=64 b=8 res=64 fp32 groups=depthwise: 0.770ms
+[2026-08-04 11:35:10,799] INFO: [235/400] layer k=7 ch=64 b=8 res=64 int8 groups=dense: 1.897ms
+[2026-08-04 11:35:11,079] INFO: [236/400] layer k=7 ch=64 b=8 res=64 int8 groups=depthwise: 0.753ms
+[2026-08-04 11:35:13,164] INFO: [237/400] layer k=7 ch=64 b=8 res=128 fp32 groups=dense: 6.277ms
+[2026-08-04 11:35:14,943] INFO: [238/400] layer k=7 ch=64 b=8 res=128 fp32 groups=depthwise: 4.838ms
+[2026-08-04 11:35:17,048] INFO: [239/400] layer k=7 ch=64 b=8 res=128 int8 groups=dense: 6.270ms
+[2026-08-04 11:35:18,829] INFO: [240/400] layer k=7 ch=64 b=8 res=128 int8 groups=depthwise: 4.837ms
+[2026-08-04 11:35:19,174] INFO: [241/400] layer k=7 ch=128 b=1 res=64 fp32 groups=dense: 1.025ms
+[2026-08-04 11:35:19,254] INFO: [242/400] layer k=7 ch=128 b=1 res=64 fp32 groups=depthwise: 0.200ms
+[2026-08-04 11:35:19,608] INFO: [243/400] layer k=7 ch=128 b=1 res=64 int8 groups=dense: 1.011ms
+[2026-08-04 11:35:19,689] INFO: [244/400] layer k=7 ch=128 b=1 res=64 int8 groups=depthwise: 0.200ms
+[2026-08-04 11:35:20,840] INFO: [245/400] layer k=7 ch=128 b=1 res=128 fp32 groups=dense: 3.503ms
+[2026-08-04 11:35:21,293] INFO: [246/400] layer k=7 ch=128 b=1 res=128 fp32 groups=depthwise: 1.219ms
+[2026-08-04 11:35:22,471] INFO: [247/400] layer k=7 ch=128 b=1 res=128 int8 groups=dense: 3.571ms
+[2026-08-04 11:35:22,928] INFO: [248/400] layer k=7 ch=128 b=1 res=128 int8 groups=depthwise: 1.240ms
+[2026-08-04 11:35:25,112] INFO: [249/400] layer k=7 ch=128 b=8 res=64 fp32 groups=dense: 6.581ms
+[2026-08-04 11:35:25,660] INFO: [250/400] layer k=7 ch=128 b=8 res=64 fp32 groups=depthwise: 1.484ms
+[2026-08-04 11:35:27,814] INFO: [251/400] layer k=7 ch=128 b=8 res=64 int8 groups=dense: 6.594ms
+[2026-08-04 11:35:28,389] INFO: [252/400] layer k=7 ch=128 b=8 res=64 int8 groups=depthwise: 1.571ms
+[2026-08-04 11:35:36,451] INFO: [253/400] layer k=7 ch=128 b=8 res=128 fp32 groups=dense: 24.654ms
+[2026-08-04 11:35:40,005] INFO: [254/400] layer k=7 ch=128 b=8 res=128 fp32 groups=depthwise: 9.751ms
+[2026-08-04 11:35:48,086] INFO: [255/400] layer k=7 ch=128 b=8 res=128 int8 groups=dense: 24.713ms
+[2026-08-04 11:35:51,640] INFO: [256/400] layer k=7 ch=128 b=8 res=128 int8 groups=depthwise: 9.754ms
+[2026-08-04 11:35:51,708] INFO: [257/400] layer k=9 ch=16 b=1 res=64 fp32 groups=dense: 0.141ms
+[2026-08-04 11:35:51,748] INFO: [258/400] layer k=9 ch=16 b=1 res=64 fp32 groups=depthwise: 0.070ms
+[2026-08-04 11:35:51,811] INFO: [259/400] layer k=9 ch=16 b=1 res=64 int8 groups=dense: 0.141ms
+[2026-08-04 11:35:51,851] INFO: [260/400] layer k=9 ch=16 b=1 res=64 int8 groups=depthwise: 0.070ms
+[2026-08-04 11:35:51,960] INFO: [261/400] layer k=9 ch=16 b=1 res=128 fp32 groups=dense: 0.315ms
+[2026-08-04 11:35:52,061] INFO: [262/400] layer k=9 ch=16 b=1 res=128 fp32 groups=depthwise: 0.298ms
+[2026-08-04 11:35:52,170] INFO: [263/400] layer k=9 ch=16 b=1 res=128 int8 groups=dense: 0.317ms
+[2026-08-04 11:35:52,273] INFO: [264/400] layer k=9 ch=16 b=1 res=128 int8 groups=depthwise: 0.306ms
+[2026-08-04 11:35:52,460] INFO: [265/400] layer k=9 ch=16 b=8 res=64 fp32 groups=dense: 0.616ms
+[2026-08-04 11:35:52,578] INFO: [266/400] layer k=9 ch=16 b=8 res=64 fp32 groups=depthwise: 0.354ms
+[2026-08-04 11:35:52,768] INFO: [267/400] layer k=9 ch=16 b=8 res=64 int8 groups=dense: 0.637ms
+[2026-08-04 11:35:52,891] INFO: [268/400] layer k=9 ch=16 b=8 res=64 int8 groups=depthwise: 0.375ms
+[2026-08-04 11:35:53,535] INFO: [269/400] layer k=9 ch=16 b=8 res=128 fp32 groups=dense: 2.300ms
+[2026-08-04 11:35:54,250] INFO: [270/400] layer k=9 ch=16 b=8 res=128 fp32 groups=depthwise: 2.192ms
+[2026-08-04 11:35:54,887] INFO: [271/400] layer k=9 ch=16 b=8 res=128 int8 groups=dense: 2.279ms
+[2026-08-04 11:35:55,590] INFO: [272/400] layer k=9 ch=16 b=8 res=128 int8 groups=depthwise: 2.193ms
+[2026-08-04 11:35:55,696] INFO: [273/400] layer k=9 ch=32 b=1 res=64 fp32 groups=dense: 0.274ms
+[2026-08-04 11:35:55,744] INFO: [274/400] layer k=9 ch=32 b=1 res=64 fp32 groups=depthwise: 0.103ms
+[2026-08-04 11:35:55,843] INFO: [275/400] layer k=9 ch=32 b=1 res=64 int8 groups=dense: 0.274ms
+[2026-08-04 11:35:55,891] INFO: [276/400] layer k=9 ch=32 b=1 res=64 int8 groups=depthwise: 0.103ms
+[2026-08-04 11:35:56,106] INFO: [277/400] layer k=9 ch=32 b=1 res=128 fp32 groups=dense: 0.723ms
+[2026-08-04 11:35:56,288] INFO: [278/400] layer k=9 ch=32 b=1 res=128 fp32 groups=depthwise: 0.568ms
+[2026-08-04 11:35:56,503] INFO: [279/400] layer k=9 ch=32 b=1 res=128 int8 groups=dense: 0.727ms
+[2026-08-04 11:35:56,686] INFO: [280/400] layer k=9 ch=32 b=1 res=128 int8 groups=depthwise: 0.567ms
+[2026-08-04 11:35:57,058] INFO: [281/400] layer k=9 ch=32 b=8 res=64 fp32 groups=dense: 1.311ms
+[2026-08-04 11:35:57,289] INFO: [282/400] layer k=9 ch=32 b=8 res=64 fp32 groups=depthwise: 0.721ms
+[2026-08-04 11:35:57,665] INFO: [283/400] layer k=9 ch=32 b=8 res=64 int8 groups=dense: 1.315ms
+[2026-08-04 11:35:57,924] INFO: [284/400] layer k=9 ch=32 b=8 res=64 int8 groups=depthwise: 0.732ms
+[2026-08-04 11:35:59,212] INFO: [285/400] layer k=9 ch=32 b=8 res=128 fp32 groups=dense: 4.549ms
+[2026-08-04 11:36:00,592] INFO: [286/400] layer k=9 ch=32 b=8 res=128 fp32 groups=depthwise: 4.300ms
+[2026-08-04 11:36:01,883] INFO: [287/400] layer k=9 ch=32 b=8 res=128 int8 groups=dense: 4.557ms
+[2026-08-04 11:36:03,264] INFO: [288/400] layer k=9 ch=32 b=8 res=128 int8 groups=depthwise: 4.306ms
+[2026-08-04 11:36:03,445] INFO: [289/400] layer k=9 ch=64 b=1 res=64 fp32 groups=dense: 0.544ms
+[2026-08-04 11:36:03,515] INFO: [290/400] layer k=9 ch=64 b=1 res=64 fp32 groups=depthwise: 0.185ms
+[2026-08-04 11:36:03,693] INFO: [291/400] layer k=9 ch=64 b=1 res=64 int8 groups=dense: 0.544ms
+[2026-08-04 11:36:03,763] INFO: [292/400] layer k=9 ch=64 b=1 res=64 int8 groups=depthwise: 0.185ms
+[2026-08-04 11:36:04,234] INFO: [293/400] layer k=9 ch=64 b=1 res=128 fp32 groups=dense: 1.562ms
+[2026-08-04 11:36:04,593] INFO: [294/400] layer k=9 ch=64 b=1 res=128 fp32 groups=depthwise: 1.119ms
+[2026-08-04 11:36:05,061] INFO: [295/400] layer k=9 ch=64 b=1 res=128 int8 groups=dense: 1.568ms
+[2026-08-04 11:36:05,421] INFO: [296/400] layer k=9 ch=64 b=1 res=128 int8 groups=depthwise: 1.126ms
+[2026-08-04 11:36:06,250] INFO: [297/400] layer k=9 ch=64 b=8 res=64 fp32 groups=dense: 2.636ms
+[2026-08-04 11:36:06,690] INFO: [298/400] layer k=9 ch=64 b=8 res=64 fp32 groups=depthwise: 1.388ms
+[2026-08-04 11:36:07,483] INFO: [299/400] layer k=9 ch=64 b=8 res=64 int8 groups=dense: 2.617ms
+[2026-08-04 11:36:07,937] INFO: [300/400] layer k=9 ch=64 b=8 res=64 int8 groups=depthwise: 1.424ms
+[2026-08-04 11:36:10,795] INFO: [301/400] layer k=9 ch=64 b=8 res=128 fp32 groups=dense: 9.380ms
+[2026-08-04 11:36:13,506] INFO: [302/400] layer k=9 ch=64 b=8 res=128 fp32 groups=depthwise: 8.570ms
+[2026-08-04 11:36:16,390] INFO: [303/400] layer k=9 ch=64 b=8 res=128 int8 groups=dense: 9.375ms
+[2026-08-04 11:36:19,103] INFO: [304/400] layer k=9 ch=64 b=8 res=128 int8 groups=depthwise: 8.573ms
+[2026-08-04 11:36:19,581] INFO: [305/400] layer k=9 ch=128 b=1 res=64 fp32 groups=dense: 1.519ms
+[2026-08-04 11:36:19,707] INFO: [306/400] layer k=9 ch=128 b=1 res=64 fp32 groups=depthwise: 0.384ms
+[2026-08-04 11:36:20,176] INFO: [307/400] layer k=9 ch=128 b=1 res=64 int8 groups=dense: 1.476ms
+[2026-08-04 11:36:20,303] INFO: [308/400] layer k=9 ch=128 b=1 res=64 int8 groups=depthwise: 0.389ms
+[2026-08-04 11:36:21,922] INFO: [309/400] layer k=9 ch=128 b=1 res=128 fp32 groups=dense: 5.285ms
+[2026-08-04 11:36:22,618] INFO: [310/400] layer k=9 ch=128 b=1 res=128 fp32 groups=depthwise: 2.175ms
+[2026-08-04 11:36:24,241] INFO: [311/400] layer k=9 ch=128 b=1 res=128 int8 groups=dense: 5.262ms
+[2026-08-04 11:36:24,939] INFO: [312/400] layer k=9 ch=128 b=1 res=128 int8 groups=depthwise: 2.175ms
+[2026-08-04 11:36:27,904] INFO: [313/400] layer k=9 ch=128 b=8 res=64 fp32 groups=dense: 9.795ms
+[2026-08-04 11:36:28,804] INFO: [314/400] layer k=9 ch=128 b=8 res=64 fp32 groups=depthwise: 2.831ms
+[2026-08-04 11:36:31,789] INFO: [315/400] layer k=9 ch=128 b=8 res=64 int8 groups=dense: 9.786ms
+[2026-08-04 11:36:32,684] INFO: [316/400] layer k=9 ch=128 b=8 res=64 int8 groups=depthwise: 2.822ms
+[2026-08-04 11:36:43,802] INFO: [317/400] layer k=9 ch=128 b=8 res=128 fp32 groups=dense: 36.760ms
+[2026-08-04 11:36:49,253] INFO: [318/400] layer k=9 ch=128 b=8 res=128 fp32 groups=depthwise: 17.172ms
+[2026-08-04 11:37:00,380] INFO: [319/400] layer k=9 ch=128 b=8 res=128 int8 groups=dense: 36.799ms
+[2026-08-04 11:37:05,807] INFO: [320/400] layer k=9 ch=128 b=8 res=128 int8 groups=depthwise: 17.171ms
+[2026-08-04 11:37:05,892] INFO: [321/400] layer k=11 ch=16 b=1 res=64 fp32 groups=dense: 0.214ms
+[2026-08-04 11:37:05,933] INFO: [322/400] layer k=11 ch=16 b=1 res=64 fp32 groups=depthwise: 0.070ms
+[2026-08-04 11:37:06,016] INFO: [323/400] layer k=11 ch=16 b=1 res=64 int8 groups=dense: 0.214ms
+[2026-08-04 11:37:06,056] INFO: [324/400] layer k=11 ch=16 b=1 res=64 int8 groups=depthwise: 0.070ms
+[2026-08-04 11:37:06,214] INFO: [325/400] layer k=11 ch=16 b=1 res=128 fp32 groups=dense: 0.508ms
+[2026-08-04 11:37:06,331] INFO: [326/400] layer k=11 ch=16 b=1 res=128 fp32 groups=depthwise: 0.361ms
+[2026-08-04 11:37:06,488] INFO: [327/400] layer k=11 ch=16 b=1 res=128 int8 groups=dense: 0.509ms
+[2026-08-04 11:37:06,609] INFO: [328/400] layer k=11 ch=16 b=1 res=128 int8 groups=depthwise: 0.378ms
+[2026-08-04 11:37:06,883] INFO: [329/400] layer k=11 ch=16 b=8 res=64 fp32 groups=dense: 0.967ms
+[2026-08-04 11:37:07,028] INFO: [330/400] layer k=11 ch=16 b=8 res=64 fp32 groups=depthwise: 0.455ms
+[2026-08-04 11:37:07,299] INFO: [331/400] layer k=11 ch=16 b=8 res=64 int8 groups=dense: 0.967ms
+[2026-08-04 11:37:07,445] INFO: [332/400] layer k=11 ch=16 b=8 res=64 int8 groups=depthwise: 0.467ms
+[2026-08-04 11:37:08,372] INFO: [333/400] layer k=11 ch=16 b=8 res=128 fp32 groups=dense: 3.381ms
+[2026-08-04 11:37:09,202] INFO: [334/400] layer k=11 ch=16 b=8 res=128 fp32 groups=depthwise: 2.717ms
+[2026-08-04 11:37:10,124] INFO: [335/400] layer k=11 ch=16 b=8 res=128 int8 groups=dense: 3.381ms
+[2026-08-04 11:37:10,963] INFO: [336/400] layer k=11 ch=16 b=8 res=128 int8 groups=depthwise: 2.729ms
+[2026-08-04 11:37:11,100] INFO: [337/400] layer k=11 ch=32 b=1 res=64 fp32 groups=dense: 0.420ms
+[2026-08-04 11:37:11,155] INFO: [338/400] layer k=11 ch=32 b=1 res=64 fp32 groups=depthwise: 0.133ms
+[2026-08-04 11:37:11,291] INFO: [339/400] layer k=11 ch=32 b=1 res=64 int8 groups=dense: 0.419ms
+[2026-08-04 11:37:11,347] INFO: [340/400] layer k=11 ch=32 b=1 res=64 int8 groups=depthwise: 0.133ms
+[2026-08-04 11:37:11,648] INFO: [341/400] layer k=11 ch=32 b=1 res=128 fp32 groups=dense: 1.078ms
+[2026-08-04 11:37:11,871] INFO: [342/400] layer k=11 ch=32 b=1 res=128 fp32 groups=depthwise: 0.715ms
+[2026-08-04 11:37:12,190] INFO: [343/400] layer k=11 ch=32 b=1 res=128 int8 groups=dense: 1.059ms
+[2026-08-04 11:37:12,413] INFO: [344/400] layer k=11 ch=32 b=1 res=128 int8 groups=depthwise: 0.718ms
+[2026-08-04 11:37:12,988] INFO: [345/400] layer k=11 ch=32 b=8 res=64 fp32 groups=dense: 2.013ms
+[2026-08-04 11:37:13,270] INFO: [346/400] layer k=11 ch=32 b=8 res=64 fp32 groups=depthwise: 0.928ms
+[2026-08-04 11:37:13,825] INFO: [347/400] layer k=11 ch=32 b=8 res=64 int8 groups=dense: 2.019ms
+[2026-08-04 11:37:14,274] INFO: [348/400] layer k=11 ch=32 b=8 res=64 int8 groups=depthwise: 0.945ms
+[2026-08-04 11:37:16,122] INFO: [349/400] layer k=11 ch=32 b=8 res=128 fp32 groups=dense: 6.745ms
+[2026-08-04 11:37:17,784] INFO: [350/400] layer k=11 ch=32 b=8 res=128 fp32 groups=depthwise: 5.377ms
+[2026-08-04 11:37:19,632] INFO: [351/400] layer k=11 ch=32 b=8 res=128 int8 groups=dense: 6.757ms
+[2026-08-04 11:37:21,320] INFO: [352/400] layer k=11 ch=32 b=8 res=128 int8 groups=depthwise: 5.382ms
+[2026-08-04 11:37:21,574] INFO: [353/400] layer k=11 ch=64 b=1 res=64 fp32 groups=dense: 0.833ms
+[2026-08-04 11:37:21,658] INFO: [354/400] layer k=11 ch=64 b=1 res=64 fp32 groups=depthwise: 0.244ms
+[2026-08-04 11:37:21,914] INFO: [355/400] layer k=11 ch=64 b=1 res=64 int8 groups=dense: 0.833ms
+[2026-08-04 11:37:21,997] INFO: [356/400] layer k=11 ch=64 b=1 res=64 int8 groups=depthwise: 0.244ms
+[2026-08-04 11:37:22,643] INFO: [357/400] layer k=11 ch=64 b=1 res=128 fp32 groups=dense: 2.255ms
+[2026-08-04 11:37:23,072] INFO: [358/400] layer k=11 ch=64 b=1 res=128 fp32 groups=depthwise: 1.399ms
+[2026-08-04 11:37:23,736] INFO: [359/400] layer k=11 ch=64 b=1 res=128 int8 groups=dense: 2.207ms
+[2026-08-04 11:37:24,163] INFO: [360/400] layer k=11 ch=64 b=1 res=128 int8 groups=depthwise: 1.376ms
+[2026-08-04 11:37:25,315] INFO: [361/400] layer k=11 ch=64 b=8 res=64 fp32 groups=dense: 4.003ms
+[2026-08-04 11:37:25,900] INFO: [362/400] layer k=11 ch=64 b=8 res=64 fp32 groups=depthwise: 1.898ms
+[2026-08-04 11:37:27,071] INFO: [363/400] layer k=11 ch=64 b=8 res=64 int8 groups=dense: 4.090ms
+[2026-08-04 11:37:27,645] INFO: [364/400] layer k=11 ch=64 b=8 res=64 int8 groups=depthwise: 1.897ms
+[2026-08-04 11:37:31,665] INFO: [365/400] layer k=11 ch=64 b=8 res=128 fp32 groups=dense: 14.052ms
+[2026-08-04 11:37:34,910] INFO: [366/400] layer k=11 ch=64 b=8 res=128 fp32 groups=depthwise: 10.636ms
+[2026-08-04 11:37:38,956] INFO: [367/400] layer k=11 ch=64 b=8 res=128 int8 groups=dense: 14.105ms
+[2026-08-04 11:37:42,199] INFO: [368/400] layer k=11 ch=64 b=8 res=128 int8 groups=depthwise: 10.635ms
+[2026-08-04 11:37:42,889] INFO: [369/400] layer k=11 ch=128 b=1 res=64 fp32 groups=dense: 2.310ms
+[2026-08-04 11:37:43,050] INFO: [370/400] layer k=11 ch=128 b=1 res=64 fp32 groups=depthwise: 0.513ms
+[2026-08-04 11:37:43,731] INFO: [371/400] layer k=11 ch=128 b=1 res=64 int8 groups=dense: 2.283ms
+[2026-08-04 11:37:43,888] INFO: [372/400] layer k=11 ch=128 b=1 res=64 int8 groups=depthwise: 0.489ms
+[2026-08-04 11:37:46,184] INFO: [373/400] layer k=11 ch=128 b=1 res=128 fp32 groups=dense: 7.952ms
+[2026-08-04 11:37:47,022] INFO: [374/400] layer k=11 ch=128 b=1 res=128 fp32 groups=depthwise: 2.700ms
+[2026-08-04 11:37:49,306] INFO: [375/400] layer k=11 ch=128 b=1 res=128 int8 groups=dense: 7.939ms
+[2026-08-04 11:37:50,151] INFO: [376/400] layer k=11 ch=128 b=1 res=128 int8 groups=depthwise: 2.713ms
+[2026-08-04 11:37:54,423] INFO: [377/400] layer k=11 ch=128 b=8 res=64 fp32 groups=dense: 15.005ms
+[2026-08-04 11:37:55,550] INFO: [378/400] layer k=11 ch=128 b=8 res=64 fp32 groups=depthwise: 3.713ms
+[2026-08-04 11:37:59,839] INFO: [379/400] layer k=11 ch=128 b=8 res=64 int8 groups=dense: 15.125ms
+[2026-08-04 11:38:00,963] INFO: [380/400] layer k=11 ch=128 b=8 res=64 int8 groups=depthwise: 3.712ms
+[2026-08-04 11:38:17,243] INFO: [381/400] layer k=11 ch=128 b=8 res=128 fp32 groups=dense: 57.422ms
+[2026-08-04 11:38:23,728] INFO: [382/400] layer k=11 ch=128 b=8 res=128 fp32 groups=depthwise: 21.304ms
+[2026-08-04 11:38:40,052] INFO: [383/400] layer k=11 ch=128 b=8 res=128 int8 groups=dense: 57.646ms
+[2026-08-04 11:38:46,511] INFO: [384/400] layer k=11 ch=128 b=8 res=128 int8 groups=depthwise: 21.309ms
+[2026-08-04 11:38:46,511] INFO: Starting FFT convolution sweep
+[2026-08-04 11:38:48,764] INFO: [385/400] FFT k=5 ch=16: 1.410137414932251
+[2026-08-04 11:38:49,096] INFO: [386/400] FFT k=5 ch=32: 1.2248146533966064
+[2026-08-04 11:38:50,257] INFO: [387/400] FFT k=5 ch=64: 4.5732581615448
+[2026-08-04 11:38:55,335] INFO: [388/400] FFT k=5 ch=128: 20.23442029953003
+[2026-08-04 11:38:56,594] INFO: [389/400] FFT k=7 ch=16: 1.3541603088378906
+[2026-08-04 11:38:57,044] INFO: [390/400] FFT k=7 ch=32: 1.3588929176330566
+[2026-08-04 11:38:58,031] INFO: [391/400] FFT k=7 ch=64: 3.5197675228118896
+[2026-08-04 11:39:02,238] INFO: [392/400] FFT k=7 ch=128: 16.43664836883545
+[2026-08-04 11:39:02,632] INFO: [393/400] FFT k=9 ch=16: 0.680394172668457
+[2026-08-04 11:39:02,971] INFO: [394/400] FFT k=9 ch=32: 0.9090554714202881
+[2026-08-04 11:39:04,082] INFO: [395/400] FFT k=9 ch=64: 3.959074020385742
+[2026-08-04 11:39:08,678] INFO: [396/400] FFT k=9 ch=128: 17.94947624206543
+[2026-08-04 11:39:09,025] INFO: [397/400] FFT k=11 ch=16: 0.7571303844451904
+[2026-08-04 11:39:09,349] INFO: [398/400] FFT k=11 ch=32: 1.183089017868042
+[2026-08-04 11:39:10,787] INFO: [399/400] FFT k=11 ch=64: 5.100107192993164
+[2026-08-04 11:39:16,515] INFO: [400/400] FFT k=11 ch=128: 22.644227743148804
+[2026-08-04 11:39:16,515] INFO: Starting model profiling sweep (18 configs)
+[2026-08-04 11:39:25,177] INFO: [1/18] alexnet_tv fp32: 2.51ms, 398.5 img/s
+[2026-08-04 11:39:33,436] INFO: [2/18] alexnet_tv int8: 10.12ms, 98.8 img/s
+[2026-08-04 11:39:35,843] INFO: [3/18] alexnet_depthwisesep fp32: 3.74ms, 267.7 img/s
+[2026-08-04 11:39:37,601] INFO: [4/18] alexnet_depthwisesep int8: 5.10ms, 196.1 img/s
+[2026-08-04 11:39:39,617] INFO: [5/18] alexnet_bottleneck fp32: 5.45ms, 183.4 img/s
+[2026-08-04 11:39:41,271] INFO: [6/18] alexnet_bottleneck int8: 3.99ms, 250.4 img/s
+[2026-08-04 11:39:42,930] INFO: [7/18] alexnet_final_bottleneck_residual fp32: 5.50ms, 181.9 img/s
+[2026-08-04 11:39:45,497] INFO: [8/18] alexnet_final_bottleneck_residual int8: 6.83ms, 146.5 img/s
+[2026-08-04 11:39:47,779] INFO: [9/18] alexnet_final_fire_residual fp32: 5.97ms, 167.4 img/s
+[2026-08-04 11:39:50,287] INFO: [10/18] alexnet_final_fire_residual int8: 5.76ms, 173.5 img/s
+[2026-08-04 11:39:52,809] INFO: [11/18] vgg_style fp32: 4.58ms, 218.4 img/s
+[2026-08-04 11:39:55,417] INFO: [12/18] vgg_style int8: 7.15ms, 139.8 img/s
+[2026-08-04 11:40:00,430] INFO: [13/18] mobilenetv2 fp32: 12.92ms, 77.4 img/s
+[2026-08-04 11:40:06,883] INFO: [14/18] mobilenetv2 int8: 16.41ms, 61.0 img/s
+[2026-08-04 11:40:08,276] INFO: [15/18] alexnet_fire fp32: 4.55ms, 219.6 img/s
+[2026-08-04 11:40:10,383] INFO: [16/18] alexnet_fire int8: 5.57ms, 179.6 img/s
+[2026-08-04 11:40:11,480] INFO: [17/18] alexnet_dilated_gap fp32: 3.12ms, 320.6 img/s
+[2026-08-04 11:40:13,124] INFO: [18/18] alexnet_dilated_gap int8: 4.39ms, 227.8 img/s
+[2026-08-04 11:40:13,125] INFO: Profiling complete
