@@ -1,0 +1,666 @@
+[2026-08-04 12:39:49,517] INFO: Starting Phase 6 profiling run on cuda
+[2026-08-04 12:39:49,518] INFO: Output: outputs/pcad/phase6/nvidia_geforce_gtx_1080_ti_beagle_profile.json
+[2026-08-04 12:39:49,618] INFO: Loaded config from configs/profiling.yaml
+[2026-08-04 12:39:49,619] INFO: Resuming: 0 configs already completed
+[2026-08-04 12:39:49,620] INFO: Starting layer profiling sweep (400 configs)
+[2026-08-04 12:39:50,430] INFO: [1/400] layer k=2 ch=16 b=1 res=64 fp32 groups=dense: 0.172ms
+[2026-08-04 12:39:50,501] INFO: [2/400] layer k=2 ch=16 b=1 res=64 fp32 groups=depthwise: 0.117ms
+[2026-08-04 12:39:51,000] INFO: [3/400] layer k=2 ch=16 b=1 res=64 int8 groups=dense: 0.986ms
+[2026-08-04 12:39:51,202] INFO: [3/400] layer k=2 ch=16 b=1 res=64 fp32_cpu groups=dense: 0.774ms
+[2026-08-04 12:39:51,544] INFO: [4/400] layer k=2 ch=16 b=1 res=64 int8 groups=depthwise: 0.960ms
+[2026-08-04 12:39:51,697] INFO: [4/400] layer k=2 ch=16 b=1 res=64 fp32_cpu groups=depthwise: 0.508ms
+[2026-08-04 12:39:51,823] INFO: [5/400] layer k=2 ch=16 b=1 res=128 fp32 groups=dense: 0.185ms
+[2026-08-04 12:39:51,906] INFO: [6/400] layer k=2 ch=16 b=1 res=128 fp32 groups=depthwise: 0.151ms
+[2026-08-04 12:39:51,907] INFO: [7/400] Skipping int8 layer config ('layer', 2, 16, 16, 1, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:39:51,907] INFO: [8/400] Skipping int8 layer config ('layer', 2, 16, 16, 1, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:39:52,038] INFO: [9/400] layer k=2 ch=16 b=8 res=64 fp32 groups=dense: 0.214ms
+[2026-08-04 12:39:52,125] INFO: [10/400] layer k=2 ch=16 b=8 res=64 fp32 groups=depthwise: 0.156ms
+[2026-08-04 12:39:52,125] INFO: [11/400] Skipping int8 layer config ('layer', 2, 16, 16, 8, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:39:52,125] INFO: [12/400] Skipping int8 layer config ('layer', 2, 16, 16, 8, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:39:52,273] INFO: [13/400] layer k=2 ch=16 b=8 res=128 fp32 groups=dense: 0.215ms
+[2026-08-04 12:39:52,470] INFO: [14/400] layer k=2 ch=16 b=8 res=128 fp32 groups=depthwise: 0.196ms
+[2026-08-04 12:39:52,471] INFO: [15/400] Skipping int8 layer config ('layer', 2, 16, 16, 8, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:39:52,471] INFO: [16/400] Skipping int8 layer config ('layer', 2, 16, 16, 8, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:39:52,843] INFO: [17/400] layer k=2 ch=16 b=64 res=64 fp32 groups=dense: 0.172ms
+[2026-08-04 12:39:53,106] INFO: [18/400] layer k=2 ch=16 b=64 res=64 fp32 groups=depthwise: 0.341ms
+[2026-08-04 12:39:53,106] INFO: [19/400] Skipping int8 layer config ('layer', 2, 16, 16, 64, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:39:53,106] INFO: [20/400] Skipping int8 layer config ('layer', 2, 16, 16, 64, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:39:53,747] INFO: [21/400] layer k=2 ch=16 b=64 res=128 fp32 groups=dense: 0.689ms
+[2026-08-04 12:39:55,143] INFO: [22/400] layer k=2 ch=16 b=64 res=128 fp32 groups=depthwise: 1.354ms
+[2026-08-04 12:39:55,144] INFO: [23/400] Skipping int8 layer config ('layer', 2, 16, 16, 64, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:39:55,144] INFO: [24/400] Skipping int8 layer config ('layer', 2, 16, 16, 64, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:39:55,202] INFO: [25/400] layer k=2 ch=32 b=1 res=64 fp32 groups=dense: 0.088ms
+[2026-08-04 12:39:55,241] INFO: [26/400] layer k=2 ch=32 b=1 res=64 fp32 groups=depthwise: 0.067ms
+[2026-08-04 12:39:55,677] INFO: [27/400] layer k=2 ch=32 b=1 res=64 int8 groups=dense: 1.555ms
+[2026-08-04 12:39:55,983] INFO: [27/400] layer k=2 ch=32 b=1 res=64 fp32_cpu groups=dense: 1.169ms
+[2026-08-04 12:39:56,243] INFO: [28/400] layer k=2 ch=32 b=1 res=64 int8 groups=depthwise: 0.601ms
+[2026-08-04 12:39:56,366] INFO: [28/400] layer k=2 ch=32 b=1 res=64 fp32_cpu groups=depthwise: 0.497ms
+[2026-08-04 12:39:56,427] INFO: [29/400] layer k=2 ch=32 b=1 res=128 fp32 groups=dense: 0.096ms
+[2026-08-04 12:39:56,485] INFO: [30/400] layer k=2 ch=32 b=1 res=128 fp32 groups=depthwise: 0.070ms
+[2026-08-04 12:39:56,485] INFO: [31/400] Skipping int8 layer config ('layer', 2, 32, 32, 1, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:39:56,485] INFO: [32/400] Skipping int8 layer config ('layer', 2, 32, 32, 1, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:39:56,558] INFO: [33/400] layer k=2 ch=32 b=8 res=64 fp32 groups=dense: 0.096ms
+[2026-08-04 12:39:56,626] INFO: [34/400] layer k=2 ch=32 b=8 res=64 fp32 groups=depthwise: 0.076ms
+[2026-08-04 12:39:56,626] INFO: [35/400] Skipping int8 layer config ('layer', 2, 32, 32, 8, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:39:56,626] INFO: [36/400] Skipping int8 layer config ('layer', 2, 32, 32, 8, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:39:56,800] INFO: [37/400] layer k=2 ch=32 b=8 res=128 fp32 groups=dense: 0.155ms
+[2026-08-04 12:39:57,166] INFO: [38/400] layer k=2 ch=32 b=8 res=128 fp32 groups=depthwise: 0.369ms
+[2026-08-04 12:39:57,166] INFO: [39/400] Skipping int8 layer config ('layer', 2, 32, 32, 8, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:39:57,166] INFO: [40/400] Skipping int8 layer config ('layer', 2, 32, 32, 8, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:39:57,494] INFO: [41/400] layer k=2 ch=32 b=64 res=64 fp32 groups=dense: 0.292ms
+[2026-08-04 12:39:57,964] INFO: [42/400] layer k=2 ch=32 b=64 res=64 fp32 groups=depthwise: 0.563ms
+[2026-08-04 12:39:57,964] INFO: [43/400] Skipping int8 layer config ('layer', 2, 32, 32, 64, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:39:57,964] INFO: [44/400] Skipping int8 layer config ('layer', 2, 32, 32, 64, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:39:59,141] INFO: [45/400] layer k=2 ch=32 b=64 res=128 fp32 groups=dense: 1.319ms
+[2026-08-04 12:40:01,889] INFO: [46/400] layer k=2 ch=32 b=64 res=128 fp32 groups=depthwise: 2.583ms
+[2026-08-04 12:40:01,889] INFO: [47/400] Skipping int8 layer config ('layer', 2, 32, 32, 64, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:01,889] INFO: [48/400] Skipping int8 layer config ('layer', 2, 32, 32, 64, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:01,956] INFO: [49/400] layer k=2 ch=64 b=1 res=64 fp32 groups=dense: 0.094ms
+[2026-08-04 12:40:01,996] INFO: [50/400] layer k=2 ch=64 b=1 res=64 fp32 groups=depthwise: 0.068ms
+[2026-08-04 12:40:02,893] INFO: [51/400] layer k=2 ch=64 b=1 res=64 int8 groups=dense: 3.449ms
+[2026-08-04 12:40:03,248] INFO: [51/400] layer k=2 ch=64 b=1 res=64 fp32_cpu groups=dense: 1.303ms
+[2026-08-04 12:40:04,487] INFO: [52/400] layer k=2 ch=64 b=1 res=64 int8 groups=depthwise: 1.394ms
+[2026-08-04 12:40:04,713] INFO: [52/400] layer k=2 ch=64 b=1 res=64 fp32_cpu groups=depthwise: 0.824ms
+[2026-08-04 12:40:04,891] INFO: [53/400] layer k=2 ch=64 b=1 res=128 fp32 groups=dense: 0.219ms
+[2026-08-04 12:40:05,021] INFO: [54/400] layer k=2 ch=64 b=1 res=128 fp32 groups=depthwise: 0.157ms
+[2026-08-04 12:40:05,021] INFO: [55/400] Skipping int8 layer config ('layer', 2, 64, 64, 1, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:05,022] INFO: [56/400] Skipping int8 layer config ('layer', 2, 64, 64, 1, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:05,227] INFO: [57/400] layer k=2 ch=64 b=8 res=64 fp32 groups=dense: 0.218ms
+[2026-08-04 12:40:05,364] INFO: [58/400] layer k=2 ch=64 b=8 res=64 fp32 groups=depthwise: 0.158ms
+[2026-08-04 12:40:05,365] INFO: [59/400] Skipping int8 layer config ('layer', 2, 64, 64, 8, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:05,365] INFO: [60/400] Skipping int8 layer config ('layer', 2, 64, 64, 8, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:05,966] INFO: [61/400] layer k=2 ch=64 b=8 res=128 fp32 groups=dense: 0.476ms
+[2026-08-04 12:40:06,683] INFO: [62/400] layer k=2 ch=64 b=8 res=128 fp32 groups=depthwise: 0.683ms
+[2026-08-04 12:40:06,684] INFO: [63/400] Skipping int8 layer config ('layer', 2, 64, 64, 8, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:06,684] INFO: [64/400] Skipping int8 layer config ('layer', 2, 64, 64, 8, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:07,554] INFO: [65/400] layer k=2 ch=64 b=64 res=64 fp32 groups=dense: 0.946ms
+[2026-08-04 12:40:08,506] INFO: [66/400] layer k=2 ch=64 b=64 res=64 fp32 groups=depthwise: 1.108ms
+[2026-08-04 12:40:08,506] INFO: [67/400] Skipping int8 layer config ('layer', 2, 64, 64, 64, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:08,506] INFO: [68/400] Skipping int8 layer config ('layer', 2, 64, 64, 64, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:11,358] INFO: [69/400] layer k=2 ch=64 b=64 res=128 fp32 groups=dense: 3.669ms
+[2026-08-04 12:40:16,945] INFO: [70/400] layer k=2 ch=64 b=64 res=128 fp32 groups=depthwise: 5.208ms
+[2026-08-04 12:40:16,946] INFO: [71/400] Skipping int8 layer config ('layer', 2, 64, 64, 64, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:16,946] INFO: [72/400] Skipping int8 layer config ('layer', 2, 64, 64, 64, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:17,054] INFO: [73/400] layer k=2 ch=128 b=1 res=64 fp32 groups=dense: 0.094ms
+[2026-08-04 12:40:17,100] INFO: [74/400] layer k=2 ch=128 b=1 res=64 fp32 groups=depthwise: 0.069ms
+[2026-08-04 12:40:19,313] INFO: [75/400] layer k=2 ch=128 b=1 res=64 int8 groups=dense: 6.285ms
+[2026-08-04 12:40:20,568] INFO: [75/400] layer k=2 ch=128 b=1 res=64 fp32_cpu groups=dense: 4.945ms
+[2026-08-04 12:40:21,164] INFO: [76/400] layer k=2 ch=128 b=1 res=64 int8 groups=depthwise: 1.775ms
+[2026-08-04 12:40:21,530] INFO: [76/400] layer k=2 ch=128 b=1 res=64 fp32_cpu groups=depthwise: 1.386ms
+[2026-08-04 12:40:21,868] INFO: [77/400] layer k=2 ch=128 b=1 res=128 fp32 groups=dense: 0.268ms
+[2026-08-04 12:40:22,057] INFO: [78/400] layer k=2 ch=128 b=1 res=128 fp32 groups=depthwise: 0.182ms
+[2026-08-04 12:40:22,057] INFO: [79/400] Skipping int8 layer config ('layer', 2, 128, 128, 1, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:22,057] INFO: [80/400] Skipping int8 layer config ('layer', 2, 128, 128, 1, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:22,637] INFO: [81/400] layer k=2 ch=128 b=8 res=64 fp32 groups=dense: 0.470ms
+[2026-08-04 12:40:22,895] INFO: [82/400] layer k=2 ch=128 b=8 res=64 fp32 groups=depthwise: 0.315ms
+[2026-08-04 12:40:22,895] INFO: [83/400] Skipping int8 layer config ('layer', 2, 128, 128, 8, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:22,895] INFO: [84/400] Skipping int8 layer config ('layer', 2, 128, 128, 8, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:25,174] INFO: [85/400] layer k=2 ch=128 b=8 res=128 fp32 groups=dense: 1.836ms
+[2026-08-04 12:40:26,598] INFO: [86/400] layer k=2 ch=128 b=8 res=128 fp32 groups=depthwise: 1.390ms
+[2026-08-04 12:40:26,599] INFO: [87/400] Skipping int8 layer config ('layer', 2, 128, 128, 8, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:26,599] INFO: [88/400] Skipping int8 layer config ('layer', 2, 128, 128, 8, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:29,083] INFO: [89/400] layer k=2 ch=128 b=64 res=64 fp32 groups=dense: 3.436ms
+[2026-08-04 12:40:30,950] INFO: [90/400] layer k=2 ch=128 b=64 res=64 fp32 groups=depthwise: 2.235ms
+[2026-08-04 12:40:30,950] INFO: [91/400] Skipping int8 layer config ('layer', 2, 128, 128, 64, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:30,950] INFO: [92/400] Skipping int8 layer config ('layer', 2, 128, 128, 64, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:40,463] INFO: [93/400] layer k=2 ch=128 b=64 res=128 fp32 groups=dense: 13.640ms
+[2026-08-04 12:40:51,663] INFO: [94/400] layer k=2 ch=128 b=64 res=128 fp32 groups=depthwise: 10.482ms
+[2026-08-04 12:40:51,663] INFO: [95/400] Skipping int8 layer config ('layer', 2, 128, 128, 64, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:51,663] INFO: [96/400] Skipping int8 layer config ('layer', 2, 128, 128, 64, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:51,715] INFO: [97/400] layer k=3 ch=16 b=1 res=64 fp32 groups=dense: 0.092ms
+[2026-08-04 12:40:51,755] INFO: [98/400] layer k=3 ch=16 b=1 res=64 fp32 groups=depthwise: 0.070ms
+[2026-08-04 12:40:52,043] INFO: [99/400] layer k=3 ch=16 b=1 res=64 int8 groups=dense: 0.886ms
+[2026-08-04 12:40:52,260] INFO: [99/400] layer k=3 ch=16 b=1 res=64 fp32_cpu groups=dense: 0.846ms
+[2026-08-04 12:40:52,471] INFO: [100/400] layer k=3 ch=16 b=1 res=64 int8 groups=depthwise: 0.595ms
+[2026-08-04 12:40:52,568] INFO: [100/400] layer k=3 ch=16 b=1 res=64 fp32_cpu groups=depthwise: 0.366ms
+[2026-08-04 12:40:52,620] INFO: [101/400] layer k=3 ch=16 b=1 res=128 fp32 groups=dense: 0.093ms
+[2026-08-04 12:40:52,663] INFO: [102/400] layer k=3 ch=16 b=1 res=128 fp32 groups=depthwise: 0.070ms
+[2026-08-04 12:40:52,663] INFO: [103/400] Skipping int8 layer config ('layer', 3, 16, 16, 1, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:52,663] INFO: [104/400] Skipping int8 layer config ('layer', 3, 16, 16, 1, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:52,718] INFO: [105/400] layer k=3 ch=16 b=8 res=64 fp32 groups=dense: 0.093ms
+[2026-08-04 12:40:52,764] INFO: [106/400] layer k=3 ch=16 b=8 res=64 fp32 groups=depthwise: 0.070ms
+[2026-08-04 12:40:52,764] INFO: [107/400] Skipping int8 layer config ('layer', 3, 16, 16, 8, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:52,764] INFO: [108/400] Skipping int8 layer config ('layer', 3, 16, 16, 8, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:52,865] INFO: [109/400] layer k=3 ch=16 b=8 res=128 fp32 groups=dense: 0.126ms
+[2026-08-04 12:40:53,101] INFO: [110/400] layer k=3 ch=16 b=8 res=128 fp32 groups=depthwise: 0.374ms
+[2026-08-04 12:40:53,102] INFO: [111/400] Skipping int8 layer config ('layer', 3, 16, 16, 8, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:53,102] INFO: [112/400] Skipping int8 layer config ('layer', 3, 16, 16, 8, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:53,318] INFO: [113/400] layer k=3 ch=16 b=64 res=64 fp32 groups=dense: 0.247ms
+[2026-08-04 12:40:53,616] INFO: [114/400] layer k=3 ch=16 b=64 res=64 fp32 groups=depthwise: 0.484ms
+[2026-08-04 12:40:53,616] INFO: [115/400] Skipping int8 layer config ('layer', 3, 16, 16, 64, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:53,616] INFO: [116/400] Skipping int8 layer config ('layer', 3, 16, 16, 64, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:54,343] INFO: [117/400] layer k=3 ch=16 b=64 res=128 fp32 groups=dense: 1.075ms
+[2026-08-04 12:40:56,096] INFO: [118/400] layer k=3 ch=16 b=64 res=128 fp32 groups=depthwise: 2.725ms
+[2026-08-04 12:40:56,096] INFO: [119/400] Skipping int8 layer config ('layer', 3, 16, 16, 64, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:56,096] INFO: [120/400] Skipping int8 layer config ('layer', 3, 16, 16, 64, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:56,148] INFO: [121/400] layer k=3 ch=32 b=1 res=64 fp32 groups=dense: 0.093ms
+[2026-08-04 12:40:56,188] INFO: [122/400] layer k=3 ch=32 b=1 res=64 fp32 groups=depthwise: 0.070ms
+[2026-08-04 12:40:56,803] INFO: [123/400] layer k=3 ch=32 b=1 res=64 int8 groups=dense: 2.041ms
+[2026-08-04 12:40:57,022] INFO: [123/400] layer k=3 ch=32 b=1 res=64 fp32_cpu groups=dense: 0.780ms
+[2026-08-04 12:40:57,246] INFO: [124/400] layer k=3 ch=32 b=1 res=64 int8 groups=depthwise: 0.601ms
+[2026-08-04 12:40:57,341] INFO: [124/400] layer k=3 ch=32 b=1 res=64 fp32_cpu groups=depthwise: 0.348ms
+[2026-08-04 12:40:57,398] INFO: [125/400] layer k=3 ch=32 b=1 res=128 fp32 groups=dense: 0.096ms
+[2026-08-04 12:40:57,460] INFO: [126/400] layer k=3 ch=32 b=1 res=128 fp32 groups=depthwise: 0.088ms
+[2026-08-04 12:40:57,460] INFO: [127/400] Skipping int8 layer config ('layer', 3, 32, 32, 1, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:57,460] INFO: [128/400] Skipping int8 layer config ('layer', 3, 32, 32, 1, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:57,531] INFO: [129/400] layer k=3 ch=32 b=8 res=64 fp32 groups=dense: 0.095ms
+[2026-08-04 12:40:57,608] INFO: [130/400] layer k=3 ch=32 b=8 res=64 fp32 groups=depthwise: 0.112ms
+[2026-08-04 12:40:57,608] INFO: [131/400] Skipping int8 layer config ('layer', 3, 32, 32, 8, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:57,608] INFO: [132/400] Skipping int8 layer config ('layer', 3, 32, 32, 8, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:57,802] INFO: [133/400] layer k=3 ch=32 b=8 res=128 fp32 groups=dense: 0.238ms
+[2026-08-04 12:40:58,271] INFO: [134/400] layer k=3 ch=32 b=8 res=128 fp32 groups=depthwise: 0.749ms
+[2026-08-04 12:40:58,271] INFO: [135/400] Skipping int8 layer config ('layer', 3, 32, 32, 8, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:58,271] INFO: [136/400] Skipping int8 layer config ('layer', 3, 32, 32, 8, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:58,631] INFO: [137/400] layer k=3 ch=32 b=64 res=64 fp32 groups=dense: 0.425ms
+[2026-08-04 12:40:59,184] INFO: [138/400] layer k=3 ch=32 b=64 res=64 fp32 groups=depthwise: 0.860ms
+[2026-08-04 12:40:59,184] INFO: [139/400] Skipping int8 layer config ('layer', 3, 32, 32, 64, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:40:59,184] INFO: [140/400] Skipping int8 layer config ('layer', 3, 32, 32, 64, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:41:00,551] INFO: [141/400] layer k=3 ch=32 b=64 res=128 fp32 groups=dense: 2.064ms
+[2026-08-04 12:41:04,011] INFO: [142/400] layer k=3 ch=32 b=64 res=128 fp32 groups=depthwise: 5.279ms
+[2026-08-04 12:41:04,011] INFO: [143/400] Skipping int8 layer config ('layer', 3, 32, 32, 64, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:41:04,011] INFO: [144/400] Skipping int8 layer config ('layer', 3, 32, 32, 64, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:41:04,073] INFO: [145/400] layer k=3 ch=64 b=1 res=64 fp32 groups=dense: 0.092ms
+[2026-08-04 12:41:04,113] INFO: [146/400] layer k=3 ch=64 b=1 res=64 fp32 groups=depthwise: 0.070ms
+[2026-08-04 12:41:05,332] INFO: [147/400] layer k=3 ch=64 b=1 res=64 int8 groups=dense: 3.557ms
+[2026-08-04 12:41:06,125] INFO: [147/400] layer k=3 ch=64 b=1 res=64 fp32_cpu groups=dense: 2.911ms
+[2026-08-04 12:41:06,476] INFO: [148/400] layer k=3 ch=64 b=1 res=64 int8 groups=depthwise: 0.994ms
+[2026-08-04 12:41:06,585] INFO: [148/400] layer k=3 ch=64 b=1 res=64 fp32_cpu groups=depthwise: 0.389ms
+[2026-08-04 12:41:06,687] INFO: [149/400] layer k=3 ch=64 b=1 res=128 fp32 groups=dense: 0.094ms
+[2026-08-04 12:41:06,808] INFO: [150/400] layer k=3 ch=64 b=1 res=128 fp32 groups=depthwise: 0.186ms
+[2026-08-04 12:41:06,808] INFO: [151/400] Skipping int8 layer config ('layer', 3, 64, 64, 1, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:41:06,808] INFO: [152/400] Skipping int8 layer config ('layer', 3, 64, 64, 1, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:41:06,996] INFO: [153/400] layer k=3 ch=64 b=8 res=64 fp32 groups=dense: 0.147ms
+[2026-08-04 12:41:07,163] INFO: [154/400] layer k=3 ch=64 b=8 res=64 fp32 groups=depthwise: 0.270ms
+[2026-08-04 12:41:07,163] INFO: [155/400] Skipping int8 layer config ('layer', 3, 64, 64, 8, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:41:07,163] INFO: [156/400] Skipping int8 layer config ('layer', 3, 64, 64, 8, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:41:07,802] INFO: [157/400] layer k=3 ch=64 b=8 res=128 fp32 groups=dense: 0.637ms
+[2026-08-04 12:41:08,720] INFO: [158/400] layer k=3 ch=64 b=8 res=128 fp32 groups=depthwise: 1.412ms
+[2026-08-04 12:41:08,720] INFO: [159/400] Skipping int8 layer config ('layer', 3, 64, 64, 8, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:41:08,720] INFO: [160/400] Skipping int8 layer config ('layer', 3, 64, 64, 8, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:41:09,625] INFO: [161/400] layer k=3 ch=64 b=64 res=64 fp32 groups=dense: 1.326ms
+[2026-08-04 12:41:10,742] INFO: [162/400] layer k=3 ch=64 b=64 res=64 fp32 groups=depthwise: 1.728ms
+[2026-08-04 12:41:10,742] INFO: [163/400] Skipping int8 layer config ('layer', 3, 64, 64, 64, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:41:10,742] INFO: [164/400] Skipping int8 layer config ('layer', 3, 64, 64, 64, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:41:14,015] INFO: [165/400] layer k=3 ch=64 b=64 res=128 fp32 groups=dense: 5.142ms
+[2026-08-04 12:41:21,034] INFO: [166/400] layer k=3 ch=64 b=64 res=128 fp32 groups=depthwise: 10.755ms
+[2026-08-04 12:41:21,034] INFO: [167/400] Skipping int8 layer config ('layer', 3, 64, 64, 64, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:41:21,034] INFO: [168/400] Skipping int8 layer config ('layer', 3, 64, 64, 64, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:41:21,141] INFO: [169/400] layer k=3 ch=128 b=1 res=64 fp32 groups=dense: 0.092ms
+[2026-08-04 12:41:21,188] INFO: [170/400] layer k=3 ch=128 b=1 res=64 fp32 groups=depthwise: 0.070ms
+[2026-08-04 12:41:27,103] INFO: [171/400] layer k=3 ch=128 b=1 res=64 int8 groups=dense: 21.605ms
+[2026-08-04 12:41:29,847] INFO: [171/400] layer k=3 ch=128 b=1 res=64 fp32_cpu groups=dense: 9.260ms
+[2026-08-04 12:41:30,458] INFO: [172/400] layer k=3 ch=128 b=1 res=64 int8 groups=depthwise: 1.837ms
+[2026-08-04 12:41:30,931] INFO: [172/400] layer k=3 ch=128 b=1 res=64 fp32_cpu groups=depthwise: 1.823ms
+[2026-08-04 12:41:31,284] INFO: [173/400] layer k=3 ch=128 b=1 res=128 fp32 groups=dense: 0.312ms
+[2026-08-04 12:41:31,522] INFO: [174/400] layer k=3 ch=128 b=1 res=128 fp32 groups=depthwise: 0.370ms
+[2026-08-04 12:41:31,523] INFO: [175/400] Skipping int8 layer config ('layer', 3, 128, 128, 1, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:41:31,523] INFO: [176/400] Skipping int8 layer config ('layer', 3, 128, 128, 1, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:41:32,154] INFO: [177/400] layer k=3 ch=128 b=8 res=64 fp32 groups=dense: 0.570ms
+[2026-08-04 12:41:32,453] INFO: [178/400] layer k=3 ch=128 b=8 res=64 fp32 groups=depthwise: 0.489ms
+[2026-08-04 12:41:32,453] INFO: [179/400] Skipping int8 layer config ('layer', 3, 128, 128, 8, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:41:32,453] INFO: [180/400] Skipping int8 layer config ('layer', 3, 128, 128, 8, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:41:34,941] INFO: [181/400] layer k=3 ch=128 b=8 res=128 fp32 groups=dense: 2.396ms
+[2026-08-04 12:41:36,744] INFO: [182/400] layer k=3 ch=128 b=8 res=128 fp32 groups=depthwise: 2.771ms
+[2026-08-04 12:41:36,744] INFO: [183/400] Skipping int8 layer config ('layer', 3, 128, 128, 8, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:41:36,744] INFO: [184/400] Skipping int8 layer config ('layer', 3, 128, 128, 8, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:41:39,744] INFO: [185/400] layer k=3 ch=128 b=64 res=64 fp32 groups=dense: 5.458ms
+[2026-08-04 12:41:41,935] INFO: [186/400] layer k=3 ch=128 b=64 res=64 fp32 groups=depthwise: 3.424ms
+[2026-08-04 12:41:41,935] INFO: [187/400] Skipping int8 layer config ('layer', 3, 128, 128, 64, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:41:41,936] INFO: [188/400] Skipping int8 layer config ('layer', 3, 128, 128, 64, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:41:54,132] INFO: [189/400] layer k=3 ch=128 b=64 res=128 fp32 groups=dense: 24.314ms
+[2026-08-04 12:42:08,238] INFO: [190/400] layer k=3 ch=128 b=64 res=128 fp32 groups=depthwise: 21.586ms
+[2026-08-04 12:42:08,239] INFO: [191/400] Skipping int8 layer config ('layer', 3, 128, 128, 64, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:42:08,239] INFO: [192/400] Skipping int8 layer config ('layer', 3, 128, 128, 64, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:42:08,292] INFO: [193/400] layer k=5 ch=16 b=1 res=64 fp32 groups=dense: 0.095ms
+[2026-08-04 12:42:08,332] INFO: [194/400] layer k=5 ch=16 b=1 res=64 fp32 groups=depthwise: 0.070ms
+[2026-08-04 12:42:08,756] INFO: [195/400] layer k=5 ch=16 b=1 res=64 int8 groups=dense: 1.447ms
+[2026-08-04 12:42:09,046] INFO: [195/400] layer k=5 ch=16 b=1 res=64 fp32_cpu groups=dense: 1.101ms
+[2026-08-04 12:42:09,277] INFO: [196/400] layer k=5 ch=16 b=1 res=64 int8 groups=depthwise: 0.727ms
+[2026-08-04 12:42:09,380] INFO: [196/400] layer k=5 ch=16 b=1 res=64 fp32_cpu groups=depthwise: 0.384ms
+[2026-08-04 12:42:09,432] INFO: [197/400] layer k=5 ch=16 b=1 res=128 fp32 groups=dense: 0.095ms
+[2026-08-04 12:42:09,483] INFO: [198/400] layer k=5 ch=16 b=1 res=128 fp32 groups=depthwise: 0.097ms
+[2026-08-04 12:42:09,483] INFO: [199/400] Skipping int8 layer config ('layer', 5, 16, 16, 1, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:42:09,483] INFO: [200/400] Skipping int8 layer config ('layer', 5, 16, 16, 1, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:42:09,541] INFO: [201/400] layer k=5 ch=16 b=8 res=64 fp32 groups=dense: 0.111ms
+[2026-08-04 12:42:09,599] INFO: [202/400] layer k=5 ch=16 b=8 res=64 fp32 groups=depthwise: 0.120ms
+[2026-08-04 12:42:09,599] INFO: [203/400] Skipping int8 layer config ('layer', 5, 16, 16, 8, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:42:09,599] INFO: [204/400] Skipping int8 layer config ('layer', 5, 16, 16, 8, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:42:09,823] INFO: [205/400] layer k=5 ch=16 b=8 res=128 fp32 groups=dense: 0.400ms
+[2026-08-04 12:42:10,164] INFO: [206/400] layer k=5 ch=16 b=8 res=128 fp32 groups=depthwise: 0.791ms
+[2026-08-04 12:42:10,165] INFO: [207/400] Skipping int8 layer config ('layer', 5, 16, 16, 8, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:42:10,165] INFO: [208/400] Skipping int8 layer config ('layer', 5, 16, 16, 8, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:42:10,544] INFO: [209/400] layer k=5 ch=16 b=64 res=64 fp32 groups=dense: 0.915ms
+[2026-08-04 12:42:10,953] INFO: [210/400] layer k=5 ch=16 b=64 res=64 fp32 groups=depthwise: 0.912ms
+[2026-08-04 12:42:10,953] INFO: [211/400] Skipping int8 layer config ('layer', 5, 16, 16, 64, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:42:10,953] INFO: [212/400] Skipping int8 layer config ('layer', 5, 16, 16, 64, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:42:12,083] INFO: [213/400] layer k=5 ch=16 b=64 res=128 fp32 groups=dense: 2.618ms
+[2026-08-04 12:42:14,644] INFO: [214/400] layer k=5 ch=16 b=64 res=128 fp32 groups=depthwise: 5.888ms
+[2026-08-04 12:42:14,644] INFO: [215/400] Skipping int8 layer config ('layer', 5, 16, 16, 64, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:42:14,644] INFO: [216/400] Skipping int8 layer config ('layer', 5, 16, 16, 64, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:42:14,698] INFO: [217/400] layer k=5 ch=32 b=1 res=64 fp32 groups=dense: 0.095ms
+[2026-08-04 12:42:14,738] INFO: [218/400] layer k=5 ch=32 b=1 res=64 fp32 groups=depthwise: 0.070ms
+[2026-08-04 12:42:15,812] INFO: [219/400] layer k=5 ch=32 b=1 res=64 int8 groups=dense: 3.685ms
+[2026-08-04 12:42:16,262] INFO: [219/400] layer k=5 ch=32 b=1 res=64 fp32_cpu groups=dense: 1.721ms
+[2026-08-04 12:42:16,521] INFO: [220/400] layer k=5 ch=32 b=1 res=64 int8 groups=depthwise: 0.753ms
+[2026-08-04 12:42:16,625] INFO: [220/400] layer k=5 ch=32 b=1 res=64 fp32_cpu groups=depthwise: 0.385ms
+[2026-08-04 12:42:16,688] INFO: [221/400] layer k=5 ch=32 b=1 res=128 fp32 groups=dense: 0.120ms
+[2026-08-04 12:42:16,777] INFO: [222/400] layer k=5 ch=32 b=1 res=128 fp32 groups=depthwise: 0.193ms
+[2026-08-04 12:42:16,777] INFO: [223/400] Skipping int8 layer config ('layer', 5, 32, 32, 1, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:42:16,777] INFO: [224/400] Skipping int8 layer config ('layer', 5, 32, 32, 1, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:42:16,886] INFO: [225/400] layer k=5 ch=32 b=8 res=64 fp32 groups=dense: 0.240ms
+[2026-08-04 12:42:16,998] INFO: [226/400] layer k=5 ch=32 b=8 res=64 fp32 groups=depthwise: 0.244ms
+[2026-08-04 12:42:16,998] INFO: [227/400] Skipping int8 layer config ('layer', 5, 32, 32, 8, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:42:16,998] INFO: [228/400] Skipping int8 layer config ('layer', 5, 32, 32, 8, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:42:17,343] INFO: [229/400] layer k=5 ch=32 b=8 res=128 fp32 groups=dense: 0.843ms
+[2026-08-04 12:42:18,005] INFO: [230/400] layer k=5 ch=32 b=8 res=128 fp32 groups=depthwise: 1.515ms
+[2026-08-04 12:42:18,005] INFO: [231/400] Skipping int8 layer config ('layer', 5, 32, 32, 8, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:42:18,005] INFO: [232/400] Skipping int8 layer config ('layer', 5, 32, 32, 8, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:42:18,640] INFO: [233/400] layer k=5 ch=32 b=64 res=64 fp32 groups=dense: 1.531ms
+[2026-08-04 12:42:19,442] INFO: [234/400] layer k=5 ch=32 b=64 res=64 fp32 groups=depthwise: 1.817ms
+[2026-08-04 12:42:19,442] INFO: [235/400] Skipping int8 layer config ('layer', 5, 32, 32, 64, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:42:19,442] INFO: [236/400] Skipping int8 layer config ('layer', 5, 32, 32, 64, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:42:21,778] INFO: [237/400] layer k=5 ch=32 b=64 res=128 fp32 groups=dense: 4.663ms
+[2026-08-04 12:42:26,901] INFO: [238/400] layer k=5 ch=32 b=64 res=128 fp32 groups=depthwise: 11.871ms
+[2026-08-04 12:42:26,901] INFO: [239/400] Skipping int8 layer config ('layer', 5, 32, 32, 64, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:42:26,902] INFO: [240/400] Skipping int8 layer config ('layer', 5, 32, 32, 64, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:42:26,981] INFO: [241/400] layer k=5 ch=64 b=1 res=64 fp32 groups=dense: 0.161ms
+[2026-08-04 12:42:27,021] INFO: [242/400] layer k=5 ch=64 b=1 res=64 fp32 groups=depthwise: 0.070ms
+[2026-08-04 12:42:30,186] INFO: [243/400] layer k=5 ch=64 b=1 res=64 int8 groups=dense: 10.589ms
+[2026-08-04 12:42:31,697] INFO: [243/400] layer k=5 ch=64 b=1 res=64 fp32_cpu groups=dense: 5.995ms
+[2026-08-04 12:42:32,115] INFO: [244/400] layer k=5 ch=64 b=1 res=64 int8 groups=depthwise: 1.279ms
+[2026-08-04 12:42:32,256] INFO: [244/400] layer k=5 ch=64 b=1 res=64 fp32_cpu groups=depthwise: 0.529ms
+[2026-08-04 12:42:32,492] INFO: [245/400] layer k=5 ch=64 b=1 res=128 fp32 groups=dense: 0.553ms
+[2026-08-04 12:42:32,679] INFO: [246/400] layer k=5 ch=64 b=1 res=128 fp32 groups=depthwise: 0.426ms
+[2026-08-04 12:42:32,679] INFO: [247/400] Skipping int8 layer config ('layer', 5, 64, 64, 1, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:42:32,679] INFO: [248/400] Skipping int8 layer config ('layer', 5, 64, 64, 1, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:42:33,040] INFO: [249/400] layer k=5 ch=64 b=8 res=64 fp32 groups=dense: 0.892ms
+[2026-08-04 12:42:33,256] INFO: [250/400] layer k=5 ch=64 b=8 res=64 fp32 groups=depthwise: 0.501ms
+[2026-08-04 12:42:33,256] INFO: [251/400] Skipping int8 layer config ('layer', 5, 64, 64, 8, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:42:33,256] INFO: [252/400] Skipping int8 layer config ('layer', 5, 64, 64, 8, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:42:34,560] INFO: [253/400] layer k=5 ch=64 b=8 res=128 fp32 groups=dense: 3.178ms
+[2026-08-04 12:42:35,886] INFO: [254/400] layer k=5 ch=64 b=8 res=128 fp32 groups=depthwise: 3.029ms
+[2026-08-04 12:42:35,886] INFO: [255/400] Skipping int8 layer config ('layer', 5, 64, 64, 8, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:42:35,886] INFO: [256/400] Skipping int8 layer config ('layer', 5, 64, 64, 8, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:42:37,313] INFO: [257/400] layer k=5 ch=64 b=64 res=64 fp32 groups=dense: 3.278ms
+[2026-08-04 12:42:38,880] INFO: [258/400] layer k=5 ch=64 b=64 res=64 fp32 groups=depthwise: 3.574ms
+[2026-08-04 12:42:38,880] INFO: [259/400] Skipping int8 layer config ('layer', 5, 64, 64, 64, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:42:38,880] INFO: [260/400] Skipping int8 layer config ('layer', 5, 64, 64, 64, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:42:43,485] INFO: [261/400] layer k=5 ch=64 b=64 res=128 fp32 groups=dense: 10.311ms
+[2026-08-04 12:42:55,716] INFO: [262/400] layer k=5 ch=64 b=64 res=128 fp32 groups=depthwise: 23.933ms
+[2026-08-04 12:42:55,717] INFO: [263/400] Skipping int8 layer config ('layer', 5, 64, 64, 64, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:42:55,717] INFO: [264/400] Skipping int8 layer config ('layer', 5, 64, 64, 64, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:42:55,952] INFO: [265/400] layer k=5 ch=128 b=1 res=64 fp32 groups=dense: 0.469ms
+[2026-08-04 12:42:56,039] INFO: [266/400] layer k=5 ch=128 b=1 res=64 fp32 groups=depthwise: 0.160ms
+[2026-08-04 12:43:03,901] INFO: [267/400] layer k=5 ch=128 b=1 res=64 int8 groups=dense: 26.468ms
+[2026-08-04 12:43:09,931] INFO: [267/400] layer k=5 ch=128 b=1 res=64 fp32_cpu groups=dense: 24.032ms
+[2026-08-04 12:43:10,710] INFO: [268/400] layer k=5 ch=128 b=1 res=64 int8 groups=depthwise: 2.458ms
+[2026-08-04 12:43:11,213] INFO: [268/400] layer k=5 ch=128 b=1 res=64 fp32_cpu groups=depthwise: 1.915ms
+[2026-08-04 12:43:11,914] INFO: [269/400] layer k=5 ch=128 b=1 res=128 fp32 groups=dense: 1.768ms
+[2026-08-04 12:43:12,268] INFO: [270/400] layer k=5 ch=128 b=1 res=128 fp32 groups=depthwise: 0.827ms
+[2026-08-04 12:43:12,268] INFO: [271/400] Skipping int8 layer config ('layer', 5, 128, 128, 1, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:43:12,268] INFO: [272/400] Skipping int8 layer config ('layer', 5, 128, 128, 1, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:43:13,556] INFO: [273/400] layer k=5 ch=128 b=8 res=64 fp32 groups=dense: 3.164ms
+[2026-08-04 12:43:13,970] INFO: [274/400] layer k=5 ch=128 b=8 res=64 fp32 groups=depthwise: 0.937ms
+[2026-08-04 12:43:13,970] INFO: [275/400] Skipping int8 layer config ('layer', 5, 128, 128, 8, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:43:13,970] INFO: [276/400] Skipping int8 layer config ('layer', 5, 128, 128, 8, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:43:19,000] INFO: [277/400] layer k=5 ch=128 b=8 res=128 fp32 groups=dense: 12.562ms
+[2026-08-04 12:43:21,621] INFO: [278/400] layer k=5 ch=128 b=8 res=128 fp32 groups=depthwise: 5.991ms
+[2026-08-04 12:43:21,621] INFO: [279/400] Skipping int8 layer config ('layer', 5, 128, 128, 8, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:43:21,621] INFO: [280/400] Skipping int8 layer config ('layer', 5, 128, 128, 8, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:43:25,151] INFO: [281/400] layer k=5 ch=128 b=64 res=64 fp32 groups=dense: 7.521ms
+[2026-08-04 12:43:29,193] INFO: [282/400] layer k=5 ch=128 b=64 res=64 fp32 groups=depthwise: 7.131ms
+[2026-08-04 12:43:29,193] INFO: [283/400] Skipping int8 layer config ('layer', 5, 128, 128, 64, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:43:29,194] INFO: [284/400] Skipping int8 layer config ('layer', 5, 128, 128, 64, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:43:41,441] INFO: [285/400] layer k=5 ch=128 b=64 res=128 fp32 groups=dense: 24.425ms
+[2026-08-04 12:44:02,224] INFO: [286/400] layer k=5 ch=128 b=64 res=128 fp32 groups=depthwise: 48.138ms
+[2026-08-04 12:44:02,225] INFO: [287/400] Skipping int8 layer config ('layer', 5, 128, 128, 64, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:44:02,225] INFO: [288/400] Skipping int8 layer config ('layer', 5, 128, 128, 64, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:44:02,279] INFO: [289/400] layer k=7 ch=16 b=1 res=64 fp32 groups=dense: 0.095ms
+[2026-08-04 12:44:02,318] INFO: [290/400] layer k=7 ch=16 b=1 res=64 fp32 groups=depthwise: 0.069ms
+[2026-08-04 12:44:02,924] INFO: [291/400] layer k=7 ch=16 b=1 res=64 int8 groups=dense: 2.076ms
+[2026-08-04 12:44:03,332] INFO: [291/400] layer k=7 ch=16 b=1 res=64 fp32_cpu groups=dense: 1.609ms
+[2026-08-04 12:44:03,616] INFO: [292/400] layer k=7 ch=16 b=1 res=64 int8 groups=depthwise: 0.919ms
+[2026-08-04 12:44:03,741] INFO: [292/400] layer k=7 ch=16 b=1 res=64 fp32_cpu groups=depthwise: 0.478ms
+[2026-08-04 12:44:03,802] INFO: [293/400] layer k=7 ch=16 b=1 res=128 fp32 groups=dense: 0.126ms
+[2026-08-04 12:44:03,869] INFO: [294/400] layer k=7 ch=16 b=1 res=128 fp32 groups=depthwise: 0.164ms
+[2026-08-04 12:44:03,869] INFO: [295/400] Skipping int8 layer config ('layer', 7, 16, 16, 1, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:44:03,869] INFO: [296/400] Skipping int8 layer config ('layer', 7, 16, 16, 1, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:44:03,964] INFO: [297/400] layer k=7 ch=16 b=8 res=64 fp32 groups=dense: 0.252ms
+[2026-08-04 12:44:04,040] INFO: [298/400] layer k=7 ch=16 b=8 res=64 fp32 groups=depthwise: 0.191ms
+[2026-08-04 12:44:04,040] INFO: [299/400] Skipping int8 layer config ('layer', 7, 16, 16, 8, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:44:04,040] INFO: [300/400] Skipping int8 layer config ('layer', 7, 16, 16, 8, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:44:04,328] INFO: [301/400] layer k=7 ch=16 b=8 res=128 fp32 groups=dense: 0.857ms
+[2026-08-04 12:44:04,801] INFO: [302/400] layer k=7 ch=16 b=8 res=128 fp32 groups=depthwise: 1.257ms
+[2026-08-04 12:44:04,801] INFO: [303/400] Skipping int8 layer config ('layer', 7, 16, 16, 8, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:44:04,801] INFO: [304/400] Skipping int8 layer config ('layer', 7, 16, 16, 8, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:44:05,183] INFO: [305/400] layer k=7 ch=16 b=64 res=64 fp32 groups=dense: 0.921ms
+[2026-08-04 12:44:05,734] INFO: [306/400] layer k=7 ch=16 b=64 res=64 fp32 groups=depthwise: 1.481ms
+[2026-08-04 12:44:05,734] INFO: [307/400] Skipping int8 layer config ('layer', 7, 16, 16, 64, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:44:05,734] INFO: [308/400] Skipping int8 layer config ('layer', 7, 16, 16, 64, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:44:06,872] INFO: [309/400] layer k=7 ch=16 b=64 res=128 fp32 groups=dense: 2.653ms
+[2026-08-04 12:44:10,405] INFO: [310/400] layer k=7 ch=16 b=64 res=128 fp32 groups=depthwise: 9.760ms
+[2026-08-04 12:44:10,405] INFO: [311/400] Skipping int8 layer config ('layer', 7, 16, 16, 64, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:44:10,405] INFO: [312/400] Skipping int8 layer config ('layer', 7, 16, 16, 64, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:44:10,485] INFO: [313/400] layer k=7 ch=32 b=1 res=64 fp32 groups=dense: 0.150ms
+[2026-08-04 12:44:10,524] INFO: [314/400] layer k=7 ch=32 b=1 res=64 fp32 groups=depthwise: 0.070ms
+[2026-08-04 12:44:11,934] INFO: [315/400] layer k=7 ch=32 b=1 res=64 int8 groups=dense: 4.389ms
+[2026-08-04 12:44:12,743] INFO: [315/400] layer k=7 ch=32 b=1 res=64 fp32_cpu groups=dense: 3.099ms
+[2026-08-04 12:44:13,062] INFO: [316/400] layer k=7 ch=32 b=1 res=64 int8 groups=depthwise: 0.964ms
+[2026-08-04 12:44:13,211] INFO: [316/400] layer k=7 ch=32 b=1 res=64 fp32_cpu groups=depthwise: 0.524ms
+[2026-08-04 12:44:13,332] INFO: [317/400] layer k=7 ch=32 b=1 res=128 fp32 groups=dense: 0.296ms
+[2026-08-04 12:44:13,495] INFO: [318/400] layer k=7 ch=32 b=1 res=128 fp32 groups=depthwise: 0.364ms
+[2026-08-04 12:44:13,495] INFO: [319/400] Skipping int8 layer config ('layer', 7, 32, 32, 1, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:44:13,495] INFO: [320/400] Skipping int8 layer config ('layer', 7, 32, 32, 1, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:44:13,812] INFO: [321/400] layer k=7 ch=32 b=8 res=64 fp32 groups=dense: 0.522ms
+[2026-08-04 12:44:14,025] INFO: [322/400] layer k=7 ch=32 b=8 res=64 fp32 groups=depthwise: 0.368ms
+[2026-08-04 12:44:14,025] INFO: [323/400] Skipping int8 layer config ('layer', 7, 32, 32, 8, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:44:14,025] INFO: [324/400] Skipping int8 layer config ('layer', 7, 32, 32, 8, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:44:14,588] INFO: [325/400] layer k=7 ch=32 b=8 res=128 fp32 groups=dense: 1.708ms
+[2026-08-04 12:44:15,497] INFO: [326/400] layer k=7 ch=32 b=8 res=128 fp32 groups=depthwise: 2.469ms
+[2026-08-04 12:44:15,497] INFO: [327/400] Skipping int8 layer config ('layer', 7, 32, 32, 8, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:44:15,497] INFO: [328/400] Skipping int8 layer config ('layer', 7, 32, 32, 8, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:44:16,142] INFO: [329/400] layer k=7 ch=32 b=64 res=64 fp32 groups=dense: 1.571ms
+[2026-08-04 12:44:17,224] INFO: [330/400] layer k=7 ch=32 b=64 res=64 fp32 groups=depthwise: 2.916ms
+[2026-08-04 12:44:17,224] INFO: [331/400] Skipping int8 layer config ('layer', 7, 32, 32, 64, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:44:17,224] INFO: [332/400] Skipping int8 layer config ('layer', 7, 32, 32, 64, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:44:19,262] INFO: [333/400] layer k=7 ch=32 b=64 res=128 fp32 groups=dense: 4.731ms
+[2026-08-04 12:44:26,279] INFO: [334/400] layer k=7 ch=32 b=64 res=128 fp32 groups=depthwise: 19.401ms
+[2026-08-04 12:44:26,279] INFO: [335/400] Skipping int8 layer config ('layer', 7, 32, 32, 64, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:44:26,279] INFO: [336/400] Skipping int8 layer config ('layer', 7, 32, 32, 64, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:44:26,418] INFO: [337/400] layer k=7 ch=64 b=1 res=64 fp32 groups=dense: 0.379ms
+[2026-08-04 12:44:26,466] INFO: [338/400] layer k=7 ch=64 b=1 res=64 fp32 groups=depthwise: 0.099ms
+[2026-08-04 12:44:30,595] INFO: [339/400] layer k=7 ch=64 b=1 res=64 int8 groups=dense: 12.795ms
+[2026-08-04 12:44:33,469] INFO: [339/400] layer k=7 ch=64 b=1 res=64 fp32_cpu groups=dense: 11.421ms
+[2026-08-04 12:44:34,003] INFO: [340/400] layer k=7 ch=64 b=1 res=64 int8 groups=depthwise: 1.713ms
+[2026-08-04 12:44:34,188] INFO: [340/400] layer k=7 ch=64 b=1 res=64 fp32_cpu groups=depthwise: 0.693ms
+[2026-08-04 12:44:34,518] INFO: [341/400] layer k=7 ch=64 b=1 res=128 fp32 groups=dense: 1.009ms
+[2026-08-04 12:44:34,758] INFO: [342/400] layer k=7 ch=64 b=1 res=128 fp32 groups=depthwise: 0.656ms
+[2026-08-04 12:44:34,758] INFO: [343/400] Skipping int8 layer config ('layer', 7, 64, 64, 1, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:44:34,758] INFO: [344/400] Skipping int8 layer config ('layer', 7, 64, 64, 1, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:44:35,369] INFO: [345/400] layer k=7 ch=64 b=8 res=64 fp32 groups=dense: 1.920ms
+[2026-08-04 12:44:35,662] INFO: [346/400] layer k=7 ch=64 b=8 res=64 fp32 groups=depthwise: 0.812ms
+[2026-08-04 12:44:35,662] INFO: [347/400] Skipping int8 layer config ('layer', 7, 64, 64, 8, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:44:35,662] INFO: [348/400] Skipping int8 layer config ('layer', 7, 64, 64, 8, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:44:37,771] INFO: [349/400] layer k=7 ch=64 b=8 res=128 fp32 groups=dense: 6.356ms
+[2026-08-04 12:44:39,579] INFO: [350/400] layer k=7 ch=64 b=8 res=128 fp32 groups=depthwise: 4.899ms
+[2026-08-04 12:44:39,580] INFO: [351/400] Skipping int8 layer config ('layer', 7, 64, 64, 8, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:44:39,580] INFO: [352/400] Skipping int8 layer config ('layer', 7, 64, 64, 8, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:44:41,048] INFO: [353/400] layer k=7 ch=64 b=64 res=64 fp32 groups=dense: 3.389ms
+[2026-08-04 12:44:43,192] INFO: [354/400] layer k=7 ch=64 b=64 res=64 fp32 groups=depthwise: 5.863ms
+[2026-08-04 12:44:43,192] INFO: [355/400] Skipping int8 layer config ('layer', 7, 64, 64, 64, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:44:43,192] INFO: [356/400] Skipping int8 layer config ('layer', 7, 64, 64, 64, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:44:47,784] INFO: [357/400] layer k=7 ch=64 b=64 res=128 fp32 groups=dense: 10.420ms
+[2026-08-04 12:45:01,924] INFO: [358/400] layer k=7 ch=64 b=64 res=128 fp32 groups=depthwise: 39.021ms
+[2026-08-04 12:45:01,924] INFO: [359/400] Skipping int8 layer config ('layer', 7, 64, 64, 64, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:45:01,924] INFO: [360/400] Skipping int8 layer config ('layer', 7, 64, 64, 64, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:45:02,278] INFO: [361/400] layer k=7 ch=128 b=1 res=64 fp32 groups=dense: 1.048ms
+[2026-08-04 12:45:02,358] INFO: [362/400] layer k=7 ch=128 b=1 res=64 fp32 groups=depthwise: 0.199ms
+[2026-08-04 12:45:16,326] INFO: [363/400] layer k=7 ch=128 b=1 res=64 int8 groups=dense: 49.607ms
+[2026-08-04 12:45:30,785] INFO: [363/400] layer k=7 ch=128 b=1 res=64 fp32_cpu groups=dense: 48.614ms
+[2026-08-04 12:45:31,768] INFO: [364/400] layer k=7 ch=128 b=1 res=64 int8 groups=depthwise: 3.259ms
+[2026-08-04 12:45:32,072] INFO: [364/400] layer k=7 ch=128 b=1 res=64 fp32_cpu groups=depthwise: 1.134ms
+[2026-08-04 12:45:33,278] INFO: [365/400] layer k=7 ch=128 b=1 res=128 fp32 groups=dense: 3.501ms
+[2026-08-04 12:45:33,737] INFO: [366/400] layer k=7 ch=128 b=1 res=128 fp32 groups=depthwise: 1.248ms
+[2026-08-04 12:45:33,737] INFO: [367/400] Skipping int8 layer config ('layer', 7, 128, 128, 1, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:45:33,738] INFO: [368/400] Skipping int8 layer config ('layer', 7, 128, 128, 1, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:45:35,922] INFO: [369/400] layer k=7 ch=128 b=8 res=64 fp32 groups=dense: 6.579ms
+[2026-08-04 12:45:36,485] INFO: [370/400] layer k=7 ch=128 b=8 res=64 fp32 groups=depthwise: 1.488ms
+[2026-08-04 12:45:36,486] INFO: [371/400] Skipping int8 layer config ('layer', 7, 128, 128, 8, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:45:36,486] INFO: [372/400] Skipping int8 layer config ('layer', 7, 128, 128, 8, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:45:44,549] INFO: [373/400] layer k=7 ch=128 b=8 res=128 fp32 groups=dense: 24.614ms
+[2026-08-04 12:45:48,121] INFO: [374/400] layer k=7 ch=128 b=8 res=128 fp32 groups=depthwise: 9.761ms
+[2026-08-04 12:45:48,121] INFO: [375/400] Skipping int8 layer config ('layer', 7, 128, 128, 8, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:45:48,121] INFO: [376/400] Skipping int8 layer config ('layer', 7, 128, 128, 8, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:45:51,700] INFO: [377/400] layer k=7 ch=128 b=64 res=64 fp32 groups=dense: 7.796ms
+[2026-08-04 12:45:55,987] INFO: [378/400] layer k=7 ch=128 b=64 res=64 fp32 groups=depthwise: 11.741ms
+[2026-08-04 12:45:55,987] INFO: [379/400] Skipping int8 layer config ('layer', 7, 128, 128, 64, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:45:55,987] INFO: [380/400] Skipping int8 layer config ('layer', 7, 128, 128, 64, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:46:07,840] INFO: [381/400] layer k=7 ch=128 b=64 res=128 fp32 groups=dense: 23.767ms
+[2026-08-04 12:46:36,165] INFO: [382/400] layer k=7 ch=128 b=64 res=128 fp32 groups=depthwise: 78.092ms
+[2026-08-04 12:46:36,166] INFO: [383/400] Skipping int8 layer config ('layer', 7, 128, 128, 64, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:46:36,166] INFO: [384/400] Skipping int8 layer config ('layer', 7, 128, 128, 64, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:46:36,261] INFO: [385/400] layer k=9 ch=16 b=1 res=64 fp32 groups=dense: 0.142ms
+[2026-08-04 12:46:36,308] INFO: [386/400] layer k=9 ch=16 b=1 res=64 fp32 groups=depthwise: 0.069ms
+[2026-08-04 12:46:37,180] INFO: [387/400] layer k=9 ch=16 b=1 res=64 int8 groups=dense: 2.798ms
+[2026-08-04 12:46:38,201] INFO: [387/400] layer k=9 ch=16 b=1 res=64 fp32_cpu groups=dense: 3.780ms
+[2026-08-04 12:46:38,454] INFO: [388/400] layer k=9 ch=16 b=1 res=64 int8 groups=depthwise: 0.758ms
+[2026-08-04 12:46:38,867] INFO: [388/400] layer k=9 ch=16 b=1 res=64 fp32_cpu groups=depthwise: 1.631ms
+[2026-08-04 12:46:38,976] INFO: [389/400] layer k=9 ch=16 b=1 res=128 fp32 groups=dense: 0.315ms
+[2026-08-04 12:46:39,077] INFO: [390/400] layer k=9 ch=16 b=1 res=128 fp32 groups=depthwise: 0.298ms
+[2026-08-04 12:46:39,077] INFO: [391/400] Skipping int8 layer config ('layer', 9, 16, 16, 1, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:46:39,077] INFO: [392/400] Skipping int8 layer config ('layer', 9, 16, 16, 1, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:46:39,266] INFO: [393/400] layer k=9 ch=16 b=8 res=64 fp32 groups=dense: 0.631ms
+[2026-08-04 12:46:39,387] INFO: [394/400] layer k=9 ch=16 b=8 res=64 fp32 groups=depthwise: 0.369ms
+[2026-08-04 12:46:39,387] INFO: [395/400] Skipping int8 layer config ('layer', 9, 16, 16, 8, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:46:39,387] INFO: [396/400] Skipping int8 layer config ('layer', 9, 16, 16, 8, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:46:40,040] INFO: [397/400] layer k=9 ch=16 b=8 res=128 fp32 groups=dense: 2.307ms
+[2026-08-04 12:46:40,738] INFO: [398/400] layer k=9 ch=16 b=8 res=128 fp32 groups=depthwise: 2.186ms
+[2026-08-04 12:46:40,738] INFO: [399/400] Skipping int8 layer config ('layer', 9, 16, 16, 8, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:46:40,738] INFO: [400/400] Skipping int8 layer config ('layer', 9, 16, 16, 8, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:46:41,098] INFO: [401/400] layer k=9 ch=16 b=64 res=64 fp32 groups=dense: 0.855ms
+[2026-08-04 12:46:41,945] INFO: [402/400] layer k=9 ch=16 b=64 res=64 fp32 groups=depthwise: 2.663ms
+[2026-08-04 12:46:41,945] INFO: [403/400] Skipping int8 layer config ('layer', 9, 16, 16, 64, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:46:41,945] INFO: [404/400] Skipping int8 layer config ('layer', 9, 16, 16, 64, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:46:43,248] INFO: [405/400] layer k=9 ch=16 b=64 res=128 fp32 groups=dense: 3.369ms
+[2026-08-04 12:46:48,625] INFO: [406/400] layer k=9 ch=16 b=64 res=128 fp32 groups=depthwise: 17.135ms
+[2026-08-04 12:46:48,625] INFO: [407/400] Skipping int8 layer config ('layer', 9, 16, 16, 64, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:46:48,625] INFO: [408/400] Skipping int8 layer config ('layer', 9, 16, 16, 64, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:46:48,725] INFO: [409/400] layer k=9 ch=32 b=1 res=64 fp32 groups=dense: 0.275ms
+[2026-08-04 12:46:48,773] INFO: [410/400] layer k=9 ch=32 b=1 res=64 fp32 groups=depthwise: 0.104ms
+[2026-08-04 12:46:50,745] INFO: [411/400] layer k=9 ch=32 b=1 res=64 int8 groups=dense: 5.644ms
+[2026-08-04 12:46:53,187] INFO: [411/400] layer k=9 ch=32 b=1 res=64 fp32_cpu groups=dense: 9.831ms
+[2026-08-04 12:46:53,600] INFO: [412/400] layer k=9 ch=32 b=1 res=64 int8 groups=depthwise: 1.246ms
+[2026-08-04 12:46:54,377] INFO: [412/400] layer k=9 ch=32 b=1 res=64 fp32_cpu groups=depthwise: 3.074ms
+[2026-08-04 12:46:54,628] INFO: [413/400] layer k=9 ch=32 b=1 res=128 fp32 groups=dense: 0.835ms
+[2026-08-04 12:46:54,830] INFO: [414/400] layer k=9 ch=32 b=1 res=128 fp32 groups=depthwise: 0.597ms
+[2026-08-04 12:46:54,830] INFO: [415/400] Skipping int8 layer config ('layer', 9, 32, 32, 1, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:46:54,830] INFO: [416/400] Skipping int8 layer config ('layer', 9, 32, 32, 1, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:46:55,202] INFO: [417/400] layer k=9 ch=32 b=8 res=64 fp32 groups=dense: 1.314ms
+[2026-08-04 12:46:55,438] INFO: [418/400] layer k=9 ch=32 b=8 res=64 fp32 groups=depthwise: 0.721ms
+[2026-08-04 12:46:55,438] INFO: [419/400] Skipping int8 layer config ('layer', 9, 32, 32, 8, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:46:55,439] INFO: [420/400] Skipping int8 layer config ('layer', 9, 32, 32, 8, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:46:56,726] INFO: [421/400] layer k=9 ch=32 b=8 res=128 fp32 groups=dense: 4.553ms
+[2026-08-04 12:46:58,111] INFO: [422/400] layer k=9 ch=32 b=8 res=128 fp32 groups=depthwise: 4.303ms
+[2026-08-04 12:46:58,112] INFO: [423/400] Skipping int8 layer config ('layer', 9, 32, 32, 8, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:46:58,112] INFO: [424/400] Skipping int8 layer config ('layer', 9, 32, 32, 8, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:46:58,704] INFO: [425/400] layer k=9 ch=32 b=64 res=64 fp32 groups=dense: 1.417ms
+[2026-08-04 12:47:00,444] INFO: [426/400] layer k=9 ch=32 b=64 res=64 fp32 groups=depthwise: 5.553ms
+[2026-08-04 12:47:00,444] INFO: [427/400] Skipping int8 layer config ('layer', 9, 32, 32, 64, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:47:00,444] INFO: [428/400] Skipping int8 layer config ('layer', 9, 32, 32, 64, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:47:02,709] INFO: [429/400] layer k=9 ch=32 b=64 res=128 fp32 groups=dense: 5.812ms
+[2026-08-04 12:47:13,438] INFO: [430/400] layer k=9 ch=32 b=64 res=128 fp32 groups=depthwise: 34.241ms
+[2026-08-04 12:47:13,438] INFO: [431/400] Skipping int8 layer config ('layer', 9, 32, 32, 64, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:47:13,439] INFO: [432/400] Skipping int8 layer config ('layer', 9, 32, 32, 64, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:47:13,627] INFO: [433/400] layer k=9 ch=64 b=1 res=64 fp32 groups=dense: 0.550ms
+[2026-08-04 12:47:13,696] INFO: [434/400] layer k=9 ch=64 b=1 res=64 fp32 groups=depthwise: 0.186ms
+[2026-08-04 12:47:20,694] INFO: [435/400] layer k=9 ch=64 b=1 res=64 int8 groups=dense: 20.978ms
+[2026-08-04 12:47:28,637] INFO: [435/400] layer k=9 ch=64 b=1 res=64 fp32_cpu groups=dense: 31.702ms
+[2026-08-04 12:47:29,359] INFO: [436/400] layer k=9 ch=64 b=1 res=64 int8 groups=depthwise: 2.291ms
+[2026-08-04 12:47:30,868] INFO: [436/400] layer k=9 ch=64 b=1 res=64 fp32_cpu groups=depthwise: 5.999ms
+[2026-08-04 12:47:31,320] INFO: [437/400] layer k=9 ch=64 b=1 res=128 fp32 groups=dense: 1.477ms
+[2026-08-04 12:47:31,679] INFO: [438/400] layer k=9 ch=64 b=1 res=128 fp32 groups=depthwise: 1.127ms
+[2026-08-04 12:47:31,679] INFO: [439/400] Skipping int8 layer config ('layer', 9, 64, 64, 1, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:47:31,680] INFO: [440/400] Skipping int8 layer config ('layer', 9, 64, 64, 1, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:47:32,483] INFO: [441/400] layer k=9 ch=64 b=8 res=64 fp32 groups=dense: 2.646ms
+[2026-08-04 12:47:32,959] INFO: [442/400] layer k=9 ch=64 b=8 res=64 fp32 groups=depthwise: 1.429ms
+[2026-08-04 12:47:32,959] INFO: [443/400] Skipping int8 layer config ('layer', 9, 64, 64, 8, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:47:32,959] INFO: [444/400] Skipping int8 layer config ('layer', 9, 64, 64, 8, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:47:35,799] INFO: [445/400] layer k=9 ch=64 b=8 res=128 fp32 groups=dense: 9.365ms
+[2026-08-04 12:47:38,515] INFO: [446/400] layer k=9 ch=64 b=8 res=128 fp32 groups=depthwise: 8.579ms
+[2026-08-04 12:47:38,515] INFO: [447/400] Skipping int8 layer config ('layer', 9, 64, 64, 8, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:47:38,515] INFO: [448/400] Skipping int8 layer config ('layer', 9, 64, 64, 8, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:47:39,876] INFO: [449/400] layer k=9 ch=64 b=64 res=64 fp32 groups=dense: 3.066ms
+[2026-08-04 12:47:43,280] INFO: [450/400] layer k=9 ch=64 b=64 res=64 fp32 groups=depthwise: 10.893ms
+[2026-08-04 12:47:43,280] INFO: [451/400] Skipping int8 layer config ('layer', 9, 64, 64, 64, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:47:43,280] INFO: [452/400] Skipping int8 layer config ('layer', 9, 64, 64, 64, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:47:48,472] INFO: [453/400] layer k=9 ch=64 b=64 res=128 fp32 groups=dense: 13.055ms
+[2026-08-04 12:48:10,005] INFO: [454/400] layer k=9 ch=64 b=64 res=128 fp32 groups=depthwise: 68.482ms
+[2026-08-04 12:48:10,005] INFO: [455/400] Skipping int8 layer config ('layer', 9, 64, 64, 64, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:48:10,005] INFO: [456/400] Skipping int8 layer config ('layer', 9, 64, 64, 64, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:48:10,485] INFO: [457/400] layer k=9 ch=128 b=1 res=64 fp32 groups=dense: 1.534ms
+[2026-08-04 12:48:10,611] INFO: [458/400] layer k=9 ch=128 b=1 res=64 fp32 groups=depthwise: 0.384ms
+[2026-08-04 12:48:53,637] INFO: [459/400] layer k=9 ch=128 b=1 res=64 int8 groups=dense: 165.708ms
+[2026-08-04 12:49:46,317] INFO: [459/400] layer k=9 ch=128 b=1 res=64 fp32_cpu groups=dense: 226.437ms
+[2026-08-04 12:49:48,472] INFO: [460/400] layer k=9 ch=128 b=1 res=64 int8 groups=depthwise: 5.852ms
+[2026-08-04 12:49:51,457] INFO: [460/400] layer k=9 ch=128 b=1 res=64 fp32_cpu groups=depthwise: 11.725ms
+[2026-08-04 12:49:53,077] INFO: [461/400] layer k=9 ch=128 b=1 res=128 fp32 groups=dense: 5.195ms
+[2026-08-04 12:49:53,767] INFO: [462/400] layer k=9 ch=128 b=1 res=128 fp32 groups=depthwise: 2.151ms
+[2026-08-04 12:49:53,767] INFO: [463/400] Skipping int8 layer config ('layer', 9, 128, 128, 1, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:49:53,767] INFO: [464/400] Skipping int8 layer config ('layer', 9, 128, 128, 1, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:49:56,656] INFO: [465/400] layer k=9 ch=128 b=8 res=64 fp32 groups=dense: 9.562ms
+[2026-08-04 12:49:57,538] INFO: [466/400] layer k=9 ch=128 b=8 res=64 fp32 groups=depthwise: 2.790ms
+[2026-08-04 12:49:57,538] INFO: [467/400] Skipping int8 layer config ('layer', 9, 128, 128, 8, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:49:57,538] INFO: [468/400] Skipping int8 layer config ('layer', 9, 128, 128, 8, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:50:08,492] INFO: [469/400] layer k=9 ch=128 b=8 res=128 fp32 groups=dense: 36.250ms
+[2026-08-04 12:50:13,900] INFO: [470/400] layer k=9 ch=128 b=8 res=128 fp32 groups=depthwise: 17.158ms
+[2026-08-04 12:50:13,900] INFO: [471/400] Skipping int8 layer config ('layer', 9, 128, 128, 8, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:50:13,900] INFO: [472/400] Skipping int8 layer config ('layer', 9, 128, 128, 8, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:50:17,400] INFO: [473/400] layer k=9 ch=128 b=64 res=64 fp32 groups=dense: 7.553ms
+[2026-08-04 12:50:24,339] INFO: [474/400] layer k=9 ch=128 b=64 res=64 fp32 groups=depthwise: 22.369ms
+[2026-08-04 12:50:24,340] INFO: [475/400] Skipping int8 layer config ('layer', 9, 128, 128, 64, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:50:24,340] INFO: [476/400] Skipping int8 layer config ('layer', 9, 128, 128, 64, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:50:39,151] INFO: [477/400] layer k=9 ch=128 b=64 res=128 fp32 groups=dense: 31.735ms
+[2026-08-04 12:51:22,246] INFO: [478/400] layer k=9 ch=128 b=64 res=128 fp32 groups=depthwise: 137.197ms
+[2026-08-04 12:51:22,246] INFO: [479/400] Skipping int8 layer config ('layer', 9, 128, 128, 64, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:51:22,247] INFO: [480/400] Skipping int8 layer config ('layer', 9, 128, 128, 64, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:51:22,382] INFO: [481/400] layer k=11 ch=16 b=1 res=64 fp32 groups=dense: 0.214ms
+[2026-08-04 12:51:22,462] INFO: [482/400] layer k=11 ch=16 b=1 res=64 fp32 groups=depthwise: 0.145ms
+[2026-08-04 12:51:23,558] INFO: [483/400] layer k=11 ch=16 b=1 res=64 int8 groups=dense: 3.284ms
+[2026-08-04 12:51:24,744] INFO: [483/400] layer k=11 ch=16 b=1 res=64 fp32_cpu groups=dense: 4.712ms
+[2026-08-04 12:51:25,064] INFO: [484/400] layer k=11 ch=16 b=1 res=64 int8 groups=depthwise: 0.951ms
+[2026-08-04 12:51:25,659] INFO: [484/400] layer k=11 ch=16 b=1 res=64 fp32_cpu groups=depthwise: 2.341ms
+[2026-08-04 12:51:25,844] INFO: [485/400] layer k=11 ch=16 b=1 res=128 fp32 groups=dense: 0.618ms
+[2026-08-04 12:51:25,976] INFO: [486/400] layer k=11 ch=16 b=1 res=128 fp32 groups=depthwise: 0.413ms
+[2026-08-04 12:51:25,976] INFO: [487/400] Skipping int8 layer config ('layer', 11, 16, 16, 1, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:51:25,976] INFO: [488/400] Skipping int8 layer config ('layer', 11, 16, 16, 1, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:51:26,314] INFO: [489/400] layer k=11 ch=16 b=8 res=64 fp32 groups=dense: 0.944ms
+[2026-08-04 12:51:26,461] INFO: [490/400] layer k=11 ch=16 b=8 res=64 fp32 groups=depthwise: 0.468ms
+[2026-08-04 12:51:26,461] INFO: [491/400] Skipping int8 layer config ('layer', 11, 16, 16, 8, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:51:26,461] INFO: [492/400] Skipping int8 layer config ('layer', 11, 16, 16, 8, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:51:27,406] INFO: [493/400] layer k=11 ch=16 b=8 res=128 fp32 groups=dense: 3.378ms
+[2026-08-04 12:51:28,268] INFO: [494/400] layer k=11 ch=16 b=8 res=128 fp32 groups=depthwise: 2.724ms
+[2026-08-04 12:51:28,268] INFO: [495/400] Skipping int8 layer config ('layer', 11, 16, 16, 8, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:51:28,269] INFO: [496/400] Skipping int8 layer config ('layer', 11, 16, 16, 8, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:51:28,645] INFO: [497/400] layer k=11 ch=16 b=64 res=64 fp32 groups=dense: 0.881ms
+[2026-08-04 12:51:29,706] INFO: [498/400] layer k=11 ch=16 b=64 res=64 fp32 groups=depthwise: 3.507ms
+[2026-08-04 12:51:29,706] INFO: [499/400] Skipping int8 layer config ('layer', 11, 16, 16, 64, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:51:29,706] INFO: [500/400] Skipping int8 layer config ('layer', 11, 16, 16, 64, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:51:31,028] INFO: [501/400] layer k=11 ch=16 b=64 res=128 fp32 groups=dense: 3.457ms
+[2026-08-04 12:51:37,501] INFO: [502/400] layer k=11 ch=16 b=64 res=128 fp32 groups=depthwise: 21.512ms
+[2026-08-04 12:51:37,501] INFO: [503/400] Skipping int8 layer config ('layer', 11, 16, 16, 64, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:51:37,502] INFO: [504/400] Skipping int8 layer config ('layer', 11, 16, 16, 64, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:51:37,648] INFO: [505/400] layer k=11 ch=32 b=1 res=64 fp32 groups=dense: 0.425ms
+[2026-08-04 12:51:37,829] INFO: [506/400] layer k=11 ch=32 b=1 res=64 fp32 groups=depthwise: 0.134ms
+[2026-08-04 12:51:40,443] INFO: [507/400] layer k=11 ch=32 b=1 res=64 int8 groups=dense: 7.593ms
+[2026-08-04 12:51:47,534] INFO: [507/400] layer k=11 ch=32 b=1 res=64 fp32_cpu groups=dense: 31.683ms
+[2026-08-04 12:51:48,410] INFO: [508/400] layer k=11 ch=32 b=1 res=64 int8 groups=depthwise: 2.625ms
+[2026-08-04 12:51:49,523] INFO: [508/400] layer k=11 ch=32 b=1 res=64 fp32_cpu groups=depthwise: 4.404ms
+[2026-08-04 12:51:49,821] INFO: [509/400] layer k=11 ch=32 b=1 res=128 fp32 groups=dense: 1.030ms
+[2026-08-04 12:51:50,039] INFO: [510/400] layer k=11 ch=32 b=1 res=128 fp32 groups=depthwise: 0.706ms
+[2026-08-04 12:51:50,039] INFO: [511/400] Skipping int8 layer config ('layer', 11, 32, 32, 1, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:51:50,040] INFO: [512/400] Skipping int8 layer config ('layer', 11, 32, 32, 1, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:51:50,599] INFO: [513/400] layer k=11 ch=32 b=8 res=64 fp32 groups=dense: 1.984ms
+[2026-08-04 12:51:50,886] INFO: [514/400] layer k=11 ch=32 b=8 res=64 fp32 groups=depthwise: 0.948ms
+[2026-08-04 12:51:50,886] INFO: [515/400] Skipping int8 layer config ('layer', 11, 32, 32, 8, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:51:50,886] INFO: [516/400] Skipping int8 layer config ('layer', 11, 32, 32, 8, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:51:52,722] INFO: [517/400] layer k=11 ch=32 b=8 res=128 fp32 groups=dense: 6.729ms
+[2026-08-04 12:51:54,374] INFO: [518/400] layer k=11 ch=32 b=8 res=128 fp32 groups=depthwise: 5.391ms
+[2026-08-04 12:51:54,374] INFO: [519/400] Skipping int8 layer config ('layer', 11, 32, 32, 8, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:51:54,374] INFO: [520/400] Skipping int8 layer config ('layer', 11, 32, 32, 8, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:51:55,001] INFO: [521/400] layer k=11 ch=32 b=64 res=64 fp32 groups=dense: 1.495ms
+[2026-08-04 12:51:57,187] INFO: [522/400] layer k=11 ch=32 b=64 res=64 fp32 groups=depthwise: 7.367ms
+[2026-08-04 12:51:57,187] INFO: [523/400] Skipping int8 layer config ('layer', 11, 32, 32, 64, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:51:57,187] INFO: [524/400] Skipping int8 layer config ('layer', 11, 32, 32, 64, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:51:59,548] INFO: [525/400] layer k=11 ch=32 b=64 res=128 fp32 groups=dense: 6.062ms
+[2026-08-04 12:52:12,399] INFO: [526/400] layer k=11 ch=32 b=64 res=128 fp32 groups=depthwise: 42.733ms
+[2026-08-04 12:52:12,400] INFO: [527/400] Skipping int8 layer config ('layer', 11, 32, 32, 64, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:52:12,400] INFO: [528/400] Skipping int8 layer config ('layer', 11, 32, 32, 64, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:52:12,657] INFO: [529/400] layer k=11 ch=64 b=1 res=64 fp32 groups=dense: 0.840ms
+[2026-08-04 12:52:12,764] INFO: [530/400] layer k=11 ch=64 b=1 res=64 fp32 groups=depthwise: 0.245ms
+[2026-08-04 12:52:29,855] INFO: [531/400] layer k=11 ch=64 b=1 res=64 int8 groups=dense: 63.861ms
+[2026-08-04 12:52:47,085] INFO: [531/400] layer k=11 ch=64 b=1 res=64 fp32_cpu groups=dense: 62.068ms
+[2026-08-04 12:52:48,044] INFO: [532/400] layer k=11 ch=64 b=1 res=64 int8 groups=depthwise: 3.051ms
+[2026-08-04 12:52:50,312] INFO: [532/400] layer k=11 ch=64 b=1 res=64 fp32_cpu groups=depthwise: 8.903ms
+[2026-08-04 12:52:52,002] INFO: [533/400] layer k=11 ch=64 b=1 res=128 fp32 groups=dense: 2.268ms
+[2026-08-04 12:52:52,423] INFO: [534/400] layer k=11 ch=64 b=1 res=128 fp32 groups=depthwise: 1.367ms
+[2026-08-04 12:52:52,423] INFO: [535/400] Skipping int8 layer config ('layer', 11, 64, 64, 1, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:52:52,423] INFO: [536/400] Skipping int8 layer config ('layer', 11, 64, 64, 1, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:52:53,571] INFO: [537/400] layer k=11 ch=64 b=8 res=64 fp32 groups=dense: 3.974ms
+[2026-08-04 12:52:54,138] INFO: [538/400] layer k=11 ch=64 b=8 res=64 fp32 groups=depthwise: 1.876ms
+[2026-08-04 12:52:54,138] INFO: [539/400] Skipping int8 layer config ('layer', 11, 64, 64, 8, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:52:54,138] INFO: [540/400] Skipping int8 layer config ('layer', 11, 64, 64, 8, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:52:58,103] INFO: [541/400] layer k=11 ch=64 b=8 res=128 fp32 groups=dense: 13.861ms
+[2026-08-04 12:53:01,332] INFO: [542/400] layer k=11 ch=64 b=8 res=128 fp32 groups=depthwise: 10.632ms
+[2026-08-04 12:53:01,333] INFO: [543/400] Skipping int8 layer config ('layer', 11, 64, 64, 8, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:53:01,333] INFO: [544/400] Skipping int8 layer config ('layer', 11, 64, 64, 8, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:53:02,762] INFO: [545/400] layer k=11 ch=64 b=64 res=64 fp32 groups=dense: 3.245ms
+[2026-08-04 12:53:07,120] INFO: [546/400] layer k=11 ch=64 b=64 res=64 fp32 groups=depthwise: 14.717ms
+[2026-08-04 12:53:07,120] INFO: [547/400] Skipping int8 layer config ('layer', 11, 64, 64, 64, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:53:07,120] INFO: [548/400] Skipping int8 layer config ('layer', 11, 64, 64, 64, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:53:12,458] INFO: [549/400] layer k=11 ch=64 b=64 res=128 fp32 groups=dense: 13.662ms
+[2026-08-04 12:53:38,055] INFO: [550/400] layer k=11 ch=64 b=64 res=128 fp32 groups=depthwise: 84.697ms
+[2026-08-04 12:53:38,055] INFO: [551/400] Skipping int8 layer config ('layer', 11, 64, 64, 64, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:53:38,056] INFO: [552/400] Skipping int8 layer config ('layer', 11, 64, 64, 64, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:53:38,737] INFO: [553/400] layer k=11 ch=128 b=1 res=64 fp32 groups=dense: 2.300ms
+[2026-08-04 12:53:38,895] INFO: [554/400] layer k=11 ch=128 b=1 res=64 fp32 groups=depthwise: 0.518ms
+[2026-08-04 12:54:14,672] INFO: [555/400] layer k=11 ch=128 b=1 res=64 int8 groups=dense: 136.244ms
+[2026-08-04 12:55:05,457] INFO: [555/400] layer k=11 ch=128 b=1 res=64 fp32_cpu groups=dense: 190.484ms
+[2026-08-04 12:55:09,404] INFO: [556/400] layer k=11 ch=128 b=1 res=64 int8 groups=depthwise: 12.993ms
+[2026-08-04 12:55:14,569] INFO: [556/400] layer k=11 ch=128 b=1 res=64 fp32_cpu groups=depthwise: 17.468ms
+[2026-08-04 12:55:16,811] INFO: [557/400] layer k=11 ch=128 b=1 res=128 fp32 groups=dense: 7.679ms
+[2026-08-04 12:55:17,641] INFO: [558/400] layer k=11 ch=128 b=1 res=128 fp32 groups=depthwise: 2.673ms
+[2026-08-04 12:55:17,641] INFO: [559/400] Skipping int8 layer config ('layer', 11, 128, 128, 1, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:55:17,641] INFO: [560/400] Skipping int8 layer config ('layer', 11, 128, 128, 1, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:55:21,791] INFO: [561/400] layer k=11 ch=128 b=8 res=64 fp32 groups=dense: 14.553ms
+[2026-08-04 12:55:22,900] INFO: [562/400] layer k=11 ch=128 b=8 res=64 fp32 groups=depthwise: 3.690ms
+[2026-08-04 12:55:22,900] INFO: [563/400] Skipping int8 layer config ('layer', 11, 128, 128, 8, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:55:22,900] INFO: [564/400] Skipping int8 layer config ('layer', 11, 128, 128, 8, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:55:38,558] INFO: [565/400] layer k=11 ch=128 b=8 res=128 fp32 groups=dense: 54.621ms
+[2026-08-04 12:55:44,991] INFO: [566/400] layer k=11 ch=128 b=8 res=128 fp32 groups=depthwise: 21.294ms
+[2026-08-04 12:55:44,992] INFO: [567/400] Skipping int8 layer config ('layer', 11, 128, 128, 8, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:55:44,992] INFO: [568/400] Skipping int8 layer config ('layer', 11, 128, 128, 8, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:55:48,618] INFO: [569/400] layer k=11 ch=128 b=64 res=64 fp32 groups=dense: 7.919ms
+[2026-08-04 12:55:57,294] INFO: [570/400] layer k=11 ch=128 b=64 res=64 fp32 groups=depthwise: 29.299ms
+[2026-08-04 12:55:57,294] INFO: [571/400] Skipping int8 layer config ('layer', 11, 128, 128, 64, 64, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:55:57,294] INFO: [572/400] Skipping int8 layer config ('layer', 11, 128, 128, 64, 64, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:56:11,470] INFO: [573/400] layer k=11 ch=128 b=64 res=128 fp32 groups=dense: 32.993ms
+[2026-08-04 12:57:02,681] INFO: [574/400] layer k=11 ch=128 b=64 res=128 fp32 groups=depthwise: 169.864ms
+[2026-08-04 12:57:02,681] INFO: [575/400] Skipping int8 layer config ('layer', 11, 128, 128, 64, 128, 'int8', 'dense') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:57:02,681] INFO: [576/400] Skipping int8 layer config ('layer', 11, 128, 128, 64, 128, 'int8', 'depthwise') (int8 layer sweep only runs at batch=1,res=64)
+[2026-08-04 12:57:02,681] INFO: Starting FFT convolution sweep
+[2026-08-04 12:57:02,936] INFO: [577/400] FFT k=5 ch=16: 0.6181097030639648
+[2026-08-04 12:57:03,201] INFO: [578/400] FFT k=5 ch=32: 1.032947301864624
+[2026-08-04 12:57:04,300] INFO: [579/400] FFT k=5 ch=64: 4.363957643508911
+[2026-08-04 12:57:09,162] INFO: [580/400] FFT k=5 ch=128: 19.399505853652954
+[2026-08-04 12:57:09,339] INFO: [581/400] FFT k=7 ch=16: 0.5929076671600342
+[2026-08-04 12:57:09,551] INFO: [582/400] FFT k=7 ch=32: 0.7438373565673828
+[2026-08-04 12:57:10,414] INFO: [583/400] FFT k=7 ch=64: 3.3478236198425293
+[2026-08-04 12:57:14,362] INFO: [584/400] FFT k=7 ch=128: 15.67875623703003
+[2026-08-04 12:57:14,537] INFO: [585/400] FFT k=9 ch=16: 0.5887246131896973
+[2026-08-04 12:57:14,762] INFO: [586/400] FFT k=9 ch=32: 0.8003675937652588
+[2026-08-04 12:57:15,711] INFO: [587/400] FFT k=9 ch=64: 3.7111055850982666
+[2026-08-04 12:57:20,029] INFO: [588/400] FFT k=9 ch=128: 17.12662935256958
+[2026-08-04 12:57:20,202] INFO: [589/400] FFT k=11 ch=16: 0.6052470207214355
+[2026-08-04 12:57:20,509] INFO: [590/400] FFT k=11 ch=32: 1.1415457725524902
+[2026-08-04 12:57:21,757] INFO: [591/400] FFT k=11 ch=64: 4.8965537548065186
+[2026-08-04 12:57:27,258] INFO: [592/400] FFT k=11 ch=128: 21.802228689193726
+[2026-08-04 12:57:27,258] INFO: Starting model profiling sweep (18 configs)
+[2026-08-04 12:57:28,990] INFO: [1/18] alexnet_tv fp32: 1.38ms, 726.1 img/s
+[2026-08-04 12:57:36,025] INFO: [2/18] alexnet_tv int8: 10.13ms, 98.7 img/s
+[2026-08-04 12:57:37,033] INFO: [3/18] alexnet_depthwisesep fp32: 3.25ms, 307.6 img/s
+[2026-08-04 12:57:38,553] INFO: [4/18] alexnet_depthwisesep int8: 4.18ms, 239.0 img/s
+[2026-08-04 12:57:39,942] INFO: [5/18] alexnet_bottleneck fp32: 4.44ms, 225.4 img/s
+[2026-08-04 12:57:41,854] INFO: [6/18] alexnet_bottleneck int8: 3.56ms, 281.1 img/s
+[2026-08-04 12:57:43,909] INFO: [7/18] alexnet_final_bottleneck_residual fp32: 5.61ms, 178.3 img/s
+[2026-08-04 12:57:46,372] INFO: [8/18] alexnet_final_bottleneck_residual int8: 6.61ms, 151.3 img/s
+[2026-08-04 12:57:48,407] INFO: [9/18] alexnet_final_fire_residual fp32: 5.34ms, 187.3 img/s
+[2026-08-04 12:57:51,671] INFO: [10/18] alexnet_final_fire_residual int8: 6.19ms, 161.7 img/s
+[2026-08-04 12:57:52,727] INFO: [11/18] vgg_style fp32: 3.13ms, 319.1 img/s
+[2026-08-04 12:57:55,513] INFO: [12/18] vgg_style int8: 7.40ms, 135.1 img/s
+[2026-08-04 12:57:59,764] INFO: [13/18] mobilenetv2 fp32: 12.79ms, 78.2 img/s
+[2026-08-04 12:58:06,043] INFO: [14/18] mobilenetv2 int8: 15.72ms, 63.6 img/s
+[2026-08-04 12:58:07,527] INFO: [15/18] alexnet_fire fp32: 4.82ms, 207.5 img/s
+[2026-08-04 12:58:09,783] INFO: [16/18] alexnet_fire int8: 5.65ms, 177.0 img/s
+[2026-08-04 12:58:10,451] INFO: [17/18] alexnet_dilated_gap fp32: 1.80ms, 554.4 img/s
+[2026-08-04 12:58:11,974] INFO: [18/18] alexnet_dilated_gap int8: 4.24ms, 235.7 img/s
+[2026-08-04 12:58:11,975] INFO: Profiling complete
