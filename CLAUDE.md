@@ -50,8 +50,10 @@ scripts/                  # CLI entry points (used instead of notebooks for PCAD
   phase7_analysis.py       # Joins detection/segmentation results to Phase 3 classification results, tests H1-H4
   aggregate_results.py     # Aggregates per-model summary JSONs from a cluster submit-sweep into one CSV
   winograd_quant_error.py  # Phase 6 extension: INT8 quantization error from Winograd F(2x2,3x3) transforms
-  measure_compression.py   # Phase 9 Task 3: entropy/k-means weight-compression headroom above plain gzip
-  prune_channels.py        # Phase 9 Task 2: structured (channel) pruning CLI, mechanics-only (no fine-tuning)
+  measure_compression.py   # Phase 9 Task 3: entropy/k-means weight-compression headroom above plain gzip;
+                           #   --evaluate actually clusters the weights and measures real accuracy vs. FP32
+  prune_channels.py        # Phase 9 Task 2: structured (channel) pruning CLI;
+                           #   --finetune-epochs fine-tunes the pruned model then runs it through QAT->INT8
   check_anchor_recall.py / diag_stage7.py / backfill_gzip.py  # one-off Phase 7 diagnostics / backfill tools
   migrate_pcad_gitignored.sh  # merges gitignored artifacts (*.pth, *.log) left in pre-reorg folder names after a pull
   submit_phase7_simple.sh / submit_phase7_multinode.sh  # PCAD multi-node Phase 7 submission (simple vs FP32→QAT→INT8 chaining) — see docs/PHASE7_MULTINODE.md
