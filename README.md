@@ -22,7 +22,7 @@ jupyter lab
 1. `notebooks/phase_1_baseline_training/baselines_qat.ipynb` — Phase 1: Reference pretrained models (ResNet18, MobileNetV2, AlexNet, VGG-style)
 2. `notebooks/phase_2_kernel_restriction_training/alexnet_qat.ipynb` — Phase 2: AlexNet kernel-restriction variants (3×3, 2×2, stacked, mixed, small-kernel)
 3. `notebooks/phase_3_compensation_and_hybrids_training/compensation_qat.ipynb` — Phase 3a: Compensation mechanisms (bottleneck, residual, factorized, etc.)
-4. `notebooks/phase_3_compensation_and_hybrids_training/tinyhybridnet_qat.ipynb` — Phase 3b: Efficient hybrids (TinyHybridNet, TinyMobileNetV2)
+4. `notebooks/phase_3_compensation_and_hybrids_training/efficient_hybrids_qat.ipynb` — Phase 3b: Efficient hybrids (TinyHybridNet, TinyMobileNetV2)
 5. `notebooks/phase_4_compression_and_final_architecture_training/compression_phase4_1.ipynb` — Phase 4.1: Aggressive compression (INT4/INT2/ternary/binary) of the best Phase 1–3 models
 6. `notebooks/phase_4_compression_and_final_architecture_training/final_architecture_qat.ipynb` — Phase 4: Combines Phase 3's best mechanisms into final hybrid architectures
 7. `notebooks/phase_5_cross_phase_results_analysis/final_analysis_phase5.ipynb` — Phase 5: Cross-phase results analysis and figure generation

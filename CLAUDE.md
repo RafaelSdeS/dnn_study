@@ -61,9 +61,9 @@ tests/                    # pytest: test_registry, test_checkpoint, test_config,
 notebooks/                # Organized by phase + purpose
   phase_1_baseline_training/                          # baselines_qat
   phase_2_kernel_restriction_training/                # alexnet_qat
-  phase_3_compensation_and_hybrids_training/          # compensation_qat, tinyhybridnet_qat
-  phase_4_compression_and_final_architecture_training/ # compression_phase4_1, final_architecture_qat
-  phase_5_cross_phase_results_analysis/               # final_analysis_phase5, final_architecture_results, _archived_results_analysis
+  phase_3_compensation_and_hybrids_training/          # compensation_qat, efficient_hybrids_qat
+  phase_4_compression_and_final_architecture_training/ # compression_phase4_1, final_architecture_qat, final_architecture_results
+  phase_5_cross_phase_results_analysis/               # final_analysis_phase5
   phase_6_hardware_profiling_analysis/                # hardware_profiling_phase6
   phase_9_pcad_bypass_ablation_analysis/              # pcad_results_analysis
 results/                  # git-ignored CSVs/JSON/figures, one dir per phase + results.csv, model_details.csv
