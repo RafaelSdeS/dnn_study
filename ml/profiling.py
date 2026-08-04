@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.ao.quantization as tq
 import torch.profiler
 
 
@@ -162,6 +163,61 @@ def profile_layer_latency_per_batch_resolution(
     return profile_layer_latency(
         kernel_size, in_ch, out_ch, input_shape, device, warmup, iters, groups=groups
     )
+
+
+def profile_layer_latency_int8(
+    kernel_size: int,
+    in_ch: int,
+    out_ch: int,
+    input_shape: tuple,
+    warmup: int = 50,
+    iters: int = 200,
+    groups: int = 1,
+) -> float:
+    """
+    Profile latency of a real statically-quantized Conv2d.
+
+    CPU-only: eager-mode PyTorch INT8 has no CUDA kernel (same reason
+    profile_model_sweep converts and profiles INT8 models on CPU), so there is
+    no GPU equivalent of this measurement.
+
+    Args:
+        kernel_size, in_ch, out_ch, groups: as profile_layer_latency.
+        input_shape: (batch, channels, height, width) tuple.
+        warmup: Warmup iterations (not timed).
+        iters: Timed iterations.
+
+    Returns:
+        Latency in milliseconds (per iteration).
+    """
+    conv = nn.Conv2d(
+        in_ch, out_ch, kernel_size, stride=1,
+        padding=(kernel_size - 1) // 2, bias=False, groups=groups
+    )
+    model = nn.Sequential(tq.QuantStub(), conv, tq.DeQuantStub()).eval()
+    model.qconfig = tq.get_default_qconfig("fbgemm")
+    tq.prepare(model, inplace=True)
+
+    input_tensor = torch.randn(input_shape)  # CPU tensor -- quantized conv is CPU-only
+
+    torch.set_grad_enabled(False)
+    with torch.no_grad():
+        for _ in range(10):
+            model(input_tensor)  # calibration pass for the activation observers
+
+    tq.convert(model, inplace=True)
+
+    for _ in range(warmup):
+        with torch.no_grad():
+            _ = model(input_tensor)
+
+    start_time = time.time()
+    for _ in range(iters):
+        with torch.no_grad():
+            _ = model(input_tensor)
+    elapsed_ms = (time.time() - start_time) * 1000 / iters
+
+    return elapsed_ms
 
 
 def detect_winograd_via_speedup(

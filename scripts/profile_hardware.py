@@ -24,6 +24,7 @@ import torch.nn as nn
 
 from ml.profiling import (
     profile_layer_latency_per_batch_resolution,
+    profile_layer_latency_int8,
     detect_winograd_via_speedup,
     profile_model_with_efficiency_metrics,
     profile_kernel_trace,
@@ -194,9 +195,18 @@ def profile_layer_sweep(
 
     device_tag = get_device_tag(device)
 
-    total_configs = (
+    # int8 only runs at the base shape (batch=1, res=64), each paired with one fp32_cpu
+    # companion row -- so it doesn't scale with the full batch/resolution grid like fp32 does.
+    non_int8_precisions = [p for p in precisions if p != "int8"]
+    layer_configs = (
         len(kernel_sizes) * len(layer_channels) * len(batch_sizes) * len(input_resolutions)
-        * len(precisions) * len(groups_modes)
+        * len(non_int8_precisions) * len(groups_modes)
+    )
+    if "int8" in precisions and 1 in batch_sizes and 64 in input_resolutions:
+        layer_configs += 2 * len(kernel_sizes) * len(layer_channels) * len(groups_modes)
+
+    total_configs = (
+        layer_configs
         + len([k for k in kernel_sizes if k >= fft_min_kernel_size]) * len(layer_channels)
     )
 
@@ -228,25 +238,39 @@ def profile_layer_sweep(
                                 logger.info(f"[{i}/{total_configs}] Skipping layer config {key}")
                                 continue
 
+                            # Eager-mode INT8 has no CUDA kernel (profile_layer_latency_int8 is
+                            # CPU-only, like the model sweep's INT8 path) -- only run it at the
+                            # base shape rather than mislabeling an FP32 GPU timing as INT8.
+                            if precision == "int8" and (batch_size, input_resolution) != (1, 64):
+                                logger.info(f"[{i}/{total_configs}] Skipping int8 layer config {key} "
+                                           f"(int8 layer sweep only runs at batch=1,res=64)")
+                                continue
+
                             try:
                                 input_shape = (batch_size, in_ch, input_resolution, input_resolution)
-                                latency_ms = profile_layer_latency_per_batch_resolution(
-                                    kernel_size,
-                                    in_ch,
-                                    in_ch,
-                                    batch_size,
-                                    input_resolution,
-                                    device,
-                                    warmup=warmup,
-                                    iters=iters,
-                                    groups=groups,
-                                )
 
-                                # Winograd detection
-                                winograd_info = detect_winograd_via_speedup(
-                                    in_ch, in_ch, input_shape, device, warmup=warmup // 2, iters=iters // 2,
-                                    groups=groups,
-                                )
+                                if precision == "int8":
+                                    latency_ms = profile_layer_latency_int8(
+                                        kernel_size, in_ch, in_ch, input_shape,
+                                        warmup=warmup, iters=iters, groups=groups,
+                                    )
+                                    winograd_info = None  # Winograd here is specifically about the GPU (H1's scope)
+                                else:
+                                    latency_ms = profile_layer_latency_per_batch_resolution(
+                                        kernel_size,
+                                        in_ch,
+                                        in_ch,
+                                        batch_size,
+                                        input_resolution,
+                                        device,
+                                        warmup=warmup,
+                                        iters=iters,
+                                        groups=groups,
+                                    )
+                                    winograd_info = detect_winograd_via_speedup(
+                                        in_ch, in_ch, input_shape, device, warmup=warmup // 2, iters=iters // 2,
+                                        groups=groups,
+                                    )
 
                                 result = {
                                     "kind": "layer",
@@ -269,6 +293,26 @@ def profile_layer_sweep(
                                 logger.info(f"[{i}/{total_configs}] layer k={kernel_size} ch={in_ch} "
                                            f"b={batch_size} res={input_resolution} {precision} "
                                            f"groups={groups_mode}: {latency_ms:.3f}ms")
+
+                                # H4 needs a same-hardware baseline: pair each real INT8 conv with
+                                # an FP32 conv timed on the same CPU (not the FP32 GPU row), so
+                                # int8-vs-fp32 latency ranking isn't confounded with GPU-vs-CPU.
+                                if precision == "int8":
+                                    fp32_cpu_key = ("layer", kernel_size, in_ch, in_ch, batch_size,
+                                                    input_resolution, "fp32_cpu", groups_mode)
+                                    if fp32_cpu_key not in completed:
+                                        fp32_cpu_latency = profile_layer_latency_per_batch_resolution(
+                                            kernel_size, in_ch, in_ch, batch_size, input_resolution,
+                                            torch.device("cpu"), warmup=warmup, iters=iters, groups=groups,
+                                        )
+                                        fp32_cpu_result = {**result, "precision": "fp32_cpu",
+                                                            "latency_ms": fp32_cpu_latency,
+                                                            "winograd_speedup_info": None}
+                                        if not dry_run:
+                                            append_result_atomic(output_path, fp32_cpu_result)
+                                        logger.info(f"[{i}/{total_configs}] layer k={kernel_size} ch={in_ch} "
+                                                   f"b={batch_size} res={input_resolution} fp32_cpu "
+                                                   f"groups={groups_mode}: {fp32_cpu_latency:.3f}ms")
 
                             except Exception as e:
                                 logger.error(f"[{i}/{total_configs}] Error profiling layer config {key}: {e}")
