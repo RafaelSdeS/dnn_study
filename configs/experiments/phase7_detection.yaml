@@ -1,9 +1,14 @@
 # Phase 7 detection experiments — per-backbone configs
 
+# num_workers: 1 on all three — jobs 811106/811127/811128 hit the same DataLoader
+# worker segfault at num_workers=4/512px (recurrence of the fragility noted in
+# phase7_diag_512.yaml; sharing_strategy="file_system" didn't fully fix it).
+
 # Bottleneck (small-kernel, channel-compressed)
 alexnet_bottleneck:
   data:
     batch_size: 16
+    num_workers: 1
   trainer:
     epochs: 1000
     lr: 1.0e-4
@@ -13,6 +18,7 @@ alexnet_bottleneck:
 alexnet_fire:
   data:
     batch_size: 16
+    num_workers: 1
   trainer:
     epochs: 1000
     lr: 1.0e-4
@@ -22,6 +28,7 @@ alexnet_fire:
 alexnet_tv:
   data:
     batch_size: 16
+    num_workers: 1
   trainer:
     epochs: 1000
     lr: 1.0e-4

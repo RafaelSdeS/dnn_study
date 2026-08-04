@@ -69,8 +69,11 @@ def run_detection(args):
         trainer_cfg = replace(trainer_cfg, epochs=100, lr=1e-5, use_amp=False)
 
     # Setup paths
+    # init_suffix distinguishes a pretrained-init sweep from the from-scratch one so
+    # they get separate output dirs and never clobber each other's checkpoints/logs.
+    init_suffix = "_pretrained" if args.pretrained_ckpt else ""
     stage_suffix = {"fp32": "fp32", "qat": "qat", "int8": "int8"}[args.stage]
-    run_id = f"ssd_{args.model}_{stage_suffix}"
+    run_id = f"ssd_{args.model}_{stage_suffix}{init_suffix}"
     if args.experiment:
         run_id += f"_{args.experiment}"
     run_dir = Path(args.save_dir) / run_id
@@ -98,7 +101,12 @@ def run_detection(args):
 
         # Build model
         print(f"\nBuilding SSD detector ({args.model})...")
-        model = build_ssd_detector(args.model, num_classes=21, image_size=data_cfg.img_size)
+        if args.pretrained_ckpt:
+            print(f"  Initializing backbone from: {args.pretrained_ckpt}")
+        model = build_ssd_detector(
+            args.model, num_classes=21, image_size=data_cfg.img_size,
+            pretrained_ckpt=args.pretrained_ckpt,
+        )
         print(f"  Model ready. Parameter count: {sum(p.numel() for p in model.parameters()):,}")
 
         # Anchor-recall pre-flight gate: mAP is capped regardless of training quality
@@ -133,12 +141,14 @@ def run_detection(args):
         # ========== QAT Fine-tuning ==========
         # Load FP32 checkpoint
         print(f"\nLoading FP32 checkpoint...")
-        fp32_run_id = f"ssd_{args.model}_fp32"
+        fp32_run_id = f"ssd_{args.model}_fp32{init_suffix}"
+        if args.experiment:
+            fp32_run_id += f"_{args.experiment}"
         fp32_ckpt = Path(args.save_dir) / fp32_run_id / f"{fp32_run_id}_best.pth"
         if not fp32_ckpt.exists():
             print(f"ERROR: FP32 checkpoint not found at {fp32_ckpt}")
             print(f"Make sure you run FP32 training first: python {__file__} detection --model {args.model} --stage fp32")
-            return
+            sys.exit(1)
 
         model = build_ssd_detector(args.model, num_classes=21, image_size=data_cfg.img_size)
         ckpt_state = torch.load(fp32_ckpt, map_location=device, weights_only=False)
@@ -178,12 +188,14 @@ def run_detection(args):
         # ========== INT8 Conversion & Evaluation ==========
         # Load QAT checkpoint
         print(f"\nLoading QAT checkpoint...")
-        qat_run_id = f"ssd_{args.model}_qat"
+        qat_run_id = f"ssd_{args.model}_qat{init_suffix}"
+        if args.experiment:
+            qat_run_id += f"_{args.experiment}"
         qat_ckpt = Path(args.save_dir) / qat_run_id / f"{qat_run_id}_best.pth"
         if not qat_ckpt.exists():
             print(f"ERROR: QAT checkpoint not found at {qat_ckpt}")
             print(f"Make sure you run QAT training first: python {__file__} detection --model {args.model} --stage qat")
-            return
+            sys.exit(1)
 
         model_qat = build_ssd_detector(args.model, num_classes=21, image_size=data_cfg.img_size)
         model_qat = build_qat_ssd_detector(model_qat, device)
@@ -303,11 +315,13 @@ def run_segmentation(args):
         # ========== QAT Fine-tuning ==========
         print(f"\nLoading FP32 checkpoint...")
         fp32_run_id = f"seg_{args.model}_fp32"
+        if args.experiment:
+            fp32_run_id += f"_{args.experiment}"
         fp32_ckpt = Path(args.save_dir) / fp32_run_id / f"{fp32_run_id}_best.pth"
         if not fp32_ckpt.exists():
             print(f"ERROR: FP32 checkpoint not found at {fp32_ckpt}")
             print(f"Make sure you run FP32 training first: python {__file__} segmentation --model {args.model} --stage fp32")
-            return
+            sys.exit(1)
 
         model = build_deeplabv3_segmenter(args.model, num_classes=21, image_size=data_cfg.img_size)
         ckpt_state = torch.load(fp32_ckpt, map_location=device, weights_only=False)
@@ -340,11 +354,13 @@ def run_segmentation(args):
         # ========== INT8 Conversion & Evaluation ==========
         print(f"\nLoading QAT checkpoint...")
         qat_run_id = f"seg_{args.model}_qat"
+        if args.experiment:
+            qat_run_id += f"_{args.experiment}"
         qat_ckpt = Path(args.save_dir) / qat_run_id / f"{qat_run_id}_best.pth"
         if not qat_ckpt.exists():
             print(f"ERROR: QAT checkpoint not found at {qat_ckpt}")
             print(f"Make sure you run QAT training first: python {__file__} segmentation --model {args.model} --stage qat")
-            return
+            sys.exit(1)
 
         model_qat = build_deeplabv3_segmenter(args.model, num_classes=21, image_size=data_cfg.img_size)
         model_qat = build_qat_deeplabv3_segmenter(model_qat, device)
@@ -403,6 +419,10 @@ def main():
     parser.add_argument("--save-dir", default="outputs/detection_segmentation", help="Output directory")
     parser.add_argument("--dry-run", action="store_true", help="Don't train, just show config")
     parser.add_argument("--skip-anchor-check", action="store_true", help="Skip the anchor-recall pre-flight gate")
+    parser.add_argument(
+        "--pretrained-ckpt", type=Path, default=None,
+        help="Tiny-ImageNet classification checkpoint to init the SSD backbone from (fp32 stage only)",
+    )
 
     args = parser.parse_args()
 

@@ -1,7 +1,7 @@
 data:
   batch_size: 16
   img_size: 512
-  num_workers: 4
+  num_workers: 1
   pin_memory: true
   seed: 42
   voc_root: ~/.cache/torchvision/datasets

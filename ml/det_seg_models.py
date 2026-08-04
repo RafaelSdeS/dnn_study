@@ -5,6 +5,7 @@ Backbone feature extraction + SSD/DeepLab heads.
 import copy
 from collections import OrderedDict
 from functools import partial
+from pathlib import Path
 from typing import Dict, List, Optional
 
 import torch
@@ -47,7 +48,13 @@ BACKBONE_FEATURE_CONFIG = {
 class DetSegBackbone(nn.Module):
     """Feature extractor: taps intermediate layers of classification backbone."""
 
-    def __init__(self, arch_name: str, num_classes: int = 200, num_extra_blocks: int = 2):
+    def __init__(
+        self,
+        arch_name: str,
+        num_classes: int = 200,
+        num_extra_blocks: int = 2,
+        pretrained_ckpt: Optional[Path] = None,
+    ):
         super().__init__()
         if arch_name not in BACKBONE_FEATURE_CONFIG:
             raise ValueError(f"Unknown arch: {arch_name}. Must be in {list(BACKBONE_FEATURE_CONFIG.keys())}")
@@ -59,11 +66,21 @@ class DetSegBackbone(nn.Module):
 
         # Load backbone (strip classifier head later).
         # alexnet_tv only: force random init for a fair cross-backbone comparison
-        # (bottleneck/fire have no pretrained checkpoints available either).
+        # (bottleneck/fire have no pretrained checkpoints available either). Moot
+        # when pretrained_ckpt is given below — that overwrites all of backbone_full's
+        # weights regardless of this initial construction.
         if arch_name == "alexnet_tv":
             self.backbone_full = ctor(num_classes=num_classes, pretrained=False)
         else:
             self.backbone_full = ctor(num_classes=num_classes)
+
+        # Init from a Tiny-ImageNet classification checkpoint instead of random
+        # weights — tests whether classification-learned features (not just
+        # architecture) transfer to detection. Strict load: same ctor, same
+        # num_classes, so this also doubles as an architecture-match check.
+        if pretrained_ckpt is not None:
+            ckpt = torch.load(pretrained_ckpt, map_location="cpu", weights_only=False)
+            self.backbone_full.load_state_dict(ckpt.get("model_state_dict", ckpt))
 
         # Tap intermediate features
         self.feature_indices = feature_indices
@@ -201,6 +218,7 @@ def build_ssd_detector(
     num_classes: int = 21,
     image_size: int = 256,
     confidence_threshold: float = 0.05,
+    pretrained_ckpt: Optional[Path] = None,
 ) -> SSD:
     """Assemble SSD detector: backbone + anchor generator + head.
 
@@ -209,6 +227,8 @@ def build_ssd_detector(
         num_classes: 21 for VOC (20 + background)
         image_size: Input resolution (default 256 for Phase 7)
         confidence_threshold: NMS confidence threshold
+        pretrained_ckpt: Optional Tiny-ImageNet classification checkpoint to init
+            the backbone from, instead of random init
 
     Returns:
         SSD model ready for training/eval
@@ -217,7 +237,9 @@ def build_ssd_detector(
         raise ValueError(f"Unknown arch: {arch_name}")
 
     # Backbone
-    backbone = DetSegBackbone(arch_name, num_classes=200, num_extra_blocks=3)
+    backbone = DetSegBackbone(
+        arch_name, num_classes=200, num_extra_blocks=3, pretrained_ckpt=pretrained_ckpt
+    )
 
     # Anchor generator — explicit scales (not min/max_ratio) placed at VOC's actual
     # GT-box-size percentiles. DefaultBoxGenerator's min/max_ratio interpolates scales
