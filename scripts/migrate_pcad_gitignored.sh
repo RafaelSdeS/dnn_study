@@ -31,7 +31,8 @@ move "$ROOT/phase6_backfill"                   "$ROOT/phase_6_hardware_profiling
 move "$ROOT/phase9_fire_bypass"                "$ROOT/phase_9_bypass_ablation/fire_bypass"
 move "$ROOT/phase9_fire_bypass_large_scale"    "$ROOT/phase_9_bypass_ablation/fire_bypass_large_scale"
 move "$ROOT/figures"                           "$ROOT/figures_generated"
-move "$ROOT/logs"                              "$ROOT/logs_by_phase/all_slurm_jobs"
+# No move for $ROOT/logs: scripts/cluster.py already writes new SLURM logs directly to
+# outputs/pcad/logs/<experiment>/, which is the final location, not a pre-reorg name.
 
 # Top-level checkpoints/ (Phase 1-4 notebook runs — *.pth is gitignored)
 move "checkpoints/baselines_qat_phase1"        "checkpoints/phase_1_baseline_training"

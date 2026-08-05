@@ -79,10 +79,10 @@ outputs/                  # Training artifacts & logs
   detection_segmentation/ # Phase 7 detection/segmentation run outputs (SSD checkpoints/logs per model+config)
     phase7/
   pcad/
-    phase_6_hardware_profiling/ # GPU profiling data (runs/, backfill/)
+    phase_6_hardware_profiling/ # GPU profiling data (runs/ — flat, host-named files; backfill/)
     phase_9_bypass_ablation/    # Phase 9 runs (fire_bypass/, fire_bypass_large_scale/)
-    archive_legacy_phases/      # Phase 2, 4, 5 runs (phase_2_kernel_restriction/, phase_4_5_large_scale/)
-    logs_by_phase/              # SLURM job output files (all_slurm_jobs/)
+    archive_legacy_phases/      # Phase 2, 4, 5 runs (phase_2_kernel_restriction/, phase_4_5_large_scale/); only *_best.pth kept, no *_resume.pth
+    logs/<experiment>/          # SLURM job stdout/stderr, one dir per experiment name (matches scripts/cluster.py's log_dir)
     figures_generated/          # Generated visualizations
     results_aggregate/          # Cross-phase result CSVs
   local/                  # Local machine runs
