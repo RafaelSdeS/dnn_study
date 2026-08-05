@@ -114,7 +114,6 @@ def profile_layer_latency(
         padding=(kernel_size - 1) // 2, bias=False, groups=groups
     )
     conv = conv.to(device).eval()
-    torch.set_grad_enabled(False)
 
     input_tensor = torch.randn(input_shape, device=device)
 
@@ -200,7 +199,6 @@ def profile_layer_latency_int8(
 
     input_tensor = torch.randn(input_shape)  # CPU tensor -- quantized conv is CPU-only
 
-    torch.set_grad_enabled(False)
     with torch.no_grad():
         for _ in range(10):
             model(input_tensor)  # calibration pass for the activation observers
@@ -280,7 +278,6 @@ def profile_model_latency(
         Latency in milliseconds per iteration.
     """
     model = model.to(device).eval()
-    torch.set_grad_enabled(False)
 
     input_tensor = torch.randn(input_size, device=device)
 
@@ -334,7 +331,6 @@ def profile_model_with_efficiency_metrics(
         }
     """
     model = model.to(device).eval()
-    torch.set_grad_enabled(False)
 
     # Memory measurement (CUDA only)
     if device.type == "cuda":
@@ -408,7 +404,6 @@ def profile_kernel_trace(
         }
     """
     model = model.to(device).eval()
-    torch.set_grad_enabled(False)
 
     op_timings = {}
     winograd_detected = False

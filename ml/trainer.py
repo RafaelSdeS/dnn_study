@@ -74,7 +74,7 @@ class Trainer:
         scaler = torch.amp.GradScaler("cuda") if cfg.use_amp else None
 
         start_epoch = 0
-        best_val_acc = 0.0
+        best_val_acc = -1.0
         best_val_top5 = 0.0
         best_val_loss = float("inf")
         best_epoch = 0

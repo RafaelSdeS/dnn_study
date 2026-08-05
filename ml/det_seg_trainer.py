@@ -83,7 +83,7 @@ class DetectionTrainer:
             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=cfg.epochs)
 
         start_epoch = 0
-        best_val_mAP = 0.0
+        best_val_mAP = -1.0
         best_epoch = 0
         patience_counter = 0
         elapsed_time_s = 0.0
@@ -99,7 +99,7 @@ class DetectionTrainer:
         if resume_from is not None and Path(resume_from).exists():
             state = load_resume_state(resume_from, model, optimizer, scheduler, scaler, device=str(self.device))
             start_epoch = state["epoch"] + 1
-            best_val_mAP = state.get("best_val_acc", 0.0)
+            best_val_mAP = state.get("best_val_acc", -1.0)
             best_epoch = start_epoch - 1
             patience_counter = state.get("patience_counter", 0)
             elapsed_time_s = state.get("elapsed_time_s", 0.0)
@@ -342,7 +342,7 @@ class SegmentationTrainer:
             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=cfg.epochs)
 
         start_epoch = 0
-        best_val_mIoU = 0.0
+        best_val_mIoU = -1.0
         best_epoch = 0
         patience_counter = 0
         elapsed_time_s = 0.0
@@ -358,7 +358,7 @@ class SegmentationTrainer:
         if resume_from is not None and Path(resume_from).exists():
             state = load_resume_state(resume_from, model, optimizer, scheduler, scaler, device=str(self.device))
             start_epoch = state["epoch"] + 1
-            best_val_mIoU = state.get("best_val_acc", 0.0)
+            best_val_mIoU = state.get("best_val_acc", -1.0)
             best_epoch = start_epoch - 1
             patience_counter = state.get("patience_counter", 0)
             elapsed_time_s = state.get("elapsed_time_s", 0.0)
