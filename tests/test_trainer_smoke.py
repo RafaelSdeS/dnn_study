@@ -18,8 +18,9 @@ NEW_HISTORY_KEYS = {
 
 
 def _tiny_loader():
-    x = torch.randn(8, 3, 8, 8)
-    y = torch.randint(0, 5, (8,))
+    g = torch.Generator().manual_seed(0)
+    x = torch.randn(8, 3, 8, 8, generator=g)
+    y = torch.randint(0, 5, (8,), generator=g)
     return DataLoader(TensorDataset(x, y), batch_size=4)
 
 
@@ -53,3 +54,35 @@ def test_fit_one_epoch_populates_all_history_fields(tmp_path):
 
     assert (tmp_path / "smoke_best.pth").exists()
     assert (tmp_path / "smoke_resume.pth").exists()
+
+
+class _AlwaysWrongModel(nn.Module):
+    """Ignores the input and always predicts class 0 -> a hard, deterministic 0% val accuracy."""
+
+    def __init__(self, num_classes=5):
+        super().__init__()
+        self.dummy = nn.Linear(3 * 8 * 8, num_classes)  # keeps a param in the backward graph
+
+    def forward(self, x):
+        batch = x.shape[0]
+        logits = torch.full((batch, self.dummy.out_features), -10.0, device=x.device)
+        logits[:, 0] = 10.0
+        return logits + 0.0 * self.dummy(x.flatten(1))
+
+
+def test_zero_accuracy_run_still_saves_a_best_checkpoint(tmp_path):
+    """Regression: best_val_acc used to be seeded at 0.0, so `val_acc > best_val_acc` was
+    never true for a model stuck at exactly 0% accuracy, and no checkpoint was ever saved."""
+    x = torch.randn(8, 3, 8, 8)
+    y = torch.ones(8, dtype=torch.long)  # never class 0 -> the always-0 model always misses
+    loader = DataLoader(TensorDataset(x, y), batch_size=4)
+    cfg = TrainerConfig(epochs=1, use_amp=False, early_stopping_patience=None)
+    trainer = Trainer(
+        _AlwaysWrongModel(), loader, loader, cfg, torch.device("cpu"),
+        tmp_path, "zero_acc", num_classes=5,
+    )
+
+    results = trainer.fit()
+
+    assert results["history"]["val_acc"][0] == 0.0
+    assert (tmp_path / "zero_acc_best.pth").exists()
