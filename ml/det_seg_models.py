@@ -303,6 +303,22 @@ def build_qat_ssd_detector(model_fp32: SSD, device: torch.device) -> SSD:
     backbone.train()
     backbone.qconfig = tq.get_default_qat_qconfig("fbgemm")
 
+    # backbone_full's own classifier and its standalone quant/dequant stubs are never
+    # invoked by DetSegBackbone.forward (which taps .features directly and uses its own
+    # quant/dequant — see the comment on those stubs above); .features layers past the
+    # deepest tap are unreachable too. qconfig otherwise propagates to all of these, so
+    # prepare_qat wraps them with observers that never see data, and tq.convert() later
+    # hard-asserts on their inf min/max (confirmed via the fp32_pretrained/qat checkpoints
+    # that hit this in production — e.g. jobs 811687/811101/811132). Opt them out.
+    backbone_full = backbone.backbone_full
+    backbone_full.classifier.qconfig = None
+    backbone_full.quant.qconfig = None
+    backbone_full.dequant.qconfig = None
+    last_tap = max(backbone.feature_indices)
+    for i, layer in enumerate(backbone_full.features):
+        if i > last_tap:
+            layer.qconfig = None
+
     # Fuse Conv-BN(-ReLU) triples inside backbone_full (bottleneck/fire only —
     # alexnet_tv's stock torchvision features have no BatchNorm, so find_fuse_groups
     # returns [] there and prepare_qat still inserts fake-quant on bare Conv2d/ReLU).

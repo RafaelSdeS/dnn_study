@@ -64,9 +64,13 @@ def run_detection(args):
         data_cfg = replace(data_cfg, **exp_cfg.get("data", {}))
         trainer_cfg = replace(trainer_cfg, **exp_cfg.get("trainer", {}))
 
-    # Adjust trainer config for QAT (shorter epochs, lower lr, no AMP)
+    # Adjust trainer config for QAT (shorter epochs, lower lr, no AMP).
+    # Disabling AMP roughly doubles activation memory at the same batch size, which
+    # OOM'd on 24GB cards at img_size 512 (e.g. job 811098) — halve batch size to
+    # compensate.
     if args.stage == "qat":
         trainer_cfg = replace(trainer_cfg, epochs=100, lr=1e-5, use_amp=False)
+        data_cfg = replace(data_cfg, batch_size=max(1, data_cfg.batch_size // 2))
 
     # Setup paths
     # init_suffix distinguishes a pretrained-init sweep from the from-scratch one so
@@ -265,9 +269,12 @@ def run_segmentation(args):
         data_cfg = replace(data_cfg, **exp_cfg.get("data", {}))
         trainer_cfg = replace(trainer_cfg, **exp_cfg.get("trainer", {}))
 
-    # Adjust trainer config for QAT (shorter epochs, lower lr, no AMP)
+    # Adjust trainer config for QAT (shorter epochs, lower lr, no AMP). Disabling AMP
+    # roughly doubles activation memory at the same batch size — halve it to compensate
+    # (see the matching fix in run_detection).
     if args.stage == "qat":
         trainer_cfg = replace(trainer_cfg, epochs=100, lr=1e-5, use_amp=False)
+        data_cfg = replace(data_cfg, batch_size=max(1, data_cfg.batch_size // 2))
 
     # Setup paths
     stage_suffix = {"fp32": "fp32", "qat": "qat", "int8": "int8"}[args.stage]

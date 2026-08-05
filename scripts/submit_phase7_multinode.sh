@@ -133,7 +133,7 @@ if [ "$RUN_QAT" = true ]; then
             qat_job_ids+=("DRY_RUN_ID")
         else
             echo "Submitting: $job_name (depends on FP32 job $depend_on)"
-            output=$(sbatch --job-name="$job_name" --time="$TIME" --mem="$MEM" --gpus="$GPUS" --partition="$PARTITION" --output="$log_file" --dependency="afterok:$depend_on" scripts/slurm/det_seg.sbatch detection qat "$model" "$EXPERIMENT" "$extra_args" 2>&1)
+            output=$(sbatch --job-name="$job_name" --time="$TIME" --mem="$MEM" --gpus="$GPUS" --partition="$PARTITION" --output="$log_file" --dependency="afterok:$depend_on" --kill-on-invalid-dep=yes scripts/slurm/det_seg.sbatch detection qat "$model" "$EXPERIMENT" "$extra_args" 2>&1)
             job_id=$(echo "$output" | grep -oP 'Submitted batch job \K[0-9]+' || echo "")
             if [ -z "$job_id" ]; then
                 echo "  ERROR: $output"
@@ -169,7 +169,7 @@ if [ "$RUN_QAT" = true ]; then
                 echo "[DRY-RUN] sbatch --job-name=$job_name --time=$TIME --mem=$MEM --gpus=$GPUS --partition=$PARTITION --output=$log_file --dependency=afterok:$depend_on scripts/slurm/det_seg.sbatch detection int8 $model $EXPERIMENT $extra_args"
             else
                 echo "Submitting: $job_name (depends on QAT job $depend_on)"
-                output=$(sbatch --job-name="$job_name" --time="$TIME" --mem="$MEM" --gpus="$GPUS" --partition="$PARTITION" --output="$log_file" --dependency="afterok:$depend_on" scripts/slurm/det_seg.sbatch detection int8 "$model" "$EXPERIMENT" "$extra_args" 2>&1)
+                output=$(sbatch --job-name="$job_name" --time="$TIME" --mem="$MEM" --gpus="$GPUS" --partition="$PARTITION" --output="$log_file" --dependency="afterok:$depend_on" --kill-on-invalid-dep=yes scripts/slurm/det_seg.sbatch detection int8 "$model" "$EXPERIMENT" "$extra_args" 2>&1)
                 job_id=$(echo "$output" | grep -oP 'Submitted batch job \K[0-9]+' || echo "")
                 if [ -z "$job_id" ]; then
                     echo "  ERROR: $output"
