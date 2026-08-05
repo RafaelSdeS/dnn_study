@@ -17,7 +17,7 @@ Status before launching more training or trusting any existing mAP number.
 | 5 | QAT/INT8 support | ✓ | `build_qat_detector()` ready |
 | 6 | Segmentation stubs | ✓ | Loaders + trainer placeholders |
 | 7 | CLI + SLURM | ✓ | `scripts/train_det_seg.py` + YAML configs |
-| 8 | Cross-phase analysis | ✓ | `scripts/phase7_analysis.py` |
+| 8 | Cross-phase analysis | ✓ | `notebooks/phase_7_detection_segmentation_analysis/phase7_results_analysis.ipynb` |
 
 ## Quick Start — Run FP32 Detection Training
 
@@ -76,8 +76,8 @@ Results saved to `outputs/detection_segmentation/phase7/ssd_<model>_fp32/`:
 4. **Re-run QAT/INT8** (H2: is quantization robustness stable?) — already run once, but on top of
    the broken FP32 checkpoints, so not yet diagnostic.
 5. **Extend to segmentation** (reuse same trainer pattern) — no training run yet, infrastructure only.
-6. **Cross-phase analysis** (`python scripts/phase7_analysis.py`) — currently prints H1–H4 against
-   the unreliable mAP data; rerun once FP32 is fixed.
+6. **Cross-phase analysis** (`notebooks/phase_7_detection_segmentation_analysis/phase7_results_analysis.ipynb`)
+   — tests H1–H4, re-run once more FP32/QAT/INT8 results land.
 
 ## Ground Rules Enforced
 

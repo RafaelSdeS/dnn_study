@@ -248,7 +248,7 @@ an SSD head over 3 backbones. Segmentation has data-loading + trainer scaffoldin
 (`create_voc_segmentation_loaders`, `docs/PHASE7_LOG.md` Stage 6) but no actual segmentation
 training run yet — "Full segmentation if detection is stable" is still an open follow-on per that
 log. CLI: `scripts/train_det_seg.py`. Results: `outputs/detection_segmentation/phase7/`. Analysis
-joining detection to Phase 3 classification: `scripts/phase7_analysis.py`, `ideas/PHASE7_PLAN.md`,
+joining detection to Phase 3 classification: `notebooks/phase_7_detection_segmentation_analysis/`, `ideas/PHASE7_PLAN.md`,
 `docs/PHASE7_LOG.md`, `docs/PHASE7_QUICKSTART.md`, `docs/PHASE7_MULTINODE.md`.
 
 Extend the kernel-restriction findings (Phases 2–3) to object detection and semantic segmentation, testing whether the accuracy/efficiency trade-off observed in classification holds for denser prediction tasks. Directly addresses the research objective's detection/segmentation scope, which Phases 1–6 (classification only) do not cover.
@@ -261,7 +261,7 @@ Models: reuse Phase 3's Pareto-optimal backbones (Bottleneck, Fire) as feature e
 - ✅ INT8 conversion — detection
 - ✅ FP32 vs INT8 evaluation (mAP for detection) — segmentation mIoU not yet run
 - ✅ Compare small-kernel vs large-kernel backbones on mAP, latency, and model size
-- ✅ Quantization robustness comparison (does the QAT-stability ranking from Phase 3 transfer to detection heads?) — H1–H4 in `scripts/phase7_analysis.py`
+- ✅ Quantization robustness comparison (does the QAT-stability ranking from Phase 3 transfer to detection heads?) — H1–H4 in `notebooks/phase_7_detection_segmentation_analysis/phase7_results_analysis.ipynb`
 - ✅ Determine whether the classification kernel-size trade-off transfers to dense prediction tasks — detection only; segmentation still open
 
 ---

@@ -747,14 +747,18 @@ before submitting the full PCAD job.
 
 ## Task 9 — Cross-Backbone, Cross-Phase, and Winograd-Latency Analysis
 
-**Status: partially implemented, as a script instead of a notebook, with a narrower scope than
-planned below.** `scripts/phase7_analysis.py` exists and does join Phase 3 classification to Phase
-7 detection results and test H1–H4 — but it only prints to console (no `phase7_comparison.csv`
-saved, no figures, no notebook-based visualizations as this task originally specified). It's also
-currently blocked by the anchor-recall issue documented in `ideas/BEST_MODELS.md`'s Phase 7
-section — any H1–H4 conclusions it prints are not yet trustworthy. If this task is picked back up,
-follow the current repo convention: a notebook (if still wanted) would live under
-`notebooks/phase_7_detection_segmentation_analysis/`, not `notebooks/analysis/`.
+**Status: implemented as planned**, as a notebook —
+`notebooks/phase_7_detection_segmentation_analysis/phase7_results_analysis.ipynb` — matching the
+current repo convention every other executed phase (5/6/9) uses. Supersedes and replaces the
+earlier `scripts/phase7_analysis.py` stub (deleted: its H2–H4 were unimplemented `print("TODO")`,
+and its run-dir parser had drifted from the current `ssd_<model>_<stage>[_pretrained]_<exp>`
+naming). The notebook loads runs directly off disk, computes per-run anchor-fix provenance
+(`git merge-base --is-ancestor 686b419 <hash>`), and only lets H1/H3 use post-fix, complete runs —
+so the anchor-recall issue documented in `ideas/BEST_MODELS.md`'s Phase 7 section can't silently
+corrupt a conclusion. As of this writing only `alexnet_bottleneck` has a complete, valid,
+non-pretrained FP32 run and H2 (INT8) is fully blocked (no INT8 detection metrics exist yet) — see
+`docs/PHASE7_LOG.md` Stage 10 / A4-A5 for current data status; re-run the notebook as more PCAD
+results land.
 
 **What (original plan):** `notebooks/phase_7_detection_segmentation_analysis/phase7_results_analysis.ipynb` — joins Phase 7's mAP/mIoU results to
 Phase 3's classification accuracy and Phase 6's latency/Winograd-eligibility data (`model_details.csv`,
@@ -788,10 +792,10 @@ finding transfer" is a comparison question, not something a single phase's numbe
 Phase 6's profiling JSON outputs, Phase 7's own `phase7_detection_comparison.csv`/
 `phase7_segmentation_comparison.csv` (Task 8 output).
 
-**Outputs (as planned; not produced by the actual `scripts/phase7_analysis.py` implementation):**
-Figures (`results/figures_generated/phase_7_detection_segmentation/phase7_*`),
-`results/phase_7_detection_segmentation_analysis/phase7_comparison.csv`, updated
-`TODO.md`/`ideas/BEST_MODELS.md` entries.
+**Outputs:** Figures (`results/figures_generated/phase_7_detection_segmentation/phase7_*`),
+`results/phase_7_detection_segmentation_analysis/phase7_comparison.csv` — both now produced by the
+notebook. `TODO.md`/`ideas/BEST_MODELS.md` updates still pending a full A4 re-run (see
+`docs/PHASE7_LOG.md` Stage 10).
 
 **Dependencies:** Tasks 1–8 complete with at least FP32+INT8 results for all 3 backbones × 2 tasks.
 

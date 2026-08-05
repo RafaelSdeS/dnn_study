@@ -98,6 +98,9 @@ Phase 7.
 - `scripts/phase7_analysis.py`: joins Phase 7 detection/segmentation to Phase 3 classification
 - Tests hypotheses H1-H4 (small-kernel transfer, quantization robustness, RF sensitivity, head latency)
 - Ready to run once Phase 7 FP32 results available
+- **Superseded:** replaced by `notebooks/phase_7_detection_segmentation_analysis/phase7_results_analysis.ipynb`
+  (see A5 below) — the script's H2-H4 were unimplemented stubs and its run-dir parser had drifted
+  from the current `ssd_<model>_<stage>[_pretrained]_phase7_detection` naming; deleted.
 
 ---
 
@@ -163,25 +166,56 @@ Phase 7.
 - **A4 attempt 2 (in progress, PCAD, jobs 809701-809709):** FP32 809701-703 → QAT 809704-706 → INT8
   809707-709, queued cleanly (no `DependencyNeverSatisfied`). Not yet confirmed past first epoch as
   of this log entry — cluster (`tupi` partition) had other users' jobs ahead in queue.
+- **A4 progress since:** `alexnet_bottleneck` FP32/QAT (`_phase7_detection`) completed post-fix
+  with valid mAP (~0.21 both stages); `alexnet_tv` QAT also completed post-fix (mAP 0.147). A
+  second submission with backbone pretraining (`_pretrained` suffix, from Phase 3 Tiny-ImageNet
+  checkpoints) is in flight: `bottleneck` FP32/QAT complete, `fire` FP32 running (job 812165), `tv`
+  FP32 queued (job 812166). No INT8 detection run has produced metrics — the one attempt (job
+  811101) crashed on uncalibrated observers (`min tensor(inf) should be less than max
+  tensor(-inf)`), unfixed. Segmentation (Part B) untouched.
+
+---
+
+## Stage 10 — Cross-Phase Analysis Notebook ✓
+
+- Replaced `scripts/phase7_analysis.py` (H2-H4 unimplemented stubs; run-dir parser broken for the
+  current `_pretrained` naming) with
+  `notebooks/phase_7_detection_segmentation_analysis/phase7_results_analysis.ipynb`, matching the
+  notebook-based analysis convention every other executed phase (5/6/9) already uses.
+- Parses every run directory directly off disk (regex on `ssd_<model>_<stage>[_pretrained]_<exp>`),
+  computes per-run provenance via `git merge-base --is-ancestor 686b419 <hash>`, and only allows
+  H1/H3 to plot runs that are both post-anchor-fix and complete — so a future stale/superseded run
+  can't silently corrupt a hypothesis test the way the pre-Stage-9 numbers did.
+- H2 (quantization robustness) is explicitly reported as blocked (no INT8 metrics exist yet) rather
+  than silently skipped.
+- H4 defaults to the recorded per-run `latency_ms_per_image` (already measured during training) and
+  only builds/profiles a live model if `RUN_PROFILING=True` is set by hand — never runs on the PCAD
+  front-end.
+- Phase 8 notebook intentionally **not** created: `ideas/PHASE8_PLAN.md` Tasks 1-6 (models,
+  registry, `configs/experiments/phase8.yaml`) don't exist yet, so a notebook now would be an empty
+  shell. Build it once at least FP32 results exist for the seven Phase 8 models.
 
 ---
 
 ## Implementation Status
 
-**Infrastructure:** All 9 stages complete and smoke-tested.
+**Infrastructure:** All 9 training-side stages complete and smoke-tested; Stage 10 (analysis
+notebook) also complete.
 
-**Superseded:** The FP32/QAT/INT8 runs below (`phase7_detection`, `_minratio02` anchor-config
-retry, `_diag_256`, `_diag_512`) all trained against the broken anchor config fixed in Stage 9.
-Validation mAP was 0.4–7.1% across every one of them — far below a working SSD's expected
-40–70%+ on VOC, consistent with the anchor-recall check never having been run to completion before
-those runs (see Stage 9 for the root cause). **Do not cite these numbers; they are invalid, not
-just low.** New training with the Stage 9 fix has not happened yet.
+**Superseded:** The FP32/QAT/INT8 runs below (`phase7_detection`'s original fire/tv FP32 runs,
+`_minratio02` anchor-config retry, `_diag_256`, `_diag_512`, `_early_30ep`) all trained against the
+broken anchor config fixed in Stage 9. Validation mAP was 0.4–7.1% across every one of them — far
+below a working SSD's expected 40–70%+ on VOC, consistent with the anchor-recall check never having
+been run to completion before those runs (see Stage 9 for the root cause). **Do not cite these
+numbers; they are invalid, not just low.** Post-Stage-9 training has since produced valid numbers
+for `alexnet_bottleneck` (FP32/QAT, both variants) and `alexnet_tv` QAT — see A4 progress above and
+the notebook's Run Inventory cell for the current, disk-sourced state.
 
 **Next:**
-1. **A4** — retrain FP32→QAT→INT8 on PCAD for all 3 backbones with the corrected config (1000/100
-   epochs, patience 50 — Stage 9). In progress: attempt 2 running as jobs 809701-809709 (see Stage 9
-   log above); not yet confirmed complete.
-2. **A5** — re-run `scripts/phase7_analysis.py` against the new results to actually test H1–H4.
+1. **A4** — finish the in-flight `_pretrained` FP32/QAT/INT8 chain for `fire`/`tv` on PCAD, and fix
+   the INT8 observer-calibration crash (job 811101) so H2 becomes testable.
+2. **A5** — re-run `notebooks/phase_7_detection_segmentation_analysis/phase7_results_analysis.ipynb`
+   (Stage 10) once more results land to actually test H1–H4 across all three backbones.
 3. Segmentation (Part B) is unstarted: `build_deeplabv3_segmenter()` is still a hardcoded
    placeholder ignoring the project's own backbones, `SegmentationTrainer.fit()` is still a
    one-line stub, and the CLI's `run_segmentation()` still just prints "not yet implemented."
