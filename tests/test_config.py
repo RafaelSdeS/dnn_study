@@ -31,6 +31,8 @@ def test_every_experiment_config_resolves_into_dataclasses():
 
     for name in _experiment_names():
         experiment_cfg = load_config(f"experiments/{name}.yaml")
+        if "models" not in experiment_cfg:
+            continue  # Phase 7 configs (scripts/train_det_seg.py) use a per-model schema, not this one
         data_cfg = _build_data_config(base_data, experiment_cfg)
         trainer_cfg = _build_trainer_config(base_training, experiment_cfg)
         qat_cfg = _build_qat_config(base_qat, experiment_cfg)

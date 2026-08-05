@@ -40,7 +40,7 @@ configs/                  # YAML hyperparameters, loaded via configs/loader.py �
   data.yaml training.yaml qat.yaml profiling.yaml compression.yaml detection.yaml
   runtime/                # local.yaml, pcad.yaml — dataset root, conda env, per-runtime toggles
   slurm/                  # single_gpu.yaml, tupi_4090.yaml, beagle.yaml — partition/GPU/CPU/wall-time
-  experiments/            # default.yaml + per-run overrides (alexnet_3x3_gap, phase7_detection, phase7_diag_*, phase7_smoke, large_scale, ...)
+  experiments/            # default.yaml + per-run overrides (alexnet_3x3_gap, phase7_detection, phase7_smoke, large_scale, ...)
   models/alexnet_fp32.yaml   # per-model lr overrides (only this one remains)
 scripts/                  # CLI entry points (used instead of notebooks for PCAD/cluster runs)
   train.py                # `python -m scripts.train --experiment ... --runtime local|pcad` — classification FP32→QAT→INT8
@@ -53,7 +53,7 @@ scripts/                  # CLI entry points (used instead of notebooks for PCAD
                            #   --evaluate actually clusters the weights and measures real accuracy vs. FP32
   prune_channels.py        # Phase 9 Task 2: structured (channel) pruning CLI;
                            #   --finetune-epochs fine-tunes the pruned model then runs it through QAT->INT8
-  check_anchor_recall.py / diag_stage7.py / backfill_gzip.py  # one-off Phase 7 diagnostics / backfill tools
+  check_anchor_recall.py / backfill_gzip.py  # one-off Phase 7 diagnostics / backfill tools
   migrate_pcad_gitignored.sh  # merges gitignored artifacts (*.pth, *.log) left in pre-reorg folder names after a pull
   submit_phase7_simple.sh / submit_phase7_multinode.sh  # PCAD multi-node Phase 7 submission (simple vs FP32→QAT→INT8 chaining) — see docs/PHASE7_MULTINODE.md
   slurm/*.sbatch           # sbatch templates — train.sbatch/profile.sbatch submitted by cluster.py, det_seg.sbatch by the submit_phase7_*.sh scripts, others called directly
@@ -74,7 +74,7 @@ docs/                     # Documentation (flat): PHASE7_QUICKSTART.md, PHASE7_M
 ideas/                    # Research notes (flat):
   BEST_MODELS.md          #   cross-phase rankings & recommendations
   MODELS.md               #   architecture notes & design rationale
-  PHASE6_PLAN.md PHASE7_PLAN.md PHASE8_PLAN.md  # research & execution plans (6/7 executed, 8 planned only)
+  PHASE6_PLAN.md PHASE7_PLAN.md PHASE8_PLAN.md PHASE9_PLAN.md  # research & execution plans (6/7/9 executed, 8 planned only)
 outputs/                  # Training artifacts & logs
   detection_segmentation/ # Phase 7 detection/segmentation run outputs (SSD checkpoints/logs per model+config)
     phase7/

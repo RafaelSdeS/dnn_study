@@ -83,14 +83,14 @@ GPUS=1
 Results appear in:
 ```
 outputs/detection_segmentation/phase7/
-├── ssd_alexnet_bottleneck_fp32/
+├── ssd_alexnet_bottleneck_fp32_phase7_detection/
 │   ├── config.yaml
 │   ├── git_hash.txt
 │   ├── metrics.json
-│   └── ssd_alexnet_bottleneck_fp32_best.pth
-├── ssd_alexnet_fire_fp32/
+│   └── ssd_alexnet_bottleneck_fp32_phase7_detection_best.pth
+├── ssd_alexnet_fire_fp32_phase7_detection/
 │   └── ...
-├── ssd_alexnet_tv_fp32/
+├── ssd_alexnet_tv_fp32_phase7_detection/
 │   └── ...
 └── logs/
     ├── p7_bottleneck_12345.log

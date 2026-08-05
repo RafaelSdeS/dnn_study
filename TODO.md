@@ -289,7 +289,7 @@ For each variant:
 
 ---
 
-## Phase 9 — SqueezeNet-Style Bypass Ablation + Structured Compression ✅ (Task 1) / 🔧 (Tasks 2–3, tooling only)
+## Phase 9 — SqueezeNet-Style Bypass Ablation + Structured Compression ✅ (Tasks 1–3)
 
 Isolates whether Phase 4's `AlexNetFinalFireResidual` accuracy gain over Phase 3's `AlexNetFire`
 comes from the residual bypass alone, or requires its stem change too — the two were previously
@@ -302,12 +302,15 @@ plan: `ideas/PHASE9_PLAN.md`.
   bypass alone accounts for ~55% of Phase 4's full gain.** Runs:
   `outputs/pcad/phase_9_bypass_ablation/`, results CSVs:
   `outputs/pcad/results_aggregate/results_phase_9_fire_bypass*.csv`.
-- 🔧 **Task 2 — Structured channel pruning** (`scripts/prune_channels.py`): CLI built, prunes
-  `_AlexBottleneck`'s internal squeeze width, mechanics-only (forward-pass + shape validation, no
-  fine-tuning). No saved pruning results yet — not yet run to produce final numbers.
-- 🔧 **Task 3 — Compression measurement** (`scripts/measure_compression.py`): CLI built, compares
-  nominal INT8 vs Shannon-entropy vs k-means weight-clustering (16/32/64 clusters) bits/weight,
-  measurement-only (no changes to `ml/checkpoint.py`). No saved results yet.
+- ✅ **Task 2 — Structured channel pruning** (`scripts/prune_channels.py`): prunes
+  `_AlexBottleneck`'s internal squeeze width. Verified against the real PCAD-trained checkpoint at
+  ratio 0.4: params 385,000 → 207,399 (53.9% reduction), forward pass OK, every remaining conv
+  stays `groups=1`. Accuracy collapses without fine-tuning (top1=0.50%), as expected — a
+  fine-tuning loop to recover accuracy is out of scope for this phase.
+- ✅ **Task 3 — Compression measurement** (`scripts/measure_compression.py`): compares nominal
+  INT8 vs Shannon-entropy vs k-means weight-clustering (16/32/64 clusters) bits/weight. Full table
+  for `alexnet_fire`: INT8 nominal 8.00 bits/weight (0.489 MB) vs. entropy 7.19 (0.440 MB) vs.
+  k-means k=16/32/64 at 4/5/6 bits (0.245/0.306/0.367 MB).
 
 ---
 
