@@ -111,7 +111,7 @@ mantendo a arquitetura inteiramente compatível com aceleração Winograd.
 A Tabela~\ref{tab:comparison} resume os três modelos sob o mesmo protocolo de treino e avaliação.
 
 \begin{table}[htbp]
-\caption{Comparação entre restrição de kernel ingênua e com compensação \textit{bottleneck}}
+\caption{Comparação entre restrição de kernel ingênua e com compensação bottleneck}
 \label{tab:comparison}
 \centering
 \begin{tabular}{@{}lcccc@{}}
@@ -197,12 +197,14 @@ compatibilidade com aceleração Winograd. Com apenas 0,385M parâmetros, o
 quantização INT8, tornando-se o ponto mais eficiente do estudo até aqui em acurácia por megabyte
 entre modelos estáveis sob quantização.
 
+\begin{sloppypar}
 Este relatório cobre apenas o primeiro modelo de uma investigação mais ampla, que inclui outras
 famílias de compensação (\textit{Fire}, \textit{depthwise separable}, \textit{residual},
 \textit{squeeze-and-excitation}), arquiteturas híbridas finais combinando múltiplos mecanismos, e
 uma extensão a detecção de objetos (SSD sobre PASCAL VOC). Versões futuras deste relatório
 incorporarão essas comparações, além de medições diretas de latência e consumo de energia em
 hardware real para quantificar o ganho prático da aceleração Winograd nessas arquiteturas.
+\end{sloppypar}
 
 \begin{thebibliography}{00}
 
