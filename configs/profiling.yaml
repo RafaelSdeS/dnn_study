@@ -1,0 +1,57 @@
+# Phase 6 Hardware Profiling Config
+# Profiling is inference-only; no training. Latency and efficiency depend on
+# layer shapes and dtypes, not trained weights.
+
+name: phase6
+
+# Layer profiling sweep parameters
+kernel_sizes: [2, 3, 5, 7, 9, 11]  # Single-layer sweep; 7/9/11 for FFT vs. Winograd crossover
+fft_min_kernel_size: 5              # FFT profiling only for kernel_size >= this (overhead too high for small kernels)
+
+layer_channels: [16, 32, 64, 128]  # Each value used as both in_ch and out_ch
+
+batch_sizes: [1, 8, 64]              # Batch 1 (latency-critical), 8 (realistic inference), 64
+                                       # (pushes toward compute-bound -- at batch<=8 every model
+                                       # sits under 1% of the 4090's FP32 peak, i.e. launch-overhead-
+                                       # bound, which makes any Winograd/kernel-size read on H1 unsafe)
+input_resolutions: [64, 128]        # Tiny ImageNet (64x64) + intermediate (128x128)
+
+groups_modes: ["dense", "depthwise"]  # dense: groups=1. depthwise: groups=in_ch (valid since
+                                       # in_ch==out_ch throughout this sweep). Tests whether
+                                       # Winograd speedup (H1) requires groups=1, or also shows
+                                       # up on depthwise convs (H2) -- layer-level, not just the
+                                       # n=2 whole-model case study.
+
+# Layer sweep: fp32 runs the full kernel x channel x batch x resolution x groups_mode grid;
+# int8 has no CUDA kernel in eager PyTorch, so it only runs at the base shape (batch=1, res=64),
+# each paired with an fp32_cpu baseline timed on the same CPU (same-hardware pair for H4).
+#   fp32:      6 kernels × 4 channels × 3 batch × 2 resolutions × 2 groups_modes = 288 configs
+#   int8 + fp32_cpu pair: 6 kernels × 4 channels × 2 groups_modes × 2 = 96 configs
+# FFT sweep: 4 kernels (>=5: 5,7,9,11) × 4 channels = 16 configs (dense only)
+# Custom Winograd F(2x2,3x3) sweep: 4 channels (kernel_size=3 only, dense) = 4 configs
+# Model sweep: 10 models × 2 precisions = 20 configs
+# Grand total: ~424 configs
+
+# Model profiling sweep parameters
+models:
+  - alexnet_tv
+  - alexnet_depthwisesep
+  - alexnet_bottleneck
+  - alexnet_final_bottleneck_residual
+  - alexnet_final_fire_residual
+  - vgg_style
+  - mobilenetv2
+  - alexnet_fire
+  - alexnet_dilated_gap
+  - resnet18tv  # third "baseline não restrito" named alongside mobilenetv2/vgg_style in report/ic_report.tex
+
+precisions: [fp32, int8]  # fp32 on GPU, int8 on CPU (shared by both the layer and model sweeps)
+                          # model sweep int8: build_qat_from_model (uncalibrated) + convert_to_int8
+                          # layer sweep int8: profile_layer_latency_int8 -- static PTQ, calibrated
+                          #   with a handful of random-input batches (there are no trained weights
+                          #   or real activations at the layer level to calibrate against anyway)
+                          # See INT8 Calibration Strategy in PHASE6_PLAN.md
+
+# Profiling parameters
+warmup: 50   # Warmup iterations (not timed)
+iters: 200   # Timed iterations (average)

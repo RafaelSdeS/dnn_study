@@ -47,6 +47,8 @@ data/
 # Logs
 # =========================
 *.log
+*.out
+*.err
 
 # =========================
 # OS files
@@ -58,3 +60,11 @@ Thumbs.db
 # Saved Models
 # =========================
 notebooks/models
+
+# =========================
+# LaTeX build artifacts
+# =========================
+*.aux
+*.fls
+*.fdb_latexmk
+*.synctex.gz

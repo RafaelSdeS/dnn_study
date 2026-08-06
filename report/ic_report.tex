@@ -1,0 +1,244 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{float}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\begin{document}
+
+\title{Restrição do Tamanho de Kernel em CNNs para Aceleração Winograd:\\
+Recuperação de Acurácia via Blocos \textit{Bottleneck}}
+
+\author{
+\IEEEauthorblockN{Rafael Silva de Souza}
+\IEEEauthorblockA{Instituto de Informática \\
+Universidade Federal do Rio Grande do Sul (UFRGS) \\
+rafesilvadesouza@gmail.com}
+\and
+\IEEEauthorblockN{Mateus Grellert}
+\IEEEauthorblockA{Instituto de Informática \\
+Universidade Federal do Rio Grande do Sul (UFRGS) \\
+Orientador}
+}
+
+\maketitle
+
+\begin{abstract}
+Aceleradores baseados no algoritmo de Winograd oferecem ganhos expressivos de eficiência para
+convoluções de kernel pequeno (2$\times$2, 3$\times$3), mas escalam mal para kernels grandes
+(5$\times$5, 11$\times$11), comuns em arquiteturas clássicas como a AlexNet. Este trabalho investiga
+o custo de restringir o tamanho de kernel de uma CNN e se esse custo pode ser recuperado sem
+reintroduzir kernels grandes. Treinamos variantes da AlexNet no Tiny ImageNet-200 (64$\times$64,
+200 classes) sob um pipeline FP32 $\rightarrow$ \textit{Quantization-Aware Training} (QAT)
+$\rightarrow$ INT8, comparando um baseline de kernel irrestrito, uma variante ingenuamente restrita
+a kernels 3$\times$3 e uma variante que adiciona blocos \textit{bottleneck} (1$\times$1
+$\rightarrow$ 3$\times$3 $\rightarrow$ 1$\times$1) a essa mesma restrição. A variante com
+\textit{bottleneck} (\texttt{AlexNetBottleneck}) atinge 44,62\% de acurácia top-1 em FP32 com
+apenas 0,385M parâmetros (4,49 MB) — superando a restrição ingênua em mais de 4 pontos percentuais
+com $6\times$ menos parâmetros — e apresenta a menor queda de acurácia sob quantização INT8 de
+todo o projeto (-0,08 p.p.). Os resultados sugerem que compensação estrutural leve, e não kernels
+maiores, é a via mais eficiente para recuperar acurácia em arquiteturas compatíveis com Winograd.
+Este é um relatório preliminar de iniciação científica voluntária, cobrindo um primeiro modelo
+representativo; comparações com as demais famílias de arquiteturas estudadas no projeto
+(compensação por \textit{Fire}, \textit{depthwise separable}, residual, entre outras) serão
+incluídas em versões futuras.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Winograd, convolução, quantização, redes neurais convolucionais, kernel bottleneck, INT8
+\end{IEEEkeywords}
+
+\section{Introdução}
+
+O algoritmo de convolução de Winograd~\cite{lavin2016fast} reduz o número de multiplicações
+necessárias para convoluções de kernel pequeno, sendo a base de aceleradores de inferência
+amplamente usados em hardware embarcado. Sua vantagem, porém, desaparece rapidamente conforme o
+kernel cresce: a complexidade da transformada cresce de forma super-linear com o tamanho do filtro,
+tornando kernels grandes (5$\times$5, 11$\times$11) pouco atrativos nesses aceleradores.
+
+Isso cria uma tensão direta com arquiteturas clássicas de visão computacional. A AlexNet
+\cite{krizhevsky2012imagenet}, por exemplo, depende de kernels 11$\times$11 e 5$\times$5 em suas
+primeiras camadas para capturar contexto espacial amplo. Restringir ingenuamente esses kernels a
+2$\times$2 ou 3$\times$3 — sem qualquer outra mudança arquitetural — reduz drasticamente a
+capacidade do modelo, já que cada camada passa a enxergar uma vizinhança muito menor da imagem.
+
+Este projeto investiga se essa perda de acurácia pode ser recuperada por meio de mecanismos de
+\emph{compensação estrutural} que mantêm todos os kernels no regime Winograd-amigável ($\leq$
+3$\times$3), em vez de simplesmente devolver kernels grandes ao modelo. Este relatório apresenta o
+primeiro resultado dessa investigação: blocos \textit{bottleneck} no estilo ResNet
+\cite{he2016deep} (redução de canais 1$\times$1 $\rightarrow$ convolução 3$\times$3 $\rightarrow$
+expansão 1$\times$1), aplicados a uma AlexNet com kernels restritos a 3$\times$3.
+
+\section{Metodologia}
+
+\subsection{Dados e configuração experimental}
+Todos os modelos foram treinados no Tiny ImageNet-200 (imagens 64$\times$64 RGB, 200 classes,
+\textit{split} 90/10 determinístico). O pipeline de treino segue três estágios: (i) treino FP32 do
+zero; (ii) \textit{Quantization-Aware Training} (QAT), inicializado a partir do melhor checkpoint
+FP32, com fusão Conv-BN-ReLU e \textit{fake quantization} nos módulos suportados
+\cite{jacob2018quantization}; (iii) conversão para INT8 (\textit{backend} fbgemm, inferência em
+CPU). Reportamos acurácia top-1 tanto para o modelo FP32 quanto para o modelo INT8 final, e a
+diferença entre ambos (\textit{QAT drop}) como medida de robustez à quantização.
+
+\subsection{Arquiteturas comparadas}
+Três variantes, treinadas sob o mesmo protocolo, permitem isolar o efeito da restrição de kernel e
+o efeito da compensação:
+
+\begin{itemize}
+\item \textbf{AlexNet (irrestrita)} — arquitetura AlexNet padrão, kernels de até 11$\times$11,
+usada como referência interna do experimento.
+\item \textbf{AlexNet3x3-GAP} — mesma arquitetura, todos os kernels convolucionais restritos a
+3$\times$3, com \textit{head} de \textit{global average pooling} (GAP) no lugar de camadas
+totalmente conectadas.
+\item \textbf{AlexNetBottleneck} — kernels igualmente restritos a 3$\times$3, mas cada estágio é
+substituído por um bloco \textit{bottleneck} (1$\times$1 $\rightarrow$ 3$\times$3 $\rightarrow$
+1$\times$1, razão de redução 4$\times$) seguido de GAP.
+\end{itemize}
+
+O bloco \textit{bottleneck} preserva o campo receptivo efetivo da convolução 3$\times$3 central,
+mas usa as convoluções 1$\times$1 para comprimir e depois expandir os canais, aumentando a
+capacidade representacional por parâmetro sem introduzir nenhum kernel maior que 3$\times$3 —
+mantendo a arquitetura inteiramente compatível com aceleração Winograd.
+
+\section{Resultados}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{figures/kernel_restriction_cost.png}
+\caption{Acurácia FP32 (top-1) por arquitetura, contrastando \textit{baselines} de kernel
+irrestrito, restrição ingênua (3$\times$3, 2$\times$2) e estratégias de compensação exploradas no
+projeto. \texttt{SmallKernel}, \texttt{Residual} e \texttt{Fire-Residual} pertencem a fases
+posteriores deste estudo e serão detalhadas em relatórios futuros.}
+\label{fig:kernel_cost}
+\end{figure}
+
+A Tabela~\ref{tab:comparison} resume os três modelos sob o mesmo protocolo de treino e avaliação.
+
+\begin{table}[htbp]
+\caption{Comparação entre restrição de kernel ingênua e com compensação bottleneck}
+\label{tab:comparison}
+\centering
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Modelo} & \textbf{Params} & \textbf{Top-1} & \textbf{Top-1} & \textbf{$\Delta$QAT} \\
+ & \textbf{(M)} & \textbf{FP32 (\%)} & \textbf{INT8 (\%)} & \textbf{(p.p.)} \\
+\midrule
+AlexNet (irrestrita) & 57,82 & 32,20 & 26,28 & $-$5,93 \\
+AlexNet3x3-GAP        & 2,30  & 40,32 & 37,02 & $-$3,29 \\
+\textbf{AlexNetBottleneck} & \textbf{0,385} & \textbf{44,62} & \textbf{44,54} & \textbf{$-$0,08} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Dois resultados se destacam. Primeiro, a restrição de kernel por si só (\texttt{AlexNet3x3-GAP})
+já supera o baseline irrestrito neste protocolo — o \textit{head} GAP reduz drasticamente o
+\textit{overfitting} da camada totalmente conectada original, com $25\times$ menos parâmetros.
+Segundo, adicionar o bloco \textit{bottleneck} sobre essa mesma restrição de kernel recupera mais
+4,3 pontos percentuais de acurácia com $6\times$ menos parâmetros que a variante GAP simples, e
+praticamente elimina a perda de acurácia sob quantização INT8.
+
+A Fig.~\ref{fig:kernel_cost} situa esse resultado no panorama mais amplo do projeto, incluindo
+\textit{baselines} não restritos (MobileNetV2, VGG-Style, ResNet18) e outras estratégias de
+recuperação de acurácia (\textit{residual}, \textit{Fire}) exploradas em fases posteriores.
+
+A Fig.~\ref{fig:qat_stability} mostra a queda de acurácia sob QAT$\to$INT8 para arquiteturas
+representativas: modelos com compensação por \textit{bottleneck} e \textit{Fire} são
+substancialmente mais estáveis sob quantização do que restrições ingênuas de kernel.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{figures/quant_stability_bar.png}
+\caption{Queda de acurácia (p.p.) de FP32 para INT8 por arquitetura. Mecanismos de compensação
+(\textit{bottleneck}, \textit{Fire}) mantêm a acurácia quase intacta sob quantização, ao contrário
+de restrições de kernel sem compensação.}
+\label{fig:qat_stability}
+\end{figure}
+
+Por fim, a Fig.~\ref{fig:efficiency} agrega, em todo o conjunto de arquiteturas do projeto, a
+acurácia por megabyte de modelos Winograd-amigáveis (kernel $\leq$3$\times$3, com compensação)
+contra arquiteturas que dependem de kernels maiores.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{figures/winograd_efficiency_bar.png}
+\caption{Eficiência de acurácia (\% por MB), agregada por família de arquitetura Winograd-amigável
+vs. não amigável, em todo o conjunto de modelos avaliados no projeto.}
+\label{fig:efficiency}
+\end{figure}
+
+\section{Discussão}
+
+O padrão observado — restrição de kernel isolada perde acurácia, mas compensação estrutural leve a
+recupera quase por completo — é consistente com a literatura de arquiteturas eficientes: blocos
+\textit{bottleneck} \cite{he2016deep} e módulos \textit{Fire} \cite{iandola2016squeezenet} foram
+originalmente propostos para reduzir parâmetros sem restrição de kernel, mas o presente resultado
+indica que o mesmo mecanismo é igualmente eficaz quando o kernel já está restrito por uma
+necessidade externa (compatibilidade com Winograd), e não apenas por economia de parâmetros.
+
+A robustez do \texttt{AlexNetBottleneck} sob quantização (-0,08 p.p.) também é notável frente à
+variante GAP simples (-3,29 p.p.): a hipótese de trabalho é que as convoluções 1$\times$1 do
+\textit{bottleneck} produzem ativações com distribuições mais regulares, facilitando a
+calibração dos parâmetros de quantização — hipótese que pretendemos testar diretamente em
+trabalhos futuros deste projeto.
+
+\section{Conclusão e Trabalhos Futuros}
+
+Restringir o kernel de uma AlexNet a 3$\times$3 é custoso para a acurácia, mas esse custo é, em
+grande parte, recuperável por um mecanismo de compensação leve — o bloco \textit{bottleneck} —
+que não reintroduz nenhum kernel maior que 3$\times$3 e, portanto, preserva integralmente a
+compatibilidade com aceleração Winograd. Com apenas 0,385M parâmetros, o
+\texttt{AlexNetBottleneck} atinge 44,62\% de acurácia top-1 em FP32 e mantém 44,54\% após
+quantização INT8, tornando-se o ponto mais eficiente do estudo até aqui em acurácia por megabyte
+entre modelos estáveis sob quantização.
+
+\begin{sloppypar}
+Este relatório cobre apenas o primeiro modelo de uma investigação mais ampla, que inclui outras
+famílias de compensação (\textit{Fire}, \textit{depthwise separable}, \textit{residual},
+\textit{squeeze-and-excitation}), arquiteturas híbridas finais combinando múltiplos mecanismos, e
+uma extensão a detecção de objetos (SSD sobre PASCAL VOC). Versões futuras deste relatório
+incorporarão essas comparações, além de medições diretas de latência e consumo de energia em
+hardware real para quantificar o ganho prático da aceleração Winograd nessas arquiteturas.
+\end{sloppypar}
+
+\begin{thebibliography}{00}
+
+\bibitem{krizhevsky2012imagenet}
+A. Krizhevsky, I. Sutskever, and G. E. Hinton, ``ImageNet classification with deep convolutional
+neural networks,'' in \textit{Advances in Neural Information Processing Systems (NeurIPS)}, 2012.
+
+\bibitem{lavin2016fast}
+A. Lavin and S. Gray, ``Fast algorithms for convolutional neural networks,'' in \textit{Proc. IEEE
+Conf. Computer Vision and Pattern Recognition (CVPR)}, 2016.
+
+\bibitem{iandola2016squeezenet}
+F. N. Iandola, S. Han, M. W. Moskewicz, K. Ashraf, W. J. Dally, and K. Keutzer, ``SqueezeNet:
+AlexNet-level accuracy with 50x fewer parameters and $<$0.5MB model size,'' \textit{arXiv preprint
+arXiv:1602.07360}, 2016.
+
+\bibitem{he2016deep}
+K. He, X. Zhang, S. Ren, and J. Sun, ``Deep residual learning for image recognition,'' in
+\textit{Proc. IEEE Conf. Computer Vision and Pattern Recognition (CVPR)}, 2016.
+
+\bibitem{sandler2018mobilenetv2}
+M. Sandler, A. Howard, M. Zhu, A. Zhmoginov, and L.-C. Chen, ``MobileNetV2: Inverted residuals and
+linear bottlenecks,'' in \textit{Proc. IEEE Conf. Computer Vision and Pattern Recognition (CVPR)},
+2018.
+
+\bibitem{jacob2018quantization}
+B. Jacob \textit{et al.}, ``Quantization and training of neural networks for efficient
+integer-arithmetic-only inference,'' in \textit{Proc. IEEE Conf. Computer Vision and Pattern
+Recognition (CVPR)}, 2018.
+
+\bibitem{le2015tiny}
+Y. Le and X. Yang, ``Tiny ImageNet visual recognition challenge,'' Stanford CS231N Report, 2015.
+
+\end{thebibliography}
+
+\end{document}

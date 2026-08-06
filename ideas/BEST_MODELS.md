@@ -1,6 +1,6 @@
 # Summary
 
-Results after implementing phases 1, 2, and 3. **Most baselines (MobileNetV2, ResNet18, VGGStyle) show superior accuracy to pure AlexNet models, but Phase 2–3 AlexNet variants achieve competitive accuracy at 100–1000× smaller model sizes.**
+Results after implementing phases 1–4, 6, and 9. **Most baselines (MobileNetV2, ResNet18, VGGStyle) show superior accuracy to pure AlexNet models, but Phase 2–4 AlexNet variants achieve competitive accuracy at 100–1000× smaller model sizes.** Phase 4's final hybrid architectures push AlexNet-family accuracy past 49% for the first time — within 3pp of VGGStyle — while Phase 9 shows a single residual bypass, with zero added parameters, closes most of that gap on its own. Phase 7 (detection) is trained end-to-end but its results are not yet trustworthy — see the Phase 7 section below. Phase 5 is this document plus `results/phase_5_cross_phase_results_analysis/`; Phase 8 is planned only, no results yet.
 
 ---
 
@@ -11,12 +11,22 @@ Results after implementing phases 1, 2, and 3. **Most baselines (MobileNetV2, Re
 | 1 | **MobileNetV2** | 1 | 57.99% | 2.48 | 28.75 | 2.01 |
 | 2 | **ResNet18** | 1 | 53.91% | 11.28 | 129.21 | 0.42 |
 | 3 | **VGGStyle** | 1 | 51.81% | 2.41 | 27.58 | 1.88 |
-| 4 | **AlexNetResidual** | 3 | **48.01%** | 60.67 | 694.41 | 0.07 |
-| 5 | **AlexNetSmallKernel** | 2 | **45.84%** | 1.60 | 18.35 | 2.50 |
-| 6 | **AlexNetStacked** | 2 | **44.56%** | 60.48 | 692.25 | 0.06 |
-| 7 | **AlexNetBottleneck** | 3 | **44.62%** | 0.39 | 4.49 | **9.93** |
-| 8 | **AlexNetDepthwiseSep** | 3 | **44.39%** | 0.31 | 3.65 | **12.15** |
-| 9 | **AlexNetFire** | 3 | **43.98%** | 0.52 | 5.99 | **7.34** |
+| 4 | **AlexNetFinalFireResidual** | 4 | **49.79%** | 0.70 | 8.09 | 6.15 |
+| 5 | **AlexNetFireBypass** | 9 | **49.03%** | 0.52 | 5.99 | **8.18** |
+| 6 | **AlexNetResidual** | 3 | **48.01%** | 60.67 | 694.41 | 0.07 |
+| 7 | **AlexNetSmallKernel** | 2 | **45.84%** | 1.60 | 18.35 | 2.50 |
+| 8 | **AlexNetFinalBottleneckResidual** | 4 | **45.10%** | 0.57 | 6.65 | 6.78 |
+| 9 | **AlexNetBottleneck** | 3 | **44.62%** | 0.39 | 4.49 | **9.93** |
+| 10 | **AlexNetStacked** | 2 | **44.56%** | 60.48 | 692.25 | 0.06 |
+| 11 | **AlexNetDepthwiseSep** | 3 | **44.39%** | 0.31 | 3.65 | **12.15** |
+| 12 | **AlexNetFire** | 3 | **43.98%** | 0.52 | 5.99 | 7.34 |
+| 13 | **AlexNetFinalDepthwiseFire** | 4 | **43.46%** | 0.47 | 5.51 | 7.88 |
+| 14 | **AlexNetFinalBottleneckFire** | 4 | **42.29%** | 0.51 | 5.88 | 7.19 |
+
+All 9 original Phase 1–3 models are still here, just renumbered — rows 4, 5, 8, 13, and 14 are the
+new Phase 4/9 additions. **The "Analysis by Dimension" section below still discusses the
+Phase 1–3-only picture** (written before Phase 4/9 existed) — read it with the new rows above in
+mind; Phase 4 and 9 get their own dedicated analysis further down instead.
 
 ---
 
@@ -141,11 +151,197 @@ Results after implementing phases 1, 2, and 3. **Most baselines (MobileNetV2, Re
 
 ---
 
-## Next Steps (Phase 4+)
+## Next Steps
 
-1. **Investigate AlexNetSmallKernel QAT** — Why the 9.89pp drop? Recalibrate batch norm or try different QAT schedules.
-2. **Debug AlexNetSE** — Was initialization the issue? Try different seeds or training hyperparameters.
-3. **Benchmark Winograd compatibility** — Verify that Bottleneck & Fire leverage small-kernel acceleration on actual hardware.
-4. **Architecture search** — AutoML over compensation mechanisms for Pareto-optimal size/accuracy/quantization trade-offs.
-4. **Task transfer** — Test best models on object detection and semantic segmentation (Phase 4–5 scope).
-6. **Fine-tune Tier 1 models** for deployment scenarios (mobile, edge, server).
+1. **Investigate AlexNetSmallKernel QAT** — Why the 9.89pp drop? Recalibrate batch norm or try different QAT schedules. Still open.
+2. **Debug AlexNetSE** — Was initialization the issue? Try different seeds or training hyperparameters. Still open.
+3. ~~**Benchmark Winograd compatibility** — Verify that Bottleneck & Fire leverage small-kernel acceleration on actual hardware.~~ **Done — see Phase 6.**
+4. **Architecture search** — AutoML over compensation mechanisms for Pareto-optimal size/accuracy/quantization trade-offs. Not started (see "Phase 10" in `TODO.md`, contingent on Phase 8).
+5. ~~**Task transfer** — Test best models on object detection and semantic segmentation.~~ **In progress — see Phase 7. Detection trains end-to-end but results are blocked on an unresolved anchor-recall issue; segmentation has no training run yet.**
+6. **Fine-tune Tier 1 models** for deployment scenarios (mobile, edge, server). Not started.
+7. **Fix Phase 7's anchor-recall blocker** and rerun detection before trusting any backbone comparison there.
+
+---
+
+## Phase 6 — Hardware Profiling (Winograd Efficiency)
+
+Measured on a real RTX 4090 (PCAD `tupi5`), batch=1, 64×64 input — the first phase to check hardware
+behavior directly instead of relying on FLOPs/params as a proxy. Full methodology, statistical tests, and
+data-quality corrections in `notebooks/phase_6_hardware_profiling_analysis/hardware_profiling_phase6.ipynb`;
+hypotheses/acceptance-criteria source in `ideas/PHASE6_PLAN.md`.
+
+| Model | Winograd-eligible | FP32 Latency (ms) | INT8 Latency (ms) | FP32 GFLOP/s | FP32 Top-1 | Efficiency (Acc/ms) |
+|---|---|---|---|---|---|---|
+| `alexnet_tv` | ⚠️ Only trailing 3×3 layers | 0.49 | 0.98 | 390.1 | 32.89% | 67.6 |
+| `alexnet_depthwisesep` | ❌ None (depthwise) | 0.96 | 0.94 | 42.7 | 44.39% | 46.3 |
+| `alexnet_bottleneck` | ✅ Dense 3×3 branch | 1.54 | 0.86 | 52.7 | 44.62% | 28.9 |
+| `alexnet_final_bottleneck_residual` | ✅ Dense 3×3 branch | 1.93 | 1.27 | 57.8 | 45.10% | 23.4 |
+| `alexnet_final_fire_residual` | ✅ Fire expand branch | 1.81 | 1.14 | 61.9 | 49.79% | 27.5 |
+| `vgg_style` | ✅ Fully (every conv) | 1.15 | 1.29 | 405.5 | 51.81% | 45.2 |
+| `mobilenetv2` | ❌ None (depthwise) | 1.47 | 4.24 | 37.3 | 57.99% | 39.4* |
+| `alexnet_fire` | ✅ Fire expand branch | 1.65 | 0.79 | 218.1 | 43.98% | 26.6 |
+
+\*`mobilenetv2` INT8 top-1 accuracy is unmeasured (Phase 1–4 training gap, unrelated to Phase 6) — its
+INT8 latency (4.24ms) is unusually high, plausibly an uncalibrated-quantization fusion penalty specific
+to its inverted-residual/depthwise structure; efficiency column is FP32-only for this model.
+
+**Hypothesis results** (full statistical detail in the notebook):
+
+- **H1 (dense 3×3 gets Winograd acceleration): PARTIAL.** A paired Wilcoxon test across 32 layer-config
+  groups confirms 3×3 is *systematically* faster than 5×5 (p=4.7e-10) — a real, structural effect, not
+  noise. But the stricter per-group signal (3×3 beats 2×2 *and* clears a 1.8× margin vs. 5×5) only holds
+  in 31% of groups, well under a 60% bar — the effect is real but inconsistent across batch/resolution
+  combinations, likely because larger batches/resolutions become memory-bound rather than compute-bound.
+  The kernel-name trace detector (`profile_kernel_trace`) never fired at all — best-effort as documented,
+  provides no confirmation either way.
+- **H2 (depthwise doesn't benefit): PASS (n=2, case-study level).** `alexnet_depthwisesep`/`mobilenetv2`
+  median 40.0 GFLOP/s vs. 91.2 GFLOP/s for the dense-conv group.
+- **H3 (Pareto frontier beats baseline on accuracy/latency): 4/5 PASS.** `alexnet_bottleneck`,
+  `alexnet_final_bottleneck_residual`, `alexnet_final_fire_residual`, and `vgg_style` all beat
+  `alexnet_tv`'s accuracy/latency ratio. `mobilenetv2` does not — `alexnet_tv`'s FP32 latency turned out
+  to be the fastest of all 16 profiled configs (0.49ms despite a 662MB model), and `mobilenetv2`'s INT8
+  accuracy can't be checked (unmeasured). Not smoothed over — see notebook for full discussion.
+- **H4 (INT8 preserves latency ranking vs. FP32): PASS, unambiguous.** Spearman ρ=0.9999 (n=96 layer
+  configs) — FP32 latency is a reliable proxy for INT8 latency ranking.
+
+**Practical takeaway:** kernel size alone doesn't predict Winograd-friendliness — `alexnet_depthwisesep`
+and `mobilenetv2` use 3×3 kernels but see none of the acceleration `vgg_style`/the bottleneck-fire hybrids
+show, because Winograd requires *dense* (`groups=1`) convolutions. `alexnet_fire` (INT8: 456 GFLOP/s) and
+`alexnet_tv` (FP32: 390 GFLOP/s) post the highest raw compute throughput in this sweep, though `vgg_style`
+is the most consistently Winograd-eligible architecture (100% dense 3×3).
+
+**Known limitations:** single-GPU (RTX 4090 only, no RTX 4060 cross-comparison yet); uncalibrated INT8
+observers (±5–10% latency bias per `PHASE6_PLAN.md`); `winograd_speedup_info` in the raw JSONL is not
+per-kernel-size (see notebook Phase 1 for the correction applied). Full details in the notebook's
+Limitations section.
+
+---
+
+## Phase 4 — Final Architecture & Compression
+
+Combines Phase 3's best mechanisms (Bottleneck, Fire, Residual, Depthwise-Separable) into four
+hybrid architectures, then separately tests how far each can be compressed below plain INT8. Full
+data: `results/phase_4_compression_and_final_architecture_training/`; notebooks:
+`notebooks/phase_4_compression_and_final_architecture_training/`.
+
+### Final hybrid architectures — FP32 vs INT8
+
+| Model | Mechanisms combined | FP32 Top-1 | INT8 Top-1 | QAT Δ | Size (MB) | Acc/MB |
+|---|---|---|---|---|---|---|
+| **AlexNetFinalFireResidual** | Fire + residual shortcuts | 49.79% | 49.20% | –0.59pp | 8.09 | 6.15 |
+| AlexNetFinalBottleneckResidual | Bottleneck + residual shortcuts | 45.10% | 45.98% | +0.88pp ✓ | 6.65 | 6.78 |
+| AlexNetFinalDepthwiseFire | Depthwise-separable stem + Fire body | 43.46% | 42.79% | –0.67pp | 5.51 | 7.88 |
+| AlexNetFinalBottleneckFire | Bottleneck stem + Fire body | 42.29% | 44.00% | +1.71pp ✓✓ | 5.88 | 7.19 |
+
+### Ablation — does combining mechanisms help, or does one alone explain the gain?
+
+Each hybrid compared against its two single-mechanism Phase 3 parents (no retraining, direct lookup):
+
+| Hybrid | Hybrid FP32 | Best single-mechanism parent | Parent FP32 | Δ vs best parent |
+|---|---|---|---|---|
+| **AlexNetFinalFireResidual** | 49.79% | AlexNetResidual | 48.01% | **+1.78pp — only combo that beats both parents** |
+| AlexNetFinalBottleneckFire | 42.29% | AlexNetBottleneck | 44.62% | –2.34pp — combining hurts |
+| AlexNetFinalBottleneckResidual | 45.10% | AlexNetResidual | 48.01% | –2.91pp — combining hurts |
+| AlexNetFinalDepthwiseFire | 43.46% | AlexNetDepthwiseSep | 44.39% | –0.93pp — combining hurts |
+
+**Only Fire+Residual beats its best single-mechanism parent; the other three combinations
+underperform their own ancestor.** Combining mechanisms isn't automatically additive, and can
+actively hurt accuracy (Bottleneck+Residual: –2.91pp; Bottleneck+Fire: –2.34pp) — see Phase 9 below
+for how much of Fire+Residual's win is attributable to the bypass alone vs. its added stem.
+
+### Compression (Phase 4.1) — how far below plain INT8 can these go?
+
+5 models (`mobilenetv2`, `alexnet_bottleneck`, `alexnet_fire`, `alexnet_depthwisesep`,
+`alexnet_final_fire_residual`) pushed through INT8/INT4/INT2/ternary/binary, both PTQ and QAT, plus
+per-layer mixed precision. Mean across all 5 models per method:
+
+| Method | Mean Top-1 | Mean Drop (pp) | Mean Ratio | Mean Acc/MB |
+|---|---|---|---|---|
+| INT8 (anchor) | 47.40% | 0.76pp | 3.97× | 90.8 |
+| **Mixed INT4/8 (per-layer)** | 44.52% | **–0.19pp (gain)** | 7.05× | 215.3 |
+| INT4 QAT | 43.31% | 1.02pp | 7.86× | 230.2 |
+| INT4 PTQ | 25.31% | 22.85pp | 7.86× | 106.2 |
+| Ternary QAT | 26.06% | 22.10pp | 15.42× | 205.4 |
+| INT2 QAT | 17.40% | 30.75pp | 15.42× | 145.4 |
+| Binary QAT | 10.73% | 37.43pp | 29.70× | 164.8 |
+
+**Verdict:** Mixed-precision INT4/8 is the actual Pareto winner among the aggressive options — it
+beats plain INT8 on *both* accuracy (slight gain) and size (7.05× vs. 3.97×) by keeping the
+sensitive ~30% of layers at INT8 and pushing the rest to INT4. Pure INT4 QAT is close behind and
+simpler (uniform bit-width, no sensitivity analysis needed). Below INT4, retraining recovers
+meaningfully more than PTQ at the same bit-width (ternary QAT 26.1% vs. INT4 PTQ 25.3%, despite
+ternary being *more* aggressive) — but ternary/binary still cost 22–37pp and aren't viable without
+further work. Full per-model breakdown: `.../pareto_frontier.csv`.
+
+---
+
+## Phase 7 — Detection & Segmentation: anchor-recall bug fixed, retraining not yet run
+
+**Status: the table below is invalid, not just low — do not cite it.** Detection trains
+end-to-end (FP32 → QAT → INT8) for 3 backbones on PASCAL VOC via `scripts/train_det_seg.py`,
+producing real loss curves and checkpoints — but every one of these runs trained against a broken
+anchor-generator config, capping mAP regardless of backbone quality:
+
+| Model | Config | Best val mAP | Best epoch |
+|---|---|---|---|
+| alexnet_tv | phase7_detection | 7.14% | 27 |
+| alexnet_bottleneck | phase7_detection | 1.17% | 24 |
+| alexnet_bottleneck | phase7_detection_minratio02 | 0.96% | 28 |
+| alexnet_fire | phase7_detection | 0.50% | 25 |
+
+**Root cause found and fixed** (`docs/PHASE7_LOG.md` Stage 9): anchor recall was confirmed at
+0.76–0.80 for all 3 backbones (well under the 95% acceptance bar), caused by two bugs — a
+tap-index bug producing duplicate/degenerate pyramid levels, and `DefaultBoxGenerator`'s
+`min_ratio`/`max_ratio` linear scale interpolation badly mismatched to VOC's actual box-size
+distribution. Fixed via corrected tap indices + explicit percentile-matched anchor scales; recall
+is now 0.991/0.991/0.932 (bottleneck/fire/alexnet_tv) at 512px. The anchor-recall pre-flight gate
+in `scripts/train_det_seg.py` is re-enabled and confirmed working. Segmentation has data-loading +
+trainer scaffolding built (`docs/PHASE7_LOG.md` Stage 6) but no training run at all yet, and the
+segmenter/trainer/CLI are all still placeholders (Stage 9's "Next" section, Part B).
+
+**Before trusting any Phase 7 ranking:** retrain FP32→QAT→INT8 on PCAD with the corrected config
+(A4 in `docs/PHASE7_LOG.md` Stage 9) and replace the table above.
+
+---
+
+## Phase 9 — Bypass Ablation: does Phase 4's whole architecture change matter, or just the bypass?
+
+Phase 4's `AlexNetFinalFireResidual` (49.79% FP32) beats Phase 3's `AlexNetFire` (43.98% FP32) by
++5.81pp — but it changes two things at once versus Fire: it adds a 3×3 stride-2 stem *and* wraps
+every Fire stage in a residual shortcut. `AlexNetFireBypass` isolates the shortcut alone (Fire's
+exact stem, one identity bypass added, zero extra parameters) to find out which change is doing the
+work. Full plan: `ideas/PHASE9_PLAN.md`.
+
+| Run | Epochs | FP32 Top-1 | INT8 Top-1 | Quant. Δ |
+|---|---|---|---|---|
+| Initial (PCAD job 806654) | 66 | 47.05% | 47.16% | +0.11pp (gain) |
+| **Large-scale (final)** | **152** | **49.03%** | **49.86%** | **+0.84pp (gain)** |
+
+**The bypass-alone fraction of Phase 4's total gain grew substantially with more training.** The
+original ~55% estimate (git commit `924d553`) came from the 66-epoch initial run; the 152-epoch
+large-scale run shows bypass alone closing **87% of the FP32 gap** to `AlexNetFinalFireResidual`
+(5.05pp of 5.82pp) and **fully exceeding it on INT8** (49.86% vs. 49.20% — the bypass-only model,
+despite fewer total architectural changes, edges out the full Phase 4 hybrid once quantized). Zero
+added parameters (0.516M, identical to `AlexNetFire`), and it keeps Fire's quantization-gain
+property (INT8 improves over FP32) that the full Phase 4 hybrid loses (see Phase 4 table above:
+FireResidual drops –0.59pp under QAT).
+
+**Practical implication:** the stem change in `AlexNetFinalFireResidual` contributes comparatively
+little once training is run to completion — a plain Fire backbone plus one residual shortcut gets
+nearly all of the benefit at Fire's exact parameter count, and quantizes better doing it.
+
+**Task 2 — structured channel pruning** (`scripts/prune_channels.py`, `alexnet_bottleneck`,
+ratio 0.4): 385,000 → 207,399 params (53.9%), forward-passes cleanly, every remaining `Conv2d`
+stays `groups=1` (Winograd-eligible by construction). Unfine-tuned accuracy collapses as expected
+(top1=0.50%, top5=2.35%) — this is a mechanics/Winograd-eligibility check, not a competitive
+pruned-accuracy result; a fine-tuning loop to recover accuracy is future work.
+
+**Task 3 — compression headroom** (`scripts/measure_compression.py`, `alexnet_fire`): real INT8
+weights use 7.19 bits/weight (vs. 8.00 nominal); k-means weight-sharing at 16/32/64 clusters
+(4/5/6-bit) all beat the real on-disk gzip ratio (1.18×), with up to ~2.2× headroom at 16 clusters
+(weights-only) — gzip's DEFLATE is only capturing a fraction of the achievable compression on top
+of INT8. H3's acceptance criterion is met; per D6 no changes were made to `ml/checkpoint.py`, this
+is a measurement-only signal that a real weight-sharing pipeline would be worth building.
+
+Full tables and methodology: `ideas/PHASE9_PLAN.md` (Tasks 1–3). Reproducible analysis notebook:
+`notebooks/phase_9_pcad_bypass_ablation_analysis/phase9_ablation_analysis.ipynb`.

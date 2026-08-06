@@ -1,15 +1,88 @@
+import gzip
 import json
+import time
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import torch
+
+
+def compute_detection_summary(
+    model, image_size: int, val_loader, device, checkpoint_path: str | Path | None = None,
+) -> dict:
+    """Params, FLOPs, disk size, and inference latency/throughput for a trained detection model.
+
+    Mirrors the classification-side fields from make_run_summary (params_m, macs, flops,
+    size, latency/throughput), adapted to detection models' list-of-tensors forward signature.
+    FLOPs/benchmark are best-effort — SSD's custom ops can trip up fvcore, so failures degrade
+    to None rather than crashing a finished training run.
+    """
+    model = model.eval().to(device)
+    params_m = sum(p.numel() for p in model.parameters()) / 1e6
+
+    macs = flops = None
+    try:
+        from fvcore.nn import FlopCountAnalysis
+        dummy = torch.zeros(3, image_size, image_size, device=device)
+        analysis = FlopCountAnalysis(model, ([dummy],))
+        analysis.unsupported_ops_warnings(False)
+        analysis.uncalled_modules_warnings(False)
+        macs = analysis.total()
+        flops = macs * 2
+    except Exception:
+        pass
+
+    latency_ms = throughput = None
+    try:
+        with torch.no_grad():
+            n_warmup = 0
+            for images, _ in val_loader:
+                model([img.to(device) for img in images])
+                n_warmup += len(images)
+                if n_warmup >= 20:
+                    break
+
+            total_images = 0
+            t0 = time.perf_counter()
+            for images, _ in val_loader:
+                model([img.to(device) for img in images])
+                total_images += len(images)
+                if total_images >= 200:
+                    break
+            if device.type == "cuda":
+                torch.cuda.synchronize()
+            elapsed = time.perf_counter() - t0
+        if total_images > 0 and elapsed > 0:
+            latency_ms = (elapsed / total_images) * 1000
+            throughput = total_images / elapsed
+    except Exception:
+        pass
+
+    return {
+        "params_m": params_m,
+        "macs": macs,
+        "flops": flops,
+        "model_size_mb": disk_mb(checkpoint_path) if checkpoint_path else None,
+        "latency_ms_per_image": latency_ms,
+        "throughput_img_per_s": throughput,
+    }
 
 
 def disk_mb(path: str | Path) -> float | None:
     """File size in MB; None if file doesn't exist."""
     p = Path(path)
     return p.stat().st_size / (1024 ** 2) if p.exists() else None
+
+
+def gzip_mb(path: str | Path) -> float | None:
+    """Gzip-compressed size in MB (lossless, Deep Compression-style entropy coding on top of
+    whatever precision the checkpoint is already saved at); None if file doesn't exist."""
+    p = Path(path)
+    if not p.exists():
+        return None
+    return len(gzip.compress(p.read_bytes())) / (1024 ** 2)
 
 
 def compute_flops(model, input_size: tuple = (1, 3, 64, 64)) -> dict:
@@ -30,6 +103,18 @@ def compute_flops(model, input_size: tuple = (1, 3, 64, 64)) -> dict:
     return {"macs": macs, "flops": macs * 2}
 
 
+def _avg(values: list) -> float | None:
+    """Mean of the non-None entries in values, or None if there are none."""
+    clean = [v for v in values if v is not None]
+    return sum(clean) / len(clean) if clean else None
+
+
+def _total(values: list) -> float | None:
+    """Sum of the non-None entries in values, or None if there are none."""
+    clean = [v for v in values if v is not None]
+    return sum(clean) if clean else None
+
+
 def make_run_summary(
     name: str,
     mode: str,
@@ -42,6 +127,8 @@ def make_run_summary(
     flops_results: dict,
     int8_eval: dict | None = None,
     int8_benchmark: dict | None = None,
+    fp32_gzip_mb: float | None = None,
+    int8_gzip_mb: float | None = None,
 ) -> dict:
     """Assemble the full per-model run summary with FP32 and INT8 metrics."""
     history = fit_results.get("history", {})
@@ -49,11 +136,25 @@ def make_run_summary(
     epoch_times = history.get("epoch_time_s", [])
     avg_epoch_time_s = sum(epoch_times) / len(epoch_times) if epoch_times else None
     peak_gpu_mem_mb = max(history.get("peak_gpu_mem_mb", [0]) or [0])
+    avg_images_per_sec = _avg(history.get("images_per_sec", []))
+    avg_batch_time_s = _avg(history.get("avg_batch_time_s", []))
+    avg_cpu_percent = _avg(history.get("cpu_percent", []))
+    avg_ram_used_mb = _avg(history.get("ram_used_mb", []))
+    avg_gpu_power_w = _avg(history.get("gpu_power_avg_w", []))
+    avg_gpu_utilization_pct = _avg(history.get("gpu_utilization_pct", []))
+    avg_gpu_temp_c = _avg(history.get("gpu_temp_avg_c", []))
+    total_gpu_energy_wh = _total(history.get("gpu_energy_wh", []))
 
     compression_ratio = (
         fp32_size_mb / int8_size_mb
         if int8_size_mb and int8_size_mb > 0
         else None
+    )
+    fp32_gzip_ratio = (
+        fp32_size_mb / fp32_gzip_mb if fp32_gzip_mb and fp32_gzip_mb > 0 else None
+    )
+    int8_gzip_ratio = (
+        int8_size_mb / int8_gzip_mb if int8_gzip_mb and int8_gzip_mb > 0 else None
     )
     best_top1 = fit_results.get("best_val_top1", fp32_eval.get("top1"))
     param_efficiency = best_top1 / params_m if (best_top1 and params_m) else None
@@ -96,6 +197,11 @@ def make_run_summary(
         "int8_size_mb": int8_size_mb,
         "params_m": params_m,
         "compression_ratio": compression_ratio,
+        # Gzip (lossless entropy coding on top of the saved precision)
+        "fp32_gzip_mb": fp32_gzip_mb,
+        "int8_gzip_mb": int8_gzip_mb,
+        "fp32_gzip_ratio": fp32_gzip_ratio,
+        "int8_gzip_ratio": int8_gzip_ratio,
         "param_efficiency_top1_per_m": param_efficiency,
         # FLOPs
         "macs": flops_results.get("macs"),
@@ -109,6 +215,15 @@ def make_run_summary(
         "avg_epoch_time_s": avg_epoch_time_s,
         "total_training_time_s": fit_results.get("total_training_time_s"),
         "peak_gpu_mem_mb": peak_gpu_mem_mb,
+        "avg_images_per_sec": avg_images_per_sec,
+        "avg_batch_time_s": avg_batch_time_s,
+        # Hardware utilization (averaged/summed across training epochs)
+        "avg_cpu_percent": avg_cpu_percent,
+        "avg_ram_used_mb": avg_ram_used_mb,
+        "avg_gpu_power_w": avg_gpu_power_w,
+        "avg_gpu_utilization_pct": avg_gpu_utilization_pct,
+        "avg_gpu_temp_c": avg_gpu_temp_c,
+        "total_gpu_energy_wh": total_gpu_energy_wh,
     }
 
 
@@ -118,7 +233,10 @@ def build_comparison_table(rows: list[dict]) -> pd.DataFrame:
     sort_cols = [c for c in ["precision", "top1_%"] if c in df.columns]
     if not sort_cols:
         return df.reset_index(drop=True)
-    return df.sort_values(sort_cols, ascending=[True, False][: len(sort_cols)]).reset_index(drop=True)
+    ascending = [True] * len(sort_cols)
+    if len(sort_cols) > 1 and "top1_%" in sort_cols:
+        ascending[-1] = False
+    return df.sort_values(sort_cols, ascending=ascending).reset_index(drop=True)
 
 
 def create_results_summary(
@@ -126,19 +244,9 @@ def create_results_summary(
     config,
     output_path: str | Path,
 ) -> None:
-    """
-    Save experiment results + config to JSON.
-
-    `config` can be a dataclass (uses asdict), a dict, or any object with
-    a to_dict() method.
-    """
-    if hasattr(config, "__dataclass_fields__"):
-        cfg_dict = asdict(config)
-    else:
-        cfg_dict = dict(config)
-
+    """Save experiment results + config to JSON."""
+    cfg_dict = asdict(config) if hasattr(config, "__dataclass_fields__") else dict(config)
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-
     with open(output_path, "w") as f:
         json.dump({"config": cfg_dict, **results}, f, indent=2, default=str)
