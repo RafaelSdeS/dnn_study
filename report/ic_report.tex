@@ -6,6 +6,7 @@
 \usepackage{textcomp}
 \usepackage{booktabs}
 \usepackage{xcolor}
+\usepackage{float}
 
 \def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
     T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
@@ -108,6 +109,16 @@ mantendo a arquitetura inteiramente compatível com aceleração Winograd.
 
 \section{Resultados}
 
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{figures/kernel_restriction_cost.png}
+\caption{Acurácia FP32 (top-1) por arquitetura, contrastando \textit{baselines} de kernel
+irrestrito, restrição ingênua (3$\times$3, 2$\times$2) e estratégias de compensação exploradas no
+projeto. \texttt{SmallKernel}, \texttt{Residual} e \texttt{Fire-Residual} pertencem a fases
+posteriores deste estudo e serão detalhadas em relatórios futuros.}
+\label{fig:kernel_cost}
+\end{figure}
+
 A Tabela~\ref{tab:comparison} resume os três modelos sob o mesmo protocolo de treino e avaliação.
 
 \begin{table}[htbp]
@@ -137,21 +148,11 @@ A Fig.~\ref{fig:kernel_cost} situa esse resultado no panorama mais amplo do proj
 \textit{baselines} não restritos (MobileNetV2, VGG-Style, ResNet18) e outras estratégias de
 recuperação de acurácia (\textit{residual}, \textit{Fire}) exploradas em fases posteriores.
 
-\begin{figure*}[t]
-\centering
-\includegraphics[width=0.85\linewidth]{figures/kernel_restriction_cost.png}
-\caption{Acurácia FP32 (top-1) por arquitetura, contrastando \textit{baselines} de kernel
-irrestrito, restrição ingênua (3$\times$3, 2$\times$2) e estratégias de compensação exploradas no
-projeto. \texttt{SmallKernel}, \texttt{Residual} e \texttt{Fire-Residual} pertencem a fases
-posteriores deste estudo e serão detalhadas em relatórios futuros.}
-\label{fig:kernel_cost}
-\end{figure*}
-
 A Fig.~\ref{fig:qat_stability} mostra a queda de acurácia sob QAT$\to$INT8 para arquiteturas
 representativas: modelos com compensação por \textit{bottleneck} e \textit{Fire} são
 substancialmente mais estáveis sob quantização do que restrições ingênuas de kernel.
 
-\begin{figure}[htbp]
+\begin{figure}[H]
 \centering
 \includegraphics[width=\linewidth]{figures/quant_stability_bar.png}
 \caption{Queda de acurácia (p.p.) de FP32 para INT8 por arquitetura. Mecanismos de compensação
@@ -164,7 +165,7 @@ Por fim, a Fig.~\ref{fig:efficiency} agrega, em todo o conjunto de arquiteturas 
 acurácia por megabyte de modelos Winograd-amigáveis (kernel $\leq$3$\times$3, com compensação)
 contra arquiteturas que dependem de kernels maiores.
 
-\begin{figure}[htbp]
+\begin{figure}[H]
 \centering
 \includegraphics[width=\linewidth]{figures/winograd_efficiency_bar.png}
 \caption{Eficiência de acurácia (\% por MB), agregada por família de arquitetura Winograd-amigável
