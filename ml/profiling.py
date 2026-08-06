@@ -430,6 +430,114 @@ def profile_kernel_trace(
     }
 
 
+def winograd_conv2d_f23(x: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
+    """Real Winograd F(2x2,3x3) convolution: stride=1, groups=1, 'same' padding.
+
+    Fixed transform matrices (Lavin & Gray, "Fast Algorithms for Convolutional
+    Neural Networks"): 4x3 G (kernel transform), 4x4 B^T (input transform), 2x4
+    A^T (output transform). Input is tiled into overlapping 4x4 blocks (stride 2,
+    so each tile maps to one 2x2 output block); both input tiles and the kernel are
+    transformed into the Winograd domain, elementwise-multiplied (16 multiplies per
+    tile vs. direct GEMM's 36), then inverse-transformed back to 2x2 output tiles.
+
+    Args:
+        x: (batch, in_ch, height, width).
+        weight: (out_ch, in_ch, 3, 3).
+
+    Returns:
+        (batch, out_ch, height, width) -- same shape as F.conv2d(x, weight, padding=1).
+    """
+    device = x.device
+    batch, in_ch, height, width = x.shape
+    out_ch = weight.shape[0]
+
+    G = torch.tensor([[1.0, 0.0, 0.0],
+                       [0.5, 0.5, 0.5],
+                       [0.5, -0.5, 0.5],
+                       [0.0, 0.0, 1.0]], device=device)
+    BT = torch.tensor([[1.0, 0.0, -1.0, 0.0],
+                        [0.0, 1.0, 1.0, 0.0],
+                        [0.0, -1.0, 1.0, 0.0],
+                        [0.0, 1.0, 0.0, -1.0]], device=device)
+    AT = torch.tensor([[1.0, 1.0, 1.0, 0.0],
+                        [0.0, 1.0, -1.0, -1.0]], device=device)
+
+    # padding=1 on the near side (matches conv's 'same' padding); the far side gets
+    # an extra +1 whenever height/width is odd, so the output rounds up to an even
+    # size and tiles evenly into 2x2 blocks (cropped back to the true size below).
+    pad_bottom = 1 + (height % 2)
+    pad_right = 1 + (width % 2)
+    x_pad = torch.nn.functional.pad(x, (1, pad_right, 1, pad_bottom))
+    tiles = x_pad.unfold(2, 4, 2).unfold(3, 4, 2)  # (b, c, n_tile_h, n_tile_w, 4, 4)
+
+    V = torch.einsum("xr,bcHWrs,ys->bcHWxy", BT, tiles, BT)
+    U = torch.einsum("xr,ocrs,ys->ocxy", G, weight, G)
+    M = torch.einsum("ocxy,bcHWxy->boHWxy", U, V)
+    Y = torch.einsum("px,boHWxy,qy->boHWpq", AT, M, AT)
+
+    n_tile_h, n_tile_w = Y.shape[2], Y.shape[3]
+    out = Y.permute(0, 1, 2, 4, 3, 5).reshape(batch, out_ch, n_tile_h * 2, n_tile_w * 2)
+    return out[..., :height, :width]
+
+
+def profile_layer_conv_winograd(
+    kernel_size: int,
+    in_ch: int,
+    out_ch: int,
+    input_shape: tuple,
+    device: torch.device,
+    warmup: int = 50,
+    iters: int = 200,
+) -> dict:
+    """
+    Profile the hand-rolled Winograd F(2x2,3x3) convolution above -- a real transform,
+    not cuDNN's internal kernel selection. Only meaningful for kernel_size=3, stride=1,
+    groups=1 (F(2,3)'s domain); mirrors profile_layer_conv_fft's kernel_size>=5
+    restriction on the other side. The kernel transform is redone every timed
+    iteration (not cached across iterations), matching profile_layer_conv_fft's
+    per-iteration kernel_fft, so the two are comparable on the same basis.
+
+    Args:
+        kernel_size: must be 3; anything else is skipped (see FFT's kernel_size<5 note).
+        in_ch, out_ch: channel counts.
+        input_shape: (batch, channels, height, width).
+        device: torch.device.
+        warmup, iters: profiling parameters.
+
+    Returns:
+        {"latency_ms": float or None, "note": str}
+    """
+    if kernel_size != 3:
+        return {
+            "latency_ms": None,
+            "note": f"Skipped: kernel_size={kernel_size} != 3; F(2x2,3x3) only applies to 3x3 kernels",
+        }
+
+    input_tensor = torch.randn(input_shape, device=device)
+    weight = torch.randn(out_ch, in_ch, 3, 3, device=device)
+
+    for _ in range(warmup):
+        with torch.no_grad():
+            _ = winograd_conv2d_f23(input_tensor, weight)
+
+    if device.type == "cuda":
+        torch.cuda.synchronize(device)
+    start_time = time.time()
+
+    for _ in range(iters):
+        with torch.no_grad():
+            _ = winograd_conv2d_f23(input_tensor, weight)
+
+    if device.type == "cuda":
+        torch.cuda.synchronize(device)
+    elapsed_ms = (time.time() - start_time) * 1000 / iters
+
+    return {
+        "latency_ms": elapsed_ms,
+        "note": "Hand-rolled Winograd F(2x2,3x3); stride=1, groups=1 only",
+    }
+
+
 def profile_layer_conv_fft(
     kernel_size: int,
     in_ch: int,

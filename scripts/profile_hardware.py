@@ -29,6 +29,7 @@ from ml.profiling import (
     profile_model_with_efficiency_metrics,
     profile_kernel_trace,
     profile_layer_conv_fft,
+    profile_layer_conv_winograd,
 )
 from ml.quantization import build_qat_from_model, convert_to_int8
 from ml.reporting import compute_flops
@@ -130,6 +131,13 @@ def load_completed_configs(output_path: Path) -> set:
                             record["in_ch"],
                             record["out_ch"],
                         )
+                    elif record["kind"] == "winograd_custom":
+                        key = (
+                            "winograd_custom",
+                            record["kernel_size"],
+                            record["in_ch"],
+                            record["out_ch"],
+                        )
                     else:
                         continue
                     completed.add(key)
@@ -208,6 +216,7 @@ def profile_layer_sweep(
     total_configs = (
         layer_configs
         + len([k for k in kernel_sizes if k >= fft_min_kernel_size]) * len(layer_channels)
+        + len(layer_channels)  # custom Winograd sweep (kernel_size=3 only)
     )
 
     i = 0
@@ -352,6 +361,43 @@ def profile_layer_sweep(
 
             except Exception as e:
                 logger.error(f"[{i}/{total_configs}] Error profiling FFT config {key}: {e}")
+
+    # Custom Winograd F(2x2,3x3) sweep (real transform, kernel_size=3 only, dense groups=1) --
+    # gives a direct kind:layer (cuDNN's own algorithm choice) vs. kind:winograd_custom
+    # (explicit reduced-multiply algorithm) comparison at the same channel widths.
+    logger.info("Starting custom Winograd F(2x2,3x3) sweep")
+    for in_ch in layer_channels:
+        i += 1
+
+        key = ("winograd_custom", 3, in_ch, in_ch)
+
+        if key in completed:
+            logger.info(f"[{i}/{total_configs}] Skipping Winograd config {key}")
+            continue
+
+        try:
+            input_shape = (1, in_ch, 64, 64)
+            winograd_result = profile_layer_conv_winograd(
+                3, in_ch, in_ch, input_shape, device, warmup=warmup, iters=iters
+            )
+
+            result = {
+                "kind": "winograd_custom",
+                "kernel_size": 3,
+                "in_ch": in_ch,
+                "out_ch": in_ch,
+                "latency_ms": winograd_result.get("latency_ms"),
+                "note": winograd_result.get("note"),
+                "device": device_tag,
+            }
+
+            if not dry_run:
+                append_result_atomic(output_path, result)
+
+            logger.info(f"[{i}/{total_configs}] Winograd k=3 ch={in_ch}: {winograd_result['latency_ms'] or 'N/A'}")
+
+        except Exception as e:
+            logger.error(f"[{i}/{total_configs}] Error profiling Winograd config {key}: {e}")
 
 
 def profile_model_sweep(

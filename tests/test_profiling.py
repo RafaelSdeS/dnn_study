@@ -2,8 +2,39 @@
 import time
 
 import torch
+import torch.nn.functional as F
 
-from ml.profiling import GpuSampler, profile_layer_latency
+from ml.profiling import (
+    GpuSampler,
+    profile_layer_latency,
+    profile_layer_conv_winograd,
+    winograd_conv2d_f23,
+)
+
+
+def test_winograd_f23_matches_direct_conv():
+    # The real test of a hand-rolled Winograd transform: does it compute the same
+    # thing as direct conv? A sign/transpose error in B/G/A gives a plausible-looking
+    # but wrong number, not a crash. Covers both even (8) and odd (7) spatial sizes,
+    # since odd sizes exercise the extra-padding branch in winograd_conv2d_f23.
+    torch.manual_seed(0)
+    for size in (8, 7):
+        x = torch.randn(2, 3, size, size)
+        weight = torch.randn(4, 3, 3, 3)
+        expected = F.conv2d(x, weight, padding=1)
+        actual = winograd_conv2d_f23(x, weight)
+        assert actual.shape == expected.shape
+        assert torch.allclose(actual, expected, atol=1e-4), f"mismatch at size={size}"
+
+
+def test_profile_layer_conv_winograd_skips_non_3x3_kernels():
+    result = profile_layer_conv_winograd(5, 8, 8, (1, 8, 8, 8), torch.device("cpu"), warmup=0, iters=1)
+    assert result["latency_ms"] is None
+
+
+def test_profile_layer_conv_winograd_runs_on_3x3():
+    result = profile_layer_conv_winograd(3, 8, 8, (1, 8, 8, 8), torch.device("cpu"), warmup=0, iters=1)
+    assert result["latency_ms"] > 0
 
 
 def test_profile_layer_latency_groups_runs_dense_and_depthwise():

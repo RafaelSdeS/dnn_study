@@ -12,15 +12,15 @@ data:
   pin_memory: true
   train_val_split: 0.9
 training:
-  epochs: 100
+  epochs: 1000
   lr: 3.0e-4
   weight_decay: 5.0e-4
   label_smoothing: 0.1
   grad_clip_norm: null
   use_amp: true
-  early_stopping_patience: 5
+  early_stopping_patience: 20
 qat:
-  epochs: 20
+  epochs: 100
   lr: 1.0e-5
   weight_decay: 5.0e-4
   freeze_bn_epoch: 3
