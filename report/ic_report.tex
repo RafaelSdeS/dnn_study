@@ -188,6 +188,22 @@ variante GAP simples (-3,29 p.p.): a hipótese de trabalho é que as convoluçõ
 calibração dos parâmetros de quantização — hipótese que pretendemos testar diretamente em
 trabalhos futuros deste projeto.
 
+Uma primeira medição de hardware (Fase 6 do projeto, em andamento) já fornece um dado direto de
+latência para o \texttt{AlexNetBottleneck}: 0,81\,ms em FP32 e 1,19\,ms em INT8 (\textit{batch}=1,
+GPU NVIDIA RTX 4060 Laptop), obtidos pelo mesmo \textit{profiling} em nível de camada aplicado às
+convoluções 3$\times$3 isoladas do bloco \textit{bottleneck}. O rastreamento do kernel CUDA
+efetivamente selecionado pela cuDNN confirma que essas convoluções são executadas por um kernel
+Winograd F(2$\times$2,3$\times$3) real — validando que a arquitetura é de fato utilizável pela
+aceleração que motiva a restrição de kernel —, mas apenas em \textit{batches} pequenos (1 e 8); em
+\textit{batch}=64, a mesma convolução 3$\times$3 passa a ser executada por um kernel TF32 sobre
+\textit{tensor cores}, e a latência medida nesse regime deixa de mostrar qualquer vantagem de
+$k=3$ sobre kernels maiores. Isso sugere que, em GPUs equipadas com \textit{tensor cores}, a
+aceleração Winograd compete diretamente com a aceleração de \textit{tensor cores} e tende a ser
+preterida em \textit{batches} maiores — uma limitação da GPU como plataforma de validação, não do
+princípio de restrição de kernel em si: o acelerador FPGA que motiva este projeto não possui
+\textit{tensor cores}, e a redução no número de multiplicações que o Winograd oferece se
+converteria em economia de área e potência independentemente do tamanho do \textit{batch}.
+
 \section{Conclusão e Trabalhos Futuros}
 
 Restringir o kernel de uma AlexNet a 3$\times$3 é custoso para a acurácia, mas esse custo é, em
@@ -203,8 +219,9 @@ Este relatório cobre apenas o primeiro modelo de uma investigação mais ampla,
 famílias de compensação (\textit{Fire}, \textit{depthwise separable}, \textit{residual},
 \textit{squeeze-and-excitation}), arquiteturas híbridas finais combinando múltiplos mecanismos, e
 uma extensão a detecção de objetos (SSD sobre PASCAL VOC). Versões futuras deste relatório
-incorporarão essas comparações, além de medições diretas de latência e consumo de energia em
-hardware real para quantificar o ganho prático da aceleração Winograd nessas arquiteturas.
+incorporarão essas comparações. Uma primeira medição direta de latência em hardware real para o
+\texttt{AlexNetBottleneck} já está disponível (ver Discussão) e será estendida às demais famílias
+de arquitetura e a medições de consumo de energia em trabalhos futuros.
 \end{sloppypar}
 
 \begin{thebibliography}{00}
