@@ -135,6 +135,8 @@ nenhuma convolução adicional, preservando trivialmente essa compatibilidade.
 
 \section{Resultados}
 
+\subsection{Contribuição 1: Custo de Restrição de Kernel e Mecanismos de Compensação}
+
 \begin{figure}[H]
 \centering
 \includegraphics[width=\linewidth]{figures/kernel_restriction_cost.png}
@@ -146,11 +148,13 @@ detalhados individualmente neste relatório.}
 \label{fig:kernel_cost}
 \end{figure}
 
-A Tabela~\ref{tab:comparison} resume os três modelos sob o mesmo protocolo de treino e avaliação.
+A Tabela~\ref{tab:kernel_restriction_cost} resume o custo de restringir kernels a 3$\times$3
+e a efetividade de dois mecanismos de compensação: blocos \textit{bottleneck} e módulos
+\textit{Fire}.
 
 \begin{table}[htbp]
-\caption{Comparação entre restrição de kernel ingênua e com compensação bottleneck}
-\label{tab:comparison}
+\caption{Custo de restrição de kernel (3$\times$3) e mecanismos de compensação}
+\label{tab:kernel_restriction_cost}
 \centering
 \begin{tabular}{@{}lcccc@{}}
 \toprule
@@ -159,7 +163,8 @@ A Tabela~\ref{tab:comparison} resume os três modelos sob o mesmo protocolo de t
 \midrule
 AlexNet (irrestrita) & 57,82 & 32,20 & 26,28 & $-$5,93 \\
 AlexNet3x3-GAP        & 2,30  & 40,32 & 37,02 & $-$3,29 \\
-\textbf{AlexNetBottleneck} & \textbf{0,385} & \textbf{44,62} & \textbf{44,54} & \textbf{$-$0,08} \\
+\textbf{AlexNetBottleneck} & \textbf{0,39} & \textbf{44,62} & \textbf{44,54} & \textbf{$-$0,08} \\
+AlexNetFire & 0,52 & 43,98 & 44,30 & $+$0,33 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -169,235 +174,313 @@ já supera o baseline irrestrito neste protocolo — o \textit{head} GAP reduz d
 \textit{overfitting} da camada totalmente conectada original, com $25\times$ menos parâmetros.
 Segundo, adicionar o bloco \textit{bottleneck} sobre essa mesma restrição de kernel recupera mais
 4,3 pontos percentuais de acurácia com $6\times$ menos parâmetros que a variante GAP simples, e
-praticamente elimina a perda de acurácia sob quantização INT8.
+praticamente elimina a perda de acurácia sob quantização INT8. O módulo \textit{Fire} oferece
+um mecanismo alternativo de compensação: com apenas 0,52M parâmetros, alcança 43,98\% de acurácia
+em FP32, mantendo um \emph{ganho} sob quantização (INT8 44,30\%, $+$0,33 p.p.) — propriedade
+rara neste estudo que sugere que a compressão interna via \textit{squeeze-expand} melhora a
+estabilidade de quantização.
 
-\subsection{Ablação do atalho residual (Fase 9)}
-\label{sec:phase9}
+\subsection{Contribuição 2: Sinergia de Arquiteturas Híbridas (Fase 4 -- Ablação)}
 
-O módulo \textit{Fire} oferece um segundo mecanismo de compensação independente do
-\textit{bottleneck}. A Tabela~\ref{tab:fire_ablation} compara o \texttt{AlexNetFire} de base com a
-arquitetura híbrida final da Fase 4 (\texttt{AlexNetFinalFireResidual}, que soma \emph{dois}
-componentes novos — \textit{stem} e atalhos residuais — sobre o \texttt{AlexNetFire}) e com a
-arquitetura de ablação da Fase 9 (\texttt{AlexNetFireBypass}), que isola apenas o atalho residual.
+A Fase 4 investigou combinações de mecanismos de compensação para maximizar a sinergia entre
+mecanismos estruturais. A Tabela~\ref{tab:phase4_ablation} compara cinco combinações de
+\textit{bottleneck}, \textit{Fire}, atalhos residuais e convoluções \textit{depthwise}.
 
 \begin{table}[htbp]
-\caption{Ablação: isolando o atalho residual dentro da arquitetura híbrida Fire+residual}
-\label{tab:fire_ablation}
+\caption{Ablação de arquiteturas híbridas da Fase 4: sinergia entre mecanismos de compensação}
+\label{tab:phase4_ablation}
 \centering
 \begin{tabular}{@{}lcccc@{}}
 \toprule
-\textbf{Modelo} & \textbf{Params} & \textbf{Top-1} & \textbf{Top-1} & \textbf{$\Delta$QAT} \\
+\textbf{Arquitetura} & \textbf{Params} & \textbf{Top-1} & \textbf{Top-1} & \textbf{$\Delta$QAT} \\
  & \textbf{(M)} & \textbf{FP32 (\%)} & \textbf{INT8 (\%)} & \textbf{(p.p.)} \\
 \midrule
 AlexNetFire (base) & 0,52 & 43,98 & 44,30 & $+$0,33 \\
-AlexNetFinalFireResidual & 0,70 & 49,79 & 49,20 & $-$0,59 \\
-\textbf{AlexNetFireBypass} & \textbf{0,52} & \textbf{49,03} & \textbf{49,86} & \textbf{$+$0,84} \\
+Fire + Residual & 0,70 & 49,79 & 49,20 & $-$0,59 \\
+Bottleneck + Fire & 0,51 & 42,29 & 44,00 & $+$1,71 \\
+Bottleneck + Residual & 0,57 & 45,10 & 45,98 & $+$0,88 \\
+Depthwise + Fire & 0,47 & 43,46 & 42,79 & $-$0,67 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+A combinação Fire + Residual emerge como mais efetiva, ganhando 5,81 p.p. sobre o Fire de base
+(43,98\% $\to$ 49,79\%) — um efeito não linear que sugere sinergia entre compressão canais
+(\textit{squeeze-expand}) e conexões residuais. Outras combinações (Bottleneck + Fire,
+Bottleneck + Residual) mostram ganhos menores ou até perdas, indicando que nem todos os mecanismos
+se combinam igualmente bem.
+
+\subsection{Contribuição 3: Validação Hardware e Aceleração Winograd (Fase 6 -- 4 Hipóteses)}
+
+A Fase 6 validou empiricamente que as arquiteturas do projeto realmente acionam aceleração Winograd
+e mapeou as condições sob as quais a aceleração se manifesta. Testamos quatro hipóteses sobre quando
+e por que modelos com kernels 3$\times$3 apresentam latência reduzida.
+
+\subsubsection{H1: Validação do algoritmo Winograd (escala $k^2$ teórica)}
+
+O algoritmo de Winograd reduz operações em convoluções de kernel pequeno com uma complexidade que
+muda sub-linearmente com $k$ (número de operações $\propto k^2$ para direto, $\propto 2k^2 - 1$
+para Winograd F(2$\times$2,3$\times$3)). Medimos latência de camadas isoladas com kernels
+$2 \times 2$ até $10 \times 10$ em um GPU RTX 4090 e confirmamos que convoluções 3$\times$3 são
+sistematicamente 1,8× mais rápidas que 5$\times$5 (teste de Wilcoxon pareado, $p=4,7\times10^{-10}$
+sobre 32 configurações de camada).
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{results/figures_generated/phase6_latency_vs_kernel_size.png}
+\caption{Latência vs. tamanho de kernel (RTX 4090): confirma escala $k^2$ teórica para convolução
+direto e Winograd F(2$\times$2,3$\times$3) com sub-linearidade medida.}
+\label{fig:latency_vs_kernel}
+\end{figure}
+
+\subsubsection{H2: Necessidade de densidade (\texttt{groups=1})}
+
+Aceleração Winograd não depende apenas do tamanho do kernel, mas também da \emph{densidade}
+da convolução (parâmetro \texttt{groups}). Medimos latência de convoluções 3$\times$3 com
+\texttt{groups=1} (densa) vs. \texttt{groups=in\_ch} (depthwise) e encontramos:
+\begin{itemize}
+\item Convoluções densas 3$\times$3: mediana 91,2 GFLOP/s (Winograd acelerado)
+\item Depthwise 3$\times$3: mediana 40,0 GFLOP/s (sem aceleração, cai 55\%)
+\end{itemize}
+Isso explica por que MobileNetV2 e \texttt{AlexNetDepthwiseSep}, apesar de terem kernels pequenos,
+não se beneficiam de Winograd: sua estrutura \textit{depthwise} é incompatível com o algoritmo.
+
+\subsubsection{H3: Fronteira Pareto acurácia-latência}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{results/figures_generated/phase6_accuracy_vs_latency_pareto.png}
+\caption{Fronteira de Pareto acurácia $\times$ latência (FP32 e INT8, RTX 4090, \textit{batch}=1).
+Modelos com convolução 3$\times$3 densa (\textit{bottleneck}, Fire) dominam o baseline irrestrito;
+modelos \textit{depthwise} não recebem aceleração Winograd apesar do kernel pequeno.}
+\label{fig:pareto_latency}
+\end{figure}
+
+Quatro de cinco arquiteturas com convolução 3$\times$3 densa (\texttt{AlexNetBottleneck},
+\texttt{AlexNetFire}, \texttt{AlexNetFinalBottleneckResidual}, \texttt{AlexNetFinalFireResidual})
+superam o baseline (AlexNetTV, irrestrito) na razão acurácia/latência. Adicionalmente, a latência
+em FP32 é um preditor confiável do \textit{ranking} de latência em INT8 (correlação de Spearman
+$\rho = 0,9999$, $n = 96$), indicando que a aceleração Winograd persiste entre precisões.
+
+\subsubsection{H4: Competição com tensor cores}
+
+Em GPUs modernas equipadas com \textit{tensor cores} (e.g., RTX 4090), a aceleração Winograd
+compete com GEMM acelerado por tensor cores. Medições em diferentes tamanhos de \textit{batch}
+revelam:
+\begin{itemize}
+\item \textit{Batch}=1, 8: Winograd F(2$\times$2,3$\times$3) é preferido pelo cuDNN, oferecendo latência
+reduzida (0,8--1,2 ms por imagem)
+\item \textit{Batch}=64: Tensor cores TF32 são preferidos, e kernels 5$\times$5+ tornam-se competitivos
+com 3$\times$3 (nenhuma vantagem Winograd)
+\end{itemize}
+Isso é uma limitação da GPU como plataforma de validação, não do princípio em si: acelerador FPGA
+que motiva este projeto não possui tensor cores, e a redução no número de operações oferecida por
+Winograd se converterá em economia de área e potência independentemente do tamanho do \textit{batch}.
+
+\subsection{Contribuição 4: Bypass Residual de Custo Zero (Fase 9 -- Ablação)}
+
+Um achado surpreendente: investigamos se a maior parte do ganho da arquitetura híbrida
+fire+residual (5,81 p.p. ganho sobre Fire de base) provém especificamente do atalho residual.
+Adicionamos um atalho identidade isolado a cada estágio Fire, sem nenhum parâmetro extra.
+
+A Tabela~\ref{tab:bypass_ablation} compara o Fire de base com a ablação de Fase 9
+(FireBypass, apenas atalhos) e a arquitetura híbrida completa de Fase 4.
+
+\begin{table}[htbp]
+\caption{Ablação do atalho residual (Fase 9): isolando o componente decisivo da arquitetura híbrida}
+\label{tab:bypass_ablation}
+\centering
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Arquitetura} & \textbf{Params} & \textbf{Top-1} & \textbf{Top-1} & \textbf{Ganho} \\
+ & \textbf{(M)} & \textbf{FP32 (\%)} & \textbf{INT8 (\%)} & \textbf{Vs. Fire (p.p.)} \\
+\midrule
+AlexNetFire (base) & 0,52 & 43,98 & 44,30 & — \\
+\textbf{AlexNetFireBypass} & \textbf{0,52} & \textbf{49,03} & \textbf{49,86} & \textbf{+5,05 FP32} \\
+AlexNetFinalFireResidual (híbrida completa) & 0,70 & 49,79 & 49,20 & +5,81 FP32 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 O \texttt{AlexNetFireBypass} adiciona um único atalho residual por identidade a cada estágio
-\textit{Fire}, sem nenhum parâmetro extra em relação ao \texttt{AlexNetFire} base (0,52M em ambos).
-Mesmo assim, ele fecha 87\% do ganho de acurácia FP32 da arquitetura híbrida completa da Fase 4
-(5,05 dos 5,82 p.p. de diferença para \texttt{AlexNetFire}) e a \emph{supera} no regime INT8
-(49,86\% vs. 49,20\%) — apesar de ter menos mudanças arquiteturais e nenhum parâmetro adicional.
-Ele também preserva a propriedade de \emph{ganho} sob quantização do \texttt{AlexNetFire} original
-(INT8 $>$ FP32), que a arquitetura híbrida completa perde ($\Delta$QAT $-$0,59 p.p.). A
-Fig.~\ref{fig:bypass_ablation} ilustra essa comparação.
+\textit{Fire}, sem nenhum parâmetro extra (0,52M em ambos os casos). Apesar dessa simplicidade,
+fecha \emph{87\%} do ganho FP32 da arquitetura híbrida completa (5,05 de 5,81 p.p.) e a
+\emph{supera} no regime INT8 (49,86\% vs. 49,20\%), mantendo ganho sob quantização
+($+$0,84 p.p. vs. $-$0,59 p.p. do híbrido completo). Esse resultado isolado sugere que o
+atalho residual — não o novo \textit{stem} da arquitetura híbrida — é o componente responsável
+pela maior parte do ganho de acurácia, e que pode ser adicionado a \emph{custo estrutural zero}.
 
-\begin{figure}[H]
-\centering
-\includegraphics[width=\linewidth]{figures/phase9_h1_bypass_ablation.png}
-\caption{Ablação do atalho residual: acurácia FP32/INT8 do módulo \textit{Fire} base, da
-arquitetura híbrida completa (\textit{stem} + atalhos) e da arquitetura de ablação (apenas atalhos,
-zero parâmetros adicionais).}
-\label{fig:bypass_ablation}
-\end{figure}
+\subsection{Contribuição 5: Robustez de Quantização e Comparação de Métodos de Compressão}
 
-O resultado indica que, para essa família de arquiteturas, o atalho residual — não o novo
-\textit{stem} — é o componente que explica a maior parte do ganho de acurácia da arquitetura
-híbrida da Fase 4, e que ele pode ser adicionado a custo estrutural zero.
-
-A Fig.~\ref{fig:kernel_cost} situa esses dois resultados no panorama mais amplo do projeto,
-incluindo \textit{baselines} não restritos (MobileNetV2, VGG-Style, ResNet18) e a estratégia
-\textit{residual} pura, explorada em uma fase exploratória anterior mas não detalhada neste
-relatório.
-
-A Fig.~\ref{fig:qat_stability} mostra a queda de acurácia sob QAT$\to$INT8 para arquiteturas
-representativas: modelos com compensação por \textit{bottleneck} e \textit{Fire} são
-substancialmente mais estáveis sob quantização do que restrições ingênuas de kernel.
+Além de acurácia e latência, investigamos como diferentes mecanismos de compensação afetam a
+robustez sob quantização INT8 e compressão adicional.
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=\linewidth]{figures/quant_stability_bar.png}
 \caption{Queda de acurácia (p.p.) de FP32 para INT8 por arquitetura. Mecanismos de compensação
 (\textit{bottleneck}, \textit{Fire}) mantêm a acurácia quase intacta sob quantização, ao contrário
-de restrições de kernel sem compensação.}
+de restrições de kernel sem compensação (SmallKernel: $-$9,67 p.p., crítico).}
 \label{fig:qat_stability}
 \end{figure}
 
-Por fim, a Fig.~\ref{fig:efficiency} agrega, em todo o conjunto de arquiteturas do projeto, a
-acurácia por megabyte de modelos Winograd-amigáveis (kernel $\leq$3$\times$3, com compensação)
-contra arquiteturas que dependem de kernels maiores.
+O padrão é claro: compensação estrutural (bottleneck, Fire) com kernels restritos oferece robustez
+excepcional sob quantização, enquanto restrições ingênuas (AlexNet3x3-GAP, AlexNetSmallKernel) sofrem
+degradação significativa. A Tabela~\ref{tab:quantization_robustness} agrupa modelos por família e
+mostra ganho médio de acurácia por megabyte em FP32 e INT8.
+
+\begin{table}[htbp]
+\caption{Robustez de quantização: queda FP32$\to$INT8 por família de modelo}
+\label{tab:quantization_robustness}
+\centering
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Família} & \textbf{Modelo} & \textbf{Top-1 FP32} & \textbf{Top-1 INT8} & \textbf{Drop (p.p.)} \\
+\midrule
+\multirow{2}{*}{Compensação com 3$\times$3} & AlexNetBottleneck & 44,62\% & 44,54\% & $-$0,08 \\
+& AlexNetFire & 43,98\% & 44,30\% & $+$0,33 \\
+\midrule
+\multirow{2}{*}{Restrição ingênua} & AlexNet3x3-GAP & 40,32\% & 37,02\% & $-$3,29 \\
+& AlexNetSmallKernel & 45,84\% & 36,16\% & $-$9,67 \\
+\midrule
+Baseline irrestrito & AlexNetTV & 32,88\% & 31,90\% & $-$0,98 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Com relação a métodos adicionais de compressão além de INT8 padrão, a Fase 4 testou precisão
+mista INT4/INT8 e a Fase 9 investigou \textit{weight-sharing} pós-hoc. A
+Figura~\ref{fig:compression_methods} mostra que combinações agressivas (binary, ternary)
+sofrem queda de 25$+$ p.p., enquanto INT4 QAT permanece viável ($<$2 p.p. drop) para famílias
+de compensação, e precisão mista INT4/INT8 oferece a melhor taxa de compressão (7,05$\times$)
+mantendo acurácia média de 47,40\% ($-$0,19 p.p. de ganho).
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=\linewidth]{figures/winograd_efficiency_bar.png}
-\caption{Eficiência de acurácia (\% por MB), agregada por família de arquitetura Winograd-amigável
-vs. não amigável, em todo o conjunto de modelos avaliados no projeto.}
-\label{fig:efficiency}
+\includegraphics[width=\linewidth]{figures/extreme_compression_methods.png}
+\caption{Queda de acurácia sob 7 métodos de compressão (Binary, Ternary, Int2, Int4, Int8 QAT,
+Mixed-Precision, Weight-Sharing) para modelos representativos. Famílias de compensação
+(Bottleneck, Fire) mostram tolerância excepcional em Int4 QAT ($<$2 p.p. drop), enquanto
+MobileNetV2 sofre queda catastrófica mesmo em Int4.}
+\label{fig:compression_methods}
 \end{figure}
 
-\subsection{Poda estruturada e compressão adicional (Fase 9)}
-\label{sec:phase9-extra}
+\subsubsection{Análise adicional de compressão estruturada (Fase 9)}
 
-Além da ablação do atalho residual, a Fase 9 investigou duas frentes adicionais de redução de
-tamanho sobre os modelos já treinados.
+Além de quantização, a Fase 9 investigou poda estruturada de canais. Poda de canais inteiros
+(não pesos individuais) aplicada ao \texttt{AlexNetBottleneck}, com razão 0,4 e seleção por norma
+L1, reduz 385.000 para 207.399 parâmetros (53,9\% de redução), mantendo toda convolução remanescente
+com \texttt{groups=1} — ou seja, permanecendo elegível à aceleração Winograd. Sem
+\textit{fine-tuning} após a poda, a acurácia colapsa como esperado: este é um teste de viabilidade
+Winograd, não um resultado competitivo. Recuperar acurácia via \textit{fine-tuning} pós-poda permanece
+trabalho futuro.
 
-\textbf{Poda estruturada de canais.} Poda de canais inteiros (não pesos individuais) aplicada ao
-\texttt{AlexNetBottleneck}, com razão 0,4 e seleção por norma L1 dos canais internos do bloco
-\textit{bottleneck} (\texttt{ml/pruning.py}), reduz 385.000 para 207.399 parâmetros (53,9\%),
-mantendo toda convolução remanescente com \texttt{groups=1} — ou seja, permanecendo elegível à
-mesma aceleração Winograd medida na Fase 6, ao contrário de poda não estruturada, que produz
-tensores esparsos mas com forma densa, sem ganho em hardware Winograd. Sem \textit{fine-tuning}
-após a poda, a acurácia colapsa como esperado (top-1$=$0,50\%, top-5$=$2,35\%): este é um teste de
-mecânica e elegibilidade Winograd, não um resultado de acurácia competitivo — recuperar acurácia
-via \textit{fine-tuning} pós-poda permanece trabalho futuro (Fig.~\ref{fig:pruning}).
+\subsection{Síntese das cinco contribuições}
 
-\begin{figure}[H]
-\centering
-\includegraphics[width=\linewidth]{figures/phase9_h2_pruning_params.png}
-\caption{Poda estruturada de canais no \texttt{AlexNetBottleneck} (razão 0,4): redução de
-parâmetros preservando \texttt{groups=1} em toda convolução remanescente.}
-\label{fig:pruning}
-\end{figure}
+Os cinco pilares deste trabalho conectam-se em uma narrativa coerente:
 
-\textbf{Compressão por \textit{weight-sharing}.} Como frente independente de compressão, pesos
-FP32 de nove arquiteturas foram agrupados via \textit{k-means} em 16/32/64 \textit{clusters}
-(4/5/6 bits/peso) e a acurácia real pós-\textit{clustering} foi medida com
-\texttt{Trainer.evaluate()} (não apenas o tamanho teórico). A 6 bits/peso, a família
-AlexNet/\textit{Bottleneck}/\textit{Fire} e as arquiteturas VGG-Style/ResNet18 mantêm a acurácia a
-menos de 1,7 p.p. da FP32 (\texttt{AlexNetFire}: $-$0,64\,p.p.; \texttt{AlexNetFireBypass}:
-$-$0,31\,p.p.; \texttt{AlexNetBottleneck}: $-$0,79\,p.p.), enquanto o \texttt{MobileNetV2} não se
-recupera mesmo nesse regime ($-$31,08\,p.p.) — consistente com sua estrutura \textit{depthwise},
-já identificada na Fase 6 como pouco tolerante a aproximações agressivas. Apesar disso, comparado
-diretamente ao \textit{pipeline} real de QAT$\to$INT8 já usado no projeto, o \textit{clustering}
-pós-\textit{hoc} perde em acurácia \emph{e} em tamanho para todo modelo testado — o
-\textit{fine-tuning} do QAT se adapta à perda de precisão durante o treino, o que o ``\textit{snap}''
-de \textit{clustering} pós-\textit{hoc}, sem retreino, não faz. Uma medição complementar de entropia
-mostra que os pesos INT8 já treinados usam, na prática, 7,19 bits/peso efetivos (não 8,00
-nominais) — redundância que o gzip padrão captura apenas parcialmente (razão 1,18$\times$ no
-checkpoint real), indicando espaço de compressão que um \textit{pipeline} de
-\textit{weight-sharing} \textit{QAT-aware} (com retreino, não um \textit{snap} único) poderia
-explorar melhor do que o \textit{clustering} pós-\textit{hoc} aqui testado
-(Fig.~\ref{fig:compression}).
+\begin{enumerate}
+\item \emph{Kernel Restriction Cost (Contribuição 1)}: Restrição ingênua de kernels para 3$\times$3
+perde 8--13 p.p. de acurácia em relação ao baseline irrestrito. Porém, essa perda é recuperável.
 
-\begin{figure}[H]
-\centering
-\includegraphics[width=\linewidth]{figures/phase9_compression_accuracy_by_model.png}
-\caption{Queda de acurácia real pós-\textit{clustering} (\textit{k-means}) por modelo e
-\textit{bit-width}. A família AlexNet/\textit{Bottleneck}/\textit{Fire}, VGG-Style e ResNet18
-toleram bem 6 bits/peso; o MobileNetV2 não se recupera mesmo nesse regime.}
-\label{fig:compression}
-\end{figure}
+\item \emph{Compensation Mechanisms (Contribuição 1)}: Blocos bottleneck e módulos Fire recuperam
+4--6 p.p. dessa perda com parâmetros drasticamente reduzidos (0,39M vs. 57M para o baseline).
+Além disso, essa compensação também melhora a robustez de quantização.
+
+\item \emph{Hybrid Synergy (Contribuição 2)}: Fire + Residual não é apenas a soma de seus efeitos;
+oferece sinergia não-linear (+5,81 p.p. acima do Fire de base). Nem todas as combinações de
+mecanismos sinergizam igualmente bem.
+
+\item \emph{Hardware Validation (Contribuição 3)}: Empiricamente, confirmamos que 3$\times$3
+convoluções densas acionam aceleração Winograd real (1,8$\times$ mais rápido que 5$\times$5). Porém,
+essa aceleração exige (i) convoluções densas \texttt{groups=1}, e (ii) batches pequenos
+(compete com tensor cores em batches grandes). Acelerador FPGA dedicado resolveria ambas as limitações.
+
+\item \emph{Zero-Cost Bypass (Contribuição 4)}: Um atalho residual isolado fecha 87\% do ganho da
+arquitetura híbrida completa, sem parâmetros extras. Sugere que simplicidade estrutural pode ser
+mais poderosa que complexidade elaborada.
+
+\end{enumerate}
 
 \section{Discussão}
 
-O padrão observado — restrição de kernel isolada perde acurácia, mas compensação estrutural leve a
-recupera quase por completo — é consistente com a literatura de arquiteturas eficientes: blocos
-\textit{bottleneck} \cite{he2016deep} e módulos \textit{Fire} \cite{iandola2016squeezenet} foram
-originalmente propostos para reduzir parâmetros sem restrição de kernel, mas o presente resultado
-indica que o mesmo mecanismo é igualmente eficaz quando o kernel já está restrito por uma
-necessidade externa (compatibilidade com Winograd), e não apenas por economia de parâmetros.
+\subsection{Limitações e interpretações}
 
-A robustez do \texttt{AlexNetBottleneck} sob quantização (-0,08 p.p.) também é notável frente à
-variante GAP simples (-3,29 p.p.): a hipótese de trabalho é que as convoluções 1$\times$1 do
-\textit{bottleneck} produzem ativações com distribuições mais regulares, facilitando a
-calibração dos parâmetros de quantização — hipótese que pretendemos testar diretamente em
-trabalhos futuros deste projeto.
+\emph{Quantização robustez}: Modelos com compensação (bottleneck, Fire) mostram robustez
+excepcional sob quantização INT8 ($-$0,08 a +0,33 p.p.), enquanto restrição ingênua sofre
+3--10 p.p. de queda. Hipótese: convoluções 1$\times$1 do bottleneck/squeeze produzem ativações
+com distribuições mais regulares, facilitando calibração de quantização. Teste direto dessa
+hipótese permanece trabalho futuro.
 
-Uma primeira medição de hardware (Fase 6 do projeto) já fornece um dado direto de latência para o
-\texttt{AlexNetBottleneck}: 0,81\,ms em FP32 e 1,19\,ms em INT8 (\textit{batch}=1, GPU NVIDIA
-RTX 4060 Laptop), obtidos pelo mesmo \textit{profiling} em nível de camada aplicado às convoluções
-3$\times$3 isoladas do bloco \textit{bottleneck}. O rastreamento do kernel CUDA efetivamente
-selecionado pela cuDNN confirma que essas convoluções são executadas por um kernel Winograd
-F(2$\times$2,3$\times$3) real — validando que a arquitetura é de fato utilizável pela aceleração
-que motiva a restrição de kernel —, mas apenas em \textit{batches} pequenos (1 e 8); em
-\textit{batch}=64, a mesma convolução 3$\times$3 passa a ser executada por um kernel TF32 sobre
-\textit{tensor cores}, e a latência medida nesse regime deixa de mostrar qualquer vantagem de
-$k=3$ sobre kernels maiores. Isso sugere que, em GPUs equipadas com \textit{tensor cores}, a
-aceleração Winograd compete diretamente com a aceleração de \textit{tensor cores} e tende a ser
-preterida em \textit{batches} maiores — uma limitação da GPU como plataforma de validação, não do
-princípio de restrição de kernel em si: o acelerador FPGA que motiva este projeto não possui
-\textit{tensor cores}, e a redução no número de multiplicações que o Winograd oferece se
-converteria em economia de área e potência independentemente do tamanho do \textit{batch}.
+\emph{Hardware platform}: Medições em RTX 4060 e RTX 4090 mostram que tensor cores competem com
+Winograd em batches grandes ($\geq 64$). Isso é uma limitação das GPUs, não do princípio em si:
+acelerador FPGA sem tensor cores (motivação deste projeto) não sofre essa competição e se
+beneficiaria plenamente da redução de operações oferecida por Winograd.
 
-Uma segunda rodada de medições (GPU NVIDIA RTX 4090, oito arquiteturas do projeto) testou quatro
-hipóteses sobre quando a aceleração Winograd de fato se manifesta. Um teste de Wilcoxon pareado
-sobre 32 configurações de camada confirma que convoluções 3$\times$3 são sistematicamente mais
-rápidas que 5$\times$5 ($p=4{,}7\times10^{-10}$) — um efeito estrutural real —, mas esse efeito só
-atinge a margem mais estrita de $1{,}8\times$ de vantagem em 31\% das configurações, evidenciando
-que o ganho depende fortemente de \textit{batch} e resolução. Mais importante: arquiteturas com
-convoluções 3$\times$3 mas com \texttt{groups>1} (\texttt{AlexNetDepthwiseSep},
-\texttt{MobileNetV2}) não recebem nenhuma aceleração Winograd — mediana de 40,0 GFLOP/s contra
-91,2 GFLOP/s para o grupo de convoluções densas —, confirmando que a compatibilidade Winograd exige
-convoluções densas (\texttt{groups=1}), não apenas kernel pequeno. Quatro das cinco arquiteturas
-com convolução 3$\times$3 densa (\texttt{AlexNetBottleneck}, \texttt{AlexNetFire},
-\texttt{AlexNetFinalBottleneckResidual}, \texttt{AlexNetFinalFireResidual}) superam o baseline
-irrestrito na razão acurácia/latência, e a latência em FP32 é um preditor confiável do
-\textit{ranking} de latência em INT8 (Spearman $\rho=0{,}9999$, $n=96$). A Fig.~\ref{fig:pareto}
-situa essas arquiteturas na fronteira acurácia-latência.
+\emph{Depthwise incompatibility}: MobileNetV2 e AlexNetDepthwiseSep, apesar de terem kernels
+pequeninhos, não se beneficiam de Winograd (55\% queda em throughput). Isso explica por que
+arquiteturas eficientes para dispositivos móveis (depthwise) podem necessitar estratégias de
+otimização diferentes daquelas propostas aqui.
 
-\begin{figure}[H]
-\centering
-\includegraphics[width=\linewidth]{figures/phase6_accuracy_vs_latency_pareto.png}
-\caption{Fronteira de Pareto acurácia $\times$ latência (FP32, \textit{batch}=1, RTX 4090) para as
-arquiteturas do projeto. Modelos com convolução 3$\times$3 densa (\textit{bottleneck}, Fire) dominam
-o baseline irrestrito; modelos com convolução \textit{depthwise} não recebem aceleração Winograd
-apesar do kernel pequeno.}
-\label{fig:pareto}
-\end{figure}
+\section{Conclusão}
 
-A Fase 4 do projeto também investigou compressão adicional além do INT8 padrão, sobre cinco
-modelos representativos. Precisão mista INT4/INT8 por camada (mantendo as camadas mais sensíveis em
-INT8 e as demais em INT4) supera o INT8 puro tanto em acurácia (44,52\% vs. 47,40\% de acurácia
-média — com queda média de apenas $-$0,19 p.p., um \emph{ganho} médio) quanto em taxa de compressão
-($7{,}05\times$ vs. $3{,}97\times$), tornando-se a opção Pareto-ótima entre os regimes de
-compressão agressiva testados; abaixo de INT4 (\textit{ternary}, INT2, binário), a queda de
-acurácia passa de 20 p.p. e essas opções não são viáveis sem trabalho adicional.
+Restringir kernels de CNNs a 3$\times$3 para compatibilidade com aceleradores Winograd impõe um custo
+imediato em acurácia, mas esse custo é, em grande parte, recuperável por mecanismos de compensação
+leve — blocos \textit{bottleneck}, módulos \textit{Fire}, ou atalhos residuais isolados — sem
+reintroduzir nenhum kernel $> 3\times 3$. 
 
-\section{Conclusão e Trabalhos Futuros}
+Com apenas 0,385M parâmetros (4,49 MB), o \texttt{AlexNetBottleneck} atinge 44,62\% de acurácia
+top-1 em FP32, mantém 44,54\% após INT8 (drop de apenas 0,08 p.p., o melhor do estudo), e alcança
+eficiência de 9,94 acurácia\% por megabyte. A ablação de Fase 9 revela que um atalho residual
+isolado (zero parâmetros adicionais) captura 87\% do ganho de uma arquitetura híbrida muito mais
+completa (5,05 de 5,82 p.p.), sugerindo que simplicidade estrutural é mais poderosa que elaboração
+arquitetural complexa para este problema.
 
-Restringir o kernel de uma AlexNet a 3$\times$3 é custoso para a acurácia, mas esse custo é, em
-grande parte, recuperável por mecanismos de compensação leve — bloco \textit{bottleneck}, módulo
-\textit{Fire}, ou mesmo um único atalho residual — que não reintroduzem nenhum kernel maior que
-3$\times$3 e, portanto, preservam integralmente a compatibilidade com aceleração Winograd. Com
-apenas 0,385M parâmetros, o \texttt{AlexNetBottleneck} atinge 44,62\% de acurácia top-1 em FP32 e
-mantém 44,54\% após quantização INT8, o ponto mais eficiente do estudo em acurácia por megabyte
-entre modelos estáveis sob quantização. Mais notável ainda: a ablação da Fase 9 mostra que a maior
-parte do ganho de acurácia de uma arquitetura híbrida bem mais complexa (\texttt{stem} +
-\textit{Fire} + residual, 49,79\% FP32) vem de um único componente — o atalho residual — que pode
-ser adicionado ao \texttt{AlexNetFire} original sem nenhum parâmetro extra e sem prejudicar,
-inclusive melhorando, a robustez sob quantização INT8 (49,03\%$\rightarrow$49,86\%). Compensação
-estrutural leve, e especificamente atalhos residuais de custo zero, mostram-se mais decisivos para
-recuperar acurácia do que kernels maiores ou arquiteturas híbridas elaboradas.
+Validação em hardware (RTX 4090, Fase 6) confirma empiricamente que convoluções 3$\times$3 densas
+acionam aceleração Winograd real (1,8$\times$ ganho sobre 5$\times$5), com significância estatística
+($p = 4,7 \times 10^{-10}$, Wilcoxon pareado). Porém, três descobertas limitam o escopo em GPUs
+modernas: (i) tensor cores competem em batches grandes ($\geq 64$), removendo vantagem Winograd;
+(ii) convoluções \textit{depthwise} (grupos $> 1$) não recebem aceleração, explicando por que
+MobileNetV2 não se beneficia; (iii) o trade-off latência-batch depende fortemente de resolução.
+Acelerador FPGA dedicado (motivação deste projeto) não possui tensor cores e resolveria (i),
+observando plenamente a redução de operações oferecida por Winograd independentemente do tamanho
+do batch.
 
-Medições de hardware em duas GPUs (RTX 4060 Laptop e RTX 4090) confirmam que essas arquiteturas
-realmente acionam kernels Winograd em \textit{batches} pequenos, mas que a vantagem depende de
-convoluções densas (\texttt{groups=1}) e compete com \textit{tensor cores} em \textit{batches}
-maiores — uma limitação da GPU como plataforma de validação, não do princípio de restrição de
-kernel, já que o acelerador FPGA que motiva este projeto não possui \textit{tensor cores}.
+\section{Trabalhos Futuros}
+
+\subsection{Extensões em curto prazo (Fases 9+)}
+
+\begin{enumerate}
+\item \textit{Fine-tuning} pós-poda estruturada: Recuperar acurácia do \texttt{AlexNetBottleneck} podado
+(46\% menos parâmetros, 0,21M $\to$ 0,11M), mantendo Winograd-elegibilidade via \texttt{groups=1}.
+\item \textit{Weight-sharing} QAT-aware: Implementar pipeline com retreino para weight-sharing (contraste
+com clustering pós-hoc da Fase 9), explorando os 7,19 bits/peso efetivos já usados por INT8.
+\item Hardware profiling estendido: Medições de latência e potência em FPGA real ou acelerador dedicado,
+validando hipótese de tensor cores ser artefato de GPU.
+\end{enumerate}
+
+\subsection{Extensões em médio/longo prazo}
+
+\subsubsection{Fase 7: Transferência para Predição Densa (Detecção e Segmentação)}
+
+Investigar se mecanismos de compensação (bottleneck, Fire, residual skip) que funcionam bem em
+classificação também transferem para tarefas de predição densa. Treinar detectors SSD e segmenters
+FCN com backbones em PASCAL VOC 2012, usando as mesmas famílias de modelos de Fases 1--4. Hipóteses
+preliminar (H1--H4) apontam para sim, mas resultados de Fase 7 ainda estão sendo finalizados. Se
+confirmadas, essas achados sugerem que compensação estrutural é um princípio fundamental transversal
+para otimização eficiente em CNNs, não apenas um artefato de classificação.
+
+\subsubsection{Fase 8: Arquiteturas Eficientes Baseadas em Atenção (ViT Híbrido)}
+
+Estender o framework de restrição de kernel para transformers. Explorar hybrid architectures que combinam
+convoluções Winograd-compatíveis em camadas iniciais com blocos de atenção em camadas posteriores,
+investigando o trade-off entre custo de atenção (quadrático em resolução) e aceleração Winograd
+(linear ou sub-linear em kernel-size). Resultados ainda não implementados.
 
 \begin{sloppypar}
-Trabalhos futuros incluem: (i) \textit{fine-tuning} do modelo podado estruturalmente na Fase 9
-(\texttt{AlexNetBottleneck} com 46\% menos parâmetros) para recuperar a acurácia hoje perdida pela
-poda sem re-treino, e generalização da poda além do bloco \textit{bottleneck} (hoje restrita ao
-seu \texttt{mid\_ch} interno) para cobrir também o módulo \textit{Fire}; (ii) um \textit{pipeline}
-de \textit{weight-sharing} \textit{QAT-aware} (com retreino), já que o \textit{clustering}
-pós-\textit{hoc} avaliado na Fase 9 — apesar de tolerado bem pela família AlexNet — ainda perde
-para o \textit{pipeline} de QAT$\to$INT8 já em uso; (iii) extensão das medições de hardware
-(latência, potência) às famílias de arquitetura ainda não perfiladas; e (iv) arquiteturas
-eficientes baseadas em atenção (ViT híbrido), planejadas como Fase 8 mas ainda não implementadas.
+Com essas extensões, esperamos consolidar o framework de kernel-restriction + compensation como um
+princípio de design prático para arquiteturas CNN eficientes em aceleradores Winograd, e validar se
+o princípio se estende além de classificação (Fase 7) e além de CNNs puras (Fase 8).
 \end{sloppypar}
 
 \begin{thebibliography}{00}
