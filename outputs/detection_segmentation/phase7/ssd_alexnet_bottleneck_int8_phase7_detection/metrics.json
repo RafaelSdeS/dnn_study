@@ -1,0 +1,9 @@
+{
+  "val_mAP": [
+    0.20847442746162415
+  ],
+  "val_mAP50": [
+    0.4783490002155304
+  ],
+  "note": "INT8 evaluation only (no training)"
+}
