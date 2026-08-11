@@ -97,10 +97,11 @@ nenhum parâmetro adicional.
 
 \subsection{Dados e configuração experimental}
 \label{sec:dados}
-Todos os modelos foram avaliados no Tiny ImageNet-200 (imagens 64$\times$64 RGB, 200 classes,
-\textit{split} 90/10 determinístico) sob o mesmo pipeline de três estágios: (i) treino FP32 —
-do zero para a grande maioria das variantes, exceto a baseline AlexNet irrestrita e os baselines
-externos ResNet18/MobileNetV2 (Seção~\ref{sec:contrib1}), que partem de pesos pré-treinados em
+Todos os modelos foram avaliados no Tiny ImageNet-200 \cite{le2015tiny} (imagens 64$\times$64 RGB,
+200 classes, \textit{split} 90/10 determinístico) sob o mesmo pipeline de três estágios: (i) treino
+FP32 — do zero para a grande maioria das variantes, exceto a baseline AlexNet irrestrita e os
+baselines externos ResNet18 \cite{he2016deep}/MobileNetV2 \cite{sandler2018mobilenetv2}
+(Seção~\ref{sec:contrib1}), que partem de pesos pré-treinados em
 ImageNet-1K e são apenas ajustados (\textit{fine-tuned}) para as 200 classes do Tiny ImageNet; (ii)
 \textit{Quantization-Aware Training} (QAT), inicializado a partir do melhor checkpoint FP32, com
 fusão Conv-BN-ReLU e \textit{fake quantization} nos módulos suportados \cite{jacob2018quantization};
@@ -125,8 +126,8 @@ convolucionais restritos a 3$\times$3 e treinada do zero, mantendo a \textit{hea
 conectada original. Serve de controle para isolar o efeito da restrição de kernel isoladamente do
 \textit{head} GAP (usado apenas no próximo item) e do pré-treino.
 \item \textbf{AlexNet3x3-GAP} — mesma arquitetura, todos os kernels convolucionais restritos a
-3$\times$3, com \textit{head} de \textit{global average pooling} (GAP) no lugar de camadas
-totalmente conectadas.
+3$\times$3, com \textit{head} de \textit{global average pooling} (GAP) \cite{lin2014network} no
+lugar de camadas totalmente conectadas.
 \item \textbf{AlexNetBottleneck} — kernels igualmente restritos a 3$\times$3, mas cada estágio é
 substituído por um bloco \textit{bottleneck} (1$\times$1 $\rightarrow$ 3$\times$3 $\rightarrow$
 1$\times$1, razão de redução 4$\times$) seguido de GAP.
@@ -316,11 +317,11 @@ denso vs. \texttt{groups=in\_ch}) rejeita sinal Winograd para \textit{depthwise}
 de apenas $n=2$ modelos \textit{depthwise}, exploratória. O mais correto a afirmar é que, \emph{nesta GPU e neste \textit{backend} (cuDNN)},
 convoluções \textit{depthwise} nunca acionam um \textit{kernel} Winograd, não que o algoritmo seja
 matematicamente incompatível com elas — a literatura descreve variantes de Winograd por canal para
-convoluções \textit{depthwise}; o que este experimento mostra é que o cuDNN, nesta configuração,
-não as usa.
+convoluções \textit{depthwise} \cite{li2025depthwisewinograd}; o que este experimento mostra é que
+o cuDNN, nesta configuração, não as usa.
 
 Mapeamos também a fronteira de Pareto entre acurácia e latência para o conjunto completo de
-arquiteturas.
+arquiteturas (Figura~\ref{fig:pareto_latency}).
 
 \begin{figure*}[!t]
 \centering
@@ -383,7 +384,8 @@ fecha \emph{87\%} do ganho FP32 da arquitetura híbrida completa (5,05 de 5,81 p
 \emph{supera} no regime INT8 (49,86\% vs. 49,20\%), mantendo ganho sob quantização
 ($+$0,84 p.p. vs. $-$0,59 p.p. do híbrido completo). Esse resultado isolado sugere que o
 atalho residual — não o novo \textit{stem} da arquitetura híbrida — é o componente responsável
-pela maior parte do ganho de acurácia, e que pode ser adicionado a \emph{custo estrutural zero}.
+pela maior parte do ganho de acurácia, e que pode ser adicionado a \emph{custo estrutural zero}. A
+Figura~\ref{fig:accuracy_vs_size} situa esse resultado no conjunto completo de modelos do estudo.
 
 \begin{figure*}[!t]
 \centering
@@ -674,6 +676,24 @@ S. Han, H. Mao, and W. J. Dally, ``Deep compression: Compressing deep neural net
 pruning, trained quantization and Huffman coding,'' in \textit{International Conference on
 Learning Representations (ICLR)}, 2016.
 
+\bibitem{li2025depthwisewinograd}
+G. Li, R. Li, T. Li, T. Chen, M. Zhang, and H. Corporaal, ``Algorithm-hardware co-design for
+accelerating depthwise separable CNNs,'' \textit{ACM Transactions on Design Automation of
+Electronic Systems}, vol. 30, no. 2, 2025.
+
+\bibitem{loshchilov2019adamw}
+I. Loshchilov and F. Hutter, ``Decoupled weight decay regularization,'' in \textit{International
+Conference on Learning Representations (ICLR)}, 2019.
+
+\bibitem{cubuk2019autoaugment}
+E. D. Cubuk, B. Zoph, D. Mané, V. Vasudevan, and Q. V. Le, ``AutoAugment: Learning augmentation
+strategies from data,'' in \textit{Proc. IEEE Conf. Computer Vision and Pattern Recognition
+(CVPR)}, 2019, pp. 113--123.
+
+\bibitem{lin2014network}
+M. Lin, Q. Chen, and S. Yan, ``Network in network,'' in \textit{International Conference on
+Learning Representations (ICLR)}, 2014.
+
 \end{thebibliography}
 
 \clearpage
@@ -686,11 +706,13 @@ Pareto acurácia/tamanho/quantização e são construídos inteiramente com conv
 (nenhum kernel $>$3$\times$3) — as Figuras~\ref{fig:arch_bottleneck}--\ref{fig:arch_firebypass}
 mostram o diagrama de blocos por estágio, com canais de entrada/saída, contagem de parâmetros e o
 tipo de cada convolução interna (1$\times$1 em cinza, 3$\times$3 em verde), extraídos dos pesos
-treinados reais. Os rótulos internos das figuras permanecem em inglês.
+treinados reais. Os diagramas são dispostos na horizontal (entrada à esquerda, \textit{head}
+classificador à direita) para caber dois por página em largura total sem perder legibilidade. Os
+rótulos internos das figuras permanecem em inglês.
 
 \begin{figure*}[!t]
 \centering
-\includegraphics[width=0.62\textwidth]{figures/architecture_alexnet_bottleneck.png}
+\includegraphics[width=\textwidth]{figures/architecture_alexnet_bottleneck.png}
 \caption{\texttt{AlexNetBottleneck}: bloco \textit{reduce} 1$\times$1
 $\rightarrow$ \textit{conv} 3$\times$3 $\rightarrow$ \textit{expand} 1$\times$1 por estágio.}
 \label{fig:arch_bottleneck}
@@ -698,7 +720,7 @@ $\rightarrow$ \textit{conv} 3$\times$3 $\rightarrow$ \textit{expand} 1$\times$1 
 
 \begin{figure*}[!t]
 \centering
-\includegraphics[width=0.62\textwidth]{figures/architecture_alexnet_fire.png}
+\includegraphics[width=\textwidth]{figures/architecture_alexnet_fire.png}
 \caption{\texttt{AlexNetFire}: módulo \textit{Fire} (\textit{squeeze} 1$\times$1
 $\rightarrow$ \textit{expand} 1$\times$1/3$\times$3 concatenados) por estágio.}
 \label{fig:arch_fire}
@@ -706,7 +728,7 @@ $\rightarrow$ \textit{expand} 1$\times$1/3$\times$3 concatenados) por estágio.}
 
 \begin{figure*}[!t]
 \centering
-\includegraphics[width=0.62\textwidth]{figures/architecture_alexnet_final_fire_residual.png}
+\includegraphics[width=\textwidth]{figures/architecture_alexnet_final_fire_residual.png}
 \caption{\texttt{AlexNetFinalFireResidual}: \textit{stem} 3$\times$3 \textit{stride}-2
 seguido de módulos \textit{Fire} com atalho residual em cada estágio.}
 \label{fig:arch_finalfireresidual}
@@ -714,10 +736,95 @@ seguido de módulos \textit{Fire} com atalho residual em cada estágio.}
 
 \begin{figure*}[!t]
 \centering
-\includegraphics[width=0.62\textwidth]{figures/architecture_alexnet_fire_bypass.png}
+\includegraphics[width=\textwidth]{figures/architecture_alexnet_fire_bypass.png}
 \caption{\texttt{AlexNetFireBypass}: \texttt{AlexNetFire} base com um atalho residual
 por identidade adicionado a cada estágio, sem nenhum parâmetro extra.}
 \label{fig:arch_firebypass}
 \end{figure*}
+
+\subsection{Dados de Treinamento}
+\label{sec:apendice_treinamento}
+
+A Tabela~\ref{tab:hyperparams} resume o protocolo de hiperparâmetros compartilhado por todos os
+modelos (Seção~\ref{sec:dados}), fixado nos arquivos \texttt{configs/training.yaml},
+\texttt{configs/qat.yaml} e \texttt{configs/data.yaml} do repositório. O otimizador é AdamW
+\cite{loshchilov2019adamw} com \textit{learning rate} decaído por \textit{cosine annealing}
+(\texttt{T\_max} = número de épocas do estágio); a taxa de aprendizado inicial, porém, é um
+hiperparâmetro \emph{por modelo} (registrado junto à arquitetura, não um valor único global) — a
+Tabela~\ref{tab:per_model_training} lista o valor usado por cada um.
+
+\begin{table*}[!t]
+\caption{Hiperparâmetros de treinamento compartilhados}
+\label{tab:hyperparams}
+\centering
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Parâmetro} & \textbf{Valor} \\
+\midrule
+Otimizador & AdamW \cite{loshchilov2019adamw} \\
+\textit{Scheduler} & \textit{Cosine annealing} (T\_max = épocas) \\
+Épocas (orçamento FP32) & 100, \textit{early stopping} paciência 5 \\
+Épocas (orçamento QAT) & 20, \textit{early stopping} paciência 5 \\
+\textit{Weight decay} (FP32 / QAT) & 5$\times10^{-4}$ / 5$\times10^{-4}$ \\
+\textit{Label smoothing} & 0,1 \\
+\textit{Batch size} & 64 \\
+AMP (\textit{mixed precision}) & Ligado (FP32) / desligado (QAT) \\
+\textit{Split} treino/validação & 90/10 determinístico, seed 42 \\
+Aumento de dados (treino) & \textit{RandomResizedCrop} (0,7--1,0), \textit{flip} \\
+ & horizontal, \textit{RandomRotation} (15°), \\
+ & AutoAugment (política ImageNet) \cite{cubuk2019autoaugment} \\
+Aumento de dados (validação) & \textit{Resize} $\to$ \textit{CenterCrop} \\
+Normalização & Média/desvio-padrão do ImageNet \\
+QAT: \textit{freeze} BN / desativa \textit{observers} & Época 3 / Época 5 \\
+INT8: \textit{backend} / dispositivo & fbgemm / CPU \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+A Tabela~\ref{tab:per_model_training} lista, por modelo, a taxa de aprendizado inicial (FP32), o
+número de épocas efetivamente treinadas até o melhor \textit{checkpoint} (\textit{early stopping}
+pode interromper antes do orçamento de 100 épocas) e o tempo de treino FP32 medido. O agrupamento
+por família replica o da Figura~\ref{fig:kernel_cost}. O tempo total é o produto entre épocas e
+tempo médio por época — os modelos das famílias \textit{baselines irrestritos} e
+\textit{restrição ingênua}/\texttt{AlexNetBottleneck}/\texttt{AlexNetFire} foram treinados
+localmente (GPU única, RTX 4060 Laptop); as arquiteturas híbridas da Contribuição 2
+(\texttt{Bottleneck+Fire}, \texttt{Bottleneck+Residual}, \texttt{Depthwise+Fire}) e da
+arquitetura híbrida final foram treinadas nos nós RTX 4090 do cluster PCAD
+(\texttt{configs/slurm/tupi\_4090.yaml}) — os tempos por época \emph{não} são diretamente
+comparáveis entre si nem com as medições de latência da Contribuição 3, que usam exclusivamente a
+RTX 4060 Laptop (Seção~\ref{sec:profiling}).
+
+\begin{table*}[!t]
+\caption{Taxa de aprendizado, épocas efetivas e tempo de treino FP32 por modelo}
+\label{tab:per_model_training}
+\centering
+\begin{tabular}{@{}llccc@{}}
+\toprule
+\textbf{Família} & \textbf{Modelo} & \textbf{LR} & \textbf{Épocas} & \textbf{Tempo (min)} \\
+\midrule
+\multirow{4}{*}{Baselines irrestritos}
+ & AlexNetTV (pré-trein.) & 3$\times10^{-4}$ & 79 & 63,2 \\
+ & MobileNetV2 (pré-trein.) & 1$\times10^{-4}$ & 27 & 14,8 \\
+ & ResNet18 (pré-trein.) & 1$\times10^{-4}$ & 15 & 7,1 \\
+ & VGG-Style & 1$\times10^{-3}$ & 62 & 30,5 \\
+\midrule
+\multirow{3}{*}{Restrição ingênua}
+ & AlexNet3x3-FC & 3$\times10^{-4}$ & 37 & 29,1 \\
+ & AlexNet3x3-GAP & 3$\times10^{-4}$ & 43 & 16,3 \\
+ & AlexNetSmallKernel & 3$\times10^{-4}$ & 62 & 24,5 \\
+\midrule
+\multirow{5}{*}{Tentativas de compensação}
+ & AlexNetBottleneck & 1$\times10^{-3}$ & 76 & 29,6 \\
+ & AlexNetFire & 1$\times10^{-3}$ & 41 & 21,7 \\
+ & Bottleneck + Fire & 1$\times10^{-3}$ & 40 & 13,9 \\
+ & Bottleneck + Residual & 1$\times10^{-3}$ & 38 & 15,6 \\
+ & Depthwise + Fire & 1$\times10^{-3}$ & 76 & 27,3 \\
+\midrule
+\multirow{2}{*}{Arquitetura híbrida final}
+ & Fire + Residual (\texttt{FinalFireResidual}) & 1$\times10^{-3}$ & 77 & 28,8 \\
+ & AlexNetFireBypass & 1$\times10^{-3}$ & 152 & 86,2 \\
+\bottomrule
+\end{tabular}
+\end{table*}
 
 \end{document}

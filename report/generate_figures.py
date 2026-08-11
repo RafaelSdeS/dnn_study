@@ -242,13 +242,16 @@ ax.set_xlim(0, 82)
 _style_axes(ax)
 
 legend_handles = [Patch(facecolor=c, label=g) for g, c in COMP_GROUP_COLORS.items()]
-ax.legend(handles=legend_handles, loc="upper center", bbox_to_anchor=(0.5, -0.14),
+# bbox_to_anchor is in axes-fraction coords; plt.tight_layout() (removed below) fights this by
+# shrinking the axes to fit the legend inside the original figsize, which paradoxically pushes the
+# per-bar annotation text further into the legend's column -- bbox_inches="tight" on savefig alone
+# already crops the canvas to content, so tight_layout() isn't needed here.
+ax.legend(handles=legend_handles, loc="center left", bbox_to_anchor=(1.02, 0.5),
           ncol=1, frameon=False, fontsize=12)
 
 fig.suptitle("Métodos de compressão além de INT8\n"
              "(taxa = tamanho do checkpoint FP32 ÷ tamanho do checkpoint comprimido)",
              fontsize=12, color=TEXT_PRIMARY)
-plt.tight_layout()
 plt.savefig(OUTPUT_DIR / "extreme_compression_methods.png", dpi=150, bbox_inches="tight", facecolor="white")
 print("✓ extreme_compression_methods.png")
 plt.close()
