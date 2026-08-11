@@ -1,5 +1,7 @@
 \documentclass[conference]{IEEEtran}
 \IEEEoverridecommandlockouts
+\renewcommand{\figurename}{Figura}
+\renewcommand{\tablename}{Tabela}
 \usepackage{cite}
 \usepackage{amsmath,amssymb,amsfonts}
 \usepackage{graphicx}
@@ -19,14 +21,16 @@ Recuperação de Acurácia via Blocos \textit{Bottleneck}}
 
 \author{
 \IEEEauthorblockN{Rafael Silva de Souza}
-\IEEEauthorblockA{Instituto de Informática \\
+\IEEEauthorblockA{Curso de Engenharia de Computação \\
+Instituto de Informática \\
 Universidade Federal do Rio Grande do Sul (UFRGS) \\
-rafesilvadesouza@gmail.com}
+rafael.souza@inf.ufrgs.br}
 \and
-\IEEEauthorblockN{Mateus Grellert}
-\IEEEauthorblockA{Instituto de Informática \\
+\IEEEauthorblockN{Mateus Grellert da Silva}
+\IEEEauthorblockA{Professor Adjunto, Orientador \\
+Instituto de Informática \\
 Universidade Federal do Rio Grande do Sul (UFRGS) \\
-Orientador}
+mateus.grellert@inf.ufrgs.br}
 }
 
 \maketitle
@@ -93,13 +97,16 @@ nenhum parâmetro adicional.
 
 \subsection{Dados e configuração experimental}
 \label{sec:dados}
-Todos os modelos foram treinados no Tiny ImageNet-200 (imagens 64$\times$64 RGB, 200 classes,
-\textit{split} 90/10 determinístico). O pipeline de treino segue três estágios: (i) treino FP32 do
-zero; (ii) \textit{Quantization-Aware Training} (QAT), inicializado a partir do melhor checkpoint
-FP32, com fusão Conv-BN-ReLU e \textit{fake quantization} nos módulos suportados
-\cite{jacob2018quantization}; (iii) conversão para INT8 (\textit{backend} fbgemm, inferência em
-CPU). Reportamos acurácia top-1 tanto para o modelo FP32 quanto para o modelo INT8 final, e a
-diferença entre ambos (\textit{QAT drop}) como medida de robustez à quantização.
+Todos os modelos foram avaliados no Tiny ImageNet-200 (imagens 64$\times$64 RGB, 200 classes,
+\textit{split} 90/10 determinístico) sob o mesmo pipeline de três estágios: (i) treino FP32 —
+do zero para a grande maioria das variantes, exceto a baseline AlexNet irrestrita e os baselines
+externos ResNet18/MobileNetV2 (Seção~\ref{sec:contrib1}), que partem de pesos pré-treinados em
+ImageNet-1K e são apenas ajustados (\textit{fine-tuned}) para as 200 classes do Tiny ImageNet; (ii)
+\textit{Quantization-Aware Training} (QAT), inicializado a partir do melhor checkpoint FP32, com
+fusão Conv-BN-ReLU e \textit{fake quantization} nos módulos suportados \cite{jacob2018quantization};
+(iii) conversão para INT8 (\textit{backend} fbgemm, inferência em CPU). Reportamos acurácia top-1
+tanto para o modelo FP32 quanto para o modelo INT8 final, e a diferença entre ambos (\textit{QAT
+drop}) como medida de robustez à quantização.
 
 \subsection{Arquiteturas comparadas}
 Sete variantes permitem isolar o efeito da restrição de kernel, o efeito do \textit{head} GAP, o
@@ -159,16 +166,26 @@ mente; ver limitações na Seção~\ref{sec:discussao}.
 \section{Resultados}
 
 \subsection{Contribuição 1: Custo de Restrição de Kernel e Mecanismos de Compensação}
+\label{sec:contrib1}
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=\linewidth]{figures/kernel_restriction_cost.png}
-\caption{Acurácia FP32 (top-1) por arquitetura, contrastando \textit{baselines} de kernel
-irrestrito, restrição ingênua (3$\times$3, 2$\times$2), tentativas exploratórias de compensação
-(\texttt{Mixed}, \texttt{SmallKernel}, \texttt{Residual} puro — não detalhadas individualmente
-neste relatório) e a arquitetura híbrida final (\texttt{Fire-Residual}).}
+\caption{Acurácia FP32 (top-1) por arquitetura, contrastando \textit{baselines} externos de
+kernel irrestrito (MobileNetV2, ResNet18, VGG-Style), restrição ingênua (AlexNet 3$\times$3 e
+2$\times$2), tentativas exploratórias de compensação (\texttt{Mixed}, \texttt{Residual} puro —
+não detalhadas individualmente neste relatório; \texttt{SmallKernel} é retomado com números na
+Contribuição 5) e a arquitetura híbrida final (\texttt{Fire-Residual}).}
 \label{fig:kernel_cost}
 \end{figure}
+
+Os três \textit{baselines} externos da Figura~\ref{fig:kernel_cost} situam essa restrição num
+contexto mais amplo, fora do escopo Winograd-amigável ($\leq$3$\times$3) deste estudo: MobileNetV2
+pré-treinada atinge 58,0\% de acurácia FP32 (28,75 MB, a maior do gráfico), ResNet18 pré-treinada
+53,9\% (129,21 MB), e VGG-Style — treinada do zero, sem pré-treino — 51,8\% (27,58 MB). Do lado da
+restrição ingênua, o par completo citado na legenda é \texttt{AlexNet3x3-FC} (35,79\%, discutida
+abaixo) e \texttt{AlexNet2x2-FC} (30,53\%, treinada do zero) — kernel 2$\times$2 sozinho, sem
+compensação estrutural, fica abaixo até da baseline AlexNet pré-treinada de kernel irrestrito.
 
 A Tabela~\ref{tab:kernel_restriction_cost} resume o custo de restringir kernels a 3$\times$3
 e a efetividade de dois mecanismos de compensação: blocos \textit{bottleneck} e módulos
@@ -264,7 +281,8 @@ Winograd especificamente para convoluções densas (\texttt{groups=1}) com kerne
 O teste de \textit{scaling} teórico é mais fraco. A complexidade de Winograd cresce
 sub-linearmente com o tamanho do kernel $k$ (número de operações $\propto 2k^2-1$, contra
 $\propto k^2$ da convolução direta); a Figura~\ref{fig:latency_vs_kernel} mostra a latência por
-FLOP medida para $k \in \{2,3,5,7,9,11\}$. Um teste de Wilcoxon pareado (latência por FLOP,
+FLOP medida para $k \in \{2,3,5,7,9,11\}$. Um teste de Wilcoxon pareado \cite{wilcoxon1945individual}
+(latência por FLOP,
 $k{=}3$ vs. $k{=}5$, denso) no regime \emph{compute-bound} ($\textit{batch}=64$, a evidência
 primária — ver painel central da figura) é \textbf{inconclusivo}: $p=0,023$, $n=8$, e a mediana do
 custo por FLOP em $k{=}3$ não é menor que em $k{=}5$. No regime \textit{overhead-bound}
@@ -273,8 +291,8 @@ $k{=}3$), mas sem significância estatística ($p=0,82$, $n=16$). Consistente co
 rastreamento de \textit{kernel} mostra que, em $\textit{batch}=64$, o cuDNN troca Winograd por um
 \textit{kernel} TF32 de \textit{tensor core} mesmo em $k{=}3$ — ou seja, no regime onde a
 comparação estatística mais importa, nem sempre há Winograd para medir. A leitura mais defensável
-não é "Winograd não ajuda", mas "\textit{tensor cores} competem com a vantagem de Winograd
-justamente no regime \textit{compute-bound}, onde uma redução de multiplicações teria mais efeito"
+não é que Winograd não ajuda, mas que \textit{tensor cores} competem com a vantagem de Winograd
+justamente no regime \textit{compute-bound}, onde uma redução de multiplicações teria mais efeito
 — achado interessante para o acelerador FPGA que motiva este projeto (sem \textit{tensor cores}),
 mas que este experimento em GPU não pode confirmar diretamente.
 
@@ -288,7 +306,8 @@ estatístico e sua limitação no regime \textit{compute-bound} (\textit{batch}=
 \end{figure*}
 
 Para convoluções \textit{depthwise}, o quadro é mais consistente: nenhuma evidência de Winograd
-foi encontrada em nenhum regime. No nível de camada, o mesmo teste de Wilcoxon (compute-bound,
+foi encontrada em nenhum regime. No nível de camada, o mesmo teste de Wilcoxon
+\cite{wilcoxon1945individual} (compute-bound,
 denso vs. \texttt{groups=in\_ch}) rejeita sinal Winograd para \textit{depthwise}
 ($p=0,0078$, $n=8$). No nível de modelo completo, \texttt{alexnet\_depthwisesep} e \texttt{mobilenetv2} (85,0 e
 24,9 GFLOP/s, mediana 54,9) ficam bem abaixo de quatro modelos densos comparáveis
@@ -307,8 +326,11 @@ arquiteturas.
 \centering
 \includegraphics[width=\linewidth]{figures/phase6_accuracy_vs_latency_pareto.png}
 \caption{Fronteira de Pareto acurácia $\times$ latência (FP32 e INT8, RTX 4060, \textit{batch}=1).
-Modelos com convolução 3$\times$3 densa (\textit{bottleneck}, Fire) dominam o baseline irrestrito;
-modelos \textit{depthwise} não recebem aceleração Winograd apesar do kernel pequeno.}
+Cor indica o mesmo agrupamento da Figura~\ref{fig:kernel_cost} (\textit{baselines} irrestritos,
+restrição ingênua, tentativas de compensação, arquitetura híbrida final); forma indica precisão
+(círculo = FP32, quadrado = INT8). Modelos com convolução 3$\times$3 densa (\textit{bottleneck},
+Fire) dominam o baseline irrestrito; modelos \textit{depthwise} não recebem aceleração Winograd
+apesar do kernel pequeno.}
 \label{fig:pareto_latency}
 \end{figure*}
 
@@ -363,24 +385,37 @@ fecha \emph{87\%} do ganho FP32 da arquitetura híbrida completa (5,05 de 5,81 p
 atalho residual — não o novo \textit{stem} da arquitetura híbrida — é o componente responsável
 pela maior parte do ganho de acurácia, e que pode ser adicionado a \emph{custo estrutural zero}.
 
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=\linewidth]{figures/accuracy_vs_size_all_models.png}
+\caption{Acurácia top-1 vs. tamanho (MB, escala log) para todos os modelos discutidos neste
+relatório, FP32 e INT8. Cor indica o mesmo agrupamento da Figura~\ref{fig:kernel_cost}
+(\textit{baselines} irrestritos, restrição ingênua, tentativas de compensação, arquitetura híbrida
+final); forma indica precisão (círculo = FP32, quadrado = INT8), e linhas cinza conectam o par
+FP32/INT8 de cada modelo. As linhas tracejada e pontilhada são as fronteiras de Pareto
+acurácia-tamanho para FP32 e INT8, respectivamente. MobileNetV2 e ResNet18 não têm ponto INT8
+porque QAT foi pulado para ambos (\textit{residual adds} sem \texttt{FloatFunctional},
+Seção~\ref{sec:contrib1}). \texttt{AlexNet (irrestrita)} usa a mesma execução de 79 épocas
+padronizada na Tabela~\ref{tab:kernel_restriction_cost}.}
+\label{fig:accuracy_vs_size}
+\end{figure*}
+
 \subsection{Contribuição 5: Robustez de Quantização e Comparação de Métodos de Compressão}
 
 Além de acurácia e latência, investigamos como diferentes mecanismos de compensação afetam a
 robustez sob quantização INT8 e compressão adicional.
 
-\begin{figure*}[!t]
-\centering
-\includegraphics[width=\linewidth]{figures/quant_stability_bar.png}
-\caption{Queda de acurácia (p.p.) de FP32 para INT8 por arquitetura. Mecanismos de compensação
-(\textit{bottleneck}, \textit{Fire}) mantêm a acurácia quase intacta sob quantização, ao contrário
-de restrições de kernel sem compensação (SmallKernel: $-$9,67 p.p., crítico).}
-\label{fig:qat_stability}
-\end{figure*}
-
 O padrão é claro: compensação estrutural (bottleneck, Fire) com kernels restritos oferece robustez
 excepcional sob quantização, enquanto restrições ingênuas (AlexNet3x3-GAP, AlexNetSmallKernel) sofrem
-degradação significativa. A Tabela~\ref{tab:quantization_robustness} agrupa modelos por família e
-mostra a queda de acurácia FP32$\to$INT8 (\textit{drop}) para cada uma.
+degradação significativa. \texttt{AlexNetSmallKernel} é a variante mais enxuta do estudo: mesmo
+\textit{backbone} totalmente 3$\times$3 do \texttt{AlexNet3x3-GAP}, mas com canais bem mais estreitos
+(64$\rightarrow$128$\rightarrow$256$\rightarrow$256$\rightarrow$256) e, como o \texttt{AlexNet3x3-GAP},
+sem \textit{BatchNorm}. É o modelo mais compacto do estudo em número de parâmetros dentre as variantes
+de kernel restrito sem compensação, mas também o que mais sofre com a quantização: sem BN após cada
+convolução e com canais estreitos, resta pouca margem de ativação para absorver o ruído de
+quantização — ao contrário de \texttt{AlexNetBottleneck}/\texttt{AlexNetFire}, que têm BN após toda
+convolução (Seção~\ref{sec:contrib1}). A Tabela~\ref{tab:quantization_robustness} agrupa modelos por
+família e mostra a queda de acurácia FP32$\to$INT8 (\textit{drop}) para cada uma.
 
 \begin{table*}[!t]
 \caption{Robustez de quantização: queda FP32$\to$INT8 por família de modelo}
@@ -402,19 +437,27 @@ Baseline irrestrito & AlexNetTV & 32,88\% & 31,90\% & $-$0,98 \\
 \end{table*}
 
 Com relação a métodos adicionais de compressão além de INT8 padrão, testamos precisão
-mista INT4/INT8 e investigamos \textit{weight-sharing} pós-hoc. A
-Figura~\ref{fig:compression_methods} mostra que combinações agressivas (binary, ternary)
-sofrem queda de 25$+$ p.p., enquanto INT4 QAT permanece viável ($<$2 p.p. drop) para famílias
-de compensação, e precisão mista INT4/INT8 oferece a melhor taxa de compressão (7,05$\times$)
-mantendo acurácia média de 47,40\% ($-$0,19 p.p. de ganho).
+mista INT4/INT8 e investigamos \textit{weight-sharing} pós-hoc. A precisão mista atribui bits por
+camada por sensibilidade: cada camada quantizável tem seus pesos fake-quantizados isoladamente
+para INT4 (por canal de saída), mede-se o EQM dos \textit{logits} resultantes contra o \textit{baseline}
+FP32 num único \textit{batch} de calibração, e as camadas são ranqueadas por essa sensibilidade —
+as 30\% mais sensíveis permanecem em INT8, o restante vai para INT4, seguido de
+\textit{fine-tuning}. A Figura~\ref{fig:compression_methods} mostra que métodos sub-INT4 mais
+agressivos (ternary, int2, binary, todos QAT) sofrem quedas de 22 a 37 p.p., enquanto INT4 QAT
+permanece viável ($<$2 p.p. drop) para famílias de compensação, e essa precisão mista INT4/INT8
+oferece a melhor taxa de compressão entre os métodos com retreino (7,05$\times$) mantendo acurácia
+média de 44,52\%, um ganho médio de 0,19 p.p. sobre o FP32 dos mesmos 3 modelos.
 
 \begin{figure*}[!t]
 \centering
 \includegraphics[width=\linewidth]{figures/extreme_compression_methods.png}
-\caption{Queda de acurácia sob 7 métodos de compressão (Binary, Ternary, Int2, Int4, Int8 QAT,
-Mixed-Precision, Weight-Sharing) para modelos representativos. Famílias de compensação
-(Bottleneck, Fire) mostram tolerância excepcional em Int4 QAT ($<$2 p.p. drop), enquanto
-MobileNetV2 sofre queda catastrófica mesmo em Int4.}
+\caption{Acurácia top-1 média por método de compressão além de INT8, com taxa de compressão
+(tamanho do checkpoint FP32 dividido pelo tamanho do checkpoint comprimido) e número de modelos
+($n$) entre parênteses. INT4 PTQ (sem retreino) colapsa
+para 25,3\%; retreinar sob o mesmo INT4 (QAT) recupera para 43,3\% — o retreino, não a
+largura de bits em si, é o que preserva a acurácia. Precisão mista INT4/INT8 (QAT) supera até o
+INT4 QAT uniforme com taxa de compressão comparável. Métodos sub-INT4 mais agressivos (ternary,
+int2, binary, todos QAT) degradam progressivamente.}
 \label{fig:compression_methods}
 \end{figure*}
 
@@ -422,40 +465,54 @@ MobileNetV2 sofre queda catastrófica mesmo em Int4.}
 
 Como verificação adicional e preliminar (não um resultado central deste relatório), testamos poda
 estruturada de canais inteiros (não pesos individuais) no \texttt{AlexNetBottleneck}, razão 0,4,
-seleção por norma L1: 385.000$\to$207.399 parâmetros ($-$46,1\%; 53,9\% dos parâmetros originais
-retidos), mantendo toda convolução remanescente com \texttt{groups=1} (elegível à aceleração
-Winograd por construção). Sem \textit{fine-tuning} após a poda a acurácia colapsa (top-1 0,50\%),
-como esperado — este é apenas um teste de que a poda preserva \texttt{groups=1}, não um resultado
-de acurácia competitivo. Recuperar acurácia via \textit{fine-tuning} pós-poda permanece trabalho
-futuro.
+seleção por norma L1 \cite{li2017pruning}: 385.000$\to$207.399 parâmetros ($-$46,1\%; 53,9\% dos
+parâmetros originais retidos), mantendo toda convolução remanescente com \texttt{groups=1}
+(elegível à aceleração Winograd por construção). Sem \textit{fine-tuning} após a poda a acurácia
+colapsa (top-1 0,50\%), como esperado — este é apenas um teste de que a poda preserva
+\texttt{groups=1}, não um resultado de acurácia competitivo. A literatura de poda estruturada por
+norma L1 mostra que \textit{fine-tuning} pós-poda recupera acurácia próxima à do modelo original
+\cite{li2017pruning}, o que motiva tratar essa recuperação como trabalho futuro plausível, não
+apenas como esperança.
+
+\subsubsection{Nota adicional: headroom de compressão via \textit{weight-sharing}}
+
+Em paralelo à poda, medimos (sem alterar o pipeline de checkpoint) o quanto o INT8 padrão deste
+estudo ainda deixa na mesa em termos de compressão de peso. Para o \texttt{AlexNetFire}, os pesos
+INT8 reais ocupam 7,19 bits/peso de entropia de Shannon (contra 8,00 nominais), e
+\textit{weight-sharing} por \textit{k-means} — o passo de codebook do Deep Compression
+\cite{han2016deepcompression} — em 16/32/64 \textit{clusters} (4/5/6 bits) supera a razão de
+compressão real do gzip em disco (1,18$\times$), chegando a $\sim$2,2$\times$ de \textit{headroom}
+adicional (só pesos) em 16 \textit{clusters}. É uma medição teórica, não uma avaliação de acurácia
+real pós-\textit{clustering} nem uma mudança efetiva no formato de checkpoint — apenas um sinal de
+que uma pipeline real de \textit{weight-sharing} vale a pena construir (ver Trabalhos Futuros).
 
 \subsection{Síntese das cinco contribuições}
 
 Os cinco pilares deste trabalho conectam-se em uma narrativa coerente:
 
 \begin{enumerate}
-\item \emph{Kernel Restriction Cost (Contribuição 1)}: Neste protocolo, restringir kernels a
+\item \emph{Custo da Restrição de Kernel (Contribuição 1)}: Neste protocolo, restringir kernels a
 3$\times$3 isoladamente não custou acurácia (ganhou 2,9 p.p. de zero, contra a baseline
 pré-treinada) — o custo intuído na Seção I não se confirmou de forma limpa aqui; a troca de
 \textit{head} para GAP foi a mudança com efeito isolado mais claro (+4,5 p.p.).
 
-\item \emph{Compensation Mechanisms (Contribuição 1)}: Sobre a base restrita+GAP, blocos
+\item \emph{Mecanismos de Compensação (Contribuição 1)}: Sobre a base restrita+GAP, blocos
 \textit{bottleneck} e módulos \textit{Fire} recuperam mais 3,7--4,3 p.p. com parâmetros
 drasticamente reduzidos (0,39--0,52M vs. 57,8M do baseline) e melhoram a robustez de quantização —
 mas não reduzem MACs na mesma proporção (Fire usa mais MACs que a própria variante GAP).
 
-\item \emph{Hybrid Synergy (Contribuição 2)}: Fire + Residual não é apenas a soma de seus efeitos;
+\item \emph{Sinergia Híbrida (Contribuição 2)}: Fire + Residual não é apenas a soma de seus efeitos;
 oferece sinergia não-linear (+5,81 p.p. acima do Fire de base). Nem todas as combinações de
 mecanismos sinergizam igualmente bem.
 
-\item \emph{Hardware Validation (Contribuição 3)}: O rastreamento de \textit{kernel} confirma que
+\item \emph{Validação em Hardware (Contribuição 3)}: O rastreamento de \textit{kernel} confirma que
 o cuDNN aciona Winograd para convoluções densas 3$\times$3 em \textit{batches} pequenos, e nunca
 para \textit{depthwise}. O teste estatístico de latência, porém, é inconclusivo no regime
 \textit{compute-bound} — \textit{tensor cores} parecem competir com a vantagem de Winograd
 justamente aí. Um acelerador FPGA sem \textit{tensor cores} evitaria essa competição por
 construção, mas isso é uma expectativa de \textit{design}, não algo medido neste trabalho.
 
-\item \emph{Zero-Cost Bypass (Contribuição 4)}: Um atalho residual isolado fecha 87\% do ganho da
+\item \emph{Atalho de Custo Zero (Contribuição 4)}: Um atalho residual isolado fecha 87\% do ganho da
 arquitetura híbrida completa, sem parâmetros extras. Sugere que simplicidade estrutural pode ser
 mais poderosa que complexidade elaborada, ao menos para esta família de arquiteturas.
 
@@ -539,9 +596,11 @@ cores} e, por construção, não sofreria a competição de (i) — mas essa é 
 
 \begin{enumerate}
 \item \textit{Fine-tuning} pós-poda estruturada: Recuperar acurácia do \texttt{AlexNetBottleneck} podado
-(46,1\% menos parâmetros, 0,385M $\to$ 0,207M), mantendo Winograd-elegibilidade via \texttt{groups=1}.
-\item \textit{Weight-sharing} QAT-aware: Implementar pipeline com retreino para weight-sharing (contraste
-com o clustering pós-hoc já testado neste estudo), explorando os 7,19 bits/peso efetivos já usados por INT8.
+(46,1\% menos parâmetros, 0,385M $\to$ 0,207M), mantendo Winograd-elegibilidade via \texttt{groups=1} —
+literatura de poda por norma L1 \cite{li2017pruning} sugere que essa recuperação é factível.
+\item \textit{Weight-sharing} QAT-aware: Implementar pipeline real de \textit{weight-sharing}
+\cite{han2016deepcompression} com retreino (contraste com a medição teórica de \textit{headroom}
+já feita neste estudo), explorando os 7,19 bits/peso efetivos já usados por INT8.
 \item Hardware profiling estendido: Medições de latência e potência em FPGA real ou acelerador dedicado,
 validando hipótese de tensor cores ser artefato de GPU.
 \end{enumerate}
@@ -602,6 +661,63 @@ Recognition (CVPR)}, 2018.
 \bibitem{le2015tiny}
 Y. Le and X. Yang, ``Tiny ImageNet visual recognition challenge,'' Stanford CS231N Report, 2015.
 
+\bibitem{wilcoxon1945individual}
+F. Wilcoxon, ``Individual comparisons by ranking methods,'' \textit{Biometrics Bulletin}, vol. 1,
+no. 6, pp. 80--83, 1945.
+
+\bibitem{li2017pruning}
+H. Li, A. Kadav, I. Durdanovic, H. Samet, and H. P. Graf, ``Pruning filters for efficient
+ConvNets,'' in \textit{International Conference on Learning Representations (ICLR)}, 2017.
+
+\bibitem{han2016deepcompression}
+S. Han, H. Mao, and W. J. Dally, ``Deep compression: Compressing deep neural networks with
+pruning, trained quantization and Huffman coding,'' in \textit{International Conference on
+Learning Representations (ICLR)}, 2016.
+
 \end{thebibliography}
+
+\clearpage
+\appendix
+\subsection{Diagramas de Arquitetura}
+\label{sec:apendice_arquiteturas}
+
+Para os quatro modelos que sustentam as Contribuições 1, 2 e 4 — os que ocupam a fronteira de
+Pareto acurácia/tamanho/quantização e são construídos inteiramente com convoluções 1$\times$1/3$\times$3
+(nenhum kernel $>$3$\times$3) — as Figuras~\ref{fig:arch_bottleneck}--\ref{fig:arch_firebypass}
+mostram o diagrama de blocos por estágio, com canais de entrada/saída, contagem de parâmetros e o
+tipo de cada convolução interna (1$\times$1 em cinza, 3$\times$3 em verde), extraídos dos pesos
+treinados reais. Os rótulos internos das figuras permanecem em inglês.
+
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=0.62\textwidth]{figures/architecture_alexnet_bottleneck.png}
+\caption{\texttt{AlexNetBottleneck}: bloco \textit{reduce} 1$\times$1
+$\rightarrow$ \textit{conv} 3$\times$3 $\rightarrow$ \textit{expand} 1$\times$1 por estágio.}
+\label{fig:arch_bottleneck}
+\end{figure*}
+
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=0.62\textwidth]{figures/architecture_alexnet_fire.png}
+\caption{\texttt{AlexNetFire}: módulo \textit{Fire} (\textit{squeeze} 1$\times$1
+$\rightarrow$ \textit{expand} 1$\times$1/3$\times$3 concatenados) por estágio.}
+\label{fig:arch_fire}
+\end{figure*}
+
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=0.62\textwidth]{figures/architecture_alexnet_final_fire_residual.png}
+\caption{\texttt{AlexNetFinalFireResidual}: \textit{stem} 3$\times$3 \textit{stride}-2
+seguido de módulos \textit{Fire} com atalho residual em cada estágio.}
+\label{fig:arch_finalfireresidual}
+\end{figure*}
+
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=0.62\textwidth]{figures/architecture_alexnet_fire_bypass.png}
+\caption{\texttt{AlexNetFireBypass}: \texttt{AlexNetFire} base com um atalho residual
+por identidade adicionado a cada estágio, sem nenhum parâmetro extra.}
+\label{fig:arch_firebypass}
+\end{figure*}
 
 \end{document}
