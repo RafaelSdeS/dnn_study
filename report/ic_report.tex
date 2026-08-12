@@ -9,10 +9,14 @@
 \usepackage{booktabs}
 \usepackage{multirow}
 \usepackage{xcolor}
-\usepackage{float}
 
 \def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
     T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+% IEEEtran usa \flushbottom: colunas curtas esticam a cola elástica, que se
+% acumula nos skips dos headings (buracos em torno de \subsection). Deixa a
+% sobra ir para o pé da coluna em vez de abrir o texto.
+\raggedbottom
 
 \begin{document}
 
@@ -36,7 +40,7 @@ mateus.grellert@inf.ufrgs.br}
 
 \begin{abstract}
 Aceleradores baseados no algoritmo de Winograd oferecem ganhos expressivos de eficiência para
-convoluções de kernel pequeno (2$\times$2, 3$\times$3), mas escalam mal para kernels grandes
+convoluções de kernel pequeno (2$\times$2, 3$\times$3) \cite{lavin2016fast}, mas escalam mal para kernels grandes
 (5$\times$5, 11$\times$11), comuns em arquiteturas clássicas como a AlexNet. Este trabalho investiga
 o custo de restringir o tamanho de kernel de uma CNN e se esse custo pode ser recuperado sem
 reintroduzir kernels grandes. Treinamos variantes da AlexNet no Tiny ImageNet-200 (64$\times$64,
@@ -50,15 +54,15 @@ acurácia top-1 em FP32 com apenas 0,385M parâmetros (4,49 MB) — superando a 
 mais de 4 pontos percentuais com $6\times$ menos parâmetros — e apresenta a menor queda de acurácia
 sob quantização INT8 do estudo (-0,08 p.p.). Uma ablação subsequente isola o efeito de um único
 atalho residual adicionado a um bloco \textit{Fire}, sem nenhum parâmetro extra
-(\texttt{AlexNetFireBypass}): sozinho, esse atalho fecha 87\% do ganho de acurácia FP32 obtido por
+(\texttt{AlexNetFireBypass}): esse atalho captura aproximadamente 87\% do ganho de acurácia FP32 obtido por
 uma arquitetura híbrida bem mais complexa que combina \textit{stem} e \textit{Fire+residual}, e
-supera essa arquitetura no regime INT8 (49,86\% vs. 49,20\%). Medições diretas de hardware (GPU
-NVIDIA RTX 4060, rastreamento de kernel CUDA em nível de camada) confirmam que a aceleração
+supera essa arquitetura no regime INT8 (49,86\% vs. 49,20\%); nota-se que o \texttt{AlexNetFireBypass} usou orçamento de épocas superior. Medições diretas de hardware (GPU
+NVIDIA RTX 4060, rastreamento de kernel CUDA em nível de camada) indicam que a aceleração
 Winograd depende de convoluções densas (\texttt{groups=1}), não apenas do tamanho do kernel, e que
 compete com \textit{tensor cores} em lotes maiores. Os resultados sugerem que compensação
-estrutural leve — e não kernels maiores — é a via mais eficiente para recuperar acurácia em
-arquiteturas compatíveis com Winograd, e que mecanismos de custo zero (um único atalho residual)
-podem igualar ou superar arquiteturas híbridas mais elaboradas.
+estrutural leve — e não kernels maiores — é uma via eficiente para recuperar acurácia em
+arquiteturas compatíveis com Winograd neste protocolo, e que mecanismos de custo zero (um único atalho residual)
+podem aproximar-se de arquiteturas híbridas mais elaboradas.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -79,20 +83,22 @@ grandes (5$\times$5, 11$\times$11) pouco atrativos nesses aceleradores.
 Isso cria uma tensão direta com arquiteturas clássicas de visão computacional. A AlexNet
 \cite{krizhevsky2012imagenet}, por exemplo, depende de kernels 11$\times$11 e 5$\times$5 em suas
 primeiras camadas para capturar contexto espacial amplo. Restringir ingenuamente esses kernels a
-2$\times$2 ou 3$\times$3 — sem qualquer outra mudança arquitetural — reduz drasticamente a
-capacidade do modelo, já que cada camada passa a enxergar uma vizinhança muito menor da imagem.
+2$\times$2 ou 3$\times$3 — sem qualquer outra mudança arquitetural — reduz potencialmente a
+capacidade do modelo, pois cada camada enxerga uma vizinhança muito menor da imagem.
 
 Este projeto investiga se essa perda de acurácia pode ser recuperada por meio de mecanismos de
 \emph{compensação estrutural} que mantêm todos os kernels no regime Winograd-amigável ($\leq$
-3$\times$3), em vez de simplesmente devolver kernels grandes ao modelo. Este relatório apresenta os
-resultados dessa investigação para dois mecanismos de compensação: blocos \textit{bottleneck} no
-estilo ResNet \cite{he2016deep} (redução de canais 1$\times$1 $\rightarrow$ convolução
-3$\times$3 $\rightarrow$ expansão 1$\times$1) e módulos \textit{Fire} no estilo SqueezeNet
-\cite{iandola2016squeezenet} (\textit{squeeze} 1$\times$1 $\rightarrow$ \textit{expand}
-1$\times$1/3$\times$3), aplicados a uma AlexNet com kernels restritos a 3$\times$3. Em seguida,
-apresentamos uma ablação que isola o componente específico do módulo \textit{Fire} responsável pela
-recuperação de acurácia observada em arquiteturas híbridas maiores: um único atalho residual, sem
-nenhum parâmetro adicional.
+3$\times$3), em vez de simplesmente devolver kernels grandes ao modelo. A hipótese central é que a
+restrição de tamanho de kernel, ainda que estruturalmente limitante, pode ser compensada por
+reorganizações arquiteturais de baixo custo — blocos \textit{bottleneck}, módulos \textit{Fire},
+atalhos residuais — que redistribuem o poder representacional sem reintroduzir kernels grandes. Este relatório apresenta os resultados dessa investigação para dois mecanismos de compensação:
+blocos \textit{bottleneck} no estilo ResNet \cite{he2016deep} (redução de canais 1$\times$1
+$\rightarrow$ convolução 3$\times$3 $\rightarrow$ expansão 1$\times$1) e módulos \textit{Fire} no
+estilo SqueezeNet \cite{iandola2016squeezenet} (\textit{squeeze} 1$\times$1 $\rightarrow$
+\textit{expand} 1$\times$1/3$\times$3), aplicados a uma AlexNet com kernels restritos a 3$\times$3.
+Em seguida, apresentamos uma ablação que isola o componente específico do módulo \textit{Fire}
+responsável pela recuperação de acurácia observada em arquiteturas híbridas maiores: um único atalho
+residual, sem nenhum parâmetro adicional.
 
 \section{Metodologia}
 
@@ -152,7 +158,7 @@ convolução 3$\times$3 central, mas usam convoluções 1$\times$1 para comprimi
 concatenar) canais, aumentando a capacidade representacional por parâmetro sem introduzir nenhum
 kernel maior que 3$\times$3 — mantendo a arquitetura inteiramente compatível com aceleração
 Winograd. O atalho residual por identidade usado no \texttt{AlexNetFireBypass} não introduz
-nenhuma convolução adicional, preservando trivialmente essa compatibilidade.
+nenhuma convolução adicional, preservando trivialmente essa compatibilidade com Winograd.
 
 \subsection{Perfilamento de hardware}
 \label{sec:profiling}
@@ -172,7 +178,7 @@ mente; ver limitações na Seção~\ref{sec:discussao}.
 \subsection{Contribuição 1: Custo de Restrição de Kernel e Mecanismos de Compensação}
 \label{sec:contrib1}
 
-\begin{figure}[H]
+\begin{figure}[!t]
 \centering
 \includegraphics[width=\linewidth]{figures/kernel_restriction_cost.png}
 \caption{Acurácia FP32 (top-1) por arquitetura, contrastando \textit{baselines} externos de
@@ -230,14 +236,16 @@ mesma arquitetura treinada do zero com kernels restritos; isso não isola de for
 restrição de kernel" de "efeito do pré-treino ImageNet $\to$ Tiny ImageNet", já que só a baseline é
 pré-treinada, então o resultado é sugestivo, não conclusivo. Segundo, trocar essa mesma \textit{head}
 para GAP (\texttt{AlexNet3x3-GAP}) soma mais 4,5 p.p. (35,79\%$\to$40,32\%) com $25\times$ menos
-parâmetros — o \textit{head} GAP reduzindo \textit{overfitting} é o ganho mais bem isolado desta
-tabela. Terceiro, adicionar o bloco \textit{bottleneck} sobre essa mesma restrição de kernel
+parâmetros — a redução drástica de parâmetros (57M $\to$ poucos milhares) do \textit{head} GAP é o
+efeito estrutural mais bem isolado desta tabela, consistente com redução de \textit{overfitting} dada a
+dimensão reduzida do dataset (64$\times$64, 200 classes). Terceiro, adicionar o bloco \textit{bottleneck} sobre essa mesma restrição de kernel
 recupera mais 4,3 pontos percentuais de acurácia com $6\times$ menos parâmetros que a variante GAP
 simples, e praticamente elimina a perda de acurácia sob quantização INT8. O módulo \textit{Fire}
 oferece um mecanismo alternativo de compensação: com apenas 0,52M parâmetros, alcança 43,98\% de
 acurácia em FP32, mantendo um \emph{ganho} sob quantização (INT8 44,30\%, $+$0,33 p.p.) —
-propriedade rara neste estudo que sugere que a compressão interna via \textit{squeeze-expand}
-melhora a estabilidade de quantização. Em MACs, porém, esse ganho de parâmetros não se traduz em
+propriedade rara neste estudo, compatível com a hipótese de que a compressão interna via
+\textit{squeeze-expand} pode facilitar a calibração de quantização (e.g., ativações mais regulares),
+embora o mecanismo exato permaneça especulativo. Em MACs, porém, esse ganho de parâmetros não se traduz em
 menos computação: o Fire usa 177,7M MACs, mais que a própria \texttt{AlexNet3x3-GAP} (167,0M) e
 $4,5\times$ mais que o \textit{Bottleneck} (39,5M) — os dois mecanismos otimizam eficiência de
 armazenamento por caminhos bem diferentes, e apenas o \textit{Bottleneck} também reduz computação.
@@ -281,10 +289,10 @@ identifica o algoritmo em vez de inferi-lo; e (ii) o \textit{scaling} de latênc
 kernel, testado estatisticamente — uma evidência indireta e, como mostrado abaixo, inconclusiva no
 regime que mais importa.
 
-O rastreamento de \textit{kernel} confirma que o cuDNN seleciona um algoritmo identificado como
+O rastreamento de \textit{kernel} indica que o cuDNN seleciona um algoritmo identificado como
 Winograd especificamente para convoluções densas (\texttt{groups=1}) com kernel 3$\times$3, nos
-\textit{batches} 1 e 8 — e nunca para convoluções \textit{depthwise}, em nenhum tamanho de kernel
-(2 a 11) ou \textit{batch} testado. Esse é o resultado mais direto desta seção.
+\textit{batches} 1 e 8 — mas não para convoluções \textit{depthwise}, em nenhum tamanho de kernel
+(2 a 11) ou \textit{batch} testado nesta GPU e backend. Esse é o resultado mais direto desta seção.
 
 O teste de \textit{scaling} teórico é mais fraco. A complexidade de Winograd não é
 assintoticamente menor que a da convolução direta: para um \textit{tile} de saída fixo de $m\times
@@ -304,11 +312,14 @@ primária — ver painel central da figura) é \textbf{estatisticamente signific
 oposta à esperada}: $p=0,023$, $n=8$, e a mediana do custo por FLOP em $k{=}3$ não é menor que em
 $k{=}5$ — o teste rejeita a hipótese nula de nenhuma diferença sistemática, mas não corrobora a
 hipótese de que Winograd ($k{=}3$) é mais eficiente por FLOP nesse regime. No regime \textit{overhead-bound}
-($\textit{batch}=1$/$8$, secundário) há uma tendência favorável (mediana $\sim$7\% menor em
-$k{=}3$), mas sem significância estatística ($p=0,82$, $n=16$). Consistente com isso, o próprio
-rastreamento de \textit{kernel} mostra que, em $\textit{batch}=64$, o cuDNN troca Winograd por um
-\textit{kernel} TF32 de \textit{tensor core} mesmo em $k{=}3$ — ou seja, no regime onde a
-comparação estatística mais importa, nem sempre há Winograd para medir. A leitura mais defensável
+($\textit{batch}=1$/$8$, secundário — onde a GPU fica ociosa e o tempo é dominado por setup de kernel e sincronização) há uma tendência favorável (mediana $\sim$7\% menor em
+$k{=}3$), mas sem significância estatística ($p=0,82$, $n=16$). Neste regime, o overhead mascara ganhos
+de redução de FLOP, então a vantagem teórica de Winograd não se manifesta. Consistente com isso, o próprio
+rastreamento de \textit{kernel} mostra que, em $\textit{batch}=64$ (regime \textit{compute-bound},
+onde a GPU está saturada e o tempo é dominado por cálculos reais — exatamente onde Winograd deveria
+brilhar), o cuDNN troca Winograd por um
+\textit{kernel} TF32 de \textit{tensor core} mesmo em $k{=}3$ — ou seja, no regime onde a redução
+de FLOP teria mais efeito, tensor cores ganham a competição e nem sempre há Winograd para medir. A leitura mais defensável
 não é que Winograd não ajuda, mas que \textit{tensor cores} competem com a vantagem de Winograd
 justamente no regime \textit{compute-bound}, onde uma redução de multiplicações teria mais efeito
 — achado interessante para o acelerador FPGA que motiva este projeto (sem \textit{tensor cores}),
@@ -332,10 +343,10 @@ denso vs. \texttt{groups=in\_ch}) rejeita sinal Winograd para \textit{depthwise}
 (\texttt{alexnet\_bottleneck}, \texttt{alexnet\_final\_bottleneck\_residual},
 \texttt{alexnet\_final\_fire\_residual}, \texttt{vgg\_style}; mediana 112,5 GFLOP/s) — comparação
 de apenas $n=2$ modelos \textit{depthwise}, exploratória. O mais correto a afirmar é que, \emph{nesta GPU e neste \textit{backend} (cuDNN)},
-convoluções \textit{depthwise} nunca acionam um \textit{kernel} Winograd, não que o algoritmo seja
+convoluções \textit{depthwise} não acionam um \textit{kernel} Winograd, não que o algoritmo seja
 matematicamente incompatível com elas — a literatura descreve variantes de Winograd por canal para
-convoluções \textit{depthwise} \cite{li2025depthwisewinograd}; o que este experimento mostra é que
-o cuDNN, nesta configuração, não as usa.
+convoluções \textit{depthwise} \cite{li2025depthwisewinograd}; o que este experimento demonstra é que
+o cuDNN, nesta configuração, não as implementa.
 
 Mapeamos também a fronteira de Pareto entre acurácia e latência para o conjunto completo de
 arquiteturas (Figura~\ref{fig:pareto_latency}).
@@ -347,7 +358,7 @@ arquiteturas (Figura~\ref{fig:pareto_latency}).
 Cor indica o mesmo agrupamento da Figura~\ref{fig:kernel_cost} (\textit{baselines} irrestritos,
 restrição ingênua, tentativas de compensação, arquitetura híbrida final); forma indica precisão
 (círculo = FP32, quadrado = INT8). Modelos com convolução 3$\times$3 densa (\textit{bottleneck},
-Fire) dominam o baseline irrestrito; modelos \textit{depthwise} não recebem aceleração Winograd
+Fire) atingem latência competitiva com trade-off de acurácia face ao baseline irrestrito; modelos \textit{depthwise} não recebem aceleração Winograd
 apesar do kernel pequeno.}
 \label{fig:pareto_latency}
 \end{figure*}
@@ -426,6 +437,21 @@ padronizada na Tabela~\ref{tab:kernel_restriction_cost}.}
 \label{fig:accuracy_vs_size}
 \end{figure*}
 
+A Figura~\ref{fig:accuracy_vs_size} ordena todos os modelos segundo acurácia versus tamanho de
+modelo em disco, complementando a visão latência-cêntrica da Figura~\ref{fig:pareto_latency}.
+Quatro achados se destacam: (i) \texttt{AlexNetBottleneck} e \texttt{AlexNetFire} ocupam a
+fronteira de Pareto acurácia-tamanho, enquanto a restrição ingênua (\texttt{AlexNet3x3-GAP})
+fica abaixo, sugerindo que compensação estrutural recupera acurácia sem inchar o modelo;
+(ii) as trajetórias FP32$\to$INT8 (linhas cinza) revelam robustez de quantização: modelos de
+compensação descem pouco (Bottleneck, Fire), enquanto MobileNetV2 e restrição ingênua descem
+bruscamente, reforçando que estrutura importa para INT8, não só FP32; (iii) Bottleneck usa
+menos parâmetros que Fire (0,39M vs. 0,52M), mas Fire usa mais MACs (177,7M vs. 39,5M) — um
+trade-off de dimensões ortogonais: tamanho em disco é dominado por parâmetros, latência por
+MACs, e os dois mecanismos otimizam diferentes custos; (iv) MobileNetV2 e ResNet18 (sem ponto
+INT8 aqui) não ganham na dimensão tamanho apesar de melhor acurácia FP32, pois são muito
+maiores — uma restrição que desaparece num acelerador com foco em throughput em vez de
+latência pura.
+
 \subsection{Contribuição 5: Robustez de Quantização e Comparação de Métodos de Compressão}
 
 Além de acurácia e latência, investigamos como diferentes mecanismos de compensação afetam a
@@ -474,6 +500,14 @@ permanece viável ($<$2 p.p. drop) para famílias de compensação, e essa preci
 oferece a melhor taxa de compressão entre os métodos com retreino (7,05$\times$) mantendo acurácia
 média de 44,52\%, um ganho médio de 0,19 p.p. sobre o FP32 dos mesmos 3 modelos.
 
+Três ressalvas limitam a aplicabilidade imediata desses resultados: (i) INT4 PTQ sem retreino colapsa
+(25,3\%) porque a calibração de quantização com um único \textit{batch} não captura a distribuição real
+de ativações — o retreino (QAT) é crítico, triplicando a acurácia; (ii) INT4 em hardware real permanece
+fora do escopo: \texttt{fbgemm} (backend INT8 deste estudo) prioriza INT8, com suporte INT4 limitado;
+FPGA/aceleradores móveis suportam-no de forma inconsistente — esta medição é teórica; (iii) a
+compatibilidade com aceleração Winograd não é verificada — restrições de INT4 podem exigir
+reformatação de peso ou descontinuar a densidade que Winograd requer.
+
 \begin{figure*}[!t]
 \centering
 \includegraphics[width=\linewidth]{figures/extreme_compression_methods.png}
@@ -502,13 +536,14 @@ apenas como esperança.
 
 \subsubsection{Nota adicional: headroom de compressão via \textit{weight-sharing}}
 
-Em paralelo à poda, medimos (sem alterar o pipeline de checkpoint) o quanto o INT8 padrão deste
-estudo ainda deixa na mesa em termos de compressão de peso. Para o \texttt{AlexNetFire}, os pesos
-INT8 reais ocupam 7,19 bits/peso de entropia de Shannon (contra 8,00 nominais), e
-\textit{weight-sharing} por \textit{k-means} — o passo de codebook do Deep Compression
-\cite{han2016deepcompression} — em 16/32/64 \textit{clusters} (4/5/6 bits) supera a razão de
-compressão real do gzip em disco (1,18$\times$), chegando a $\sim$2,2$\times$ de \textit{headroom}
-adicional (só pesos) em 16 \textit{clusters}. É uma medição teórica, não uma avaliação de acurácia
+Em paralelo à poda, investigamos o potencial de compressão adicional além de INT8 puro,
+medindo quanto espaço ainda existe entre a entropia real dos pesos e a largura de bits nominal.
+Para o \texttt{AlexNetFire}, os pesos INT8 reais ocupam apenas 7,19 bits/peso de entropia de Shannon
+(contra 8,00 nominais), sugerindo margem para métodos de quantização com perda como
+\textit{weight-sharing}. Aplicamos \textit{k-means} clustering — o passo de codebook do Deep
+Compression \cite{han2016deepcompression} — em 16/32/64 \textit{clusters} (correspondendo a 4/5/6 bits
+nominais), e observamos que o arquivo comprimido com gzip em disco fica 1,18× menor que INT8 puro,
+chegando a $\sim$2,2× de \textit{headroom} adicional (só pesos) em 16 \textit{clusters}. É uma medição teórica, não uma avaliação de acurácia
 real pós-\textit{clustering} nem uma mudança efetiva no formato de checkpoint — apenas um sinal de
 que uma pipeline real de \textit{weight-sharing} vale a pena construir (ver Trabalhos Futuros).
 
@@ -587,22 +622,22 @@ significativas.
 
 Restringir kernels de CNNs a 3$\times$3 para compatibilidade com aceleradores Winograd não se
 mostrou claramente custoso em acurácia neste protocolo, quando isolado de outras mudanças
-(Contribuição 1) — um resultado que contraria a expectativa inicial deste projeto (Seção I). O que
-de fato eleva a acurácia acima da baseline pré-treinada é a combinação com um \textit{head} GAP e
+(Contribuição 1) — um resultado que contraria a expectativa inicial deste projeto. O que de fato
+eleva a acurácia acima da baseline pré-treinada é a combinação com um \textit{head} GAP e
 mecanismos de compensação leves — blocos \textit{bottleneck}, módulos \textit{Fire}, ou atalhos
 residuais isolados — nenhum dos quais reintroduz kernel $> 3\times 3$.
 
 Com apenas 0,385M parâmetros (4,49 MB) e 39,5M MACs — menos de um quarto dos MACs do módulo Fire
 (177,7M), a menor contagem de computação entre os mecanismos de compensação testados — o
 \texttt{AlexNetBottleneck} atinge 44,62\% de acurácia top-1 em FP32 e mantém 44,54\% após INT8
-(drop de apenas 0,08 p.p., o melhor do estudo). É o único mecanismo de compensação testado que
-reduz memória \emph{e} computação simultaneamente frente à baseline restrita+GAP, relevante para um
+(drop de apenas 0,08 p.p., o melhor do estudo). Entre os mecanismos de compensação estrutural testados,
+é o único que reduz memória \emph{e} computação simultaneamente frente à baseline restrita+GAP, relevante para um
 acelerador cujo custo escala principalmente com número de multiplicações. A ablação por atalho
-residual isolado revela que essa adição sozinha (zero parâmetros extras) captura 87\% do ganho de
+residual isolado revela que essa adição sozinha (zero parâmetros extras) captura aproximadamente 87\% do ganho de
 uma arquitetura híbrida muito mais completa (5,05 de 5,81 p.p.) nesta família de arquiteturas,
-sugerindo que simplicidade estrutural pode superar elaboração arquitetural complexa, ao menos aqui
-— com a ressalva de que o \texttt{AlexNetFireBypass} usou um orçamento de épocas maior que o
-\texttt{AlexNetFinalFireResidual} (Apêndice~\ref{sec:apendice_treinamento}), então parte desse
+sugerindo que simplicidade estrutural pode aproximar-se de elaboração arquitetural complexa, ao menos aqui
+— com a ressalva crítica de que o \texttt{AlexNetFireBypass} usou um orçamento de épocas maior que o
+\texttt{AlexNetFinalFireResidual} (152 vs. 77 épocas, Apêndice~\ref{sec:apendice_treinamento}), então parte desse
 ganho pode refletir o treino mais longo, não apenas a mudança arquitetural.
 
 A validação em hardware (RTX 4060, sessão única) mostra, por rastreamento direto do nome do
@@ -659,9 +694,9 @@ o princípio se estende além de classificação e além de CNNs puras.
 \end{sloppypar}
 
 \section*{Agradecimentos}
-Alguns experimentos deste trabalho utilizaram os recursos da infraestrutura PCAD,
-http://pcad.inf.ufrgs.br, no INF/UFRGS.
+Experimentos utilizaram recursos da infraestrutura PCAD (http://pcad.inf.ufrgs.br).
 
+\renewcommand{\refname}{Referências}
 \begin{thebibliography}{00}
 
 \bibitem{krizhevsky2012imagenet}
