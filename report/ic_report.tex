@@ -16,8 +16,7 @@
 
 \begin{document}
 
-\title{Restrição do Tamanho de Kernel em CNNs para Aceleração Winograd:\\
-Recuperação de Acurácia via Blocos \textit{Bottleneck}}
+\title{Restrição do Tamanho de Kernel em CNNs para Aceleração Winograd}
 
 \author{
 \IEEEauthorblockN{Rafael Silva de Souza}
@@ -72,8 +71,10 @@ atalho residual, INT8
 O algoritmo de convolução de Winograd~\cite{lavin2016fast} reduz o número de multiplicações
 necessárias para convoluções de kernel pequeno, sendo a base de aceleradores de inferência
 amplamente usados em hardware embarcado. Sua vantagem, porém, desaparece rapidamente conforme o
-kernel cresce: a complexidade da transformada cresce de forma super-linear com o tamanho do filtro,
-tornando kernels grandes (5$\times$5, 11$\times$11) pouco atrativos nesses aceleradores.
+kernel cresce: o fator de redução de multiplicações frente à convolução direta satura numa
+constante em vez de crescer indefinidamente, e as matrizes de transformação tornam-se
+numericamente mal-condicionadas para kernels grandes \cite{barabasz2020error}, tornando kernels
+grandes (5$\times$5, 11$\times$11) pouco atrativos nesses aceleradores.
 
 Isso cria uma tensão direta com arquiteturas clássicas de visão computacional. A AlexNet
 \cite{krizhevsky2012imagenet}, por exemplo, depende de kernels 11$\times$11 e 5$\times$5 em suas
@@ -104,8 +105,10 @@ baselines externos ResNet18 \cite{he2016deep}/MobileNetV2 \cite{sandler2018mobil
 (Seção~\ref{sec:contrib1}), que partem de pesos pré-treinados em
 ImageNet-1K e são apenas ajustados (\textit{fine-tuned}) para as 200 classes do Tiny ImageNet; (ii)
 \textit{Quantization-Aware Training} (QAT), inicializado a partir do melhor checkpoint FP32, com
-fusão Conv-BN-ReLU e \textit{fake quantization} nos módulos suportados \cite{jacob2018quantization};
-(iii) conversão para INT8 (\textit{backend} fbgemm, inferência em CPU). Reportamos acurácia top-1
+fusão Conv-BN-ReLU e \textit{fake quantization} nos módulos suportados \cite{jacob2018quantization}
+— as arquiteturas com atalho residual usam \texttt{nn.quantized.FloatFunctional} no lugar do
+operador \texttt{+} para o \textit{add}, requisito do PyTorch para que a soma também seja
+quantizada corretamente; (iii) conversão para INT8 (\textit{backend} fbgemm, inferência em CPU). Reportamos acurácia top-1
 tanto para o modelo FP32 quanto para o modelo INT8 final, e a diferença entre ambos (\textit{QAT
 drop}) como medida de robustez à quantização.
 
@@ -194,7 +197,11 @@ e a efetividade de dois mecanismos de compensação: blocos \textit{bottleneck} 
 como a Contribuição 3 mostra, eles nem sempre concordam sobre qual arquitetura é "mais eficiente".
 \texttt{AlexNet3x3-FC} isola o efeito da restrição de kernel isoladamente do \textit{head} GAP: mantém a
 \textit{head} totalmente conectada da baseline, mas restringe kernels a 3$\times$3 e treina do zero
-(diferente da baseline irrestrita, pré-treinada).
+(diferente da baseline irrestrita, pré-treinada). Note que, apesar do kernel menor,
+\texttt{AlexNet3x3-FC} tem mais MACs que a baseline (222,3M vs. 94,9M): o \textit{stem} 3$\times$3
+usa \textit{stride} 2 em vez do \textit{stride} 4 do \textit{stem} 11$\times$11 original, então os
+mapas de ativação permanecem maiores por mais camadas — um kernel menor por aplicação, mas
+aplicado sobre uma área espacial bem maior no total.
 
 \begin{table*}[!t]
 \caption{Custo de restrição de kernel (3$\times$3) e mecanismos de compensação}
@@ -251,10 +258,10 @@ mecanismos estruturais. A Tabela~\ref{tab:phase4_ablation} compara cinco combina
  & \textbf{(M)} & \textbf{FP32 (\%)} & \textbf{INT8 (\%)} & \textbf{(p.p.)} \\
 \midrule
 AlexNetFire (base) & 0,52 & 43,98 & 44,30 & $+$0,33 \\
-Fire + Residual & 0,70 & 49,79 & 49,20 & $-$0,59 \\
-Bottleneck + Fire & 0,51 & 42,29 & 44,00 & $+$1,71 \\
-Bottleneck + Residual & 0,57 & 45,10 & 45,98 & $+$0,88 \\
-Depthwise + Fire & 0,47 & 43,46 & 42,79 & $-$0,67 \\
+Fire + Residual (\texttt{AlexNetFinalFireResidual}) & 0,70 & 49,79 & 49,20 & $-$0,59 \\
+Bottleneck + Fire (\texttt{AlexNetFinalBottleneckFire}) & 0,51 & 42,29 & 44,00 & $+$1,71 \\
+Bottleneck + Residual (\texttt{AlexNetFinalBottleneckResidual}) & 0,57 & 45,10 & 45,98 & $+$0,88 \\
+Depthwise + Fire (\texttt{AlexNetFinalDepthwiseFire}) & 0,47 & 43,46 & 42,79 & $-$0,67 \\
 \bottomrule
 \end{tabular}
 \end{table*}
@@ -279,14 +286,24 @@ Winograd especificamente para convoluções densas (\texttt{groups=1}) com kerne
 \textit{batches} 1 e 8 — e nunca para convoluções \textit{depthwise}, em nenhum tamanho de kernel
 (2 a 11) ou \textit{batch} testado. Esse é o resultado mais direto desta seção.
 
-O teste de \textit{scaling} teórico é mais fraco. A complexidade de Winograd cresce
-sub-linearmente com o tamanho do kernel $k$ (número de operações $\propto 2k^2-1$, contra
-$\propto k^2$ da convolução direta); a Figura~\ref{fig:latency_vs_kernel} mostra a latência por
-FLOP medida para $k \in \{2,3,5,7,9,11\}$. Um teste de Wilcoxon pareado \cite{wilcoxon1945individual}
+O teste de \textit{scaling} teórico é mais fraco. A complexidade de Winograd não é
+assintoticamente menor que a da convolução direta: para um \textit{tile} de saída fixo de $m\times
+m$ elementos, o número de multiplicações de Winograd, $(m+k-1)^2$, e o da convolução direta,
+$m^2k^2$, crescem ambos como $\Theta(k^2)$ com o tamanho do kernel $k$ \cite{lavin2016fast} — por
+exemplo, F(2$\times$2,3$\times$3) usa 16 multiplicações contra 36 da convolução direta
+($2,25\times$), e F(4$\times$4,3$\times$3) usa 36 contra 144 ($4\times$) \cite{lavin2016fast}; essa
+vantagem converge para um fator constante ($m^2\times$) quando $k\to\infty$, em vez de crescer
+indefinidamente. Na prática, Winograd raramente é usado além de $k=3$ (ocasionalmente $k=5$) não
+por essa escala assintótica, mas porque as matrizes de transformação ficam numericamente
+mal-condicionadas para $k$ grande \cite{barabasz2020error}. A Figura~\ref{fig:latency_vs_kernel}
+mostra a latência por FLOP medida para $k \in \{2,3,5,7,9,11\}$. Um teste de Wilcoxon pareado \cite{wilcoxon1945individual} — não-paramétrico, adequado para
+comparar duas condições medidas nas mesmas configurações sem assumir normalidade dos dados —
 (latência por FLOP,
 $k{=}3$ vs. $k{=}5$, denso) no regime \emph{compute-bound} ($\textit{batch}=64$, a evidência
-primária — ver painel central da figura) é \textbf{inconclusivo}: $p=0,023$, $n=8$, e a mediana do
-custo por FLOP em $k{=}3$ não é menor que em $k{=}5$. No regime \textit{overhead-bound}
+primária — ver painel central da figura) é \textbf{estatisticamente significativo, mas na direção
+oposta à esperada}: $p=0,023$, $n=8$, e a mediana do custo por FLOP em $k{=}3$ não é menor que em
+$k{=}5$ — o teste rejeita a hipótese nula de nenhuma diferença sistemática, mas não corrobora a
+hipótese de que Winograd ($k{=}3$) é mais eficiente por FLOP nesse regime. No regime \textit{overhead-bound}
 ($\textit{batch}=1$/$8$, secundário) há uma tendência favorável (mediana $\sim$7\% menor em
 $k{=}3$), mas sem significância estatística ($p=0,82$, $n=16$). Consistente com isso, o próprio
 rastreamento de \textit{kernel} mostra que, em $\textit{batch}=64$, o cuDNN troca Winograd por um
@@ -339,9 +356,10 @@ Quatro de cinco arquiteturas com convolução 3$\times$3 densa (\texttt{AlexNetB
 \texttt{AlexNetFire}, \texttt{AlexNetFinalBottleneckResidual}, \texttt{AlexNetFinalFireResidual})
 superam o baseline (AlexNetTV, irrestrito) na razão acurácia/latência. A latência em FP32 também é
 um preditor razoável do \textit{ranking} de latência em INT8, mas só para convoluções densas
-(correlação de Spearman $\rho=0,99$, $n=24$); para \textit{depthwise} a correlação cai bem abaixo
-do limiar de robustez adotado ($\rho=0,72$, $n=24$) — o \textit{backend} INT8 (fbgemm) tem
-\textit{kernels} otimizados só para 3$\times$3/5$\times$5 em convoluções agrupadas e cai para um
+(correlação de Spearman $\rho=0,99$, $n=24$); para \textit{depthwise} a correlação é sensivelmente
+mais fraca ($\rho=0,72$, $n=24$) — o \textit{backend} INT8 (fbgemm) tem
+\textit{kernels} otimizados só para 3$\times$3/5$\times$5 em convoluções agrupadas
+\cite{khudia2021fbgemm} e cai para um
 caminho genérico muito mais lento acima disso, o que quebra a correspondência FP32$\to$INT8 nesse
 subconjunto.
 
@@ -384,7 +402,13 @@ fecha \emph{87\%} do ganho FP32 da arquitetura híbrida completa (5,05 de 5,81 p
 \emph{supera} no regime INT8 (49,86\% vs. 49,20\%), mantendo ganho sob quantização
 ($+$0,84 p.p. vs. $-$0,59 p.p. do híbrido completo). Esse resultado isolado sugere que o
 atalho residual — não o novo \textit{stem} da arquitetura híbrida — é o componente responsável
-pela maior parte do ganho de acurácia, e que pode ser adicionado a \emph{custo estrutural zero}. A
+pela maior parte do ganho de acurácia, e que pode ser adicionado a \emph{custo estrutural zero}.
+Um adendo importante: o \texttt{AlexNetFireBypass} foi treinado com um orçamento de épocas maior
+que o restante do estudo (152 épocas efetivas, contra 77 do \texttt{AlexNetFinalFireResidual} —
+Tabela~\ref{tab:per_model_training} no apêndice), por ter sido executado no cluster PCAD da UFRGS
+sob um orçamento de época maior que o disponível localmente; parte do ganho de acurácia relatado
+aqui pode portanto também refletir esse treino mais longo, não apenas o atalho residual
+isoladamente. A
 Figura~\ref{fig:accuracy_vs_size} situa esse resultado no conjunto completo de modelos do estudo.
 
 \begin{figure*}[!t]
@@ -509,8 +533,8 @@ mecanismos sinergizam igualmente bem.
 
 \item \emph{Validação em Hardware (Contribuição 3)}: O rastreamento de \textit{kernel} confirma que
 o cuDNN aciona Winograd para convoluções densas 3$\times$3 em \textit{batches} pequenos, e nunca
-para \textit{depthwise}. O teste estatístico de latência, porém, é inconclusivo no regime
-\textit{compute-bound} — \textit{tensor cores} parecem competir com a vantagem de Winograd
+para \textit{depthwise}. O teste estatístico de latência, porém, é significativo na direção
+oposta à esperada no regime \textit{compute-bound} — \textit{tensor cores} parecem competir com a vantagem de Winograd
 justamente aí. Um acelerador FPGA sem \textit{tensor cores} evitaria essa competição por
 construção, mas isso é uma expectativa de \textit{design}, não algo medido neste trabalho.
 
@@ -575,14 +599,17 @@ Com apenas 0,385M parâmetros (4,49 MB) e 39,5M MACs — menos de um quarto dos 
 reduz memória \emph{e} computação simultaneamente frente à baseline restrita+GAP, relevante para um
 acelerador cujo custo escala principalmente com número de multiplicações. A ablação por atalho
 residual isolado revela que essa adição sozinha (zero parâmetros extras) captura 87\% do ganho de
-uma arquitetura híbrida muito mais completa (5,05 de 5,82 p.p.) nesta família de arquiteturas,
-sugerindo que simplicidade estrutural pode superar elaboração arquitetural complexa, ao menos aqui.
+uma arquitetura híbrida muito mais completa (5,05 de 5,81 p.p.) nesta família de arquiteturas,
+sugerindo que simplicidade estrutural pode superar elaboração arquitetural complexa, ao menos aqui
+— com a ressalva de que o \texttt{AlexNetFireBypass} usou um orçamento de épocas maior que o
+\texttt{AlexNetFinalFireResidual} (Apêndice~\ref{sec:apendice_treinamento}), então parte desse
+ganho pode refletir o treino mais longo, não apenas a mudança arquitetural.
 
 A validação em hardware (RTX 4060, sessão única) mostra, por rastreamento direto do nome do
 \textit{kernel} CUDA, que o cuDNN aciona um \textit{kernel} Winograd para convoluções densas
 3$\times$3 em \textit{batches} pequenos (1 e 8) — e nunca para convoluções \textit{depthwise}, em
 nenhum tamanho de kernel testado. O teste estatístico de \textit{scaling} de latência é, no
-entanto, inconclusivo no regime \textit{compute-bound} (\textit{batch}=64), o mais relevante para
+entanto, significativo na direção oposta à esperada no regime \textit{compute-bound} (\textit{batch}=64), o mais relevante para
 um acelerador dedicado. Três achados limitam o escopo desta validação: (i) \textit{tensor cores}
 parecem competir com a vantagem de Winograd justamente no regime \textit{compute-bound}, tornando o
 ganho de latência inconsistente entre \textit{batches}; (ii) convoluções \textit{depthwise} nunca
@@ -631,6 +658,10 @@ princípio de design prático para arquiteturas CNN eficientes em aceleradores W
 o princípio se estende além de classificação e além de CNNs puras.
 \end{sloppypar}
 
+\section*{Agradecimentos}
+Alguns experimentos deste trabalho utilizaram os recursos da infraestrutura PCAD,
+http://pcad.inf.ufrgs.br, no INF/UFRGS.
+
 \begin{thebibliography}{00}
 
 \bibitem{krizhevsky2012imagenet}
@@ -640,6 +671,11 @@ neural networks,'' in \textit{Advances in Neural Information Processing Systems 
 \bibitem{lavin2016fast}
 A. Lavin and S. Gray, ``Fast algorithms for convolutional neural networks,'' in \textit{Proc. IEEE
 Conf. Computer Vision and Pattern Recognition (CVPR)}, 2016.
+
+\bibitem{barabasz2020error}
+B. Barabasz, A. Anderson, K. M. Soodhalter, and D. Gregg, ``Error analysis and improving the
+accuracy of Winograd convolution for deep neural networks,'' \textit{ACM Transactions on
+Mathematical Software}, vol. 46, no. 4, Art. 37, 2020.
 
 \bibitem{iandola2016squeezenet}
 F. N. Iandola, S. Han, M. W. Moskewicz, K. Ashraf, W. J. Dally, and K. Keutzer, ``SqueezeNet:
@@ -659,6 +695,11 @@ linear bottlenecks,'' in \textit{Proc. IEEE Conf. Computer Vision and Pattern Re
 B. Jacob \textit{et al.}, ``Quantization and training of neural networks for efficient
 integer-arithmetic-only inference,'' in \textit{Proc. IEEE Conf. Computer Vision and Pattern
 Recognition (CVPR)}, 2018.
+
+\bibitem{khudia2021fbgemm}
+D. Khudia, J. Huang, P. Basu, S. Deng, H. Liu, J. Park, and M. Smelyanskiy, ``FBGEMM: Enabling
+high-performance low-precision deep learning inference,'' \textit{arXiv preprint
+arXiv:2101.05615}, 2021.
 
 \bibitem{le2015tiny}
 Y. Le and X. Yang, ``Tiny ImageNet visual recognition challenge,'' Stanford CS231N Report, 2015.
@@ -751,7 +792,11 @@ modelos (Seção~\ref{sec:dados}), fixado nos arquivos \texttt{configs/training.
 \cite{loshchilov2019adamw} com \textit{learning rate} decaído por \textit{cosine annealing}
 (\texttt{T\_max} = número de épocas do estágio); a taxa de aprendizado inicial, porém, é um
 hiperparâmetro \emph{por modelo} (registrado junto à arquitetura, não um valor único global) — a
-Tabela~\ref{tab:per_model_training} lista o valor usado por cada um.
+Tabela~\ref{tab:per_model_training} lista o valor usado por cada um. No treino QAT, as estatísticas
+de \textit{running mean/var} da BatchNorm são congeladas na época 3 e os observadores de
+quantização (que calibram escala e \textit{zero-point}) são desativados na época 5 — prática
+recomendada por \cite{jacob2018quantization} para estabilizar a escala de quantização antes do
+restante do \textit{fine-tuning} ajustar os pesos a ela.
 
 \begin{table*}[!t]
 \caption{Hiperparâmetros de treinamento compartilhados}
@@ -789,8 +834,11 @@ tempo médio por época — os modelos das famílias \textit{baselines irrestrit
 \textit{restrição ingênua}/\texttt{AlexNetBottleneck}/\texttt{AlexNetFire} foram treinados
 localmente (GPU única, RTX 4060 Laptop); as arquiteturas híbridas da Contribuição 2
 (\texttt{Bottleneck+Fire}, \texttt{Bottleneck+Residual}, \texttt{Depthwise+Fire}) e da
-arquitetura híbrida final foram treinadas nos nós RTX 4090 do cluster PCAD
-(\texttt{configs/slurm/tupi\_4090.yaml}) — os tempos por época \emph{não} são diretamente
+arquitetura híbrida final (\texttt{AlexNetFinalFireResidual} e \texttt{AlexNetFireBypass}) foram
+treinadas nos nós RTX 4090 do cluster PCAD (\texttt{configs/slurm/tupi\_4090.yaml}); o
+\texttt{AlexNetFireBypass}, em particular, usou um orçamento de épocas maior que os demais
+modelos do estudo, daí as 152 épocas efetivas e 86,2 min de treino na tabela — bem acima do
+restante. Os tempos por época \emph{não} são diretamente
 comparáveis entre si nem com as medições de latência da Contribuição 3, que usam exclusivamente a
 RTX 4060 Laptop (Seção~\ref{sec:profiling}).
 
@@ -816,12 +864,12 @@ RTX 4060 Laptop (Seção~\ref{sec:profiling}).
 \multirow{5}{*}{Tentativas de compensação}
  & AlexNetBottleneck & 1$\times10^{-3}$ & 76 & 29,6 \\
  & AlexNetFire & 1$\times10^{-3}$ & 41 & 21,7 \\
- & Bottleneck + Fire & 1$\times10^{-3}$ & 40 & 13,9 \\
- & Bottleneck + Residual & 1$\times10^{-3}$ & 38 & 15,6 \\
- & Depthwise + Fire & 1$\times10^{-3}$ & 76 & 27,3 \\
+ & Bottleneck + Fire (\texttt{AlexNetFinalBottleneckFire}) & 1$\times10^{-3}$ & 40 & 13,9 \\
+ & Bottleneck + Residual (\texttt{AlexNetFinalBottleneckResidual}) & 1$\times10^{-3}$ & 38 & 15,6 \\
+ & Depthwise + Fire (\texttt{AlexNetFinalDepthwiseFire}) & 1$\times10^{-3}$ & 76 & 27,3 \\
 \midrule
 \multirow{2}{*}{Arquitetura híbrida final}
- & Fire + Residual (\texttt{FinalFireResidual}) & 1$\times10^{-3}$ & 77 & 28,8 \\
+ & Fire + Residual (\texttt{AlexNetFinalFireResidual}) & 1$\times10^{-3}$ & 77 & 28,8 \\
  & AlexNetFireBypass & 1$\times10^{-3}$ & 152 & 86,2 \\
 \bottomrule
 \end{tabular}
