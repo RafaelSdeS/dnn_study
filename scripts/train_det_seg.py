@@ -202,6 +202,10 @@ def run_detection(args):
             sys.exit(1)
 
         model_qat = build_ssd_detector(args.model, num_classes=21, image_size=data_cfg.img_size)
+        # True architecture param count, from the untouched FP32 skeleton -- quantized modules
+        # pack weights as torch.qint8 buffers, not nn.Parameter, so counting on the converted
+        # INT8 model itself (below) silently undercounts.
+        true_params_m = sum(p.numel() for p in model_qat.parameters()) / 1e6
         model_qat = build_qat_ssd_detector(model_qat, device)
         ckpt_state = torch.load(qat_ckpt, map_location=device, weights_only=False)
         model_qat.load_state_dict(ckpt_state)
@@ -240,6 +244,17 @@ def run_detection(args):
         }
         print(f"  INT8 mAP@[.5:.95]: {val_mAP:.4f}")
         print(f"  INT8 mAP@.5: {val_mAP50:.4f}")
+
+        # Save the converted checkpoint and its real size (fp32/qat both do this; int8 didn't
+        # until now, so past runs' metrics.json has accuracy but no summary — see
+        # scripts/backfill_int8_size.py for backfilling those).
+        int8_ckpt_path = run_dir / f"{run_id}_best.pth"
+        torch.save(model_int8.state_dict(), int8_ckpt_path)
+        history["summary"] = compute_detection_summary(
+            model_int8, data_cfg.img_size, val_loader, torch.device("cpu"),
+            checkpoint_path=int8_ckpt_path,
+        )
+        history["summary"]["params_m"] = true_params_m
 
     # Save final results
     results_path = run_dir / "metrics.json"
