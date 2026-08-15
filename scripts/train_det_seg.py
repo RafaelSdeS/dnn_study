@@ -36,7 +36,7 @@ from ml.det_seg_models import (
     build_qat_deeplabv3_segmenter, convert_deeplabv3_to_int8,
 )
 from ml.quantization import make_qat_callback
-from ml.reporting import compute_detection_summary
+from ml.reporting import compute_detection_summary, compute_segmentation_summary
 from ml.runtime import expand_path
 
 
@@ -292,8 +292,12 @@ def run_segmentation(args):
         data_cfg = replace(data_cfg, batch_size=max(1, data_cfg.batch_size // 2))
 
     # Setup paths
+    # init_suffix distinguishes a pretrained-init sweep from the from-scratch one so
+    # they get separate output dirs and never clobber each other's checkpoints/logs
+    # (mirrors run_detection).
+    init_suffix = "_pretrained" if args.pretrained_ckpt else ""
     stage_suffix = {"fp32": "fp32", "qat": "qat", "int8": "int8"}[args.stage]
-    run_id = f"seg_{args.model}_{stage_suffix}"
+    run_id = f"seg_{args.model}_{stage_suffix}{init_suffix}"
     if args.experiment:
         run_id += f"_{args.experiment}"
     run_dir = Path(args.save_dir) / run_id
@@ -319,7 +323,12 @@ def run_segmentation(args):
         print(f"  Train: {len(train_ds)} | Val: {len(val_ds)}")
 
         print(f"\nBuilding DeepLabV3 segmenter ({args.model})...")
-        model = build_deeplabv3_segmenter(args.model, num_classes=21, image_size=data_cfg.img_size)
+        if args.pretrained_ckpt:
+            print(f"  Initializing backbone from: {args.pretrained_ckpt}")
+        model = build_deeplabv3_segmenter(
+            args.model, num_classes=21, image_size=data_cfg.img_size,
+            pretrained_ckpt=args.pretrained_ckpt,
+        )
         print(f"  Model ready. Parameter count: {sum(p.numel() for p in model.parameters()):,}")
 
         print(f"\nStarting FP32 training...")
@@ -331,12 +340,15 @@ def run_segmentation(args):
         )
 
         history = trainer.fit(resume_from=run_dir / f"{run_id}_resume.pth")
-        # history["summary"] = compute_segmentation_summary(...) — deferred to B6 (out of scope)
+        history["summary"] = compute_segmentation_summary(
+            model, data_cfg.img_size, val_loader, device,
+            checkpoint_path=run_dir / f"{run_id}_best.pth",
+        )
 
     elif args.stage == "qat":
         # ========== QAT Fine-tuning ==========
         print(f"\nLoading FP32 checkpoint...")
-        fp32_run_id = f"seg_{args.model}_fp32"
+        fp32_run_id = f"seg_{args.model}_fp32{init_suffix}"
         if args.experiment:
             fp32_run_id += f"_{args.experiment}"
         fp32_ckpt = Path(args.save_dir) / fp32_run_id / f"{fp32_run_id}_best.pth"
@@ -371,11 +383,15 @@ def run_segmentation(args):
         )
 
         history = trainer.fit(resume_from=run_dir / f"{run_id}_resume.pth")
+        history["summary"] = compute_segmentation_summary(
+            model_qat, data_cfg.img_size, val_loader, device,
+            checkpoint_path=run_dir / f"{run_id}_best.pth",
+        )
 
     elif args.stage == "int8":
         # ========== INT8 Conversion & Evaluation ==========
         print(f"\nLoading QAT checkpoint...")
-        qat_run_id = f"seg_{args.model}_qat"
+        qat_run_id = f"seg_{args.model}_qat{init_suffix}"
         if args.experiment:
             qat_run_id += f"_{args.experiment}"
         qat_ckpt = Path(args.save_dir) / qat_run_id / f"{qat_run_id}_best.pth"
@@ -385,6 +401,10 @@ def run_segmentation(args):
             sys.exit(1)
 
         model_qat = build_deeplabv3_segmenter(args.model, num_classes=21, image_size=data_cfg.img_size)
+        # True architecture param count, from the untouched FP32 skeleton -- quantized modules
+        # pack weights as torch.qint8 buffers, not nn.Parameter, so counting on the converted
+        # INT8 model itself (below) silently undercounts (mirrors run_detection's int8 branch).
+        true_params_m = sum(p.numel() for p in model_qat.parameters()) / 1e6
         model_qat = build_qat_deeplabv3_segmenter(model_qat, device)
         ckpt_state = torch.load(qat_ckpt, map_location=device, weights_only=False)
         model_qat.load_state_dict(ckpt_state)
@@ -420,6 +440,17 @@ def run_segmentation(args):
         }
         print(f"  INT8 val loss: {val_loss:.4f}")
         print(f"  INT8 mIoU: {val_mIoU:.4f}")
+
+        # Save the converted checkpoint and its real size (fp32/qat both do this via
+        # SegmentationTrainer.fit(); int8 has no fit() call so it never got a checkpoint
+        # saved at all -- mirrors run_detection's int8 branch, which had the same gap once).
+        int8_ckpt_path = run_dir / f"{run_id}_best.pth"
+        torch.save(model_int8.state_dict(), int8_ckpt_path)
+        history["summary"] = compute_segmentation_summary(
+            model_int8, data_cfg.img_size, val_loader, torch.device("cpu"),
+            checkpoint_path=int8_ckpt_path,
+        )
+        history["summary"]["params_m"] = true_params_m
 
     # Save final results
     results_path = run_dir / "metrics.json"

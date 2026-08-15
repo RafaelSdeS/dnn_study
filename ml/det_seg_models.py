@@ -147,9 +147,11 @@ class DetSegBackbone(nn.Module):
 class DeepLabV3Segmenter(nn.Module):
     """DeepLabV3-style segmenter: DetSegBackbone (deepest tap only) + DeepLabHead + upsample."""
 
-    def __init__(self, arch_name: str, num_classes: int = 21):
+    def __init__(self, arch_name: str, num_classes: int = 21, pretrained_ckpt: Optional[Path] = None):
         super().__init__()
-        self.backbone = DetSegBackbone(arch_name, num_classes=200, num_extra_blocks=0)
+        self.backbone = DetSegBackbone(
+            arch_name, num_classes=200, num_extra_blocks=0, pretrained_ckpt=pretrained_ckpt
+        )
         self.head = DeepLabHead(self.backbone.out_channels[-1], num_classes)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -163,6 +165,7 @@ def build_deeplabv3_segmenter(
     arch_name: str,
     num_classes: int = 21,
     image_size: int = 256,
+    pretrained_ckpt: Optional[Path] = None,
 ) -> DeepLabV3Segmenter:
     """Assemble DeepLabV3-style segmenter: backbone (deepest tap) + DeepLabHead.
 
@@ -171,10 +174,12 @@ def build_deeplabv3_segmenter(
         num_classes: 21 for VOC (20 + background), same convention as build_ssd_detector
         image_size: kept for call-site parity with build_ssd_detector; forward() upsamples
             to the actual input tensor's spatial size, not this constant.
+        pretrained_ckpt: Optional Tiny-ImageNet classification checkpoint to init the
+            backbone from, instead of random init (same convention as build_ssd_detector).
     """
     if arch_name not in BACKBONE_FEATURE_CONFIG:
         raise ValueError(f"Unknown arch: {arch_name}")
-    return DeepLabV3Segmenter(arch_name, num_classes=num_classes)
+    return DeepLabV3Segmenter(arch_name, num_classes=num_classes, pretrained_ckpt=pretrained_ckpt)
 
 
 def build_qat_deeplabv3_segmenter(model_fp32: DeepLabV3Segmenter, device: torch.device) -> DeepLabV3Segmenter:

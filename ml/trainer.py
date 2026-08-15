@@ -116,7 +116,7 @@ class Trainer:
             if self.epoch_callback is not None:
                 self.epoch_callback(epoch, model)
 
-            if torch.cuda.is_available():
+            if self.device.type == "cuda":
                 torch.cuda.reset_peak_memory_stats(self.device)
 
             with GpuSampler() as gpu_sampler:
@@ -129,7 +129,7 @@ class Trainer:
             epoch_time = time.time() - epoch_start
             peak_mem = (
                 torch.cuda.max_memory_allocated(self.device) / (1024 ** 2)
-                if torch.cuda.is_available() else 0.0
+                if self.device.type == "cuda" else 0.0
             )
             n_batches = len(self.train_loader)
             images_per_sec = (n_batches * self.train_loader.batch_size) / epoch_time if epoch_time > 0 else None
@@ -302,7 +302,7 @@ class Trainer:
             data = data.to(self.device)
             model(data)
             total_images += data.size(0)
-        if torch.cuda.is_available():
+        if self.device.type == "cuda":
             torch.cuda.synchronize()
         elapsed = time.perf_counter() - t0
 
