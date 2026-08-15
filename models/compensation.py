@@ -381,10 +381,15 @@ class _FireModule(nn.Module):
             nn.Conv2d(squeeze_ch, expand_ch, 3, padding=1, bias=False),
             nn.BatchNorm2d(expand_ch), nn.ReLU(inplace=False),
         )
+        # expand1/expand3 are independently observed under QAT, so a bare torch.cat
+        # post-convert concatenates int8 tensors with mismatched scale/zero-point
+        # (ATen silently requantizes into the first branch's qparams, adding noise).
+        # FloatFunctional.cat gives the concat its own observer -> one shared qparam.
+        self.cat = _float_functional()
 
     def forward(self, x):
         s = self.squeeze(x)
-        return torch.cat([self.expand1(s), self.expand3(s)], dim=1)
+        return self.cat.cat([self.expand1(s), self.expand3(s)], dim=1)
 
 
 class AlexNetFire(nn.Module):
@@ -397,7 +402,7 @@ class AlexNetFire(nn.Module):
     Expected top-1: ~10-16% (compression reduces overfitting; parallel expand adds expressivity).
     Size: ~5 MB FP32 / ~1.5 MB INT8.
     Training speed: fast (aggressive squeeze reduces FLOPs; GAP head).
-    QAT: full — torch.cat is QAT-compatible; Conv-BN-ReLU fuseable in each branch.
+    QAT: full — concat via FloatFunctional (shared qparams); Conv-BN-ReLU fuseable in each branch.
     Trade-off: SqueezeNet-style compression + multi-scale features vs plain 3×3.
     """
 
