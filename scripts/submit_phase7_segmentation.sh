@@ -1,12 +1,12 @@
 #!/bin/bash
 #
-# Simpler Phase 7 multi-node submission.
-# Submits 3 jobs (one per backbone) to PCAD in parallel.
-# Each runs on a separate node.
+# Phase 7 segmentation FP32 job submission for PCAD.
+# Submits 3 jobs (one per backbone) to the tupi (RTX 4090) partition, one node each.
+# Mirrors submit_phase7_simple.sh's structure for the "segmentation" task.
 #
 # Usage:
-#   bash scripts/submit_phase7_simple.sh           # Submit all 3
-#   bash scripts/submit_phase7_simple.sh bottleneck fire  # Submit specific models
+#   bash scripts/submit_phase7_segmentation.sh                              # Submit all 3
+#   bash scripts/submit_phase7_segmentation.sh alexnet_bottleneck alexnet_fire  # Submit specific models
 
 if [ "$#" -eq 0 ]; then
     MODELS=("alexnet_bottleneck" "alexnet_fire" "alexnet_tv")
@@ -18,7 +18,7 @@ PARTITION="tupi"   # RTX 4090 nodes; alternatives: shared (K20m, weak), grace (L
 
 mkdir -p outputs/detection_segmentation/phase7/logs
 
-echo "Submitting Phase 7 FP32 training to PCAD..."
+echo "Submitting Phase 7 segmentation FP32 training to PCAD..."
 echo "Models: ${MODELS[@]}"
 echo "Partition: $PARTITION"
 echo ""
@@ -28,13 +28,13 @@ for model in "${MODELS[@]}"; do
     echo "Submitting: $model"
 
     output=$(sbatch \
-        --job-name="p7_${model:0:8}" \
+        --job-name="p7seg_${model:0:8}" \
         --time=12:00:00 \
         --mem=32G \
         --gpus=1 \
         --partition="$PARTITION" \
-        --output="outputs/detection_segmentation/phase7/logs/p7_${model}_%j.log" \
-        scripts/slurm/det_seg.sbatch detection fp32 "$model" phase7_detection 2>&1)
+        --output="outputs/detection_segmentation/phase7/logs/p7seg_${model}_%j.log" \
+        scripts/slurm/det_seg.sbatch segmentation fp32 "$model" phase7_segmentation 2>&1)
 
     job_id=$(echo "$output" | grep -oP 'Submitted batch job \K[0-9]+' || echo "")
     if [ -z "$job_id" ]; then

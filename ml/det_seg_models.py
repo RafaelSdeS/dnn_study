@@ -195,6 +195,20 @@ def build_qat_deeplabv3_segmenter(model_fp32: DeepLabV3Segmenter, device: torch.
     backbone.train()
     backbone.qconfig = tq.get_default_qat_qconfig("fbgemm")
 
+    # Same opt-out as build_qat_ssd_detector: backbone_full's classifier and its own
+    # quant/dequant stubs are never invoked by DetSegBackbone.forward (it taps .features
+    # directly and uses its own quant/dequant), and .features layers past the deepest tap
+    # are unreachable too. Left qconfig'd, prepare_qat wraps them with observers that never
+    # see data and tq.convert() hard-asserts on their inf min/max.
+    backbone_full = backbone.backbone_full
+    backbone_full.classifier.qconfig = None
+    backbone_full.quant.qconfig = None
+    backbone_full.dequant.qconfig = None
+    last_tap = max(backbone.feature_indices)
+    for i, layer in enumerate(backbone_full.features):
+        if i > last_tap:
+            layer.qconfig = None
+
     fuse_groups = find_fuse_groups(backbone.backbone_full)
     if fuse_groups:
         prefixed = [[f"backbone_full.{step}" for step in group] for group in fuse_groups]
