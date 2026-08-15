@@ -53,9 +53,11 @@ scripts/                  # CLI entry points (used instead of notebooks for PCAD
                            #   --evaluate actually clusters the weights and measures real accuracy vs. FP32
   prune_channels.py        # Phase 9 Task 2: structured (channel) pruning CLI;
                            #   --finetune-epochs fine-tunes the pruned model then runs it through QAT->INT8
-  check_anchor_recall.py / backfill_gzip.py  # one-off Phase 7 diagnostics / backfill tools
+  check_anchor_recall.py / backfill_gzip.py / backfill_int8_size.py  # one-off Phase 7 diagnostics / backfill tools
+  oneoff_dilated_gap_local.py  # one-off lighter-budget local smoke run for alexnet_dilated_gap
   migrate_pcad_gitignored.sh  # merges gitignored artifacts (*.pth, *.log) left in pre-reorg folder names after a pull
-  submit_phase7_simple.sh / submit_phase7_multinode.sh  # PCAD multi-node Phase 7 submission (simple vs FP32→QAT→INT8 chaining) — see docs/PHASE7_MULTINODE.md
+  submit_phase7_simple.sh / submit_phase7_multinode.sh  # PCAD Phase 7 detection submission (simple vs FP32→QAT→INT8 chaining) — see docs/PHASE7_MULTINODE.md
+  submit_phase7_segmentation.sh / submit_phase7_segmentation_multinode.sh  # same, for segmentation (no --pretrained-ckpt support)
   slurm/*.sbatch           # sbatch templates — train.sbatch/profile.sbatch submitted by cluster.py, det_seg.sbatch by the submit_phase7_*.sh scripts, others called directly
 tests/                    # pytest: test_registry, test_checkpoint, test_config, test_trainer_smoke,
                           #   test_quantization, test_profiling, test_train_cli
@@ -162,7 +164,7 @@ QAT cfg is typically `replace(fp32_cfg, epochs=20, lr=1e-5, use_amp=False)`.
 | 6 — Hardware profiling | (reuses Phase 1–4 models) | `ml/profiling.py` + `scripts/profile_hardware.py`; dilated variants added to test whether dilated 3×3 retains Winograd acceleration |
 | 7 — Detection/segmentation | `ml/det_seg_models.py` | Bottleneck/Fire/AlexNetTV backbones + SSD head on PASCAL VOC, via `scripts/train_det_seg.py` |
 
-**Results & rankings:** see `ideas/BEST_MODELS.md` (Pareto tiers, recommendations, now covering Phases 1–4/6/7/9) and `results/results_aggregate/results_cross_phase.csv` / `results/results_aggregate/model_details_cross_phase.csv`. Headlines: MobileNetV2 best overall (~58% top-1) among Phase 1–3 models, though Phase 4's AlexNetFinalFireResidual (49.79%) and Phase 9's AlexNetFireBypass (49.03%) close most of the gap at a fraction of the size; AlexNetBottleneck/AlexNetFire remain Pareto-optimal on efficiency (43–44%, 4–6 MB, quantization-stable). Known issues: AlexNetSmallKernel severe QAT drop (~–10pp), AlexNetSE training failure, Phase 7 detection mAP unreliable — anchor-recall root cause found and fixed, retraining on PCAD (A4) still pending (see `ideas/BEST_MODELS.md`, `docs/PHASE7_LOG.md` Stage 9). Phase 7 hypotheses (H1–H4, does compensation transfer to dense prediction) and progress: `ideas/PHASE7_PLAN.md`, `docs/PHASE7_LOG.md`.
+**Results & rankings:** see `ideas/BEST_MODELS.md` (Pareto tiers, recommendations, now covering Phases 1–4/6/7/9) and `results/results_aggregate/results_cross_phase.csv` / `results/results_aggregate/model_details_cross_phase.csv`. Headlines: MobileNetV2 best overall (~58% top-1) among Phase 1–3 models, though Phase 4's AlexNetFinalFireResidual (49.79%) and Phase 9's AlexNetFireBypass (49.03%) close most of the gap at a fraction of the size; AlexNetBottleneck/AlexNetFire remain Pareto-optimal on efficiency (43–44%, 4–6 MB, quantization-stable). Known issues: AlexNetSmallKernel severe QAT drop (~–10pp), AlexNetSE training failure. Phase 7 detection: anchor-recall root cause fixed and A4 retrain complete on PCAD — all 3 backbones (bottleneck/fire/tv) × FP32/QAT/INT8 × plain/pretrained now have valid mAP (see `ideas/BEST_MODELS.md`). Phase 7 segmentation: trainer/model/CLI fully implemented but no PCAD run yet (Part B). Phase 7 hypotheses (H1–H4, does compensation transfer to dense prediction) and progress: `ideas/PHASE7_PLAN.md`, `docs/PHASE7_LOG.md`.
 
 ---
 
