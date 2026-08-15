@@ -1,6 +1,6 @@
 # Summary
 
-Results after implementing phases 1–4, 6, and 9. **Most baselines (MobileNetV2, ResNet18, VGGStyle) show superior accuracy to pure AlexNet models, but Phase 2–4 AlexNet variants achieve competitive accuracy at 100–1000× smaller model sizes.** Phase 4's final hybrid architectures push AlexNet-family accuracy past 49% for the first time — within 3pp of VGGStyle — while Phase 9 shows a single residual bypass, with zero added parameters, closes most of that gap on its own. Phase 7 (detection) is trained end-to-end but its results are not yet trustworthy — see the Phase 7 section below. Phase 5 is this document plus `results/phase_5_cross_phase_results_analysis/`; Phase 8 is planned only, no results yet.
+Results after implementing phases 1–4, 6, and 9. **Most baselines (MobileNetV2, ResNet18, VGGStyle) show superior accuracy to pure AlexNet models, but Phase 2–4 AlexNet variants achieve competitive accuracy at 100–1000× smaller model sizes.** Phase 4's final hybrid architectures push AlexNet-family accuracy past 49% for the first time — within 3pp of VGGStyle — while Phase 9 shows a single residual bypass, with zero added parameters, closes most of that gap on its own. Phase 7 detection has completed a valid retrain (anchor-recall bug fixed) across all 3 backbones — see the Phase 7 section below; segmentation is implemented but not yet run. Phase 5 is this document plus `results/phase_5_cross_phase_results_analysis/`; Phase 8 is planned only, no results yet.
 
 ---
 
@@ -157,9 +157,9 @@ mind; Phase 4 and 9 get their own dedicated analysis further down instead.
 2. **Debug AlexNetSE** — Was initialization the issue? Try different seeds or training hyperparameters. Still open.
 3. ~~**Benchmark Winograd compatibility** — Verify that Bottleneck & Fire leverage small-kernel acceleration on actual hardware.~~ **Done — see Phase 6.**
 4. **Architecture search** — AutoML over compensation mechanisms for Pareto-optimal size/accuracy/quantization trade-offs. Not started (see "Phase 10" in `TODO.md`, contingent on Phase 8).
-5. ~~**Task transfer** — Test best models on object detection and semantic segmentation.~~ **In progress — see Phase 7. Detection trains end-to-end but results are blocked on an unresolved anchor-recall issue; segmentation has no training run yet.**
+5. ~~**Task transfer** — Test best models on object detection and semantic segmentation.~~ **Detection done (valid A4 retrain, all 3 backbones) — see Phase 7. Segmentation implemented but not yet run on PCAD.**
 6. **Fine-tune Tier 1 models** for deployment scenarios (mobile, edge, server). Not started.
-7. **Fix Phase 7's anchor-recall blocker** and rerun detection before trusting any backbone comparison there.
+7. **Run Phase 7 segmentation on PCAD** and extend the H1–H4 analysis notebook to segmentation once results land.
 
 ---
 
@@ -275,32 +275,37 @@ further work. Full per-model breakdown: `.../pareto_frontier.csv`.
 
 ---
 
-## Phase 7 — Detection & Segmentation: anchor-recall bug fixed, retraining not yet run
+## Phase 7 — Detection: A4 retrain complete (valid numbers); Segmentation: implemented, not yet run
 
-**Status: the table below is invalid, not just low — do not cite it.** Detection trains
-end-to-end (FP32 → QAT → INT8) for 3 backbones on PASCAL VOC via `scripts/train_det_seg.py`,
-producing real loss curves and checkpoints — but every one of these runs trained against a broken
-anchor-generator config, capping mAP regardless of backbone quality:
+**Root cause found and fixed** (`docs/PHASE7_LOG.md` Stage 9): anchor recall was originally
+0.76–0.80 for all 3 backbones (well under the 95% acceptance bar), caused by a tap-index bug
+producing duplicate/degenerate pyramid levels plus `DefaultBoxGenerator`'s `min_ratio`/`max_ratio`
+linear scale interpolation badly mismatched to VOC's actual box-size distribution. Fixed via
+corrected tap indices + explicit percentile-matched anchor scales; recall is now 0.991/0.991/0.932
+(bottleneck/fire/alexnet_tv) at 512px. The A4 retrain (FP32 → QAT → INT8, all 3 backbones, plain
++ ImageNet-pretrained-backbone variants) has since completed on PCAD against the fixed config —
+these are real, citable numbers:
 
-| Model | Config | Best val mAP | Best epoch |
-|---|---|---|---|
-| alexnet_tv | phase7_detection | 7.14% | 27 |
-| alexnet_bottleneck | phase7_detection | 1.17% | 24 |
-| alexnet_bottleneck | phase7_detection_minratio02 | 0.96% | 28 |
-| alexnet_fire | phase7_detection | 0.50% | 25 |
+| Model | Variant | FP32 mAP | QAT mAP | INT8 mAP | Size FP32/INT8 (MB) |
+|---|---|---|---|---|---|
+| alexnet_bottleneck | scratch | 20.98% | 21.00% | 20.85% | 5.96 / 3.35 |
+| alexnet_bottleneck | pretrained | 20.83% | 20.15% | 19.79% | 5.97 / 3.35 |
+| alexnet_fire | scratch | 8.94% | 6.38% | 6.40% | 6.46 / 3.47 |
+| alexnet_fire | pretrained | 8.93% | 7.79% | 7.54% | 6.46 / 3.47 |
+| alexnet_tv | scratch | 16.94% | 14.73% | 14.50% | 223.4 / 221.5 |
+| alexnet_tv | pretrained | 18.10% | 17.24% | 16.96% | 223.4 / — |
 
-**Root cause found and fixed** (`docs/PHASE7_LOG.md` Stage 9): anchor recall was confirmed at
-0.76–0.80 for all 3 backbones (well under the 95% acceptance bar), caused by two bugs — a
-tap-index bug producing duplicate/degenerate pyramid levels, and `DefaultBoxGenerator`'s
-`min_ratio`/`max_ratio` linear scale interpolation badly mismatched to VOC's actual box-size
-distribution. Fixed via corrected tap indices + explicit percentile-matched anchor scales; recall
-is now 0.991/0.991/0.932 (bottleneck/fire/alexnet_tv) at 512px. The anchor-recall pre-flight gate
-in `scripts/train_det_seg.py` is re-enabled and confirmed working. Segmentation has data-loading +
-trainer scaffolding built (`docs/PHASE7_LOG.md` Stage 6) but no training run at all yet, and the
-segmenter/trainer/CLI are all still placeholders (Stage 9's "Next" section, Part B).
+**Reading it:** bottleneck is both the best detector and quantization-stable (FP32→INT8 within
+0.2pp, matching its classification-phase behavior); fire is the worst detector and takes a real
+QAT hit (–2.6pp scratch) that backbone pretraining partly recovers; tv (the largest backbone by
+far, ~223MB vs. ~6MB) doesn't convert its size advantage into a proportional mAP lead over
+bottleneck. Backbone pretraining helps tv and fire's QAT/INT8 stages but has ~no effect on
+bottleneck. This is a first read of the raw numbers, not yet the H1–H4 hypothesis analysis — see
+`notebooks/phase_7_detection_segmentation_analysis/phase7_results_analysis.ipynb` for that.
 
-**Before trusting any Phase 7 ranking:** retrain FP32→QAT→INT8 on PCAD with the corrected config
-(A4 in `docs/PHASE7_LOG.md` Stage 9) and replace the table above.
+Segmentation (Part B) has a fully implemented model/trainer/CLI (`build_deeplabv3_segmenter`,
+`SegmentationTrainer`, `run_segmentation` — no longer placeholders) and submission scripts
+(`scripts/submit_phase7_segmentation*.sh`), but no PCAD training run has been submitted yet.
 
 ---
 
