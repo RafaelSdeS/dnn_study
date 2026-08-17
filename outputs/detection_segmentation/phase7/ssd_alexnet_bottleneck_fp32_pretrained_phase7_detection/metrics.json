@@ -9152,6 +9152,7 @@
     "flops": 8931573760,
     "model_size_mb": 5.966901779174805,
     "latency_ms_per_image": 7.24332738452806,
-    "throughput_img_per_s": 138.058097737792
+    "throughput_img_per_s": 138.058097737792,
+    "true_size_mb": 5.757146835327148
   }
 }

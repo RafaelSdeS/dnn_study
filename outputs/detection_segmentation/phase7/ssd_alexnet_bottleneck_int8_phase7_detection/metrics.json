@@ -12,6 +12,7 @@
     "flops": null,
     "model_size_mb": 3.347330093383789,
     "latency_ms_per_image": null,
-    "throughput_img_per_s": null
+    "throughput_img_per_s": null,
+    "true_size_mb": 3.1411304473876953
   }
 }

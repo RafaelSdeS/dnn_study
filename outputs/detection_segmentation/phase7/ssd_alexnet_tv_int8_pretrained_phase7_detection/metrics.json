@@ -5,5 +5,8 @@
   "val_mAP50": [
     0.37822452187538147
   ],
-  "note": "INT8 evaluation only (no training)"
+  "note": "INT8 evaluation only (no training)",
+  "summary": {
+    "true_size_mb": 2.2175731658935547
+  }
 }
