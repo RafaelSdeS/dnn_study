@@ -1,0 +1,9 @@
+{
+  "val_loss": [
+    1.376855649790921
+  ],
+  "val_mIoU": [
+    0.17050336301326752
+  ],
+  "note": "INT8 evaluation only (no training)"
+}
