@@ -360,6 +360,30 @@ def convert_ssd_to_int8(qat_model: SSD) -> SSD:
     return qat_model
 
 
+def trim_dead_backbone_weights(model: nn.Module) -> None:
+    """Drop backbone_full submodules DetSegBackbone.forward never reaches (in place).
+
+    DetSegBackbone keeps the whole classification network (backbone_full) around only to
+    support loading a pretrained Tiny-ImageNet checkpoint, but forward() walks backbone_full
+    .features only up to the deepest tap and never touches backbone_full.classifier (or any
+    .features layers past that tap) -- see DetSegBackbone.forward's "break" past last_tap. Those
+    layers still get saved in every training/QAT/INT8 checkpoint at full precision: for
+    alexnet_tv that's ~57M of ~58M "backbone" params (its stock torchvision classifier), which is
+    also never quantized (qconfig=None), so raw checkpoint size barely reflects the deployed
+    model or the QAT->INT8 size drop. Call after loading a trained checkpoint, before measuring
+    or saving a "true" deployable size -- safe because nothing downstream of this call touches
+    the dropped submodules.
+    """
+    backbone = model.backbone
+    last_tap = max(backbone.feature_indices)
+    backbone_full = backbone.backbone_full
+    backbone_full.features = backbone_full.features[: last_tap + 1]
+    if hasattr(backbone_full, "classifier"):
+        del backbone_full.classifier
+    if hasattr(backbone_full, "avgpool"):
+        del backbone_full.avgpool
+
+
 def compute_anchor_recall(
     model: SSD,
     dataloader,

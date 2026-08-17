@@ -5,5 +5,14 @@
   "val_mIoU": [
     0.16207171976566315
   ],
-  "note": "INT8 evaluation only (no training)"
+  "note": "INT8 evaluation only (no training)",
+  "summary": {
+    "params_m": 60.175133,
+    "macs": null,
+    "flops": null,
+    "model_size_mb": 228.64806175231934,
+    "latency_ms_per_image": null,
+    "throughput_img_per_s": null,
+    "true_size_mb": 9.323707580566406
+  }
 }

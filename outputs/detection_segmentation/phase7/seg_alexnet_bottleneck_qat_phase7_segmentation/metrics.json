@@ -581,5 +581,8 @@
   ],
   "total_time_s": 786.4058442115784,
   "best_epoch": 5,
-  "best_val_mIoU": 0.17900705337524414
+  "best_val_mIoU": 0.17900705337524414,
+  "summary": {
+    "true_size_mb": 12.235767364501953
+  }
 }
