@@ -8,12 +8,20 @@ these get QAT-prepared; LayerNorm and attention math can't go through this codeb
 fbgemm QAT path the way pure Conv-BN-ReLU models can.
 """
 
+from collections import OrderedDict
 from functools import partial
 
+import torch
 import torch.ao.quantization as tq
 import torch.nn as nn
-from torchvision.models.swin_transformer import ShiftedWindowAttention, SwinTransformer, SwinTransformerBlock
-from torchvision.models.vision_transformer import VisionTransformer
+from torchvision.models.swin_transformer import (
+    PatchMerging,
+    ShiftedWindowAttention,
+    SwinTransformer,
+    SwinTransformerBlock,
+    _patch_merging_pad,
+)
+from torchvision.models.vision_transformer import Encoder, EncoderBlock, VisionTransformer
 
 from .compensation import _AlexBottleneck, _float_functional
 
@@ -99,6 +107,162 @@ class _QuantizableSwinBlock(SwinTransformerBlock):
         return x
 
 
+class _QuantizablePatchMerging(PatchMerging):
+    """PatchMerging with the norm->reduction boundary bracketed: norm stays excluded
+    (LayerNorm, D6) but reduction is a plain Linear that stays quantized -- same root
+    cause/fix as _QuantizableMLP above."""
+
+    def __init__(self, dim, norm_layer=nn.LayerNorm):
+        super().__init__(dim, norm_layer=norm_layer)
+        self.quant_reduction = tq.QuantStub()
+        self.dequant_reduction = tq.DeQuantStub()
+
+    def forward(self, x):
+        x = _patch_merging_pad(x)
+        x = self.norm(x)
+        x = self.quant_reduction(x)
+        x = self.reduction(x)
+        return self.dequant_reduction(x)
+
+
+class _QuantizableSwinTransformer(SwinTransformer):
+    """SwinTransformer with its two remaining boundary crossings bracketed: patch
+    embedding's quantized Conv2d feeding directly into the excluded LayerNorm right
+    after it, and the excluded final norm feeding directly into the quantized head
+    Linear. PatchMerging's own crossing is handled by defaulting downsample_layer to
+    _QuantizablePatchMerging above."""
+
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("downsample_layer", _QuantizablePatchMerging)
+        super().__init__(*args, **kwargs)
+        conv, permute, norm = self.features[0]
+        self.features[0] = nn.Sequential(conv, permute, tq.DeQuantStub(), norm)
+        self.quant_head = tq.QuantStub()
+
+    def forward(self, x):
+        x = self.features(x)
+        x = self.norm(x)
+        x = self.permute(x)
+        x = self.avgpool(x)
+        x = self.flatten(x)
+        x = self.quant_head(x)
+        return self.head(x)
+
+
+# ─── QAT-safe ViT encoder (D6 follow-up, same root cause as the Swin fix above) ─
+#
+# EncoderBlock.forward() does `x = x + input` / `x = x_after_mlp + x`, and
+# Encoder.forward() does `input = input + self.pos_embedding` -- all bare `+`.
+# ln_1/ln_2 are excluded (LayerNorm, D6); self_attention's Linears (once swapped to
+# torch.ao.nn.quantizable.MultiheadAttention via ml/quantization.py's
+# swap_quantizable_mha, D6/Task 3) and mlp's Linears stay quantized -- the exact
+# same FP32-vs-INT8 residual mismatch as Swin's blocks, plus VisionTransformer.
+# forward()'s `torch.cat([class_token, conv_proj_output])` mixes the always-FP32
+# class_token parameter with conv_proj's quantized output. Neither Encoder nor
+# VisionTransformer exposes a pluggable block class the way SwinTransformer does
+# (no `block=` constructor arg), so this reimplements their __init__/forward
+# instead of subclassing lightly -- safe since Phase 8 trains from scratch (D3),
+# so there's no pretrained state dict this fresh reconstruction could lose.
+
+class _QuantizableEncoderBlock(EncoderBlock):
+    """EncoderBlock with FloatFunctional residual adds and a Quant/Dequant-bracketed
+    self_attention + mlp branch. swap_quantizable_mha MUST run before this block is
+    QAT-prepared: self_attention here is bracketed assuming it is (or will become)
+    torch.ao.nn.quantizable.MultiheadAttention, which the bracketing's quantized
+    input requires -- the stock nn.MultiheadAttention cannot accept it.
+    """
+
+    def __init__(self, num_heads, hidden_dim, mlp_dim, dropout, attention_dropout,
+                 norm_layer=None):
+        if norm_layer is None:
+            norm_layer = partial(nn.LayerNorm, eps=1e-6)
+        super().__init__(num_heads, hidden_dim, mlp_dim, dropout, attention_dropout, norm_layer)
+        self.mlp = _QuantizableMLP(hidden_dim, mlp_dim, dropout)
+        self.quant_attn_in = tq.QuantStub()
+        self.dequant_attn_out = tq.DeQuantStub()
+        self.skip_add_attn = _float_functional()
+        self.skip_add_mlp = _float_functional()
+        self.skip_add_attn.qconfig = None
+        self.skip_add_mlp.qconfig = None
+
+    def forward(self, input):
+        x = self.ln_1(input)
+        x = self.quant_attn_in(x)
+        x, _ = self.self_attention(x, x, x, need_weights=False)
+        x = self.dequant_attn_out(x)
+        x = self.dropout(x)
+        x = self.skip_add_attn.add(x, input)
+
+        y = self.mlp(self.ln_2(x))
+        return self.skip_add_mlp.add(x, y)
+
+
+class _QuantizableEncoder(Encoder):
+    """Encoder with a FloatFunctional pos_embedding add (both operands FP32 by
+    construction -- see _QuantizableVisionTransformer's dequant_patches below) and
+    _QuantizableEncoderBlock layers instead of stock EncoderBlock. Bypasses
+    Encoder.__init__ (it hardcodes EncoderBlock) rather than calling super().__init__().
+    """
+
+    def __init__(self, seq_length, num_layers, num_heads, hidden_dim, mlp_dim,
+                 dropout, attention_dropout, norm_layer=None):
+        nn.Module.__init__(self)
+        if norm_layer is None:
+            norm_layer = partial(nn.LayerNorm, eps=1e-6)
+        self.pos_embedding = nn.Parameter(torch.empty(1, seq_length, hidden_dim).normal_(std=0.02))
+        self.dropout = nn.Dropout(dropout)
+        layers: OrderedDict[str, nn.Module] = OrderedDict()
+        for i in range(num_layers):
+            layers[f"encoder_layer_{i}"] = _QuantizableEncoderBlock(
+                num_heads, hidden_dim, mlp_dim, dropout, attention_dropout, norm_layer,
+            )
+        self.layers = nn.Sequential(layers)
+        self.ln = norm_layer(hidden_dim)
+        self.skip_add_pos = _float_functional()
+        self.skip_add_pos.qconfig = None
+
+    def forward(self, input):
+        input = self.skip_add_pos.add(input, self.pos_embedding)
+        return self.ln(self.layers(self.dropout(input)))
+
+
+class _QuantizableVisionTransformer(VisionTransformer):
+    """VisionTransformer with the class_token concatenation boundary bracketed
+    (conv_proj's quantized output meeting the always-FP32 class_token parameter)
+    and _QuantizableEncoder swapped in for the stock Encoder."""
+
+    def __init__(self, image_size, patch_size, num_layers, num_heads, hidden_dim,
+                 mlp_dim, dropout: float = 0.0, attention_dropout: float = 0.0,
+                 num_classes: int = 1000, representation_size=None, norm_layer=None,
+                 conv_stem_configs=None):
+        if norm_layer is None:
+            norm_layer = partial(nn.LayerNorm, eps=1e-6)
+        super().__init__(
+            image_size=image_size, patch_size=patch_size, num_layers=num_layers,
+            num_heads=num_heads, hidden_dim=hidden_dim, mlp_dim=mlp_dim,
+            dropout=dropout, attention_dropout=attention_dropout,
+            num_classes=num_classes, representation_size=representation_size,
+            norm_layer=norm_layer, conv_stem_configs=conv_stem_configs,
+        )
+        self.dequant_patches = tq.DeQuantStub()
+        self.quant_head = tq.QuantStub()
+        self.encoder = _QuantizableEncoder(
+            self.seq_length, num_layers, num_heads, hidden_dim, mlp_dim,
+            dropout, attention_dropout, norm_layer,
+        )
+
+    def forward(self, x):
+        x = self._process_input(x)
+        x = self.dequant_patches(x)
+        n = x.shape[0]
+        batch_class_token = self.class_token.expand(n, -1, -1)
+        x = torch.cat([batch_class_token, x], dim=1)
+        x = self.encoder(x)
+        x = x[:, 0]
+        x = self.quant_head(x)
+        return self.heads(x)
+
+
 # ─── ViT-Tiny (H1 baseline / DeiT-Ti base) ─────────────────────────────────────
 
 class ViTTiny(nn.Module):
@@ -110,7 +274,7 @@ class ViTTiny(nn.Module):
         super().__init__()
         self.quant = tq.QuantStub()
         self.dequant = tq.DeQuantStub()
-        self.vit = VisionTransformer(
+        self.vit = _QuantizableVisionTransformer(
             image_size=64, patch_size=8, num_layers=6, num_heads=3,
             hidden_dim=192, mlp_dim=768, num_classes=num_classes,
         )
@@ -148,7 +312,7 @@ class SwinPico(nn.Module):
         self.quant = tq.QuantStub()
         self.dequant = tq.DeQuantStub()
         block = partial(_QuantizableSwinBlock, attn_layer=attn_layer) if attn_layer else _QuantizableSwinBlock
-        self.swin = SwinTransformer(
+        self.swin = _QuantizableSwinTransformer(
             patch_size=[4, 4], embed_dim=48, depths=[2, 2], num_heads=[2, 4],
             window_size=[window_size, window_size], num_classes=num_classes,
             block=block,
@@ -269,8 +433,6 @@ def demo() -> None:
     for every constructor, incl. the window-size sweep. Not run automatically --
     invoke directly (`python -m models.vit_variants`) since this repo's Trainer/QAT
     pipeline is CPU-heavy and this file's job is architecture wiring, not execution."""
-    import torch
-
     ctors = {
         "vit_tiny": vit_tiny,
         "deit_tiny": deit_tiny,
