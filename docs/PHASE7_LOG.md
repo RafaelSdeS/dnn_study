@@ -226,9 +226,9 @@ has been re-run with H1/H4 plots and real INT8 model sizes against the full A4 r
 **Next:**
 1. Segmentation (Part B) — code is complete: `build_deeplabv3_segmenter()`, `SegmentationTrainer`,
    and the CLI's `run_segmentation()` are fully implemented (no longer placeholders/stubs), and
-   `scripts/submit_phase7_segmentation.sh` / `submit_phase7_segmentation_multinode.sh` exist to
-   submit it on PCAD. No training run has been submitted yet — that, plus extending the analysis
-   notebook to segmentation once results land, is what's left.
+   PCAD runs are now complete for all 3 backbones × FP32/QAT/INT8
+   (`outputs/detection_segmentation/phase7/seg_*`). What's left: extending the H1–H4 analysis
+   notebook to segmentation now that results are on disk.
 
 **Ground Rules Applied:**
 - ✓ Context hygiene: all decisions logged here for `/compact` recovery
