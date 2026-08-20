@@ -573,7 +573,8 @@ class DistillationTrainer(Trainer):
 
     def _train_one_epoch(self, model, optimizer, scaler, criterion):
         # Override only the loss computation; keep the base class's AMP/grad-clip/logging
-        # scaffolding by calling into the same structure it uses (see ml/trainer.py L298-334).
+        # scaffolding by calling into the same structure it uses (see ml/trainer.py L313-344,
+        # AMP/grad-clip branch at L323-339).
         # loss = (1-alpha) * CE(student_logits, labels)
         #      +    alpha  * CE(student_logits, teacher(images).argmax(dim=1))   # hard distillation
         ...
@@ -587,9 +588,12 @@ not a new dataclass given it's a single float) rather than hardcoding.
 
 Teacher: `load_best_model("mobilenetv2", MODEL_REGISTRY["mobilenetv2"]["ctor"], SAVE_DIR, device)`
 — reuses Phase 1's already-trained checkpoint (per `CLAUDE.md`'s Model Inventory, `mobilenetv2`
-is Phase 1's best result at 57.99% top-1) — **no new teacher training required**, confirm the
-checkpoint file (`checkpoints/mobilenetv2_best.pth` or equivalent per `SAVE_DIR` convention)
-actually exists on disk before writing the notebook cell that depends on it.
+is Phase 1's best result at 57.99% top-1) — **no new teacher training required**. The checkpoint
+actually lives at `outputs/pcad/archive_legacy_phases/phase_4_5_large_scale/mobilenetv2/checkpoints/
+mobilenetv2_best.pth` (verified on disk), a different `SAVE_DIR` than Phase 8's own runs will use
+— point `load_best_model()` at that path explicitly rather than assuming it's colocated with
+Phase 8's checkpoints, and confirm it loads without error before writing the notebook cell that
+depends on it.
 
 **Inputs:** Task 1/2/3 outputs; Phase 1's `mobilenetv2` checkpoint (distillation only).
 
@@ -609,9 +613,12 @@ minor style call, either is a small, contained addition).
   project's CNN-tuned defaults of `lr=3e-4`, `weight_decay=5e-4`, no warmup). Reusing
   `TrainerConfig`'s defaults unchanged risks slow/unstable convergence purely from an optimizer
   mismatch, which would be mistaken for an architectural finding. **Mitigation:** add a per-model
-  `lr`/`weight_decay` override via the existing `register_model(lr=..., weight_decay=...)`
-  metadata mechanism (already used by `alexnet_fp32.yaml` for a per-model override, per
-  `CLAUDE.md`'s Key Patterns) rather than changing `TrainerConfig`'s global defaults — and
+  `lr`/`weight_decay` override via `register_model(lr=..., weight_decay=...)`'s `**metadata`
+  kwargs (already used by `alexnet_fp32.yaml` for a per-model `lr` override, per `CLAUDE.md`'s Key
+  Patterns) rather than changing `TrainerConfig`'s global defaults. Note `weight_decay` is only
+  half-wired today: `register_model()` will happily store it, but `scripts/train.py` currently
+  only reads `spec.get("lr", ...)` back out — reading `weight_decay` the same way is a small,
+  required addition to `scripts/train.py`, not zero new code. And
   strongly consider adding a minimal linear-warmup wrapper around the existing
   `CosineAnnealingLR` schedule (a `LinearLR` + `SequentialLR` composition, both stdlib `torch.optim`
   classes, no new dependency) since ViT training divergence in the first few hundred steps
