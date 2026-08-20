@@ -49,6 +49,22 @@ def exclude_attention_from_qat(model: nn.Module) -> nn.Module:
     model (none contain LayerNorm or ShiftedWindowAttention), so this is safe to run
     unconditionally inside prepare_qat_model() below rather than needing a per-model
     call site.
+
+    KNOWN UNVERIFIED RISK (found while wiring this up, not in ideas/PHASE8_PLAN.md's
+    own D6 analysis): SwinTransformerBlock.forward() does
+    `x = x + self.attn(self.norm1(x))` / `x = x + self.mlp(self.norm2(x))` with a bare
+    Python `+`, not nn.quantized.FloatFunctional().add() (this project's own
+    convention for every other residual add, per CLAUDE.md's QAT rules). norm2's MLP
+    (fc1/fc2) is NOT excluded here -- D6 deliberately wants it quantized -- so after
+    convert(), that `+` mixes an INT8 tensor (mlp output, exited through a real
+    nn.quantized.Linear) with an FP32 tensor (the skip path, since norm2 is excluded).
+    Quantized and float tensors cannot be added via bare `+` in eager-mode PyTorch.
+    This is torchvision's own forward(), not something this project can patch without
+    subclassing SwinTransformerBlock with explicit QuantStub/DeQuantStub boundaries
+    around the residual -- untested here since nothing in this pass was executed.
+    Run a convert()+forward() smoke test on a Swin-derived model before trusting any
+    Phase 8 QAT/INT8 numbers; this may be the real blocker, not the weight-transfer
+    risk Blocking Issue #1 already covers.
     """
     from torchvision.models.swin_transformer import ShiftedWindowAttention
     for module in model.modules():

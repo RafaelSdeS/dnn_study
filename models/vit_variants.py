@@ -145,11 +145,10 @@ class HybridBottleneckSwin(nn.Module):
         self.dequant = tq.DeQuantStub()
 
         self.stem = nn.Sequential(
-            _AlexBottleneck(3, 32, stride=2),
-            nn.MaxPool2d(2),
-            _AlexBottleneck(32, hidden_dim, stride=2),
-            nn.MaxPool2d(2),
-        )  # 64x64 -> 8x8, hidden_dim channels
+            _AlexBottleneck(3, 32, stride=2),           # 64 -> 32
+            _AlexBottleneck(32, hidden_dim, stride=2),  # 32 -> 16
+            nn.MaxPool2d(2),                            # 16 -> 8
+        )  # 64x64 -> 8x8, hidden_dim channels (2 stride-2 blocks + 1 maxpool = 8x reduction)
         shift = window_size // 2
         self.blocks = nn.Sequential(
             SwinTransformerBlock(hidden_dim, num_heads=4, window_size=[window_size, window_size], shift_size=[0, 0]),
