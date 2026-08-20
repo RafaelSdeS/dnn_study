@@ -39,6 +39,69 @@ def find_fuse_groups(module: nn.Module, prefix: str = "") -> list:
     return groups
 
 
+def exclude_attention_from_qat(model: nn.Module) -> nn.Module:
+    """Set qconfig=None on LayerNorm and ShiftedWindowAttention (Phase 8, D6).
+
+    fbgemm QAT has no fused quantized LayerNorm, and ShiftedWindowAttention's
+    windowing/softmax math is functional (not decomposed into observable submodules
+    the way torch.ao.nn.quantizable.MultiheadAttention is) -- excluding the whole
+    subtree is D6's documented, coarser fallback for it. A no-op for every pre-Phase-8
+    model (none contain LayerNorm or ShiftedWindowAttention), so this is safe to run
+    unconditionally inside prepare_qat_model() below rather than needing a per-model
+    call site.
+    """
+    from torchvision.models.swin_transformer import ShiftedWindowAttention
+    for module in model.modules():
+        if isinstance(module, (nn.LayerNorm, ShiftedWindowAttention)):
+            module.qconfig = None
+    return model
+
+
+def swap_quantizable_mha(model: nn.Module) -> nn.Module:
+    """Replace nn.MultiheadAttention with torch.ao.nn.quantizable.MultiheadAttention
+    (Phase 8, D6 -- ViT/DeiT path only; Swin's ShiftedWindowAttention has no quantizable
+    counterpart and uses exclude_attention_from_qat instead).
+
+    Splits the stock module's fused in_proj_weight/bias into the quantizable module's
+    separate linear_Q/K/V, mirroring the weight-splitting torch.ao.nn.quantizable's own
+    from_float() classmethod does. Does NOT call from_float()/prepare() directly:
+    those force PyTorch's static-PTQ observer-insertion flow, which is incompatible
+    with this project's QAT flow (build_qat_from_model -> tq.prepare_qat()). The
+    swapped module is left as plain float so prepare_qat_model() below processes its
+    Linears/QuantStubs the same generic way as any other module in the tree.
+
+    Call this BEFORE build_qat_from_model() on ViT/DeiT models, then verify with
+    torch.allclose() on a pre/post-swap forward pass before spending any QAT training
+    time (ideas/PHASE8_PLAN.md Task 3 Blocking Issue #1) -- a naive
+    load_state_dict(strict=False) transfer verified to silently succeed while leaving
+    linear_Q/K/V at random init, so this hand-split is the actual fix, not that.
+    """
+    from torch.ao.nn.quantizable.modules.activation import MultiheadAttention as QuantizableMHA
+
+    for name, child in model.named_children():
+        if isinstance(child, nn.MultiheadAttention):
+            assert child._qkv_same_embed_dim, "separate q/k/v-dim MHA not handled"
+            e = child.embed_dim
+            qmha = QuantizableMHA(
+                e, child.num_heads, dropout=child.dropout,
+                bias=child.in_proj_bias is not None, batch_first=child.batch_first,
+            )
+            qmha.linear_Q.weight = nn.Parameter(child.in_proj_weight[0:e, :].clone())
+            qmha.linear_K.weight = nn.Parameter(child.in_proj_weight[e:2 * e, :].clone())
+            qmha.linear_V.weight = nn.Parameter(child.in_proj_weight[2 * e:, :].clone())
+            if child.in_proj_bias is not None:
+                qmha.linear_Q.bias = nn.Parameter(child.in_proj_bias[0:e].clone())
+                qmha.linear_K.bias = nn.Parameter(child.in_proj_bias[e:2 * e].clone())
+                qmha.linear_V.bias = nn.Parameter(child.in_proj_bias[2 * e:].clone())
+            qmha.out_proj.weight = nn.Parameter(child.out_proj.weight.clone())
+            if child.out_proj.bias is not None:
+                qmha.out_proj.bias = nn.Parameter(child.out_proj.bias.clone())
+            setattr(model, name, qmha)
+        else:
+            swap_quantizable_mha(child)
+    return model
+
+
 def prepare_qat_model(
     model: nn.Module,
     fuse_pairs: list,
@@ -49,6 +112,7 @@ def prepare_qat_model(
     model = copy.deepcopy(model)
     model.train()
     model.qconfig = tq.get_default_qat_qconfig(qengine)
+    exclude_attention_from_qat(model)
     root = model if fuse_root is None else fuse_root
     if fuse_pairs:
         tq.fuse_modules_qat(root, fuse_pairs, inplace=True)
@@ -107,3 +171,40 @@ def make_qat_callback(freeze_bn_epoch: int = 3, disable_observer_epoch: int = 5)
         if epoch == disable_observer_epoch:
             model.apply(torch.ao.quantization.disable_observer)
     return cb
+
+
+def demo() -> None:
+    """Assert-based self-check for swap_quantizable_mha's weight transfer (Phase 8 Task
+    3 Blocking Issue #1 -- mandatory before any QAT time is spent). Not run automatically
+    -- invoke directly (`python -m ml.quantization`)."""
+    embed_dim, num_heads, seq_len, batch = 32, 4, 5, 2
+    mha = nn.MultiheadAttention(embed_dim, num_heads, batch_first=True).eval()
+    x = torch.randn(batch, seq_len, embed_dim)
+    with torch.no_grad():
+        expected, _ = mha(x, x, x, need_weights=False)
+
+    holder = nn.Module()
+    holder.add_module("self_attention", mha)
+    swap_quantizable_mha(holder)
+    with torch.no_grad():
+        actual, _ = holder.self_attention(x, x, x, need_weights=False)
+
+    assert torch.allclose(expected, actual, atol=1e-5), (
+        "swap_quantizable_mha output diverged from the original nn.MultiheadAttention -- "
+        "weight transfer is broken, do not proceed to QAT training"
+    )
+    print("swap_quantizable_mha: OK, pre/post-swap outputs match within atol=1e-5")
+
+    ln = nn.LayerNorm(8)
+    swa_model = nn.Module()
+    from torchvision.models.swin_transformer import ShiftedWindowAttention
+    swa = ShiftedWindowAttention(dim=8, window_size=[2, 2], shift_size=[0, 0], num_heads=2)
+    swa_model.add_module("norm", ln)
+    swa_model.add_module("attn", swa)
+    exclude_attention_from_qat(swa_model)
+    assert ln.qconfig is None and swa.qconfig is None, "exclude_attention_from_qat did not set qconfig=None"
+    print("exclude_attention_from_qat: OK, LayerNorm/ShiftedWindowAttention excluded")
+
+
+if __name__ == "__main__":
+    demo()
