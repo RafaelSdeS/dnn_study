@@ -153,8 +153,21 @@ mind; Phase 4 and 9 get their own dedicated analysis further down instead.
 
 ## Next Steps
 
-1. **Investigate AlexNetSmallKernel QAT** — Why the 9.89pp drop? Recalibrate batch norm or try different QAT schedules. Still open.
-2. **Debug AlexNetSE** — Was initialization the issue? Try different seeds or training hyperparameters. Still open.
+1. **Investigate AlexNetSmallKernel QAT** — Diagnosed: fuse_map is correct and QAT fake-quant
+   training tracks FP32 closely (no drop during training); the damage is isolated to the real
+   INT8 `convert()` step. The model has no BatchNorm (by design, for a controlled Phase 2
+   comparison), so fbgemm's per-tensor activation observer likely has no bounded range to
+   calibrate against. `AlexNetSmallKernelWithBN` (`models/compensation.py`) already exists to
+   test this and is now registered as `alexnet_small_kernel_with_bn` in
+   `notebooks/phase_3_compensation_and_hybrids_training/compensation_qat.ipynb` (Section 11) —
+   not yet trained.
+2. **Debug AlexNetSE** — Diagnosed: collapse is immediate and total from epoch 1 (loss pinned at
+   exactly `ln(200)`, never moves) — not init (identical default init to every sibling), not LR
+   (matches the best-performing sibling). Root cause hypothesis: no BatchNorm + 5 serially-chained
+   saturating Sigmoid SE gates crush gradient flow through the trunk from the first step.
+   `AlexNetResidual(use_se=True)` already has the same `_SEBlock` on a BN-backed scaffold and was
+   only ever trained with `use_se=False`; now registered as `alexnet_residual_se` in the same
+   notebook (Section 11) to test whether BN fixes it — not yet trained.
 3. ~~**Benchmark Winograd compatibility** — Verify that Bottleneck & Fire leverage small-kernel acceleration on actual hardware.~~ **Done — see Phase 6.**
 4. **Architecture search** — AutoML over compensation mechanisms for Pareto-optimal size/accuracy/quantization trade-offs. Not started (see "Phase 10" in `TODO.md`, contingent on Phase 8).
 5. ~~**Task transfer** — Test best models on object detection and semantic segmentation.~~ **Detection done (valid A4 retrain, all 3 backbones) — see Phase 7. Segmentation PCAD runs also done, all 3 backbones.**
@@ -340,7 +353,11 @@ nearly all of the benefit at Fire's exact parameter count, and quantizes better 
 ratio 0.4): 385,000 → 207,399 params (53.9%), forward-passes cleanly, every remaining `Conv2d`
 stays `groups=1` (Winograd-eligible by construction). Unfine-tuned accuracy collapses as expected
 (top1=0.50%, top5=2.35%) — this is a mechanics/Winograd-eligibility check, not a competitive
-pruned-accuracy result; a fine-tuning loop to recover accuracy is future work.
+pruned-accuracy result. `scripts/prune_channels.py --finetune-epochs` already implements the
+fine-tuning loop (full FP32→QAT→INT8, mirrors `scripts/train.py`) but every PCAD submission
+attempt (jobs 812276-812278) crashed before Python ran — `scripts/slurm/prune_channels.sbatch`
+used a stale `TRAIN_REPO_ROOT`/conda-activate pattern that broke in a non-interactive batch shell.
+Fixed to match `det_seg.sbatch`'s proven `git rev-parse`+`.venv` pattern; not yet resubmitted.
 
 **Task 3 — compression headroom** (`scripts/measure_compression.py`, `alexnet_fire`): real INT8
 weights use 7.19 bits/weight (vs. 8.00 nominal); k-means weight-sharing at 16/32/64 clusters
