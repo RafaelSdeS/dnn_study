@@ -1,5 +1,16 @@
 # Phase 8 — Efficient Vision Transformers & Hybrid Attention Architectures (Implementation Plan)
 
+**STATUS (2026-08-21):** Tasks 1–6 implemented, training submitted to PCAD; Task 7
+(cross-phase analysis) not started, blocked on results. See `docs/PHASE8_LOG.md` for the
+build history. One material deviation from this plan: **D6's QAT strategy for
+`vit_tiny`/`deit_tiny` changed** — `swap_quantizable_mha()` cannot drive this codebase's
+eager-mode `tq.prepare_qat()` (verified; PyTorch's custom-module conversion path crashes
+before observers exist). Their `self_attention` is now excluded via `qconfig=None`, the
+same treatment D6 already specified for Swin's `ShiftedWindowAttention` — see the amended
+D6 section below and `ml/quantization.py`'s `exclude_attention_from_qat` docstring for the
+full mechanism. `swap_quantizable_mha()` itself is still correct and kept in the codebase,
+just not wired into the QAT path.
+
 Phases 1–4 answered the kernel-restriction question entirely within the convolution paradigm
 (shrink the kernel, compensate architecturally). Phase 8 asks a different question: is
 convolution — at any kernel size — the right primitive at all, or can **local self-attention**
@@ -251,6 +262,28 @@ Reference: Yu, W. et al. "MetaFormer Is Actually What You Need for Vision." CVPR
 
 ### D6 — QAT Strategy: Quantize Linear (MLP + patch-embed Conv) Only; Attention Submodule and
 All LayerNorms Stay FP32 (Whole-Subtree Exclusion)
+
+**AMENDED (2026-08-21):** the `nn.MultiheadAttention → torch.ao.nn.quantizable.MultiheadAttention`
+swap this section originally called a "strict improvement" over Swin's fallback (below) does
+**not** work with this codebase's `tq.prepare_qat()`, verified by direct testing, not by reading
+docs: `torch.ao.nn.quantizable.MultiheadAttention` is registered in PyTorch's default
+`observed_to_quantized_custom_module_class` mapping, and `prepare_qat()`'s first internal step
+(`convert()`, which runs *before* `prepare()` attaches any observers) matches on it and calls its
+`.from_observed()` classmethod immediately — `AttributeError: 'Linear' object has no attribute
+'activation_post_process'`. Setting `qconfig=None` on the swapped module avoids that crash but
+also stops `prepare()`/`convert()` from recursing into its own children, so its Linears never
+quantize either — the swap buys nothing under this constraint (it would need FX graph-mode
+quantization, a different API than the rest of this codebase, to actually work). **Resolution:**
+`vit_tiny`/`deit_tiny`'s `self_attention` gets the *same* fallback as `ShiftedWindowAttention`
+below — plain `nn.MultiheadAttention`, excluded via `qconfig=None`
+(`exclude_attention_from_qat`, extended to match it) — and `models/vit_variants.py`'s
+`_QuantizableEncoderBlock` no longer brackets it with Quant/DeQuant stubs (that bracketing
+assumed a quantized-input-capable MHA). Net effect: H3's "mixed-precision, capped compression"
+prediction now applies uniformly to all seven Phase 8 models, not just the Swin-derived ones —
+arguably a cleaner, more comparable result than the original two-tier plan. The rest of this
+section is kept as-is below for the reasoning that led here (Swin's fallback was correct on the
+first pass; only the ViT/DeiT "strict improvement" half didn't survive contact with
+`tq.prepare_qat()`).
 
 This is the single most consequential new decision Phase 8 introduces, and it required checking
 this codebase's actual QAT internals (`ml/quantization.py`), not assuming by analogy to Phases

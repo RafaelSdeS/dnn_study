@@ -165,11 +165,24 @@ class _QuantizableSwinTransformer(SwinTransformer):
 # so there's no pretrained state dict this fresh reconstruction could lose.
 
 class _QuantizableEncoderBlock(EncoderBlock):
-    """EncoderBlock with FloatFunctional residual adds and a Quant/Dequant-bracketed
-    self_attention + mlp branch. swap_quantizable_mha MUST run before this block is
-    QAT-prepared: self_attention here is bracketed assuming it is (or will become)
-    torch.ao.nn.quantizable.MultiheadAttention, which the bracketing's quantized
-    input requires -- the stock nn.MultiheadAttention cannot accept it.
+    """EncoderBlock with FloatFunctional residual adds and a quantized `mlp` branch.
+
+    self_attention stays plain nn.MultiheadAttention, entirely FP32 (D6, revised):
+    torch.ao.nn.quantizable.MultiheadAttention's linear_Q/K/V/out_proj can only become
+    real nn.quantized.Linear via the static-PTQ prepare()->calibrate->convert() flow
+    (its from_float()/from_observed() classmethods) -- this codebase's single-call
+    tq.prepare_qat() cannot drive that (verified directly: PyTorch registers it in
+    `observed_to_quantized_custom_module_class`, so prepare_qat()'s first-phase
+    convert() calls its `.from_observed()` before any observer exists ->
+    AttributeError). Excluding it via qconfig=None (exclude_attention_from_qat) avoids
+    that crash but then also skips recursing into its own children during
+    prepare/convert, so its internal Linears never become quantized either --
+    swapping in QuantizableMHA bought nothing under this constraint, so this block no
+    longer brackets self_attention with Quant/DeQuant stubs (that bracketing assumed
+    a quantized-input-capable MHA, which stock nn.MultiheadAttention is not -- feeding
+    it a real quantized tensor after convert() raises NotImplementedError:
+    aten::mm.out on 'QuantizedCPU', confirmed directly). self_attention is treated
+    like ln_1/ln_2: a plain excluded FP32 submodule, no stub needed either side.
     """
 
     def __init__(self, num_heads, hidden_dim, mlp_dim, dropout, attention_dropout,
@@ -178,8 +191,6 @@ class _QuantizableEncoderBlock(EncoderBlock):
             norm_layer = partial(nn.LayerNorm, eps=1e-6)
         super().__init__(num_heads, hidden_dim, mlp_dim, dropout, attention_dropout, norm_layer)
         self.mlp = _QuantizableMLP(hidden_dim, mlp_dim, dropout)
-        self.quant_attn_in = tq.QuantStub()
-        self.dequant_attn_out = tq.DeQuantStub()
         self.skip_add_attn = _float_functional()
         self.skip_add_mlp = _float_functional()
         self.skip_add_attn.qconfig = None
@@ -187,9 +198,7 @@ class _QuantizableEncoderBlock(EncoderBlock):
 
     def forward(self, input):
         x = self.ln_1(input)
-        x = self.quant_attn_in(x)
         x, _ = self.self_attention(x, x, x, need_weights=False)
-        x = self.dequant_attn_out(x)
         x = self.dropout(x)
         x = self.skip_add_attn.add(x, input)
 
