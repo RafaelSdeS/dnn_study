@@ -33,7 +33,7 @@ def _slim_conv(conv: nn.Conv2d, out_idx: torch.Tensor | None = None, in_idx: tor
     new_conv = nn.Conv2d(
         in_ch, out_ch, conv.kernel_size, stride=conv.stride, padding=conv.padding,
         dilation=conv.dilation, groups=conv.groups, bias=conv.bias is not None,
-    )
+    ).to(device=conv.weight.device, dtype=conv.weight.dtype)
     w = conv.weight.detach()
     if out_idx is not None:
         w = w[out_idx]
@@ -49,7 +49,9 @@ def _slim_conv(conv: nn.Conv2d, out_idx: torch.Tensor | None = None, in_idx: tor
 
 
 def _slim_bn(bn: nn.BatchNorm2d, idx: torch.Tensor) -> nn.BatchNorm2d:
-    new_bn = nn.BatchNorm2d(len(idx), eps=bn.eps, momentum=bn.momentum)
+    new_bn = nn.BatchNorm2d(len(idx), eps=bn.eps, momentum=bn.momentum).to(
+        device=bn.weight.device, dtype=bn.weight.dtype
+    )
     new_bn.weight.data.copy_(bn.weight.detach()[idx])
     new_bn.bias.data.copy_(bn.bias.detach()[idx])
     new_bn.running_mean.copy_(bn.running_mean[idx])
