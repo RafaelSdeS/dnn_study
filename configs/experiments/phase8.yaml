@@ -27,16 +27,20 @@ data:
   pin_memory: true
   train_val_split: 0.9
 training:
-  epochs: 100
+  epochs: 1000
   lr: 5.0e-4
   weight_decay: 0.05
   label_smoothing: 0.1
   grad_clip_norm: 1.0
   use_amp: true
-  early_stopping_patience: 20
+  early_stopping_patience: 50
   warmup_epochs: 5
+  reset_scheduler_on_resume: true  # these 5 models' checkpoints were trained through a
+    # complete epochs=100/qat.epochs=20 cosine schedule already (see docs/PHASE8_LOG.md);
+    # resuming with the budget below needs a fresh schedule, not the exhausted one on disk
+    # -- see ml/config.py's TrainerConfig.reset_scheduler_on_resume docstring
 qat:
-  epochs: 20
+  epochs: 100
   lr: 1.0e-5
   weight_decay: 5.0e-4
   freeze_bn_epoch: 3

@@ -106,7 +106,10 @@ class Trainer:
 
         # Load full training state if resuming
         if resume_from is not None and Path(resume_from).exists():
-            state = load_resume_state(resume_from, model, optimizer, scheduler, scaler, device=str(self.device))
+            state = load_resume_state(
+                resume_from, model, optimizer, scheduler, scaler,
+                device=str(self.device), reset_scheduler=cfg.reset_scheduler_on_resume,
+            )
             start_epoch = state["epoch"] + 1
             best_val_acc = state["best_val_acc"]
             best_val_top5 = state["best_val_top5"]
@@ -117,6 +120,12 @@ class Trainer:
                 if k in history:
                     history[k] = v
             wandb_run_id = state["wandb_run_id"]
+            if cfg.reset_scheduler_on_resume:
+                # scheduler was just constructed fresh above (correct T_max for the new
+                # cfg.epochs) but never stepped -- fast-forward it to start_epoch instead
+                # of loading the checkpoint's stale, wrong-T_max scheduler state.
+                for _ in range(start_epoch):
+                    scheduler.step()
 
         best_path = self.save_dir / f"{self.run_name}_best.pth"
         resume_path = self.save_dir / f"{self.run_name}_resume.pth"

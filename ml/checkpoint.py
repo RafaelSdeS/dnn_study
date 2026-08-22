@@ -49,12 +49,18 @@ def load_resume_state(
     scheduler,
     scaler=None,
     device: str = "cpu",
+    reset_scheduler: bool = False,
 ) -> dict:
-    """Load full training state from resume checkpoint. Returns dict with epoch, best_val_acc, history, wandb_run_id, patience_counter."""
+    """Load full training state from resume checkpoint. Returns dict with epoch, best_val_acc, history, wandb_run_id, patience_counter.
+
+    reset_scheduler=True skips restoring the checkpoint's scheduler state (its T_max reflects
+    the old cfg.epochs) -- caller is responsible for fast-forwarding the freshly-built scheduler
+    instead. Use when resuming into a larger epochs budget than the checkpoint was trained for.
+    """
     ckpt = torch.load(path, map_location=device, weights_only=True)
     model.load_state_dict(ckpt["model_state_dict"])
     optimizer.load_state_dict(ckpt["optimizer_state_dict"])
-    if scheduler and ckpt.get("scheduler_state_dict"):
+    if scheduler and ckpt.get("scheduler_state_dict") and not reset_scheduler:
         scheduler.load_state_dict(ckpt["scheduler_state_dict"])
     if scaler and ckpt.get("scaler_state_dict"):
         scaler.load_state_dict(ckpt["scaler_state_dict"])
