@@ -1,5 +1,16 @@
 # Phase 8 — Efficient Vision Transformers & Hybrid Attention Architectures (Implementation Plan)
 
+**STATUS (2026-08-21):** Tasks 1–6 implemented, training submitted to PCAD; Task 7
+(cross-phase analysis) not started, blocked on results. See `docs/PHASE8_LOG.md` for the
+build history. One material deviation from this plan: **D6's QAT strategy for
+`vit_tiny`/`deit_tiny` changed** — `swap_quantizable_mha()` cannot drive this codebase's
+eager-mode `tq.prepare_qat()` (verified; PyTorch's custom-module conversion path crashes
+before observers exist). Their `self_attention` is now excluded via `qconfig=None`, the
+same treatment D6 already specified for Swin's `ShiftedWindowAttention` — see the amended
+D6 section below and `ml/quantization.py`'s `exclude_attention_from_qat` docstring for the
+full mechanism. `swap_quantizable_mha()` itself is still correct and kept in the codebase,
+just not wired into the QAT path.
+
 Phases 1–4 answered the kernel-restriction question entirely within the convolution paradigm
 (shrink the kernel, compensate architecturally). Phase 8 asks a different question: is
 convolution — at any kernel size — the right primitive at all, or can **local self-attention**
@@ -360,6 +371,28 @@ Reference: Yu, W. et al. "MetaFormer Is Actually What You Need for Vision." CVPR
 
 ### D6 — QAT Strategy: Quantize Linear (MLP + patch-embed Conv) Only; Attention Submodule and
 All LayerNorms Stay FP32 (Whole-Subtree Exclusion)
+
+**AMENDED (2026-08-21):** the `nn.MultiheadAttention → torch.ao.nn.quantizable.MultiheadAttention`
+swap this section originally called a "strict improvement" over Swin's fallback (below) does
+**not** work with this codebase's `tq.prepare_qat()`, verified by direct testing, not by reading
+docs: `torch.ao.nn.quantizable.MultiheadAttention` is registered in PyTorch's default
+`observed_to_quantized_custom_module_class` mapping, and `prepare_qat()`'s first internal step
+(`convert()`, which runs *before* `prepare()` attaches any observers) matches on it and calls its
+`.from_observed()` classmethod immediately — `AttributeError: 'Linear' object has no attribute
+'activation_post_process'`. Setting `qconfig=None` on the swapped module avoids that crash but
+also stops `prepare()`/`convert()` from recursing into its own children, so its Linears never
+quantize either — the swap buys nothing under this constraint (it would need FX graph-mode
+quantization, a different API than the rest of this codebase, to actually work). **Resolution:**
+`vit_tiny`/`deit_tiny`'s `self_attention` gets the *same* fallback as `ShiftedWindowAttention`
+below — plain `nn.MultiheadAttention`, excluded via `qconfig=None`
+(`exclude_attention_from_qat`, extended to match it) — and `models/vit_variants.py`'s
+`_QuantizableEncoderBlock` no longer brackets it with Quant/DeQuant stubs (that bracketing
+assumed a quantized-input-capable MHA). Net effect: H3's "mixed-precision, capped compression"
+prediction now applies uniformly to all seven Phase 8 models, not just the Swin-derived ones —
+arguably a cleaner, more comparable result than the original two-tier plan. The rest of this
+section is kept as-is below for the reasoning that led here (Swin's fallback was correct on the
+first pass; only the ViT/DeiT "strict improvement" half didn't survive contact with
+`tq.prepare_qat()`).
 
 This is the single most consequential new decision Phase 8 introduces, and it required checking
 this codebase's actual QAT internals (`ml/quantization.py`), not assuming by analogy to Phases
@@ -843,7 +876,8 @@ class DistillationTrainer(Trainer):
         # 3-tuple it does: (train_loss, train_acc, avg_grad_norm | None) — fit() unpacks
         # three values at ml/trainer.py:123.
         # Override only the loss computation; keep the base class's AMP/grad-clip/logging
-        # scaffolding.
+        # scaffolding by calling into the same structure it uses (see ml/trainer.py L313-344,
+        # AMP/grad-clip branch at L323-339).
         # loss = (1-alpha) * CE(student_logits, labels)
         #      +    alpha  * CE(student_logits, teacher(images).argmax(dim=1))   # hard distillation
         ...
@@ -856,12 +890,13 @@ default) as the starting point; treat as a config value (`DistillationConfig` or
 not a new dataclass given it's a single float) rather than hardcoding.
 
 Teacher: `load_best_model("mobilenetv2", MODEL_REGISTRY["mobilenetv2"]["ctor"], SAVE_DIR, device)`
-— intended to reuse Phase 1's checkpoint (`mobilenetv2`, 57.99% top-1). **That checkpoint is not
-on disk** (measured; see H4) — `checkpoints/` holds only the phase_2/3/4 directories and
-`final_architecture_phase4/`, with no `mobilenetv2_best.pth` under `outputs/` either. So "no new
-teacher training required" is false as things stand. Resolve per H4 (recover from PCAD, retrain,
-or substitute a teacher whose checkpoint exists) **before** writing the notebook cell that depends
-on it, and restate H4's expected margin if the teacher changes.
+— reuses Phase 1's already-trained checkpoint (per `CLAUDE.md`'s Model Inventory, `mobilenetv2`
+is Phase 1's best result at 57.99% top-1) — **no new teacher training required**. The checkpoint
+actually lives at `outputs/pcad/archive_legacy_phases/phase_4_5_large_scale/mobilenetv2/checkpoints/
+mobilenetv2_best.pth` (verified on disk), a different `SAVE_DIR` than Phase 8's own runs will use
+— point `load_best_model()` at that path explicitly rather than assuming it's colocated with
+Phase 8's checkpoints, and confirm it loads without error before writing the notebook cell that
+depends on it.
 
 **Inputs:** Task 1/2/3 outputs; Phase 1's `mobilenetv2` checkpoint (distillation only).
 
@@ -880,8 +915,8 @@ minor style call, either is a small, contained addition).
   own recipe uses `lr=5e-4` with a 5-epoch linear warmup, `weight_decay=0.05`, far from this
   project's CNN-tuned defaults of `lr=3e-4` and `weight_decay=4e-4` in `ml/config.py`
   (`configs/training.yaml` overrides the latter to `5e-4`; the two disagree, worth reconciling
-  while you are here). The base `Trainer` already uses `AdamW` (`ml/trainer.py:72`) with
-  `CosineAnnealingLR` (`:73`), so only warmup and the hyperparameter values are missing.
+  while you are here), with no warmup. The base `Trainer` already uses `AdamW` (`ml/trainer.py:72`)
+  with `CosineAnnealingLR` (`:73`), so only warmup and the hyperparameter values are missing.
   Reusing the defaults unchanged risks slow/unstable convergence purely from an optimizer
   mismatch, which would be mistaken for an architectural finding.
   **Mitigation, corrected:** `TrainerConfig.warmup_epochs` **already exists**
@@ -889,8 +924,12 @@ minor style call, either is a small, contained addition).
   `ml/trainer.py` never reads it — `fit()` constructs `CosineAnnealingLR` unconditionally, so the
   field is currently dead. The work is to *wire the existing field* (`LinearLR` + `SequentialLR`,
   both stdlib `torch.optim`) and add `warmup_epochs` to `configs/training.yaml`, not to add a new
-  config knob. For the per-model `lr`/`weight_decay` overrides, see Task 2's warning: only `lr`
-  is read from registry metadata today.
+  config knob. Separately, add a per-model `lr`/`weight_decay` override via
+  `register_model(lr=..., weight_decay=...)`'s `**metadata` kwargs (already used by
+  `alexnet_fp32.yaml` for a per-model `lr` override, per `CLAUDE.md`'s Key Patterns). Note
+  `weight_decay` is only half-wired today: `register_model()` will happily store it, but
+  `scripts/train.py` currently only reads `spec.get("lr", ...)` back out — reading `weight_decay`
+  the same way is a small, required addition to `scripts/train.py`, not zero new code.
 - `use_amp=True` (this project's FP32-training default) interacts with LayerNorm/softmax
   numerics differently than with BatchNorm/ReLU — AMP is generally safe for transformers (it's
   the standard training regime in the literature) but watch for any NaN/inf loss in the first few

@@ -37,6 +37,13 @@ from models import (
     AlexNetDilatedGAP,
     TinyHybridNet,
     TinyMobileNetV2,
+    vit_tiny,
+    deit_tiny,
+    swin_pico_w2,
+    swin_pico_w4,
+    swin_pico_w8,
+    swin_pico_poolmixer,
+    hybrid_bottleneck_swin,
 )
 
 # notebooks/phase_1_baseline_training/baselines_qat.ipynb
@@ -147,4 +154,25 @@ register_model(
     AlexNetFinalDepthwiseFire,
     fuse_map=find_fuse_groups(AlexNetFinalDepthwiseFire()),
     lr=1e-3,
+)
+
+# ideas/PHASE8_PLAN.md Task 2. patch-embedding Conv2d in ViT/Swin has no adjacent BN
+# (uses LayerNorm), so fuse_map=[] for the pure-attention models -- only
+# hybrid_bottleneck_swin's _AlexBottleneck stem has fusable Conv-BN-ReLU triples.
+# lr/weight_decay follow DeiT's recipe (Touvron et al. 2021), not this project's
+# CNN-tuned defaults (Task 4 Pitfalls / Blocking Issue #5); warmup_epochs is set at
+# the experiment-config level (configs/experiments/phase8.yaml) since it isn't a
+# per-model registry field.
+register_model("vit_tiny", vit_tiny, fuse_map=[], lr=5e-4, weight_decay=0.05)
+register_model("deit_tiny", deit_tiny, fuse_map=[], lr=5e-4, weight_decay=0.05)
+register_model("swin_pico_w2", swin_pico_w2, fuse_map=[], lr=5e-4, weight_decay=0.05)
+register_model("swin_pico_w4", swin_pico_w4, fuse_map=[], lr=5e-4, weight_decay=0.05)
+register_model("swin_pico_w8", swin_pico_w8, fuse_map=[], lr=5e-4, weight_decay=0.05)
+register_model("swin_pico_poolmixer", swin_pico_poolmixer, fuse_map=[], lr=5e-4, weight_decay=0.05)
+register_model(
+    "hybrid_bottleneck_swin",
+    hybrid_bottleneck_swin,
+    fuse_map=find_fuse_groups(hybrid_bottleneck_swin()),
+    lr=5e-4,
+    weight_decay=0.05,
 )

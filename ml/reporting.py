@@ -144,6 +144,27 @@ def gzip_mb(path: str | Path) -> float | None:
     return len(gzip.compress(p.read_bytes())) / (1024 ** 2)
 
 
+def _sdpa_flop_jit(inputs, outputs):
+    """MACs for aten::scaled_dot_product_attention (Phase 8 D7): fvcore has no built-in
+    handler for this fused op -- nn.MultiheadAttention (vit_tiny/deit_tiny) dispatches to
+    it directly, so without this handler every attention layer's QK^T + softmax*V MACs
+    are silently dropped from compute_flops()'s total. Verified against the standard
+    transformer FLOP-counting formula (2 * num_heads * seq_len^2 * head_dim per layer,
+    e.g. Kaplan et al. 2020 Sec 2.1): exact match on vit_tiny (delta = 9,734,400 MACs
+    for its 6 layers, batch=1). A no-op for every pre-Phase-8 model -- they contain no
+    scaled_dot_product_attention call, so this handler is never invoked for them.
+    """
+    from fvcore.nn.jit_handles import get_shape
+    q_shape, k_shape, v_shape = get_shape(inputs[0]), get_shape(inputs[1]), get_shape(inputs[2])
+    *batch_dims, seq_q, head_dim = q_shape
+    seq_k = k_shape[-2]
+    head_dim_v = v_shape[-1]
+    batch = 1
+    for b in batch_dims:
+        batch *= b
+    return batch * seq_q * seq_k * head_dim + batch * seq_q * seq_k * head_dim_v
+
+
 def compute_flops(model, input_size: tuple = (1, 3, 64, 64)) -> dict:
     """MACs and FLOPs via fvcore. Returns {"macs": int, "flops": int}."""
     from fvcore.nn import FlopCountAnalysis
@@ -158,6 +179,7 @@ def compute_flops(model, input_size: tuple = (1, 3, 64, 64)) -> dict:
     analysis = FlopCountAnalysis(model, inp)
     analysis.unsupported_ops_warnings(False)
     analysis.uncalled_modules_warnings(False)
+    analysis.set_op_handle("aten::scaled_dot_product_attention", _sdpa_flop_jit)
     macs = analysis.total()
     return {"macs": macs, "flops": macs * 2}
 

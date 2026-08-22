@@ -1,0 +1,43 @@
+# ideas/PHASE8_PLAN.md Task 6. deit_tiny is deliberately excluded from this list --
+# its distillation training needs DistillationTrainer + a frozen mobilenetv2 teacher
+# checkpoint, so it's driven from the Phase 8 notebook, not this generic CLI loop
+# (same reasoning as every other model here needing no new script at all).
+#
+# vit_tiny/deit_tiny's QAT stage also needs swap_quantizable_mha() called on the FP32
+# model before build_qat() (D6) -- this generic loop's build_qat() has no hook for
+# that, so vit_tiny's `qat`/`int8` stages need the notebook path too, not just
+# deit_tiny's `fp32` stage. Swin-derived models (swin_pico_*, hybrid_bottleneck_swin)
+# don't need this since exclude_attention_from_qat() is wired unconditionally into
+# ml/quantization.py's prepare_qat_model().
+name: phase8
+models:
+  - swin_pico_w2
+  - swin_pico_w4
+  - swin_pico_w8
+  - swin_pico_poolmixer
+  - hybrid_bottleneck_swin
+seed: 42
+stages:
+  - fp32
+  - qat
+  - int8
+data:
+  batch_size: 64
+  num_workers: 4
+  pin_memory: true
+  train_val_split: 0.9
+training:
+  epochs: 100
+  lr: 5.0e-4
+  weight_decay: 0.05
+  label_smoothing: 0.1
+  grad_clip_norm: 1.0
+  use_amp: true
+  early_stopping_patience: 20
+  warmup_epochs: 5
+qat:
+  epochs: 20
+  lr: 1.0e-5
+  weight_decay: 5.0e-4
+  freeze_bn_epoch: 3
+  disable_observer_epoch: 5

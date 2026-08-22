@@ -70,7 +70,21 @@ class Trainer:
         model = self.model.to(self.device)
         criterion = nn.CrossEntropyLoss(label_smoothing=cfg.label_smoothing)
         optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=cfg.epochs)
+        if cfg.warmup_epochs > 0:
+            # Same LinearLR+SequentialLR composition as ml/det_seg_trainer.py's fit();
+            # transformer training (Phase 8) diverges early without warmup far more
+            # often than the CNN-tuned defaults this loop was built for.
+            warmup = torch.optim.lr_scheduler.LinearLR(
+                optimizer, start_factor=0.1, total_iters=cfg.warmup_epochs
+            )
+            cosine = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer, T_max=cfg.epochs - cfg.warmup_epochs
+            )
+            scheduler = torch.optim.lr_scheduler.SequentialLR(
+                optimizer, schedulers=[warmup, cosine], milestones=[cfg.warmup_epochs]
+            )
+        else:
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=cfg.epochs)
         scaler = torch.amp.GradScaler("cuda") if cfg.use_amp else None
 
         start_epoch = 0
