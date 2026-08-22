@@ -136,7 +136,7 @@ precise match, not just close. No-op for every pre-Phase-8 model (none contain t
 
 ## Stage 9 — Notebook (Task 6, `vit_tiny`/`deit_tiny`) ✓
 
-`notebooks/phase_8_efficient_vit_hybrid_attention_training/vit_qat_phase8.ipynb`:
+`notebooks/phase_8_efficient_vit/vit_qat_phase8.ipynb`:
 registration, blocking-issue pre-flight checks (teacher checkpoint, attention
 exclusion, FLOPs verification — all as runnable cells, not just prose), model
 shape/param-count sanity check, FP32 training (`vit_tiny` plain `Trainer`, `deit_tiny`

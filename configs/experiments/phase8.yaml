@@ -3,12 +3,15 @@
 # checkpoint, so it's driven from the Phase 8 notebook, not this generic CLI loop
 # (same reasoning as every other model here needing no new script at all).
 #
-# vit_tiny/deit_tiny's QAT stage also needs swap_quantizable_mha() called on the FP32
-# model before build_qat() (D6) -- this generic loop's build_qat() has no hook for
-# that, so vit_tiny's `qat`/`int8` stages need the notebook path too, not just
-# deit_tiny's `fp32` stage. Swin-derived models (swin_pico_*, hybrid_bottleneck_swin)
-# don't need this since exclude_attention_from_qat() is wired unconditionally into
-# ml/quantization.py's prepare_qat_model().
+# vit_tiny's qat/int8 stages also stay in the notebook, not because they need any
+# special handling anymore (D6, revised: swap_quantizable_mha() turned out to be
+# unusable on this codebase's eager-mode prepare_qat() and was dropped from the QAT
+# path -- vit_tiny/deit_tiny now use plain build_qat(), same as every other Phase 8
+# model, via exclude_attention_from_qat() wired unconditionally into
+# ml/quantization.py's prepare_qat_model()) -- but because vit_tiny is trained
+# alongside deit_tiny in that notebook for a clean, identically-configured baseline,
+# and splitting its qat/int8 stages into this CLI loop would mean two SAVE_DIR
+# layouts for one model.
 name: phase8
 models:
   - swin_pico_w2

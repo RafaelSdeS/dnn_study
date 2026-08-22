@@ -700,10 +700,13 @@ by fusion (LayerNorm has no BN-fusion analogue; Linear-GELU-Linear has no fusabl
 **Dependencies:** Task 1.
 
 **Deliverables:** Registration cells in
-`notebooks/phase_8_efficient_vit_hybrid_attention_training/vit_qat_phase8.ipynb` (see Task 6),
+`notebooks/phase_8_efficient_vit/vit_qat_phase8.ipynb` (see Task 6),
 plus the mirrored `ml/model_registrations.py` entries. Note the path: this project stores
-notebooks under `notebooks/phase_N_<topic>_<purpose>/`, so a bare `notebooks/vit_qat_phase8.ipynb`
-(as an earlier draft specified) breaks the convention every other phase follows.
+notebooks under `notebooks/phase_N_<topic>[_<purpose>]/`, so a bare `notebooks/vit_qat_phase8.ipynb`
+(as an earlier draft specified) breaks the convention every other phase follows. Phase 8's
+training and analysis notebooks share one `phase_8_efficient_vit/` folder rather than
+separate `_training`/`_analysis` folders (the split every other multi-notebook phase uses) —
+a deliberate exception, not a naming-convention regression.
 
 **Pitfalls / Alternatives:** If `torchinfo.summary()` (used by every prior phase's per-model
 reporting step) doesn't cleanly print a `VisionTransformer`/`SwinTransformer`'s layer table (some
@@ -1025,7 +1028,7 @@ one-off logic into the notebook.
 **Dependencies:** Tasks 1–5.
 
 **Deliverables:** `configs/experiments/phase8.yaml`,
-`notebooks/phase_8_efficient_vit_hybrid_attention_training/vit_qat_phase8.ipynb` (registration
+`notebooks/phase_8_efficient_vit/vit_qat_phase8.ipynb` (registration
 cells, `DistillationTrainer` training cell for `deit_tiny`, standard FP32/QAT/INT8 loop for the
 other six via `scripts/train.py`-equivalent notebook cells, matching every prior phase's notebook
 structure). Model the YAML on `configs/experiments/default.yaml` — same
@@ -1045,7 +1048,7 @@ before a full PCAD submission.
 
 ## Task 7 — Cross-Phase Analysis Notebook
 
-**What:** `notebooks/phase_8_efficient_vit_hybrid_attention_analysis/phase8_results_analysis.ipynb` — joins Phase 8's results to Phase
+**What:** `notebooks/phase_8_efficient_vit/phase8_results_analysis.ipynb` — joins Phase 8's results to Phase
 2/3's classification results and Phase 6's profiling infrastructure (reused directly on the new
 models per H5) to test H1–H5.
 
@@ -1077,7 +1080,7 @@ models per H5) to test H1–H5.
 
 **Dependencies:** Tasks 1–6 complete with at least FP32+INT8 results for all seven models.
 
-**Deliverables:** `notebooks/phase_8_efficient_vit_hybrid_attention_analysis/phase8_results_analysis.ipynb`.
+**Deliverables:** `notebooks/phase_8_efficient_vit/phase8_results_analysis.ipynb`.
 
 **Pitfalls / Alternatives:** With 3–6 points per hypothesis, correlation statistics have limited
 power — same caveat Phase 6/7 already state explicitly; report raw numbers prominently.
