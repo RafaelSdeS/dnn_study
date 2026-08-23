@@ -1,12 +1,18 @@
 {
   "title": "Phase 10 \u2014 Final Cross-Project Summary",
   "phases_covered": [
-    "Phase 8 \u2014 Efficient ViT / Hybrid-Attention"
+    "Phase 1 \u2014 Baselines",
+    "Phase 2 \u2014 AlexNet Variants",
+    "Phase 3 \u2014 Compensation",
+    "Phase 4 \u2014 Final Architecture",
+    "Phase 8 \u2014 Efficient ViT / Hybrid-Attention",
+    "Phase 9 \u2014 PCAD Bypass Ablation"
   ],
   "n_classification_models": 31,
   "n_detection_runs": 18,
   "n_segmentation_runs": 9,
   "best_fp32_overall": {
+    "phase": "Phase 1 \u2014 Baselines",
     "model_name": "mobilenetv2",
     "fp32_top1": 57.99558162689209,
     "fp32_top5": 81.51498436927795,
@@ -22,10 +28,10 @@
     "param_efficiency_top1_per_m": 23.414642800692885,
     "total_training_time_s": 1087.8419904708862,
     "avg_epoch_time_s": 32.87225328069745,
-    "peak_gpu_mem_mb": 536.681640625,
-    "phase": NaN
+    "peak_gpu_mem_mb": 536.681640625
   },
   "most_quantization_stable": {
+    "phase": "Phase 2 \u2014 AlexNet Variants",
     "model_name": "alexnet_small_kernel",
     "fp32_top1": 45.836564898490906,
     "fp32_top5": 71.07693552970886,
@@ -41,8 +47,7 @@
     "param_efficiency_top1_per_m": 28.60751783601352,
     "total_training_time_s": 24.23272156715393,
     "avg_epoch_time_s": 23.74463478848338,
-    "peak_gpu_mem_mb": 1038.20849609375,
-    "phase": NaN
+    "peak_gpu_mem_mb": 1038.20849609375
   },
   "best_detection_mAP": {
     "run_dir": "ssd_alexnet_bottleneck_qat_phase7_detection",
