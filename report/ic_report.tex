@@ -1216,8 +1216,15 @@ INT8: \textit{backend} / dispositivo & fbgemm / CPU \\
 \end{table*}
 
 A Tabela~\ref{tab:per_model_training} lista, por modelo, a taxa de aprendizado inicial (FP32), o
-número de épocas efetivamente treinadas até o melhor \textit{checkpoint} (\textit{early stopping}
-pode interromper antes do orçamento de 100 épocas) e o tempo de treino FP32 medido. O agrupamento
+número de épocas efetivamente treinadas até o melhor \textit{checkpoint} em cada estágio —
+FP32 e QAT (\textit{early stopping} pode interromper antes do orçamento de cada estágio) — e o
+tempo de treino medido em cada estágio. As épocas e o tempo de QAT não puderam ser recuperados
+para os modelos treinados antes do Eixo 7 — os \textit{checkpoints}/\textit{logs} desse estágio já
+não estão presentes localmente, e o resumo persistente (\texttt{results/*\_summary.json}) grava
+apenas a época e o tempo do melhor \textit{checkpoint} FP32 quando ambos os estágios rodam
+(\texttt{ml/reporting.py}); essas células aparecem como ``—''. A conversão para INT8 não é um
+estágio treinado (apenas calibração/\textit{eval} estático em CPU, ordem de segundos) e por isso
+não tem uma coluna de tempo própria. O agrupamento
 por família replica o da Figura~\ref{fig:kernel_cost}. O tempo total é o produto entre épocas e
 tempo médio por época — os modelos das famílias \textit{baselines irrestritos} e
 \textit{restrição ingênua}/\texttt{AlexNetBottleneck}/\texttt{AlexNetFire} foram treinados
@@ -1237,53 +1244,60 @@ comparáveis entre si nem com as medições de latência do Eixo 3, que usam exc
 RTX 4060 Laptop (Seção~\ref{sec:profiling}).
 
 \begin{table*}[!t]
-\caption{Taxa de aprendizado, épocas efetivas e tempo de treino FP32 por modelo}
+\caption{Taxa de aprendizado, épocas efetivas (FP32/QAT) e tempo de treino (FP32/QAT) por modelo}
 \label{tab:per_model_training}
 \centering
-\begin{tabular}{@{}llccc@{}}
+\setlength{\tabcolsep}{4pt}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{@{}llccccc@{}}
 \toprule
-\textbf{Família} & \textbf{Modelo} & \textbf{LR} & \textbf{Épocas} & \textbf{Tempo (min)} \\
+\textbf{Família} & \textbf{Modelo} & \textbf{LR} & \textbf{Ép. FP32} & \textbf{Ép. QAT} & \textbf{T. FP32 (min)} & \textbf{T. QAT (min)} \\
 \midrule
 \multirow{4}{*}{Baselines irrestritos}
- & AlexNetTV (pré-trein.) & 3$\times10^{-4}$ & 79 & 63,2 \\
- & MobileNetV2 (pré-trein.) & 1$\times10^{-4}$ & 27 & 14,8 \\
- & ResNet18 (pré-trein.) & 1$\times10^{-4}$ & 15 & 7,1 \\
- & VGG-Style & 1$\times10^{-3}$ & 62 & 30,5 \\
+ & AlexNetTV (pré-trein.) & 3$\times10^{-4}$ & 79 & — & 63,2 & — \\
+ & MobileNetV2 (pré-trein.) & 1$\times10^{-4}$ & 27 & — & 14,8 & — \\
+ & ResNet18 (pré-trein.) & 1$\times10^{-4}$ & 15 & — & 7,1 & — \\
+ & VGG-Style & 1$\times10^{-3}$ & 62 & — & 30,5 & — \\
 \midrule
 \multirow{3}{*}{Restrição ingênua}
- & AlexNet3x3-FC & 3$\times10^{-4}$ & 37 & 29,1 \\
- & AlexNet3x3-GAP & 3$\times10^{-4}$ & 43 & 16,3 \\
- & AlexNetSmallKernel & 3$\times10^{-4}$ & 62 & 24,5 \\
+ & AlexNet3x3-FC & 3$\times10^{-4}$ & 37 & — & 29,1 & — \\
+ & AlexNet3x3-GAP & 3$\times10^{-4}$ & 43 & — & 16,3 & — \\
+ & AlexNetSmallKernel & 3$\times10^{-4}$ & 62 & — & 24,5 & — \\
 \midrule
 \multirow{5}{*}{Tentativas de compensação}
- & AlexNetBottleneck & 1$\times10^{-3}$ & 76 & 29,6 \\
- & AlexNetFire & 1$\times10^{-3}$ & 41 & 21,7 \\
- & Bottleneck + Fire (\texttt{AlexNetFinalBottleneckFire}) & 1$\times10^{-3}$ & 40 & 13,9 \\
- & Bottleneck + Residual (\texttt{AlexNetFinalBottleneckResidual}) & 1$\times10^{-3}$ & 38 & 15,6 \\
- & Depthwise + Fire (\texttt{AlexNetFinalDepthwiseFire}) & 1$\times10^{-3}$ & 76 & 27,3 \\
+ & AlexNetBottleneck & 1$\times10^{-3}$ & 76 & — & 29,6 & — \\
+ & AlexNetFire & 1$\times10^{-3}$ & 41 & — & 21,7 & — \\
+ & Bottleneck + Fire (\texttt{AlexNetFinalBottleneckFire}) & 1$\times10^{-3}$ & 40 & — & 13,9 & — \\
+ & Bottleneck + Residual (\texttt{AlexNetFinalBottleneckResidual}) & 1$\times10^{-3}$ & 38 & — & 15,6 & — \\
+ & Depthwise + Fire (\texttt{AlexNetFinalDepthwiseFire}) & 1$\times10^{-3}$ & 76 & — & 27,3 & — \\
 \midrule
 \multirow{2}{*}{Arquitetura híbrida final}
- & Fire + Residual (\texttt{AlexNetFinalFireResidual}) & 1$\times10^{-3}$ & 77 & 28,8 \\
- & AlexNetFireBypass & 1$\times10^{-3}$ & 152 & 86,2 \\
+ & Fire + Residual (\texttt{AlexNetFinalFireResidual}) & 1$\times10^{-3}$ & 77 & — & 28,8 & — \\
+ & AlexNetFireBypass & 1$\times10^{-3}$ & 152 & — & 86,2 & — \\
 \midrule
 \multirow{7}{*}{Atenção local (Eixo 7)}
- & swin\_pico\_w2 & 5$\times10^{-4}$ & 99 & 156,1 \\
- & swin\_pico\_w4 & 5$\times10^{-4}$ & 99 & 150,2 \\
- & swin\_pico\_w8 & 5$\times10^{-4}$ & 99 & 80,7 \\
- & swin\_pico\_poolmixer & 5$\times10^{-4}$ & 99 & 80,6 \\
- & hybrid\_bottleneck\_swin & 5$\times10^{-4}$ & 99 & 85,9 \\
- & vit\_tiny & 5$\times10^{-4}$ & 125 & 59,6 \\
- & deit\_tiny & 5$\times10^{-4}$ & 212 & 108,4 \\
+ & swin\_pico\_w2 & 5$\times10^{-4}$ & 146 & 99 & 156,1 & 107,3 \\
+ & swin\_pico\_w4 & 5$\times10^{-4}$ & 143 & 91 & 150,2 & 97,3 \\
+ & swin\_pico\_w8 & 5$\times10^{-4}$ & 144 & 80 & 80,7 & 44,8 \\
+ & swin\_pico\_poolmixer & 5$\times10^{-4}$ & 143 & 99 & 80,6 & 55,5 \\
+ & hybrid\_bottleneck\_swin & 5$\times10^{-4}$ & 144 & 96 & 85,9 & 56,7 \\
+ & vit\_tiny & 5$\times10^{-4}$ & 125 & 89 & 59,6 & 65,8 \\
+ & deit\_tiny & 5$\times10^{-4}$ & 212 & 62 & 108,4 & 46,1 \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \end{table*}
 
 Os cinco primeiros modelos de atenção local (\texttt{swin\_pico\_*}, \texttt{hybrid\_bottleneck\_swin})
-encerraram o treino no mesmo número de épocas (99) apesar do orçamento de 1000 e paciência de 50 —
-consistente com um limite de tempo de execução compartilhado no PCAD, não necessariamente
-\textit{early stopping} por estagnação da métrica; \texttt{vit\_tiny}/\texttt{deit\_tiny}, treinados
-via \textit{notebook} dedicado em vez do \texttt{sbatch} compartilhado, encerraram em épocas
-diferentes (125 e 212, respectivamente).
+encerraram o estágio FP32 entre as épocas 143 e 146, bem abaixo do orçamento de 1000 —
+consistente com \textit{early stopping} por estagnação da métrica (paciência 50) em vez de um
+limite de tempo de execução. No estágio QAT (orçamento de 100 épocas), \texttt{swin\_pico\_w2} e
+\texttt{swin\_pico\_poolmixer} atingiram o teto de 99 sem estagnar, enquanto os demais
+(\texttt{swin\_pico\_w4}, \texttt{swin\_pico\_w8}, \texttt{hybrid\_bottleneck\_swin}) encerraram
+antes via \textit{early stopping} (91, 80 e 96, respectivamente), com tempos de QAT
+correspondentemente mais curtos (Tabela~\ref{tab:per_model_training}); \texttt{vit\_tiny}/\texttt{deit\_tiny},
+treinados via \textit{notebook} dedicado em vez do \texttt{sbatch} compartilhado, também encerraram
+em épocas distintas em ambos os estágios (125/89 e 212/62, FP32/QAT respectivamente).
 
 \subsection{Dados de Treinamento — Predição Densa (Eixo 6)}
 \label{sec:apendice_treinamento_fase7}
