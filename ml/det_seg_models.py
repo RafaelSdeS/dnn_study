@@ -147,9 +147,11 @@ class DetSegBackbone(nn.Module):
 class DeepLabV3Segmenter(nn.Module):
     """DeepLabV3-style segmenter: DetSegBackbone (deepest tap only) + DeepLabHead + upsample."""
 
-    def __init__(self, arch_name: str, num_classes: int = 21):
+    def __init__(self, arch_name: str, num_classes: int = 21, pretrained_ckpt: Optional[Path] = None):
         super().__init__()
-        self.backbone = DetSegBackbone(arch_name, num_classes=200, num_extra_blocks=0)
+        self.backbone = DetSegBackbone(
+            arch_name, num_classes=200, num_extra_blocks=0, pretrained_ckpt=pretrained_ckpt
+        )
         self.head = DeepLabHead(self.backbone.out_channels[-1], num_classes)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -163,6 +165,7 @@ def build_deeplabv3_segmenter(
     arch_name: str,
     num_classes: int = 21,
     image_size: int = 256,
+    pretrained_ckpt: Optional[Path] = None,
 ) -> DeepLabV3Segmenter:
     """Assemble DeepLabV3-style segmenter: backbone (deepest tap) + DeepLabHead.
 
@@ -171,10 +174,12 @@ def build_deeplabv3_segmenter(
         num_classes: 21 for VOC (20 + background), same convention as build_ssd_detector
         image_size: kept for call-site parity with build_ssd_detector; forward() upsamples
             to the actual input tensor's spatial size, not this constant.
+        pretrained_ckpt: Optional Tiny-ImageNet classification checkpoint to init the
+            backbone from, instead of random init (same convention as build_ssd_detector).
     """
     if arch_name not in BACKBONE_FEATURE_CONFIG:
         raise ValueError(f"Unknown arch: {arch_name}")
-    return DeepLabV3Segmenter(arch_name, num_classes=num_classes)
+    return DeepLabV3Segmenter(arch_name, num_classes=num_classes, pretrained_ckpt=pretrained_ckpt)
 
 
 def build_qat_deeplabv3_segmenter(model_fp32: DeepLabV3Segmenter, device: torch.device) -> DeepLabV3Segmenter:
@@ -194,6 +199,20 @@ def build_qat_deeplabv3_segmenter(model_fp32: DeepLabV3Segmenter, device: torch.
 
     backbone.train()
     backbone.qconfig = tq.get_default_qat_qconfig("fbgemm")
+
+    # Same opt-out as build_qat_ssd_detector: backbone_full's classifier and its own
+    # quant/dequant stubs are never invoked by DetSegBackbone.forward (it taps .features
+    # directly and uses its own quant/dequant), and .features layers past the deepest tap
+    # are unreachable too. Left qconfig'd, prepare_qat wraps them with observers that never
+    # see data and tq.convert() hard-asserts on their inf min/max.
+    backbone_full = backbone.backbone_full
+    backbone_full.classifier.qconfig = None
+    backbone_full.quant.qconfig = None
+    backbone_full.dequant.qconfig = None
+    last_tap = max(backbone.feature_indices)
+    for i, layer in enumerate(backbone_full.features):
+        if i > last_tap:
+            layer.qconfig = None
 
     fuse_groups = find_fuse_groups(backbone.backbone_full)
     if fuse_groups:
@@ -339,6 +358,30 @@ def convert_ssd_to_int8(qat_model: SSD) -> SSD:
     qat_model = qat_model.to("cpu").eval()
     qat_model.backbone = tq.convert(qat_model.backbone, inplace=False)
     return qat_model
+
+
+def trim_dead_backbone_weights(model: nn.Module) -> None:
+    """Drop backbone_full submodules DetSegBackbone.forward never reaches (in place).
+
+    DetSegBackbone keeps the whole classification network (backbone_full) around only to
+    support loading a pretrained Tiny-ImageNet checkpoint, but forward() walks backbone_full
+    .features only up to the deepest tap and never touches backbone_full.classifier (or any
+    .features layers past that tap) -- see DetSegBackbone.forward's "break" past last_tap. Those
+    layers still get saved in every training/QAT/INT8 checkpoint at full precision: for
+    alexnet_tv that's ~57M of ~58M "backbone" params (its stock torchvision classifier), which is
+    also never quantized (qconfig=None), so raw checkpoint size barely reflects the deployed
+    model or the QAT->INT8 size drop. Call after loading a trained checkpoint, before measuring
+    or saving a "true" deployable size -- safe because nothing downstream of this call touches
+    the dropped submodules.
+    """
+    backbone = model.backbone
+    last_tap = max(backbone.feature_indices)
+    backbone_full = backbone.backbone_full
+    backbone_full.features = backbone_full.features[: last_tap + 1]
+    if hasattr(backbone_full, "classifier"):
+        del backbone_full.classifier
+    if hasattr(backbone_full, "avgpool"):
+        del backbone_full.avgpool
 
 
 def compute_anchor_recall(

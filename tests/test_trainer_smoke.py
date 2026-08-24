@@ -45,8 +45,11 @@ def test_fit_one_epoch_populates_all_history_fields(tmp_path):
     for key in NEW_HISTORY_KEYS:
         assert len(history[key]) == 1, key
 
-    # No GPU on this box: hardware fields degrade to None rather than crashing.
-    assert history["gpu_power_avg_w"][0] is None
+    # GpuSampler polls nvidia-smi in the background regardless of self.device (it measures
+    # system-wide GPU telemetry, not just this run's usage) and degrades to None if no sample
+    # lands before the tiny 2-batch epoch ends -- on a box with a real GPU this is a race, not
+    # a guarantee, so assert well-formedness rather than hardcoding "no GPU on this box".
+    assert history["gpu_power_avg_w"][0] is None or history["gpu_power_avg_w"][0] >= 0
     # CPU/RAM/throughput are always measurable, even without a GPU.
     assert history["cpu_percent"][0] is not None
     assert history["ram_used_mb"][0] > 0

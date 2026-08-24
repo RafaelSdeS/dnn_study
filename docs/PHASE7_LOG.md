@@ -173,6 +173,8 @@ Phase 7.
   FP32 queued (job 812166). No INT8 detection run has produced metrics — the one attempt (job
   811101) crashed on uncalibrated observers (`min tensor(inf) should be less than max
   tensor(-inf)`), unfixed. Segmentation (Part B) untouched.
+- **A4 complete:** all 3 backbones × FP32/QAT/INT8 × scratch/pretrained now have valid metrics on
+  disk. The INT8 crash is fixed (see Implementation Status below for the fix and the real numbers).
 
 ---
 
@@ -207,20 +209,26 @@ notebook) also complete.
 broken anchor config fixed in Stage 9. Validation mAP was 0.4–7.1% across every one of them — far
 below a working SSD's expected 40–70%+ on VOC, consistent with the anchor-recall check never having
 been run to completion before those runs (see Stage 9 for the root cause). **Do not cite these
-numbers; they are invalid, not just low.** Post-Stage-9 training has since produced valid numbers
-for `alexnet_bottleneck` (FP32/QAT, both variants) and `alexnet_tv` QAT — see A4 progress above and
-the notebook's Run Inventory cell for the current, disk-sourced state.
+numbers; they are invalid, not just low.**
+
+**A4 — complete.** All 3 backbones (bottleneck/fire/tv) × FP32/QAT/INT8 × scratch/pretrained-backbone
+now have valid metrics on disk (`outputs/detection_segmentation/phase7/ssd_*_phase7_detection*`).
+The INT8 observer-calibration crash (job 811101) is resolved — `scripts/train_det_seg.py`'s `int8`
+branch now saves a checkpoint and computes a size/params summary (backfilled onto older runs via
+`scripts/backfill_int8_size.py`), and the Fire backbone's INT8 concat-quantization mismatch is
+fixed (`models/compensation.py`, commit `565fef4`). Real numbers and a first read: `ideas/BEST_MODELS.md`
+Phase 7 section.
+
+**A5 — done.** `notebooks/phase_7_detection_segmentation_analysis/phase7_results_analysis.ipynb`
+has been re-run with H1/H4 plots and real INT8 model sizes against the full A4 result set. H2
+(quantization robustness) is now testable since INT8 metrics exist for all backbones.
 
 **Next:**
-1. **A4** — finish the in-flight `_pretrained` FP32/QAT/INT8 chain for `fire`/`tv` on PCAD, and fix
-   the INT8 observer-calibration crash (job 811101) so H2 becomes testable.
-2. **A5** — re-run `notebooks/phase_7_detection_segmentation_analysis/phase7_results_analysis.ipynb`
-   (Stage 10) once more results land to actually test H1–H4 across all three backbones.
-3. Segmentation (Part B) is unstarted: `build_deeplabv3_segmenter()` is still a hardcoded
-   placeholder ignoring the project's own backbones, `SegmentationTrainer.fit()` is still a
-   one-line stub, and the CLI's `run_segmentation()` still just prints "not yet implemented."
-   B1–B7 (real DeepLabV3 head → QAT/INT8 → real trainer → CLI → reporting → cross-phase analysis
-   extension → PCAD runs) all remain, deferred until after A4/A5 land.
+1. Segmentation (Part B) — code is complete: `build_deeplabv3_segmenter()`, `SegmentationTrainer`,
+   and the CLI's `run_segmentation()` are fully implemented (no longer placeholders/stubs), and
+   PCAD runs are now complete for all 3 backbones × FP32/QAT/INT8
+   (`outputs/detection_segmentation/phase7/seg_*`). What's left: extending the H1–H4 analysis
+   notebook to segmentation now that results are on disk.
 
 **Ground Rules Applied:**
 - ✓ Context hygiene: all decisions logged here for `/compact` recovery

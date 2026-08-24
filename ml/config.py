@@ -33,6 +33,8 @@ class TrainerConfig:
     use_amp: bool = True         # set False for QAT fine-tuning
     early_stopping_patience: Optional[int] = DEFAULT_EARLY_STOPPING_PATIENCE
     warmup_epochs: int = 0       # linear LR warmup before cosine decay; 0 disables
+    reset_scheduler_on_resume: bool = False  # skip the checkpoint's stale scheduler state
+                                              # (wrong T_max) when resuming into a bigger epochs budget
 
 
 @dataclass

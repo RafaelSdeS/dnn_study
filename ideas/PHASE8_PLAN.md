@@ -1,5 +1,16 @@
 # Phase 8 — Efficient Vision Transformers & Hybrid Attention Architectures (Implementation Plan)
 
+**STATUS (2026-08-21):** Tasks 1–6 implemented, training submitted to PCAD; Task 7
+(cross-phase analysis) not started, blocked on results. See `docs/PHASE8_LOG.md` for the
+build history. One material deviation from this plan: **D6's QAT strategy for
+`vit_tiny`/`deit_tiny` changed** — `swap_quantizable_mha()` cannot drive this codebase's
+eager-mode `tq.prepare_qat()` (verified; PyTorch's custom-module conversion path crashes
+before observers exist). Their `self_attention` is now excluded via `qconfig=None`, the
+same treatment D6 already specified for Swin's `ShiftedWindowAttention` — see the amended
+D6 section below and `ml/quantization.py`'s `exclude_attention_from_qat` docstring for the
+full mechanism. `swap_quantizable_mha()` itself is still correct and kept in the codebase,
+just not wired into the QAT path.
+
 Phases 1–4 answered the kernel-restriction question entirely within the convolution paradigm
 (shrink the kernel, compensate architecturally). Phase 8 asks a different question: is
 convolution — at any kernel size — the right primitive at all, or can **local self-attention**
@@ -9,21 +20,28 @@ receptive-field problem Phase 3 spent an entire phase compensating for? This is 
 Phase 8's decisions (QAT strategy, Winograd applicability, FLOP accounting) need new reasoning
 that Phases 1–7 didn't require.
 
-**Scope framing, stated up front:** Phase 8 is scope-comparable to **Phase 3** (a new model
-family plugged into the already-complete `create_imagenet_loaders` → `Trainer` →
-`build_qat`/`make_qat_callback` → `convert_to_int8` pipeline), **not** to Phase 7 (new dataset,
-new loss, new trainer subclasses, new metrics). Classification stays 200-way on Tiny
-ImageNet-200 at 64×64 — zero changes to `ml/data.py`, `ml/config.py`'s `DataConfig`, or
-`ml/trainer.py`'s core loop for three of the four model variants. The genuinely new engineering
-is narrower and concentrated in three places: (1) four new model files that are mostly thin
-wrappers around **already-installed** `torchvision.models.vision_transformer`/`swin_transformer`
-classes (confirmed present in the pinned `torchvision==0.20.1`, no new dependency), (2) a
-`qconfig = None` submodule-exclusion pattern for LayerNorm/Softmax/attention math that this
-codebase has never needed before (every prior model was pure Conv-BN-ReLU), and (3) a
-distillation training loop for DeiT-Tiny (one new `Trainer` subclass, following Phase 7's
-"subclass only the step, keep the loop" pattern). Budget accordingly — closer to a
-multi-day task than Phase 6's afternoon, but well short of Phase 7's multi-day-plus-new-dataset
-scope (see **SCOPE & EFFORT**).
+**Scope framing, stated up front:** the *data* half of Phase 8 is Phase-3-scale; the
+*quantization* half is not. Classification stays 200-way on Tiny ImageNet-200 at 64×64 — zero
+changes to `ml/data.py`, `ml/config.py`'s `DataConfig`, or `ml/trainer.py`'s core loop, and six
+of the seven registry entries train through `scripts/train.py` unmodified. Phase 8 registers
+**seven** models from **one** new file (`models/vit_variants.py`): `vit_tiny`, `deit_tiny`,
+`swin_pico_{w2,w4,w8}`, `hybrid_bottleneck_swin`, `swin_pico_poolmixer`.
+
+The QAT half is the real cost, and it is **larger than Phase 7's**, not smaller. Torchvision's
+`VisionTransformer`/`SwinTransformer` carry no `QuantStub`/`DeQuantStub`, so `convert()` fails
+outright on them (verified, see D6); under D6's mixed-precision design every FP32 island
+(LayerNorm, attention core) additionally needs an explicit dequant/quant boundary. That is a
+per-block `forward()` rewrite, not the one-helper `qconfig = None` walk an earlier draft of this
+plan assumed. Budget Phase 8 at **Phase 7 scale or above** (see **SCOPE & EFFORT**), with Task 3
+as the dominant line item.
+
+> **Verification status (2026-08-17).** Every empirical claim below was checked against the
+> installed stack (`torch 2.5.1+cu121`, `torchvision 0.20.1+cu121`) and against
+> `results/results_aggregate/model_details_cross_phase.csv`. Constructors were built and
+> forwarded; the QAT path was smoke-tested end to end. Claims marked **(measured)** come from
+> that check; claims marked **(unverified)** have not been run. An earlier draft of this plan
+> contained wrong parameter counts, a wrong Phase 2 citation, a wrong compression baseline, a
+> wrong fvcore diagnosis, and a QAT swap that silently corrupts weights — all corrected in place.
 
 ---
 
@@ -36,14 +54,30 @@ sweeping it should reproduce Phase 2's kernel-restriction accuracy curve (`2×2`
 unrestricted) in attention terms.
 
 **Expected Outcome:** FP32 top-1 accuracy increases monotonically with `window_size` ∈
-`{2, 4, 8}` (at fixed `patch_size=8` on a 64×64 input, an 8×8 token grid — `window_size=8`
-degenerates to full/global attention, the "unrestricted" analogue). The accuracy gap between
-`window_size=2` and `window_size=8` should be directionally similar in shape (not necessarily
-magnitude) to Phase 2's `AlexNet2x2GAP` (30.02%) vs. unrestricted `AlexNetTV` (32.89%) gap,
-adjusted for the fact that attention's "receptive field" already covers the whole window in one
-layer (no compounding-through-depth the way stacked 3×3 convs need, per `AlexNetStacked`'s
-Phase 2 result) — so a smaller window-size penalty than the pure-conv case is itself informative,
-not a null result.
+`{2, 4, 8}`. Grid geometry (per D3, `patch_size=4` on a 64×64 input): stage 1 is a **16×16**
+token grid, stage 2 (after one `PatchMerging`) is **8×8**. `window_size=8` is therefore global
+attention *only at stage 2*; at stage 1 it still tiles the grid into 4 windows. It is the
+least-restricted point of the sweep, not a literally-global baseline — state it that way in the
+write-up.
+
+**On the Phase 2 analogy — read the actual numbers first (measured).** The project's own
+classification results do **not** show a clean small-kernel penalty at the point this hypothesis
+originally cited:
+
+| Phase 2 model | FP32 top-1 |
+|---|---|
+| `alexnet_2x2` | 30.02% |
+| `alexnet_2x2_gap` | **33.15%** |
+| `alexnet_tv` (Phase 1, unrestricted) | 32.89% |
+
+`alexnet_2x2_gap` **beats** unrestricted `alexnet_tv`. (An earlier draft attributed 30.02% to
+`AlexNet2x2GAP`; 30.02% is `alexnet_2x2`.) So H1 must not be framed as "reproduce Phase 2's
+kernel-restriction penalty in attention terms" — that penalty is not unambiguously present in
+Phase 2 once the GAP head is held fixed. Frame H1 as the standalone question it is: *does
+capping the attention receptive field cost accuracy at all, on this dataset and at this scale?*
+Attention's window covers its whole receptive field in one layer (no compounding through depth,
+unlike stacked 3×3 convs per `AlexNetStacked`), so a small or absent penalty is an informative
+result, not a null one — and it would be **consistent** with the Phase 2 GAP row above.
 
 **Evidence to Collect:** FP32 top-1/top-5 per `window_size` value; per-window-size FLOPs/params
 (windowed attention's compute scales linearly with number of windows, not quadratically with
@@ -64,11 +98,25 @@ cheap-relative-to-its-receptive-field long-range mixing — beating both `alexne
 H1) at a comparable parameter/FLOP budget.
 
 **Expected Outcome:** Hybrid FP32 top-1 ≥ `alexnet_fire`'s 43.98% (Phase 3's cheapest Pareto
-model) at size ≤ 2× `alexnet_fire`'s 5.99 MB, and ≥ pure-Swin-Pico's accuracy at the same window
-size used in its attention stages.
+model) at ≤ 2× `alexnet_fire`'s **0.516M parameters**, and ≥ pure-Swin-Pico's accuracy at the same
+window size used in its attention stages.
 
-**Evidence to Collect:** FP32 top-1, size (MB), params, FLOPs for the hybrid vs. `alexnet_fire`/
-`alexnet_bottleneck` (`results/results_aggregate/model_details_cross_phase.csv`) and vs. Phase 8's own pure-Swin variant.
+**⚠ Compare parameters, not `fp32_size_mb` (measured).** `fp32_size_mb` in
+`model_details_cross_phase.csv` is `disk_mb()` of the **training checkpoint**, which carries
+AdamW's two moment buffers alongside the weights — ≈11.5 bytes/param, not 4. `int8_size_mb` is
+the converted model, ≈1 byte/param. The two columns use different conventions, so any
+FP32-vs-INT8 or model-vs-model size claim stated in those MB figures is off by ~3×. Reference
+points: `alexnet_fire` 0.516M params / 5.99 MB ckpt, `alexnet_bottleneck` 0.385M / 4.49 MB,
+`vgg_style` 2.41M / 27.58 MB. Phase 8 reports **params and weights-only MB (`params × 4 B`)**
+alongside the legacy columns so the comparison is like-for-like.
+
+At the D3 configs this is already satisfied on the size side (measured): hybrid 0.281M params vs.
+`alexnet_fire` 0.516M — the hybrid is *smaller* than both Phase 3 Pareto models, so H2 is a clean
+accuracy question with the budget constraint already met, not a size trade-off.
+
+**Evidence to Collect:** FP32 top-1, params, weights-only MB, FLOPs for the hybrid vs.
+`alexnet_fire`/`alexnet_bottleneck` (`results/results_aggregate/model_details_cross_phase.csv`)
+and vs. Phase 8's own pure-Swin variant.
 
 **Acceptance Criterion:** Hybrid strictly dominates (higher accuracy, ≤ comparable size) at least
 one of the two pure paradigms (pure-CNN or pure-attention) it's built from; report the trade-off
@@ -83,23 +131,50 @@ Decision Record D6 — no stable INT8 path exists for them in this codebase's ea
 QAT pipeline), attention-based models end up as **mixed-precision** models where only Linear/Conv
 layers convert to INT8. This caps the achievable compression ratio and introduces FP32↔INT8
 dequant/requant boundaries at every attention block — a structurally different (and likely worse)
-quantization profile than Phase 3's fully-INT8-convertible Bottleneck/Fire (`−0.08pp`/`+0.33pp`
-drop, `results/results_aggregate/model_details_cross_phase.csv`).
+quantization profile than Phase 3's fully-INT8-convertible Bottleneck/Fire. Phase 3's measured
+accuracy change on INT8 convert: `alexnet_bottleneck` **−0.08pp**, `alexnet_fire` **+0.33pp**
+(`quantization_drop_top1` = +0.084 / −0.328 in
+`results/results_aggregate/model_details_cross_phase.csv`; that column is a *drop*, so its sign
+is inverted relative to the accuracy-change figures quoted here — state which convention any
+plot uses).
 
-**Expected Outcome:** INT8 compression ratio (FP32 size / INT8 size) for all four Phase 8 models
-is well below Phase 3's Bottleneck/Fire ratios (~4× typical for a fully-INT8 Conv-BN model, since
-weights go 32-bit→8-bit); accuracy drop may be small in absolute pp (Linear layers are usually
-quantization-tolerant) but the **efficiency** story (size reduction per unit accuracy) is worse.
+**⚠ Do not benchmark against the CSV's `compression_ratio` column (measured).** It is
+`fp32_size_mb / int8_size_mb` where the numerator includes AdamW optimizer state and the
+denominator does not (see H2), which inflates it ~3×: the CSV reports ≈**10.4×** for
+`alexnet_bottleneck` and ≈**10.9×** for `alexnet_fire` (INT8/FP32 ratios 0.096 and 0.092), not
+the ~4× a 32-bit→8-bit weight conversion can actually deliver. An earlier draft of this
+hypothesis quoted "≈0.25 (4×)" — right about the physics, wrong as a citation of this project's
+data. **H3 is therefore defined on weights only**: `theoretical_int8_MB / theoretical_fp32_MB`,
+computed from parameter counts and per-module precision, for which a fully-INT8 model floors at
+≈0.25 and Phase 3's Bottleneck/Fire sit at that floor.
 
-**Evidence to Collect:** FP32 vs. INT8 size (MB), FP32 vs. INT8 top-1, per-model breakdown of
+**Expected Outcome:** the weights-only INT8/FP32 ratio for the Phase 8 models exceeds Phase 3's
+≈0.25 floor by an amount proportional to how much of each model stays FP32; accuracy drop may be
+small in absolute pp (Linear layers are usually quantization-tolerant) but the **efficiency**
+story (size reduction per unit accuracy) is worse.
+
+**Expected split, and it is not uniform across the seven models** — this is the substantive
+prediction, and an earlier draft's blanket threshold obscured it. In a transformer block the MLP
+holds ≈`8d²` params and attention's qkv+proj ≈`4d²`:
+- **ViT/DeiT path** (`QuantizableMHA` swap, D6): qkv and proj *do* quantize, so ≈all params are
+  INT8-eligible and the ratio lands near the ≈0.25 floor — i.e. **H3 is expected to be false for
+  `vit_tiny`/`deit_tiny` on the size axis**, and their cost shows up as accuracy loss and
+  dequant/requant boundary overhead instead.
+- **Swin path** (whole-subtree `qconfig = None` on `ShiftedWindowAttention`, D6): attention's
+  ≈1/3 of block params stay FP32, predicting a ratio ≈`0.33·1 + 0.67·0.25` ≈ **0.5**.
+
+**Evidence to Collect:** weights-only FP32 vs. INT8 MB, FP32 vs. INT8 top-1, and a per-model
 "quantized parameter fraction" (params inside INT8-eligible modules / total params) — this last
-number directly explains *why* compression is capped, independent of accuracy.
+number directly explains *why* compression is capped, independent of accuracy. Report the legacy
+`fp32_size_mb`/`int8_size_mb` columns too, flagged with the convention caveat, so Phase 8 rows
+stay joinable to Phases 1–7.
 
-**Acceptance Criterion:** All four Phase 8 models show INT8/FP32 size ratio > 0.4 (i.e., less
-than ~2.5× compression), vs. Phase 3's Bottleneck/Fire at ratio ≈ 0.25 (4× compression). This is
-a mechanical consequence of D6's design choice, not a coin-flip — the acceptance criterion here is
-really a confirmation that the mixed-precision accounting is being computed and reported
-correctly, not a genuine unknown.
+**Acceptance Criterion:** the three Swin-derived models (`swin_pico_{w2,w4,w8}`) show a
+weights-only INT8/FP32 ratio > 0.4; `vit_tiny`/`deit_tiny` are **predicted to fail that bar** and
+that is the informative result, not a failed test. The real pass/fail here is whether the
+quantized-parameter-fraction accounting reproduces the two predicted ratios above from the actual
+converted models — i.e. this hypothesis tests the *accounting*, and separates the "principled but
+harder" (MHA) from the "simple but coarser" (Swin) quantization path.
 
 ---
 
@@ -123,6 +198,18 @@ teacher `mobilenetv2` at 57.99% vs. an undistilled ViT-Tiny plausibly well below
 identical hyperparameters, distillation loss added) — the only variable is the loss function, so
 this is a clean ablation, not a confound-prone architecture comparison like H1–H3.
 
+**⚠ The teacher checkpoint does not exist (measured).** There is no `mobilenetv2_best.pth`
+anywhere in the repo — `checkpoints/` contains only `phase_2_kernel_restriction_training/`,
+`phase_3_compensation_and_hybrids_training/`, `phase_4_compression_and_final_architecture_training/`
+and `final_architecture_phase4/`, and nothing matching under `outputs/`. `mobilenetv2`'s
+`int8_top1` is `NaN` in the cross-phase CSV as well, consistent with the artifact never having
+been retained. H4 therefore carries an **unbudgeted Phase 1 retrain** (`mobilenetv2`, ~58% top-1)
+before any distillation run — GPU wall-clock not counted in SCOPE & EFFORT. Resolve one of:
+(a) locate the checkpoint on PCAD and `rsync` it back, (b) retrain `mobilenetv2`, or (c) swap the
+teacher to a model whose checkpoint *does* exist locally (e.g. `vgg_style`, 51.81%, or
+`alexnet_bottleneck`, 44.62%) and restate H4's expected margin against the weaker teacher.
+Decide before Task 4, not during it.
+
 **Acceptance Criterion:** DeiT-Tiny FP32 top-1 − ViT-Tiny FP32 top-1 > 0. Directional (n=1 pair),
 report the magnitude honestly rather than assigning it false statistical weight.
 
@@ -139,22 +226,40 @@ in `profile_kernel_trace()` (Phase 6 infrastructure, reused unchanged), while th
 stem/patch-embedding portion of hybrid models remains exactly as Winograd-eligible as it was in
 Phase 6's classification of the same conv types.
 
-**Expected Outcome:** `winograd_trace_detected`/`winograd_speedup_info` (Phase 6's dual-signal
-detector) fire for <10% of total latency in pure-ViT/Swin/lightweight-attention models — all
-their compute is Linear/matmul, not `groups=1` 3×3 conv. The hybrid model's Winograd-eligible
-latency share should be roughly proportional to how much of its forward pass the CNN stem
-occupies (expected to shrink as more stages are attention-based) — directly extending Phase 6's
-"small kernel ≠ Winograd-compatible" finding (which was about depthwise convs) to a second,
-structurally different case (attention).
+**Expected Outcome:** Winograd-attributed latency is <10% of total device time in
+pure-ViT/Swin/lightweight-attention models — all their compute is Linear/matmul, not `groups=1`
+3×3 conv. The hybrid model's Winograd-eligible latency share should be roughly proportional to
+how much of its forward pass the CNN stem occupies (expected to shrink as more stages are
+attention-based) — directly extending Phase 6's "small kernel ≠ Winograd-compatible" finding
+(which was about depthwise convs) to a second, structurally different case (attention).
 
-**Evidence to Collect:** Reuse `ml/profiling.py`'s `profile_kernel_trace()`/`profile_model_latency()`
-(Phase 6, no new profiling code) on all four Phase 8 models; per-module (stem vs. attention-stage)
+**⚠ This metric is not computable with Phase 6's code as written (measured).** Two corrections to
+an earlier draft:
+- **`winograd_speedup_info` does not exist.** It appears nowhere in `ml/` or `scripts/`; there is
+  no "dual-signal detector". The only Winograd signal in `profile_kernel_trace()` is the single
+  boolean `winograd_trace_detected`.
+- **`profile_kernel_trace()` returns no per-kernel timings.** It returns
+  `{"winograd_trace_detected": bool, "top_cuda_kernel": str|None, "op_timings": dict}`. The
+  per-CUDA-kernel dict needed for a *latency share* is the local `kernel_timings`
+  (`ml/profiling.py:429`), which is never returned — a bool cannot produce a "<10% of latency"
+  number.
+
+So H5 needs a **small, additive change to `ml/profiling.py`**, not "zero new profiling code": add
+`kernel_timings` (and a derived `winograd_device_time_us` / `total_device_time_us` pair) to
+`profile_kernel_trace()`'s return dict. Purely additive — existing keys and every Phase 6 call
+site keep working. Fold this into Task 7 and its effort estimate.
+
+**Evidence to Collect:** `profile_kernel_trace()` (with the return-dict extension above) and
+`profile_model_latency()` on all seven Phase 8 models; per-module (stem vs. attention-stage)
 latency breakdown via `torch.profiler(record_shapes=True)`, same technique as Phase 7's H4.
 
-**Acceptance Criterion:** Winograd-attributed latency < 10% for pure-attention models (ViT-Tiny,
-DeiT-Tiny, lightweight-attention variant); for the hybrid, Winograd-attributed latency share is
-strictly less than `alexnet_bottleneck`'s Phase 6-measured share (a pure-CNN model at comparable
-depth), confirming attention stages dilute — never add to — Winograd eligibility.
+**Acceptance Criterion:** Winograd-attributed device time < 10% for pure-attention models
+(ViT-Tiny, DeiT-Tiny, lightweight-attention variant); for the hybrid, the Winograd-attributed
+share is strictly less than `alexnet_bottleneck`'s Phase 6-measured share (a pure-CNN model at
+comparable depth), confirming attention stages dilute — never add to — Winograd eligibility.
+Caveat carried over from Phase 6: cuDNN's Winograd kernel naming is not stable across versions,
+so a zero share is weak evidence of absence; report the matched kernel names alongside the
+percentage.
 
 ---
 
@@ -203,12 +308,24 @@ same order of magnitude as Phase 3/4's Pareto-frontier models (4–30 MB) rather
 `ViT-Tiny`/`Swin-T`'s literal published hyperparameters, which were tuned for a 3,500× larger
 dataset:
 
-| Model | Config | Params (approx.) | Notes |
-|---|---|---|---|
-| ViT-Tiny (H1 baseline / DeiT-Ti base) | `image_size=64, patch_size=8, hidden_dim=192, mlp_dim=768, num_heads=3, num_layers=6` | ~5.5M | 64 patches + 1 cls token = 65-token sequence. `num_layers=6`, not DeiT-Ti's 12 — halved given the smaller dataset (ViT is known to *overfit*, not underfit, at this data scale; depth is the more likely lever to cut before width, matching the parameter-efficiency intuition Phase 3's Bottleneck already demonstrated for CNNs) |
-| Swin-Pico (H1 window sweep) | `patch_size=[4,4], embed_dim=48, depths=[2,2], num_heads=[2,4], window_size=[w,w]` for `w ∈ {2,4,8}` | ~1–2M | 2 stages only: 16×16 → 8×8 token grid (a 3rd `PatchMerging` stage would drop the grid to 4×4, too small for any `window_size>4` sweep point) |
-| Hybrid (H2) | Bottleneck-style conv stem (reuse `_AlexBottleneck` from `models/compensation.py`) → 8×8×C feature map → 2 Swin-style windowed-attention stages (`window_size=4`, the H1 sweep's likely best point, confirm after H1 completes) | ~2–4M | See Task 4 |
-| Lightweight attention (H5 cross-check) | Swin-Pico architecture with `ShiftedWindowAttention` replaced by a parameter-free pooling or depthwise-3×3-conv token mixer | ~1–2M | See D5/Task 5 |
+**All parameter counts below are measured**, by constructing each model and forwarding a
+`(2,3,64,64)` batch — not estimated. An earlier draft's estimates (~5.5M for ViT-Tiny, ~1–2M for
+Swin-Pico) were roughly 2× high and 4× high respectively. "Weights MB" is `params × 4 B`;
+"ckpt MB" is the ≈11.5 B/param training-checkpoint figure that `fp32_size_mb` actually reports
+(see H2), given here only so these rows can be read against the existing CSV.
+
+| Model | Config | Params (measured) | Weights MB | ckpt MB | Notes |
+|---|---|---|---|---|---|
+| ViT-Tiny (H1 baseline / DeiT-Ti base) | `image_size=64, patch_size=8, hidden_dim=192, mlp_dim=768, num_heads=3, num_layers=6` | **2.758M** | 10.52 | ~30.3 | 64 patches + 1 cls token = 65-token sequence. `num_layers=6`, not DeiT-Ti's 12 — halved given the smaller dataset (ViT is known to *overfit*, not underfit, at this data scale; depth is the more likely lever to cut before width, matching the parameter-efficiency intuition Phase 3's Bottleneck already demonstrated for CNNs). Comparable to `vgg_style` (2.41M) |
+| Swin-Pico (H1 window sweep) | `patch_size=[4,4], embed_dim=48, depths=[2,2], num_heads=[2,4], window_size=[w,w]` for `w ∈ {2,4,8}` | **0.321M** (w2) / **0.322M** (w4) / **0.324M** (w8) | 1.23 | ~3.5 | 2 stages only: 16×16 → 8×8 token grid (a 3rd `PatchMerging` stage would drop the grid to 4×4, too small for any `window_size>4` sweep point). Comparable to `alexnet_bottleneck` (0.385M) |
+| Hybrid (H2) | `_AlexBottleneck` conv stem (`models/compensation.py`), 3 stride-2 stages 3→32→64→96, → 8×8×96 → 2 `SwinTransformerBlock` (`window_size=4`, provisional pending H1) → LayerNorm → GAP → Linear | **0.281M** | 1.07 | ~3.1 | Smaller than both Phase 3 Pareto models. See Task 1 |
+| Lightweight attention (H5 cross-check) | Swin-Pico architecture with `ShiftedWindowAttention` replaced by a parameter-free pooling or depthwise-3×3-conv token mixer | **0.228M** | 0.87 | ~2.5 | Pooling variant measured; the depthwise variant will be larger. See D5/Task 1 |
+
+Note the ~8.5× parameter spread between ViT-Tiny (2.758M) and the pool-mixer (0.228M). That is
+*not* a size-matched comparison, so H1 (a sweep within Swin-Pico, all three within 1% of each
+other) and H2 (hybrid vs. Phase 3 CNNs, all within 2×) are the size-controlled hypotheses;
+any ViT-vs-Swin statement is confounded by scale and must be reported on an accuracy-vs-params
+plot rather than as a head-to-head accuracy claim.
 
 Every config is deliberately picked, not tuned via a search — this phase compares *architecture
 family*, not a hyperparameter-optimized instance of each; note this limitation explicitly in
@@ -219,9 +336,12 @@ final reporting (a fully-tuned ViT might close some of the CNN gap further).
 `TODO.md` phrases the window size as "3×3 or 5×5 patches." `SwinTransformer`'s `PatchMerging`
 halves the grid at each stage, and `window_size` must evenly divide the token grid at every
 stage it's applied to — power-of-2 windows (`2, 4, 8`) are the values that divide a
-power-of-2 grid (`16×16` → `8×8`) cleanly at every stage without padding logic. `window_size=8`
-at an 8×8-token stage is full/global attention (the natural "unrestricted" endpoint for the
-sweep, directly analogous to Phase 2's uncompensated baseline). Document this substitution
+power-of-2 grid (`16×16` → `8×8`) cleanly at every stage without padding logic. All three values
+build and forward correctly at 64×64 (measured). `window_size=8` is full/global attention **only
+at the 8×8 stage-2 grid**; at stage 1's 16×16 grid it still tiles into 4 windows — so it is the
+sweep's least-restricted endpoint, *not* a globally-unrestricted baseline. An earlier draft
+overstated this as "degenerates to full/global attention"; the write-up must not claim Phase 8
+has a true global-attention Swin control. Document this substitution
 explicitly as a deliberate implementation choice driven by Swin's architectural constraint, not
 a deviation from the spirit of the TODO item — `window_size=2` (a 2×2-token, i.e. 8×8-pixel
 receptive field at `patch_size=4`) is the closest feasible analogue to "3×3 pixel patches" the
@@ -252,9 +372,65 @@ Reference: Yu, W. et al. "MetaFormer Is Actually What You Need for Vision." CVPR
 ### D6 — QAT Strategy: Quantize Linear (MLP + patch-embed Conv) Only; Attention Submodule and
 All LayerNorms Stay FP32 (Whole-Subtree Exclusion)
 
+**AMENDED (2026-08-21):** the `nn.MultiheadAttention → torch.ao.nn.quantizable.MultiheadAttention`
+swap this section originally called a "strict improvement" over Swin's fallback (below) does
+**not** work with this codebase's `tq.prepare_qat()`, verified by direct testing, not by reading
+docs: `torch.ao.nn.quantizable.MultiheadAttention` is registered in PyTorch's default
+`observed_to_quantized_custom_module_class` mapping, and `prepare_qat()`'s first internal step
+(`convert()`, which runs *before* `prepare()` attaches any observers) matches on it and calls its
+`.from_observed()` classmethod immediately — `AttributeError: 'Linear' object has no attribute
+'activation_post_process'`. Setting `qconfig=None` on the swapped module avoids that crash but
+also stops `prepare()`/`convert()` from recursing into its own children, so its Linears never
+quantize either — the swap buys nothing under this constraint (it would need FX graph-mode
+quantization, a different API than the rest of this codebase, to actually work). **Resolution:**
+`vit_tiny`/`deit_tiny`'s `self_attention` gets the *same* fallback as `ShiftedWindowAttention`
+below — plain `nn.MultiheadAttention`, excluded via `qconfig=None`
+(`exclude_attention_from_qat`, extended to match it) — and `models/vit_variants.py`'s
+`_QuantizableEncoderBlock` no longer brackets it with Quant/DeQuant stubs (that bracketing
+assumed a quantized-input-capable MHA). Net effect: H3's "mixed-precision, capped compression"
+prediction now applies uniformly to all seven Phase 8 models, not just the Swin-derived ones —
+arguably a cleaner, more comparable result than the original two-tier plan. The rest of this
+section is kept as-is below for the reasoning that led here (Swin's fallback was correct on the
+first pass; only the ViT/DeiT "strict improvement" half didn't survive contact with
+`tq.prepare_qat()`).
+
 This is the single most consequential new decision Phase 8 introduces, and it required checking
 this codebase's actual QAT internals (`ml/quantization.py`), not assuming by analogy to Phases
 1–7 (all pure Conv-BN-ReLU).
+
+> **Two hard blockers found by smoke-testing this design end to end (measured).** Both invalidate
+> an earlier draft's claim that D6 costs "one small helper function". Read these before Task 3.
+>
+> **(a) Torchvision's ViT/Swin have no `QuantStub`/`DeQuantStub`, so `convert()` fails.** Every
+> model in `models/` wraps its forward in stubs (`compensation.py:51-52`, `baselines.py:39-43`);
+> torchvision's transformer classes do not. Running the full
+> `swap → exclude → prepare_qat → convert → forward` sequence on both:
+> ```
+> vit :  NotImplementedError: Could not run 'quantized::linear'      with arguments from the 'CPU' backend
+> swin:  NotImplementedError: Could not run 'quantized::conv2d.new'  with arguments from the 'CPU' backend
+> ```
+> A quantized layer received an FP32 tensor because nothing quantized the input. Fixing this needs
+> a wrapper module per architecture carrying `self.quant`/`self.dequant` — and, because D6 is
+> *mixed* precision by design, a `DeQuantStub`→FP32 island→`QuantStub` boundary around **every**
+> `LayerNorm` and **every** `ShiftedWindowAttention`. That is a `forward()` rewrite per block
+> type, not a `for m in model.modules(): m.qconfig = None` walk. It is the dominant cost of
+> Phase 8.
+>
+> **(b) `torch.ao.nn.quantizable.MultiheadAttention` is numerically wrong at `batch_first=True`**
+> in the installed `torch==2.5.1` — which is exactly the mode torchvision's `EncoderBlock` uses
+> (`nn.MultiheadAttention(hidden_dim, num_heads, dropout=attention_dropout, batch_first=True)`).
+> With identical weights, no quantization and no dropout:
+> ```
+> batch_first=True  → max |output difference| = 0.946189
+> batch_first=False → max |output difference| = 0.000000
+> ```
+> The ViT/DeiT path in this decision record is therefore **broken as specified** until the
+> quantizable module is driven in sequence-first layout. Fix: wrap it in a small adapter that
+> transposes `(B,S,E) → (S,B,E)` on the way in and back on the way out, constructing the
+> quantizable module with `batch_first=False`. Verify with the equivalence check in Task 3 before
+> anything else. Do **not** take the earlier draft's "train the swapped module from random init"
+> fallback — that trains a module with wrong attention semantics and hides the bug rather than
+> fixing it.
 
 **What was checked:** `torch.ao.quantization.prepare_qat()` only inserts fake-quant observers on
 `nn.Module` instances that (a) have an explicit `.qconfig` set (inherited from the nearest
@@ -279,8 +455,21 @@ structural property of PyTorch's eager-mode quantization, not a gap specific to 
   (post-softmax, post-LayerNorm) have long-tailed, outlier-heavy distributions that static/QAT
   INT8 handles poorly (Bondarenko et al. 2021, "Understanding and Overcoming the Challenges of
   Efficient Transformer Quantization," EMNLP). Use this swap for ViT-Tiny/DeiT-Ti's attention
-  blocks — it is a strict improvement in quantized parameter coverage over the fallback below, at
-  the cost of one explicit module-swap step before `build_qat_from_model()`.
+  blocks — it is a strict improvement in quantized parameter coverage over the fallback below —
+  **subject to blocker (b) above**: it must be constructed `batch_first=False` behind a transpose
+  adapter, and it must be built via `QuantizableMHA.from_float(...)`, never a raw
+  `load_state_dict`. Measured key overlap between the two modules:
+  ```
+  nn.MultiheadAttention : in_proj_weight, in_proj_bias, out_proj.{weight,bias}
+  QuantizableMHA        : in_proj_weight, in_proj_bias, out_proj.{weight,bias},
+                          linear_{Q,K,V}.{weight,bias}
+  load_state_dict(..., strict=False) → missing: linear_Q/K/V.{weight,bias}
+  ```
+  `strict=False` therefore leaves Q/K/V projections **at random init and reports no error**
+  (measured output difference 0.88) — precisely the silent corruption this plan warns about.
+  `from_float()` slices `in_proj_weight` into the three linears correctly, but requires
+  `other.qconfig` to be set first (`assert hasattr(other, "qconfig")`) and returns an
+  already-`prepare`d module — see Task 3 for both consequences.
 - **`ShiftedWindowAttention`** (Swin's hand-rolled windowed attention, confirmed via source read:
   `qkv`/`proj` are bare `nn.Linear`, but the windowing/masking/relative-position-bias/softmax math
   is all *functional* code inside `forward()`, not decomposed into separate modules the way
@@ -314,41 +503,71 @@ leave H3 untestable and break the phase's comparability to Phases 1–7. Mixed-p
 correctly labeled as such, is the standard way this trade-off is reported in the transformer
 quantization literature, not a workaround specific to this codebase.
 
-**No changes needed to `ml/quantization.py`'s core functions** (`prepare_qat_model`,
-`build_qat_from_model`, `convert_to_int8`, `make_qat_callback`) — they already operate generically
-on any `nn.Module` tree and already respect per-submodule `qconfig` overrides (standard
-`torch.ao.quantization` behavior, not project-specific code). The only new code is (a) a small
-helper that walks a model and sets `.qconfig = None` on every `nn.LayerNorm` and
-`ShiftedWindowAttention` instance before calling `build_qat_from_model()`, and (b) the
-`nn.MultiheadAttention` → `torch.ao.nn.quantizable.MultiheadAttention` module-swap helper for the
-ViT/DeiT path. `make_qat_callback`'s `freeze_bn_stats` call is a documented no-op for
-BatchNorm-free models (Phase 8 uses LayerNorm throughout except in CNN-stem Conv-BN pairs) —
-harmless, no special-casing needed, but worth a one-line note in the notebook so it isn't
-mistaken for a bug.
+**What genuinely needs no change, and what does.** The `qconfig` *exclusion mechanism* is sound
+and needs no library work (verified): `prepare_qat_model` deep-copies, sets `model.qconfig` on
+the root (`ml/quantization.py:51`), then calls `tq.prepare_qat`, and PyTorch's
+`propagate_qconfig_` honours an explicitly-set child `qconfig` — including `None` — instead of
+overwriting it from the parent. So setting `qconfig = None` on submodules *before*
+`build_qat_from_model()` does exclude their subtrees, exactly as designed. `prepare_qat_model`,
+`build_qat_from_model`, `convert_to_int8` and `make_qat_callback` need no edits.
+
+What the earlier draft got wrong is the amount of **model-side** code required. Phase 8 needs:
+1. A per-architecture wrapper adding `QuantStub`/`DeQuantStub` at the model boundary (blocker (a)).
+2. Dequant/quant boundaries around every FP32 island — each `LayerNorm`, each
+   `ShiftedWindowAttention` — which means overriding the relevant `forward()`s, not just tagging
+   modules. This is the bulk of Task 3.
+3. A `batch_first` transpose adapter around `QuantizableMHA` (blocker (b)).
+4. The `exclude_attention_from_qat()` / `swap_quantizable_mha()` helpers as originally scoped —
+   now the *small* part of the job.
+
+`make_qat_callback`'s `freeze_bn_stats` call is a documented no-op for BatchNorm-free models
+(Phase 8 uses LayerNorm throughout except in the hybrid's CNN-stem Conv-BN pairs) — harmless, no
+special-casing needed, but worth a one-line note in the notebook so it isn't mistaken for a bug.
+
+**Fallback if Task 3 overruns:** report Phase 8 FP32-only and mark H3 as not-run, rather than
+shipping a mixed-precision number whose boundaries were never verified. That is a worse
+scientific outcome than the plan intends but a better one than a silently-wrong INT8 table; take
+this decision explicitly at the Task 3 checkpoint, not by drift.
 
 ### D7 — FLOPs/Params Accounting: Verify `fvcore`'s Attention Coverage Before Trusting It
 
 `ml/reporting.py`'s `compute_flops()` calls `fvcore.nn.FlopCountAnalysis` with
-`unsupported_ops_warnings(False)` — this **suppresses**, rather than fixes, the well-documented
-gap that `fvcore` (and most static FLOP counters) undercounts or entirely misses `torch.matmul`/
-`@`/`torch.bmm` calls used inside attention's QK^T and softmax·V steps unless they're wrapped in
-a module `fvcore` recognizes (it has built-in handlers for `nn.MultiheadAttention` as of recent
-`fvcore` versions, but **not** for hand-rolled functional attention like `ShiftedWindowAttention`'s
-internal matmuls). This must be verified empirically before trusting any Phase 8 FLOPs number:
-manually compute expected attention FLOPs (`2 · num_heads · seq_len² · head_dim` for QK^T,
-same again for softmax·V, standard transformer FLOP-counting convention, e.g. Kaplan et al. 2020
-§2.1) for one model and compare against `compute_flops()`'s reported value. If they disagree by
-more than a rounding-level amount, add a `fvcore.nn.jit_analysis.Handle` custom op handler for
-the missing matmul calls (fvcore's documented extension mechanism,
-`FlopCountAnalysis.set_op_handle(op_name, handler_fn)`) rather than silently reporting an
-undercounted number in the final comparison table.
+`unsupported_ops_warnings(False)` (`ml/reporting.py:159`) — this **suppresses**, rather than
+fixes, the fact that some ops go uncounted. There *is* a real undercount for Phase 8, but it is
+in the opposite place from where an earlier draft of this plan predicted.
+
+**Measured** — `analysis.unsupported_ops()` on each model at `(1,3,64,64)`:
+
+| Model | Reported MACs | Uncounted ops |
+|---|---|---|
+| `vit_tiny` | 0.176 G | `aten::scaled_dot_product_attention` ×6, `gelu` ×6, `mul` ×25, `add` ×13, `div` ×6, `unflatten` ×6 |
+| `swin_pico_w4` | 0.032 G | `softmax` ×4, `gelu` ×4, `pad` ×5, `mul` ×12, `add` ×14, `pow` ×4, `rsub` ×8, `fill_` ×18, `sub` ×2, `ne` ×2 |
+
+Corrections to the earlier draft, both material:
+- **Swin is fine.** `ShiftedWindowAttention`'s QK^T and softmax·V go through `torch.matmul`, and
+  fvcore *does* have a matmul handler — no FLOP-bearing op is missing from the Swin list above
+  (only elementwise/normalisation ops, which every phase of this project already omits).
+- **ViT is the one that undercounts.** `EncoderBlock` routes through
+  `F.scaled_dot_product_attention`, which fvcore has no handler for, so **the entire QK^T +
+  softmax·V cost of all 6 layers is missing** from that 0.176 G.
+
+So the fix targets `aten::scaled_dot_product_attention`, on the ViT/DeiT path only — *not*
+`aten::matmul` on the Swin path. Register a handler via fvcore's documented extension mechanism,
+`FlopCountAnalysis.set_op_handle(op_name, handler_fn)`, returning
+`2 · num_heads · seq_len² · head_dim` MACs per call (QK^T plus softmax·V; standard transformer
+FLOP-counting convention, e.g. Kaplan et al. 2020 §2.1). Then verify against a hand-computed
+figure (Task 5) rather than silently reporting an undercounted number in the final comparison
+table. Gate the handler so Phase 1–7's existing FLOPs numbers are untouched.
 
 ---
 
 ## Task 1 — Model Architectures (`models/vit_variants.py`)
 
 **What:** Four constructors — `vit_tiny()`, `swin_pico(window_size)`, `hybrid_bottleneck_swin()`,
-`swin_pico_poolmixer()` — each returning an `nn.Module` ready for `MODEL_REGISTRY`.
+`swin_pico_poolmixer()` — each returning an `nn.Module` ready for `MODEL_REGISTRY`. These yield
+**seven** registry entries: `swin_pico` is registered three times (w2/w4/w8) for the H1 sweep, and
+`deit_tiny` reuses `vit_tiny()`'s constructor under a distillation training recipe (H4), so it is
+a seventh entry with no seventh constructor.
 
 **Why:** See Decision Records D2–D5. All four wrap or lightly modify already-installed
 torchvision classes, following the project's existing `models/*.py` convention (`baselines.py`
@@ -377,20 +596,30 @@ exact same "thin wrapper + explicit config" pattern for consistency).
   needed — the CNN stem already produces a spatially-downsampled grid, each spatial location
   becomes one "token" directly (channel dimension = `hidden_dim`), avoiding a redundant second
   patchification.
+  **Layout: `SwinTransformerBlock` consumes and returns `(B, H, W, C)`, not `(B, C, H, W)`**
+  (measured) — the stem's output needs `.permute(0, 2, 3, 1)` going in, and the head pools over
+  `dim=(1, 2)`. Easy to get wrong silently, since a transposed tensor of the right rank will
+  still forward and merely mix the wrong axes. Reference shape that builds and forwards
+  (0.281M params, measured): stem `3→32→64→96` as three stride-2 `_AlexBottleneck` blocks
+  (64×64 → 8×8), then 2 blocks at `dim=96, num_heads=4, window_size=[4,4]`, alternating
+  `shift_size` `[0,0]` / `[2,2]`, then `LayerNorm(96)` → GAP → `Linear(96, 200)`.
 - `swin_pico_poolmixer()`: same `SwinTransformer`-derived structure as `swin_pico`, but with
   `ShiftedWindowAttention` replaced by a custom `_PoolMixer(nn.Module)` (3×3 average pool, or
   depthwise 3×3 conv — implement both, keep whichever trains more stably, document the choice) per
-  D5. Requires subclassing `SwinTransformerBlock` (or copying its ~20-line `forward()` with the
-  `attn_layer` swapped — `SwinTransformerBlock.__init__` already accepts an `attn_layer` callable
-  argument, confirmed via source read, so this is a **constructor argument swap, not a
-  monkeypatch or copy** — pass `attn_layer=_PoolMixer` directly to `SwinTransformer`'s
-  `block=partial(SwinTransformerBlock, attn_layer=_PoolMixer)` argument, also confirmed present in
-  `SwinTransformer.__init__`'s signature).
+  D5. This is a **constructor argument swap, not a monkeypatch or copy**:
+  `block=partial(SwinTransformerBlock, attn_layer=_PoolMixer)`. Both `SwinTransformer`'s `block`
+  parameter and `SwinTransformerBlock`'s `attn_layer` parameter are confirmed present, and the
+  whole composition builds and forwards to `(2, 200)` at 0.228M params (measured).
+  `_PoolMixer.__init__` must accept the signature `SwinTransformerBlock` calls `attn_layer` with —
+  `(dim, window_size, shift_size, num_heads, attention_dropout=..., dropout=...)` — even though it
+  ignores most of them, and its `forward` takes and returns `(B, H, W, C)`. Follow PoolFormer in
+  subtracting the input (`pool(x) - x`) so the block's residual add composes correctly.
 
 **Inputs:** None beyond `num_classes=200` (matches every existing `MODEL_REGISTRY` constructor's
 zero-config, defaults-from-`CLAUDE.md`-convention signature).
 
-**Outputs:** Four (six, counting the 3-way window sweep as separate registrations) `nn.Module`
+**Outputs:** Four constructors → seven registry entries (3-way window sweep plus `deit_tiny`,
+per **What** above) `nn.Module`
 classifiers, each `forward(x: (B,3,64,64)) -> (B,200)` logits — identical I/O contract to every
 existing `MODEL_REGISTRY` entry, so nothing downstream (`Trainer`, `reporting.py`,
 `quantization.py`) needs to know these are attention-based.
@@ -413,28 +642,44 @@ existing `MODEL_REGISTRY` entry, so nothing downstream (`Trainer`, `reporting.py
   cleanly, so no issue for the D4 sweep values `{2,4,8}`, but this constraint is worth a
   one-line assertion in the model constructor (`assert 16 % window_size == 0`) so a future
   edit to `depths`/`patch_size` fails loudly instead of silently miscomputing windows.
-- If `_AlexBottleneck` isn't cleanly extractable as a standalone stem (it may assume a fixed
-  input/output channel count tuned for `AlexNetBottleneck`'s specific stage sequence), a 2–3 line
-  custom `nn.Sequential` of `Conv2d-BatchNorm2d-ReLU` stride-2 blocks is an acceptable, simpler
-  fallback stem — the *scientific* point of D2/H2 (small-kernel CNN early layers + attention late
-  layers) doesn't require reusing the exact Phase 3 module, only a structurally equivalent one;
-  don't force a fragile import if the fit is awkward.
+- `_AlexBottleneck` **is** cleanly reusable as a stem — its signature is
+  `_AlexBottleneck(in_ch, out_ch, stride=1, reduction=4)` with no dependence on
+  `AlexNetBottleneck`'s stage sequence (verified; the hybrid reference shape above uses it
+  directly). The earlier draft's concern about hardcoded channel counts is unfounded; no fallback
+  stem is needed.
+- All Conv/BN inside `_AlexBottleneck` already use `ReLU(inplace=False)` and `bias=False`, i.e.
+  they already satisfy this project's QAT architecture rules — one less thing to adapt.
 
 **Validation:** `demo()`/assert-based self-check per constructor — forward a
-`torch.randn(2, 3, 64, 64)`, assert output shape `(2, 200)`, assert `torchinfo.summary()` reports
-a finite, sane parameter count (sanity bound: 0.5M–15M, catches an accidental
-`hidden_dim`/`embed_dim` typo that would otherwise silently build a 100M+-parameter model). Run
-this for all four architectures (six, counting the window sweep) before registering any of them
-for training.
+`torch.randn(2, 3, 64, 64)`, assert output shape `(2, 200)`, assert a finite, sane parameter
+count. **Sanity bound: 0.15M–5M** (an earlier draft said 0.5M–15M, which would have rejected
+four of the seven models — the pool-mixer at 0.228M, the hybrid at 0.281M, and both Swin
+variants at ~0.32M). Assert each model's measured count against D3's table within a few percent,
+which catches an `embed_dim`/`hidden_dim` typo far more tightly than a wide range does. Run for
+all seven registrations before training any of them.
+
+**Status: all seven constructors verified building and forwarding to `(2, 200)`** at the D3
+configs, with the parameter counts in D3's table (measured). Task 1 carries no known risk; the
+risk is concentrated in Task 3.
 
 ---
 
 ## Task 2 — `MODEL_REGISTRY` Integration & Fuse-Map Wiring
 
-**What:** `register_model(name, ctor, fuse_map=..., fuse_root_attr=..., lr=...)` calls for all six
-Phase 8 registry entries, in the Phase 8 notebook (matching this codebase's existing convention
-of notebook-side registration — Phase 7's D-series decisions already established this pattern for
-new phases, not a central `models/__init__.py` addition).
+**What:** `register_model(name, ctor, fuse_map=..., fuse_root_attr=..., lr=...)` calls for all
+**seven** Phase 8 registry entries (`vit_tiny`, `deit_tiny`, `swin_pico_w2`, `swin_pico_w4`,
+`swin_pico_w8`, `hybrid_bottleneck_swin`, `swin_pico_poolmixer`), in the Phase 8 notebook
+(matching this codebase's existing convention of notebook-side registration — Phase 7's D-series
+decisions already established this pattern for new phases, not a central `models/__init__.py`
+addition). Mirror them into `ml/model_registrations.py` as well, per `CLAUDE.md` — that file is
+what `scripts/train.py` reads, so Task 6's CLI path does not work without it.
+
+**⚠ Only `lr` is honoured from registry metadata (measured).** `register_model` accepts arbitrary
+`**metadata`, but `scripts/train.py:186` reads exactly one key:
+`replace(trainer_cfg, lr=spec.get("lr", trainer_cfg.lr))`. A `register_model(weight_decay=...)`
+override is accepted silently and then **ignored** — which matters because Task 4's optimizer
+mitigation depends on it. Either extend that line to pull `weight_decay` (and any warmup key) too,
+or set the transformer hyperparameters in `configs/experiments/phase8.yaml` instead.
 
 **Why:** Every downstream tool (`Trainer`, `build_qat`, `convert_to_int8`, `make_run_summary`,
 `compute_flops`) is keyed off `MODEL_REGISTRY`, exactly as in every prior phase.
@@ -450,35 +695,50 @@ by fusion (LayerNorm has no BN-fusion analogue; Linear-GELU-Linear has no fusabl
 
 **Inputs:** Task 1's constructors.
 
-**Outputs:** Six live `MODEL_REGISTRY` entries.
+**Outputs:** Seven live `MODEL_REGISTRY` entries.
 
 **Dependencies:** Task 1.
 
-**Deliverables:** Registration cells in `notebooks/vit_qat_phase8.ipynb` (see Task 6).
+**Deliverables:** Registration cells in
+`notebooks/phase_8_efficient_vit/vit_qat_phase8.ipynb` (see Task 6),
+plus the mirrored `ml/model_registrations.py` entries. Note the path: this project stores
+notebooks under `notebooks/phase_N_<topic>[_<purpose>]/`, so a bare `notebooks/vit_qat_phase8.ipynb`
+(as an earlier draft specified) breaks the convention every other phase follows. Phase 8's
+training and analysis notebooks share one `phase_8_efficient_vit/` folder rather than
+separate `_training`/`_analysis` folders (the split every other multi-notebook phase uses) —
+a deliberate exception, not a naming-convention regression.
 
 **Pitfalls / Alternatives:** If `torchinfo.summary()` (used by every prior phase's per-model
 reporting step) doesn't cleanly print a `VisionTransformer`/`SwinTransformer`'s layer table (some
 third-party summary tools mishandle attention modules' non-standard `forward()` signatures) — a
-plausible but unconfirmed risk, worth a quick check in Task 1's validation step rather than
-discovering it mid-training-run.
+plausible but **unverified** risk; check it in Task 1's validation step rather than discovering it
+mid-training-run. Raw `sum(p.numel() ...)` is the fallback and is what D3's measured counts use.
 
-**Validation:** `MODEL_REGISTRY[name]["ctor"]()` builds without error for all six entries;
+**Validation:** `MODEL_REGISTRY[name]["ctor"]()` builds without error for all seven entries;
 `find_fuse_groups()`'s output for each model's stem is manually inspected (printed, read, sanity
-checked against the actual module tree) at least once before the first training run.
+checked against the actual module tree) at least once before the first training run. Note only
+the hybrid has Conv-BN pairs to fuse — the pure ViT/Swin variants' patch embeddings are bare
+`Conv2d`/`Linear` with no BatchNorm, so their `fuse_map` is legitimately empty.
 
 ---
 
-## Task 3 — QAT Adaptation (`ml/quantization.py` addition: `exclude_attention_from_qat`)
+## Task 3 — QAT Adaptation: Quant Stubs, Mixed-Precision Boundaries, and the MHA Swap
+*(the phase's dominant cost — see D6's two confirmed blockers)*
 
-**What:** One new small helper function, `exclude_attention_from_qat(model: nn.Module) -> nn.Module`,
-plus the `nn.MultiheadAttention → torch.ao.nn.quantizable.MultiheadAttention` swap for the
-ViT/DeiT path, implementing D6.
+**What:** the mixed-precision QAT plumbing from D6. This is **four** pieces of work, not one
+helper — an earlier draft scoped only the last of them:
+1. `QuantStubWrapper` — a per-architecture wrapper adding `QuantStub`/`DeQuantStub` at the model
+   boundary (D6 blocker (a)).
+2. FP32-island boundaries — `DeQuantStub`/`QuantStub` pairs around every `LayerNorm` and every
+   `ShiftedWindowAttention`, which requires overriding the enclosing `forward()`s.
+3. `BatchFirstMHAAdapter` — a transpose wrapper so `QuantizableMHA` runs sequence-first
+   (D6 blocker (b)).
+4. `exclude_attention_from_qat()` and `swap_quantizable_mha()` — the small tagging/swap helpers.
 
-**Why:** D6 established that no existing code in this repo (or in stock `torch.ao.quantization`)
-handles LayerNorm/attention exclusion automatically — this is new, Phase-8-specific glue, but
-intentionally the *smallest possible* addition (one function, no new files, no changes to the
-existing `build_qat_from_model`/`convert_to_int8`/`make_qat_callback` call sites) given how much
-of the existing pipeline already generalizes.
+**Why:** D6 established that neither this repo nor stock `torch.ao.quantization` handles
+LayerNorm/attention exclusion or transformer stub placement automatically, and that torchvision's
+transformer classes cannot be `convert()`ed as shipped. Items 1–3 are the price of that; item 4
+is the part that really is trivial.
 
 **How:**
 ```python
@@ -487,6 +747,8 @@ def exclude_attention_from_qat(model: nn.Module) -> nn.Module:
 
     Call BEFORE build_qat_from_model(). Leaves Conv2d/Linear elsewhere untouched —
     they still inherit the model-level qconfig set inside prepare_qat_model().
+    Verified: prepare_qat's propagate_qconfig_ honours an explicitly-set child
+    qconfig (including None) rather than overwriting it from the parent.
     """
     from torchvision.models.swin_transformer import ShiftedWindowAttention
     for module in model.modules():
@@ -495,22 +757,53 @@ def exclude_attention_from_qat(model: nn.Module) -> nn.Module:
     return model
 
 
-def swap_quantizable_mha(model: nn.Module) -> nn.Module:
-    """Replace nn.MultiheadAttention with the quantizable variant (D6, ViT/DeiT path only)."""
+class BatchFirstMHAAdapter(nn.Module):
+    """Drive a sequence-first QuantizableMHA from batch-first callers (D6 blocker (b)).
+
+    torch 2.5.1's quantizable MultiheadAttention returns wrong values when built
+    with batch_first=True (measured: 0.95 max abs error vs. nn.MultiheadAttention
+    at identical weights, 0.0 when built batch_first=False). Build it seq-first and
+    transpose around it instead.
+    """
+    def __init__(self, qmha: nn.Module):
+        super().__init__()
+        self.qmha = qmha
+
+    def forward(self, q, k, v, need_weights=False, **kwargs):
+        q, k, v = (t.transpose(0, 1) for t in (q, k, v))
+        out, w = self.qmha(q, k, v, need_weights=need_weights, **kwargs)
+        return out.transpose(0, 1), w
+
+
+def swap_quantizable_mha(model: nn.Module, qengine: str = "fbgemm") -> nn.Module:
+    """Replace nn.MultiheadAttention with the quantizable variant (D6, ViT/DeiT path only).
+
+    Uses from_float(), NOT load_state_dict(strict=False): the quantizable module has
+    separate linear_Q/K/V submodules that do not exist in the float module's state dict,
+    so strict=False leaves them at random init and reports nothing (measured).
+    from_float() slices in_proj_weight into the three linears correctly, but asserts
+    the source module has a .qconfig, hence the assignment below.
+    """
+    import torch.ao.quantization as tq
     from torch.ao.nn.quantizable.modules.activation import MultiheadAttention as QuantizableMHA
     for name, child in model.named_children():
         if isinstance(child, nn.MultiheadAttention):
-            qmha = QuantizableMHA(child.embed_dim, child.num_heads, batch_first=True)
-            qmha.load_state_dict(child.state_dict(), strict=False)  # verify param-name overlap first
-            setattr(model, name, qmha)
+            seq_first = nn.MultiheadAttention(
+                child.embed_dim, child.num_heads,
+                dropout=child.dropout, batch_first=False,
+            )
+            seq_first.load_state_dict(child.state_dict())  # strict: same class, keys must match
+            seq_first.qconfig = tq.get_default_qat_qconfig(qengine)
+            setattr(model, name, BatchFirstMHAAdapter(QuantizableMHA.from_float(seq_first)))
         else:
-            swap_quantizable_mha(child)
+            swap_quantizable_mha(child, qengine)
     return model
 ```
-Call order in the Phase 8 notebook: `model = load_best_model(...)` → (ViT/DeiT only)
-`swap_quantizable_mha(model)` → `exclude_attention_from_qat(model)` → `build_qat_from_model(model,
-arch_name, device)` (unchanged) → `fit(epoch_callback=make_qat_callback(...))` (unchanged) →
-`convert_to_int8(...)` (unchanged).
+Call order in the Phase 8 notebook: `model = load_best_model(...)` → wrap in the
+stub-carrying module (item 1/2) → (ViT/DeiT only) `swap_quantizable_mha(model)` →
+`exclude_attention_from_qat(model)` → `build_qat_from_model(model, arch_name, device)`
+(unchanged) → `fit(epoch_callback=make_qat_callback(...))` (unchanged) → `convert_to_int8(...)`
+(unchanged).
 
 **Inputs:** FP32-trained model (Task 4's `fit()` output).
 
@@ -519,30 +812,40 @@ arch_name, device)` (unchanged) → `fit(epoch_callback=make_qat_callback(...))`
 
 **Dependencies:** Task 1, Task 2.
 
-**Deliverables:** `exclude_attention_from_qat()`, `swap_quantizable_mha()` added to
-`ml/quantization.py`.
+**Deliverables:** `exclude_attention_from_qat()`, `swap_quantizable_mha()`,
+`BatchFirstMHAAdapter` added to `ml/quantization.py`; stub-carrying wrapper modules in
+`models/vit_variants.py` (they are architecture-specific, so they belong with the models, not in
+the quantization module).
 
 **Pitfalls / Alternatives:**
-- `QuantizableMHA.load_state_dict(..., strict=False)` is a real risk point: the quantizable
-  variant's internal parameter names may not exactly match stock `nn.MultiheadAttention`'s
-  (`in_proj_weight` vs. separate `q_proj`/`k_proj`/`v_proj`, depending on `torch.ao.nn.quantizable`'s
-  exact internal structure in this PyTorch version) — **verify the actual parameter name overlap
-  by diffing `child.state_dict().keys()` vs. a freshly-constructed `QuantizableMHA(...).state_dict().keys()`
-  before trusting `strict=False` to silently do the right thing**; a silent shape/name mismatch
-  here would leave the swapped-in attention block at its random-init weights, invisibly corrupting
-  every downstream QAT/INT8 number without raising an error. This is the single highest-risk step
-  in Task 3 — treat `strict=False` as a starting hypothesis to verify, not a solution.
-- If the state-dict swap proves unreliable, the safe fallback is training the QAT-prepared model
-  (with `QuantizableMHA` already swapped in, at its own random init) from scratch through the QAT
-  fine-tuning schedule directly, skipping the "load FP32 weights first" step for the attention
-  submodule specifically (accept a slightly longer QAT fine-tune to let the swapped attention
-  weights re-converge) — document whichever path is actually used, don't silently assume the
-  weight transfer worked.
+- The two D6 blockers (missing stubs; `batch_first` numerics) are the substance of this task.
+  Neither is hypothetical — both were reproduced. Do not start Task 4 until both checks below pass.
+- **`from_float()` returns an already-prepared module.** Its last two lines are
+  `observed.eval()` and `torch.ao.quantization.prepare(observed, inplace=True)`, so the returned
+  object carries live observers/fake-quant. Two consequences: (i) a naive pre-swap/post-swap
+  `torch.allclose` comparison fails *even on a correct swap* — the earlier draft's mandated
+  Blocking #1 check could not distinguish success from failure, and would have been "resolved" by
+  disabling it; (ii) the swap must happen before `prepare_qat`, and you should confirm the
+  double-prepare is a no-op on the already-prepared subtree rather than assuming it.
+- The `nn.MultiheadAttention → nn.MultiheadAttention(batch_first=False)` copy in
+  `swap_quantizable_mha` uses **strict** `load_state_dict`: same class, so the keys must match
+  exactly, and a failure there should be loud. Only the float→quantizable step needs `from_float`.
+- **Unverified:** whether `tq.prepare_qat` and `tq.convert` traverse a `QuantizableMHA` nested
+  inside `BatchFirstMHAAdapter` correctly (torch maps quantizable→quantized MHA through
+  `DEFAULT_STATIC_QUANT_MODULE_MAPPINGS`, but nesting it under a custom parent has not been tested
+  here). Check this on a 2-layer ViT before committing to the 6-layer one.
 
-**Validation:** After the state-dict transfer, forward an identical input through the pre-swap and
-post-swap model in eval mode and assert the top-1 predicted class and logit values are close
-(`torch.allclose(..., atol=1e-3)` or tighter) — this is the single check that catches a silent
-weight-transfer failure immediately, before any QAT training time is spent on a corrupted model.
+**Validation** (both mandatory, in this order):
+1. **`batch_first` equivalence.** Build `nn.MultiheadAttention` and the adapter-wrapped
+   `QuantizableMHA` from the same weights, put both in eval, call
+   `qmha.apply(torch.ao.quantization.disable_fake_quant)` to take observers out of the numeric
+   path, and assert `torch.allclose(a, b, atol=1e-5)`. Expected max abs error is 0.0 — anything
+   near 0.9 means the transpose adapter is missing or bypassed. Without `disable_fake_quant` this
+   assertion fails for a *correct* swap; that is the trap described above.
+2. **End-to-end convert.** `prepare_qat → forward → convert → forward` on a 2-layer version of
+   each architecture, asserting a `(B, 200)` output. This is the check that catches missing
+   stubs; as of now it **fails** for both ViT and Swin (D6 blocker (a)) and is the definition of
+   done for this task.
 
 ---
 
@@ -572,8 +875,12 @@ class DistillationTrainer(Trainer):
         self.alpha = alpha
 
     def _train_one_epoch(self, model, optimizer, scaler, criterion):
+        # Signature matches the base class (ml/trainer.py:313) and MUST return the same
+        # 3-tuple it does: (train_loss, train_acc, avg_grad_norm | None) — fit() unpacks
+        # three values at ml/trainer.py:123.
         # Override only the loss computation; keep the base class's AMP/grad-clip/logging
-        # scaffolding by calling into the same structure it uses (see ml/trainer.py L298-334).
+        # scaffolding by calling into the same structure it uses (see ml/trainer.py L313-344,
+        # AMP/grad-clip branch at L323-339).
         # loss = (1-alpha) * CE(student_logits, labels)
         #      +    alpha  * CE(student_logits, teacher(images).argmax(dim=1))   # hard distillation
         ...
@@ -587,9 +894,12 @@ not a new dataclass given it's a single float) rather than hardcoding.
 
 Teacher: `load_best_model("mobilenetv2", MODEL_REGISTRY["mobilenetv2"]["ctor"], SAVE_DIR, device)`
 — reuses Phase 1's already-trained checkpoint (per `CLAUDE.md`'s Model Inventory, `mobilenetv2`
-is Phase 1's best result at 57.99% top-1) — **no new teacher training required**, confirm the
-checkpoint file (`checkpoints/mobilenetv2_best.pth` or equivalent per `SAVE_DIR` convention)
-actually exists on disk before writing the notebook cell that depends on it.
+is Phase 1's best result at 57.99% top-1) — **no new teacher training required**. The checkpoint
+actually lives at `outputs/pcad/archive_legacy_phases/phase_4_5_large_scale/mobilenetv2/checkpoints/
+mobilenetv2_best.pth` (verified on disk), a different `SAVE_DIR` than Phase 8's own runs will use
+— point `load_best_model()` at that path explicitly rather than assuming it's colocated with
+Phase 8's checkpoints, and confirm it loads without error before writing the notebook cell that
+depends on it.
 
 **Inputs:** Task 1/2/3 outputs; Phase 1's `mobilenetv2` checkpoint (distillation only).
 
@@ -606,16 +916,23 @@ minor style call, either is a small, contained addition).
 - ViT/Swin models are known to need different optimization hyperparameters than CNNs in the
   literature (AdamW with warmup + cosine decay, higher weight decay, gradient clipping — DeiT's
   own recipe uses `lr=5e-4` with a 5-epoch linear warmup, `weight_decay=0.05`, far from this
-  project's CNN-tuned defaults of `lr=3e-4`, `weight_decay=5e-4`, no warmup). Reusing
-  `TrainerConfig`'s defaults unchanged risks slow/unstable convergence purely from an optimizer
-  mismatch, which would be mistaken for an architectural finding. **Mitigation:** add a per-model
-  `lr`/`weight_decay` override via the existing `register_model(lr=..., weight_decay=...)`
-  metadata mechanism (already used by `alexnet_fp32.yaml` for a per-model override, per
-  `CLAUDE.md`'s Key Patterns) rather than changing `TrainerConfig`'s global defaults — and
-  strongly consider adding a minimal linear-warmup wrapper around the existing
-  `CosineAnnealingLR` schedule (a `LinearLR` + `SequentialLR` composition, both stdlib `torch.optim`
-  classes, no new dependency) since ViT training divergence in the first few hundred steps
-  without warmup is a widely-reported failure mode, not a hypothetical risk.
+  project's CNN-tuned defaults of `lr=3e-4` and `weight_decay=4e-4` in `ml/config.py`
+  (`configs/training.yaml` overrides the latter to `5e-4`; the two disagree, worth reconciling
+  while you are here), with no warmup. The base `Trainer` already uses `AdamW` (`ml/trainer.py:72`)
+  with `CosineAnnealingLR` (`:73`), so only warmup and the hyperparameter values are missing.
+  Reusing the defaults unchanged risks slow/unstable convergence purely from an optimizer
+  mismatch, which would be mistaken for an architectural finding.
+  **Mitigation, corrected:** `TrainerConfig.warmup_epochs` **already exists**
+  (`ml/config.py:36`, documented as "linear LR warmup before cosine decay; 0 disables") but
+  `ml/trainer.py` never reads it — `fit()` constructs `CosineAnnealingLR` unconditionally, so the
+  field is currently dead. The work is to *wire the existing field* (`LinearLR` + `SequentialLR`,
+  both stdlib `torch.optim`) and add `warmup_epochs` to `configs/training.yaml`, not to add a new
+  config knob. Separately, add a per-model `lr`/`weight_decay` override via
+  `register_model(lr=..., weight_decay=...)`'s `**metadata` kwargs (already used by
+  `alexnet_fp32.yaml` for a per-model `lr` override, per `CLAUDE.md`'s Key Patterns). Note
+  `weight_decay` is only half-wired today: `register_model()` will happily store it, but
+  `scripts/train.py` currently only reads `spec.get("lr", ...)` back out — reading `weight_decay`
+  the same way is a small, required addition to `scripts/train.py`, not zero new code.
 - `use_amp=True` (this project's FP32-training default) interacts with LayerNorm/softmax
   numerics differently than with BatchNorm/ReLU — AMP is generally safe for transformers (it's
   the standard training regime in the literature) but watch for any NaN/inf loss in the first few
@@ -647,13 +964,19 @@ cls token, `head_dim = hidden_dim / num_heads = 64`), summed across all 6 layers
 block's `2 · seq_len · hidden_dim · mlp_dim` MACs per layer (ordinary Linear FLOPs, `fvcore`
 already handles these correctly) — compare the attention-only component against
 `FlopCountAnalysis`'s reported total minus the MLP/Linear-only component computed the same way.
-If `fvcore`'s number is missing the attention component (expected, per D7's stated concern), add
-a custom handler:
+Per D7 the attention component **is** missing for `vit_tiny` (measured: reported total 0.176 G,
+with `aten::scaled_dot_product_attention` ×6 uncounted), so register a handler for that op:
 ```python
-from fvcore.nn.jit_handles import Handle
-def matmul_flop_handle(inputs, outputs) -> int: ...
-analysis.set_op_handle("aten::matmul", matmul_flop_handle)  # or the relevant aten op name, confirm via analysis.unsupported_ops() output
+def sdpa_flop_handle(inputs, outputs) -> int:
+    """MACs for QK^T + softmax·V. Shapes come from the jit graph; read them off
+    inputs[0] (query) rather than hardcoding, so this stays correct if the config changes."""
+    ...
+analysis.set_op_handle("aten::scaled_dot_product_attention", sdpa_flop_handle)
 ```
+**Do not** register an `aten::matmul` handler: fvcore already counts matmul, so adding one
+double-counts Swin's attention (whose QK^T/softmax·V go through `torch.matmul` and are already
+in its 0.032 G). Confirm with `analysis.unsupported_ops()` per model before adding any handler —
+Swin's uncounted list contains no FLOP-bearing op and needs no patch at all.
 
 **Inputs:** `vit_tiny()` constructed instance.
 
@@ -666,12 +989,13 @@ via a custom op handle) that the rest of Phase 8's reporting can trust without r
 `compute_flops`-adjacent helper in `ml/reporting.py` registering the custom `fvcore` op handle for
 attention models specifically (gated so it doesn't affect Phase 1–7's existing FLOPs numbers).
 
-**Pitfalls / Alternatives:** `analysis.unsupported_ops_warnings(False)` currently silences the
-exact diagnostic (`FlopCountAnalysis.unsupported_ops()`, a method that lists which ops weren't
-counted) that would make this gap visible without manual verification — call
-`analysis.unsupported_ops()` explicitly (it doesn't require re-enabling the warnings flag) as the
-first diagnostic step before writing any manual formula, it may directly report which `aten::`
-ops need a handler rather than requiring a guess.
+**Pitfalls / Alternatives:** `analysis.unsupported_ops_warnings(False)`
+(`ml/reporting.py:159`) silences the warning but **not** the diagnostic —
+`FlopCountAnalysis.unsupported_ops()` still returns the full uncounted-op dict without
+re-enabling the flag. Call it first, per model; it names the ops directly and removes the need to
+guess (that is how D7's table was produced). Note this also means every Phase 1–7 FLOPs number in
+this project omits elementwise/normalisation ops — consistent across phases, so cross-phase
+comparisons stay valid, but worth one sentence in the write-up.
 
 **Validation:** Hand-computed attention FLOPs and `compute_flops()`'s reported value agree within
 a documented tolerance (exact match unlikely given rounding/bias-term conventions differ across
@@ -703,22 +1027,28 @@ one-off logic into the notebook.
 
 **Dependencies:** Tasks 1–5.
 
-**Deliverables:** `configs/experiments/phase8.yaml`, `notebooks/vit_qat_phase8.ipynb` (registration
+**Deliverables:** `configs/experiments/phase8.yaml`,
+`notebooks/phase_8_efficient_vit/vit_qat_phase8.ipynb` (registration
 cells, `DistillationTrainer` training cell for `deit_tiny`, standard FP32/QAT/INT8 loop for the
 other six via `scripts/train.py`-equivalent notebook cells, matching every prior phase's notebook
-structure).
+structure). Model the YAML on `configs/experiments/default.yaml` — same
+`name`/`models`/`seed`/`stages`/`data`/`training`/`qat` shape, with `models` as the explicit
+seven-name list rather than `all`.
 
-**Pitfalls / Alternatives:** None beyond what Tasks 1–5 already surfaced.
+**Pitfalls / Alternatives:** `scripts/train.py` reads `ml/model_registrations.py`, not the
+notebook, so the CLI path depends on Task 2's mirrored registrations existing. Otherwise nothing
+beyond what Tasks 1–5 surfaced.
 
 **Validation:** `python -m scripts.train --experiment phase8 --runtime local --dry-run` resolves
-without error for the six non-distillation models; one short local run (2–3 epochs,
-`stages: [fp32]`) completes end-to-end before a full PCAD submission.
+without error for the six non-distillation models (`--dry-run` confirmed present,
+`scripts/train.py:375`); one short local run (2–3 epochs, `stages: [fp32]`) completes end-to-end
+before a full PCAD submission.
 
 ---
 
 ## Task 7 — Cross-Phase Analysis Notebook
 
-**What:** `notebooks/phase_8_efficient_vit_hybrid_attention_analysis/phase8_results_analysis.ipynb` — joins Phase 8's results to Phase
+**What:** `notebooks/phase_8_efficient_vit/phase8_results_analysis.ipynb` — joins Phase 8's results to Phase
 2/3's classification results and Phase 6's profiling infrastructure (reused directly on the new
 models per H5) to test H1–H5.
 
@@ -729,14 +1059,17 @@ models per H5) to test H1–H5.
   results table).
 - H2: hybrid vs. `alexnet_bottleneck`/`alexnet_fire`/pure-Swin, accuracy-vs-size scatter, same
   Pareto-frontier framing `ideas/BEST_MODELS.md` already uses.
-- H3: INT8/FP32 size ratio and quantized-parameter-fraction bar chart, all Phase 8 models vs.
-  Phase 3's Bottleneck/Fire for contrast.
-- H4: `vit_tiny` vs. `deit_tiny` FP32 top-1, single paired bar.
-- H5: reuse `ml/profiling.py`'s `profile_kernel_trace()`/`profile_model_latency()` (Phase 6,
-  zero new profiling code) on all seven models, on whichever GPU is locally available (same
+- H3: **weights-only** INT8/FP32 ratio and quantized-parameter-fraction bar chart, all Phase 8
+  models vs. Phase 3's Bottleneck/Fire for contrast. Do not plot the CSV's `compression_ratio`
+  column against Phase 8 without the optimizer-state caveat from H2 — it is not a like-for-like
+  quantity.
+- H4: `vit_tiny` vs. `deit_tiny` FP32 top-1, single paired bar; name the teacher actually used.
+- H5: `profile_kernel_trace()` (extended to return per-kernel timings, per H5) and
+  `profile_model_latency()` on all seven models, on whichever GPU is locally available (same
   "RTX 4090/PCAD full sweep is a stretch goal" reasoning Phase 7's Task 9 used) — per-module
   (stem vs. attention-stage) latency breakdown via `torch.profiler(record_shapes=True)`.
-- Produce `results/phase8_comparison.csv` (same convention as every prior phase) and update
+- Produce `results/phase_8_efficient_vit_hybrid_attention_analysis/phase8_comparison.csv` (one
+  path, matching the Outputs list below and every prior phase's convention) and update
   `ideas/BEST_MODELS.md`/`TODO.md`.
 
 **Inputs:** `results/results_aggregate/model_details_cross_phase.csv`, Phase 6's profiling JSON, Phase 8's own comparison CSV.
@@ -747,7 +1080,7 @@ models per H5) to test H1–H5.
 
 **Dependencies:** Tasks 1–6 complete with at least FP32+INT8 results for all seven models.
 
-**Deliverables:** `notebooks/phase_8_efficient_vit_hybrid_attention_analysis/phase8_results_analysis.ipynb`.
+**Deliverables:** `notebooks/phase_8_efficient_vit/phase8_results_analysis.ipynb`.
 
 **Pitfalls / Alternatives:** With 3–6 points per hypothesis, correlation statistics have limited
 power — same caveat Phase 6/7 already state explicitly; report raw numbers prominently.
@@ -759,37 +1092,63 @@ crash-safe convention every prior phase's analysis notebook follows.
 
 ## BLOCKING ISSUES & REQUIRED FIXES
 
-Must be resolved before committing to a full training run:
+Must be resolved before committing to a full training run. Items 1, 2 and 4 are **confirmed
+failing today**, not risks to watch.
 
-### 1. Attention-Weight-Transfer Verification (BLOCKING)
-The `nn.MultiheadAttention → QuantizableMHA` state-dict swap (Task 3) is the single highest-risk,
-least-precedented step in this plan — a silent shape/name mismatch would invisibly corrupt QAT
-results. **Fix:** the `torch.allclose()` pre/post-swap output check specified in Task 3's
-Validation is mandatory, not optional, before any QAT training time is spent.
+### 1. Missing QuantStub/DeQuantStub — INT8 Convert Fails (BLOCKING, CONFIRMED FAILING)
+Torchvision's `VisionTransformer`/`SwinTransformer` carry no quant stubs, so `convert()` raises
+`NotImplementedError: Could not run 'quantized::linear' / 'quantized::conv2d.new' with arguments
+from the 'CPU' backend` on both paths (reproduced). **Fix:** Task 3 items 1–2 — a stub-carrying
+wrapper per architecture, plus dequant/quant boundaries around every FP32 island required by D6's
+mixed-precision design. Definition of done: Task 3's Validation check 2 passes. This is the
+largest single piece of work in Phase 8.
 
-### 2. FLOPs Undercount for Attention Ops (BLOCKING)
-`fvcore`'s default handler set is confirmed (via documented, general `fvcore` behavior) to miss
-some matmul-based ops unless custom handlers are registered — an unverified FLOPs number would
-corrupt every efficiency comparison in Task 7. **Fix:** Task 5's verification step, completed and
-its outcome (confirmed correct, or patched) documented, before Task 7's plots are trusted.
+### 2. QuantizableMHA Is Wrong at `batch_first=True` (BLOCKING, CONFIRMED FAILING)
+`torch.ao.nn.quantizable.MultiheadAttention` in `torch==2.5.1` returns wrong values in exactly the
+layout torchvision's ViT uses — 0.946 max abs error vs. `nn.MultiheadAttention` at identical
+weights, 0.0 when built `batch_first=False` (reproduced). **Fix:** the `BatchFirstMHAAdapter` in
+Task 3, verified by Task 3's Validation check 1 (with `disable_fake_quant` applied, or the check
+fails on correct code). Related: build the quantizable module with `from_float()`, never
+`load_state_dict(strict=False)` — the latter leaves `linear_Q/K/V` at random init and reports
+nothing.
 
-### 3. Window-Size / Grid-Divisibility Assertion (BLOCKING)
-A silent shape mismatch inside `SwinTransformer`'s internal windowing/masking logic (if a future
-edit changes `depths`/`patch_size` without re-checking `window_size` divisibility) is a plausible,
-hard-to-diagnose failure mode. **Fix:** the `assert 16 % window_size == 0`-style guard specified
-in Task 1's Pitfalls, added to every Swin-derived constructor.
+### 3. FLOPs Undercount for ViT Attention (BLOCKING)
+`fvcore` does not count `aten::scaled_dot_product_attention`, so `vit_tiny`/`deit_tiny`'s entire
+attention cost is missing from `compute_flops()` (measured). Swin is **not** affected — its
+matmuls are counted. **Fix:** Task 5's handler for that one op, plus the hand-computed
+cross-check, documented before Task 7's efficiency plots are trusted. Do not add an
+`aten::matmul` handler; that would double-count Swin.
 
-### 4. Teacher Checkpoint Existence (BLOCKING for H4)
-`DistillationTrainer` hard-depends on `mobilenetv2_best.pth` already existing on disk from Phase
-1. **Fix:** verify the file's presence (and that it loads via `load_best_model()` without error)
-in the notebook's first cell, before any Phase 8 training begins — fail fast with a clear message
-rather than a late, confusing crash mid-distillation-training-loop.
+### 4. Teacher Checkpoint Does Not Exist (BLOCKING for H4, CONFIRMED FAILING)
+`mobilenetv2_best.pth` is absent from `checkpoints/` and `outputs/` (measured), so
+`DistillationTrainer`'s dependency cannot be satisfied as written. **Fix:** recover it from PCAD,
+retrain `mobilenetv2`, or substitute an existing teacher — decide per H4 before Task 4, and
+budget the GPU time if retraining. Keep the fail-fast existence check in the notebook's first cell
+regardless.
 
-### 5. AdamW Warmup for Transformer Training (BLOCKING for training stability)
-Reusing `TrainerConfig`'s CNN-tuned optimizer defaults unchanged risks conflating an optimizer
-mismatch with an architectural finding (Task 4's Pitfalls). **Fix:** implement the
-`LinearLR + SequentialLR` warmup wrapper (both stdlib `torch.optim`, no new dependency) before the
-first full training run, not after observing unexplained instability.
+### 5. Warmup Field Exists But Is Not Wired (BLOCKING for training stability)
+`TrainerConfig.warmup_epochs` is defined (`ml/config.py:36`) and never read — `fit()` builds
+`CosineAnnealingLR` unconditionally (`ml/trainer.py:73`). ViT divergence in the first few hundred
+steps without warmup is a widely-reported failure mode, and reusing CNN-tuned defaults would
+conflate an optimizer mismatch with an architectural finding. **Fix:** wire the existing field via
+`LinearLR` + `SequentialLR` (stdlib), add `warmup_epochs` to `configs/training.yaml`, and
+reconcile the `weight_decay` disagreement between `ml/config.py` (4e-4) and
+`configs/training.yaml` (5e-4) while there.
+
+### 6. Registry Metadata Beyond `lr` Is Silently Ignored (BLOCKING for the optimizer fix)
+`scripts/train.py:186` reads only `spec.get("lr", ...)`; a `register_model(weight_decay=...)`
+override is accepted and discarded (measured). Blocking #5's mitigation depends on it. **Fix:**
+extend that line, or set the transformer hyperparameters in `configs/experiments/phase8.yaml`.
+
+### 7. Window-Size / Grid-Divisibility Assertion (BLOCKING for future edits)
+All three sweep values `{2,4,8}` build and forward correctly today (measured), so this is a
+regression guard rather than a live bug: a later edit to `depths`/`patch_size` could break
+window divisibility silently. **Fix:** the `assert 16 % window_size == 0`-style guard from
+Task 1's Pitfalls in every Swin-derived constructor.
+
+### 8. `profile_kernel_trace()` Cannot Produce H5's Metric (BLOCKING for H5)
+It returns a boolean, not per-kernel timings, and `winograd_speedup_info` does not exist
+(measured). **Fix:** the additive return-dict extension described in H5, before Task 7.
 
 ---
 
@@ -800,9 +1159,12 @@ publishable result.
 
 ### 6. `vgg_style` as a Fifth CNN Comparison Point
 Phase 6's profiling table already includes `vgg_style` (fully Winograd-eligible, all-dense-3×3) —
-adding it to Phase 8's H2/H5 comparison plots (no new training needed, results already exist in
-`results/results_aggregate/model_details_cross_phase.csv`) would sharpen the "does attention beat the *best* CNN, not just the
-smallest one" framing.
+adding it to Phase 8's H2/H5 comparison plots (no new training needed; its row is present in
+`results/results_aggregate/model_details_cross_phase.csv` at **51.81% FP32 top-1, 2.41M params**,
+verified) would sharpen the "does attention beat the *best* CNN, not just the smallest one"
+framing. It is also the closest size match to `vit_tiny` (2.758M) in the whole project, which
+makes it the one honest head-to-head available for the ViT — worth promoting above
+"medium priority" for that reason alone.
 
 ### 7. Full RTX 4090/PCAD Profiling of All Seven Phase 8 Models
 Extends H5 from "confirmed on one GPU class" to "confirmed across bandwidth-limited vs.
@@ -821,48 +1183,76 @@ independent data point.
 
 Before submitting any full training run:
 
-- [ ] All six (seven, counting the window-size sweep) model constructors pass Task 1's `demo()`
-      shape/param-count self-check.
-- [ ] `find_fuse_groups()` output manually inspected for each model's CNN stem (Task 2).
-- [ ] Attention-weight-transfer `torch.allclose()` check passed before any QAT training (Blocking #1).
+- [x] All seven model constructors build and forward to `(2, 200)` at the D3 configs, with
+      parameter counts matching D3's table (done 2026-08-17).
+- [ ] Task 1's `demo()` self-check committed with the corrected 0.15M–5M bound and per-model
+      expected counts.
+- [ ] `find_fuse_groups()` output manually inspected for each model's CNN stem (Task 2); empty
+      `fuse_map` confirmed correct for the BN-free pure ViT/Swin variants.
+- [ ] Seven registrations mirrored into `ml/model_registrations.py`, not just the notebook
+      (Task 2) — `scripts/train.py` reads that file.
+- [ ] **Blocking #1:** `prepare_qat → convert → forward` succeeds on a 2-layer version of each
+      architecture (currently fails — missing quant stubs).
+- [ ] **Blocking #2:** `BatchFirstMHAAdapter` equivalence check passes at `atol=1e-5` with
+      `disable_fake_quant` applied; `from_float()` used, `load_state_dict(strict=False)` not.
 - [ ] `exclude_attention_from_qat()` confirmed to set `qconfig=None` on every `LayerNorm`/
-      `ShiftedWindowAttention` instance (inspect `model.qconfig` on a few submodules directly,
+      `ShiftedWindowAttention` instance (inspect `module.qconfig` on a few submodules directly,
       don't just trust the function ran).
-- [ ] FLOPs verification (Task 5 / Blocking #2) completed, outcome documented.
-- [ ] Grid-divisibility assertions added to Swin-derived constructors (Blocking #3).
-- [ ] `mobilenetv2_best.pth` existence verified before `DistillationTrainer` is instantiated
-      (Blocking #4).
-- [ ] AdamW warmup wrapper implemented and used for all seven models' FP32 training (Blocking #5).
+- [ ] **Blocking #3:** `aten::scaled_dot_product_attention` handler registered for the ViT path
+      only, hand-computed cross-check documented; Swin left unpatched.
+- [ ] **Blocking #4:** teacher resolved (recovered / retrained / substituted) and H4's expected
+      margin restated if the teacher changed.
+- [ ] **Blocking #5:** `warmup_epochs` wired into `Trainer.fit()`, added to
+      `configs/training.yaml`, `weight_decay` discrepancy reconciled.
+- [ ] **Blocking #6:** per-model `weight_decay` actually reaches the optimizer (assert it in the
+      dry-run output, don't assume).
+- [ ] **Blocking #7:** grid-divisibility assertions added to Swin-derived constructors.
+- [ ] **Blocking #8:** `profile_kernel_trace()` returns per-kernel timings; Phase 6 call sites
+      still pass.
 - [ ] 2–3 epoch smoke run passed for all seven models (Task 4 Validation) before full-budget
       training or PCAD submission.
 - [ ] `configs/experiments/phase8.yaml` `--dry-run` succeeds (Task 6 Validation).
 - [ ] `phase8_comparison.csv` populated and cross-referenced against Phase 2/3/6 CSVs before any
       headline claim is written into `TODO.md`/`ideas/BEST_MODELS.md` (Task 7).
+- [ ] Any size or compression claim uses params / weights-only MB, with the
+      optimizer-state caveat stated wherever the legacy CSV columns appear (H2/H3).
 
 ---
 
 ## SCOPE & EFFORT
 
-Rough estimate, engineering time only (excludes GPU training wall-clock):
+Rough estimate, engineering time only (excludes GPU training wall-clock). Revised upward after
+the verification pass — the earlier ~1.5–2.5 day figure assumed a one-helper Task 3, which the
+D6 blockers disprove.
 
-- **Task 1 (model architectures):** ~4–6 hours — four architecturally distinct constructors,
-  the hybrid (H2) and pool-mixer (D5) variants being the least precedented.
-- **Task 2 (registry integration):** ~1–2 hours — mechanical once Task 1 exists.
-- **Task 3 (QAT adaptation):** ~4–6 hours — flagged as the highest-uncertainty task (Blocking #1),
-  budget contingency here first if anything overruns, matching Phase 7's Task 6 precedent of
-  flagging the QAT-adaptation task as the riskiest one in a new-model-family phase.
-- **Task 4 (training incl. distillation):** ~3–4 hours engineering (training wall-clock separate;
-  ViT-family models often need more epochs to converge than this project's CNN defaults, budget
-  extra GPU time even though extra engineering time is modest).
-- **Task 5 (FLOPs verification):** ~1–2 hours.
+- **Task 1 (model architectures):** ~2–3 hours — all seven constructors are already verified
+  building and forwarding; what remains is packaging them into `models/vit_variants.py` with the
+  asserts and `demo()`. Revised *down* from ~4–6 hours.
+- **Task 2 (registry integration):** ~1–2 hours — mechanical, plus the `model_registrations.py`
+  mirror and the `weight_decay` plumbing fix (Blocking #6).
+- **Task 3 (QAT adaptation):** **~2–3 days** — was ~4–6 hours. Two confirmed blockers, a
+  stub-wrapper and FP32-island boundaries per architecture (a `forward()` rewrite, not a helper),
+  a `batch_first` adapter, and an untested `prepare_qat`/`convert` traversal through nested
+  quantizable modules. This is now the phase's dominant cost and its main schedule risk; the
+  FP32-only fallback in D6 is the release valve.
+- **Task 4 (training incl. distillation):** ~4–6 hours engineering — the `DistillationTrainer`
+  itself is modest, but add the warmup wiring (Blocking #5) and, if the teacher must be
+  retrained, a full `mobilenetv2` run of GPU wall-clock (Blocking #4). ViT-family models often
+  need more epochs to converge than this project's CNN defaults; budget extra GPU time.
+- **Task 5 (FLOPs verification):** ~1–2 hours — the diagnosis is already done (D7); what remains
+  is writing and checking the one handler.
 - **Task 6 (config/CLI/notebook):** ~1–2 hours — mechanical, reuses `scripts/train.py` unchanged
   for 6 of 7 models.
-- **Task 7 (analysis notebook):** ~2–3 hours.
+- **Task 7 (analysis notebook):** ~3–4 hours — includes the additive `profile_kernel_trace()`
+  extension H5 needs (Blocking #8).
 
-**Total engineering estimate: ~1.5–2.5 working days**, before GPU training wall-clock and before
-medium-priority stretch items — noticeably smaller than Phase 7's ~2–3 days (no new dataset, no
-new data pipeline, no new loss/metric infrastructure), but not a Phase-6-scale afternoon either,
-because of the genuinely novel QAT-for-attention engineering (D6/Task 3) this phase requires.
+**Total engineering estimate: ~3.5–5 working days**, before GPU training wall-clock and before
+medium-priority stretch items — i.e. **larger than Phase 7's ~2–3 days**, not smaller. The data
+pipeline is free (no new dataset, loss, or metric infrastructure), but that saving is more than
+offset by transformer QAT, which has no precedent anywhere in Phases 1–7 and which torchvision's
+models are not built to support. If the schedule cannot absorb Task 3, take the FP32-only
+fallback deliberately at the Task 3 checkpoint: H1, H2, H4 and H5 all remain answerable without
+INT8; only H3 is lost.
 
 **Manual/out of scope for tooling:** Nsight Compute deep-dive on attention kernels (same
 precedent as Phase 6/7 — external CLI, only if H5's profiling result needs a kernel-level

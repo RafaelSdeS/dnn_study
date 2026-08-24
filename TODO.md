@@ -320,6 +320,12 @@ Note: Phase 9 is already executed — see `ideas/PHASE9_PLAN.md` (bypass ablatio
 
 If Phase 8 yields promising hybrid results, consider automated architecture search (NAS or evolutionary search) to discover optimal kernel-size, depth, width, and attention-ratio combinations under Winograd constraints.
 
+- [ ] Evaluate candidate efficiency techniques catalogued in `ideas/EFFICIENCY_IDEAS.md` (ghost
+  modules, channel shuffle, Tucker decomposition, distillation, Mixup/CutMix, QAT
+  self-distillation, N:M sparsity/ternary weights, soft weight-sharing, Winograd-aware training,
+  per-layer kernel-size search). Unscoped — start with distillation and Winograd-aware training
+  per that doc's Priority section.
+
 ### Deployment Fine-Tuning (NEW)
 
 Optimize Tier 1 models for real-world deployment scenarios.

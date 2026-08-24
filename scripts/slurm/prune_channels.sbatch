@@ -1,17 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="${TRAIN_REPO_ROOT:-$PWD}"
-CONDA_ENV_NAME="${CONDA_ENV_NAME:-alexnet_rafael}"
-
-cd "$ROOT_DIR"
-
-if command -v conda >/dev/null 2>&1; then
-    source "$(conda info --base)/etc/profile.d/conda.sh"
-    conda activate "$CONDA_ENV_NAME"
-elif [[ -n "${CONDA_PREFIX:-}" && -f "$CONDA_PREFIX/bin/activate" ]]; then
-    source "$CONDA_PREFIX/bin/activate"
-fi
+# ponytail: cd via git rev-parse (not $TRAIN_REPO_ROOT/$PWD) + .venv (not conda) — matches
+# scripts/slurm/det_seg.sbatch's already-proven pattern. The old TRAIN_REPO_ROOT+conda-activate
+# combo caused every real PCAD attempt (jobs 812276-812278) to fail before Python ever ran: a
+# doubled repo path from a bad TRAIN_REPO_ROOT, then "python: command not found" because conda
+# never activates in a non-interactive batch shell (conda init lives in ~/.bashrc, which batch
+# shells don't source).
+cd "$(git rev-parse --show-toplevel)"
+source .venv/bin/activate
 
 export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
 export MKL_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"

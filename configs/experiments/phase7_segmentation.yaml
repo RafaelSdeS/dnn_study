@@ -1,26 +1,26 @@
 # Phase 7 segmentation experiments — per-backbone configs
-# Provisional numbers, mirroring phase7_detection.yaml's shape — adjust before a real PCAD run.
+# Matches phase7_detection.yaml's epochs/lr/early_stopping_patience.
 
 alexnet_bottleneck:
   data:
     batch_size: 16
   trainer:
-    epochs: 50
+    epochs: 1000
     lr: 1.0e-4
-    early_stopping_patience: 15
+    early_stopping_patience: 50
 
 alexnet_fire:
   data:
     batch_size: 16
   trainer:
-    epochs: 50
+    epochs: 1000
     lr: 1.0e-4
-    early_stopping_patience: 15
+    early_stopping_patience: 50
 
 alexnet_tv:
   data:
     batch_size: 16
   trainer:
-    epochs: 50
+    epochs: 1000
     lr: 1.0e-4
-    early_stopping_patience: 15
+    early_stopping_patience: 50

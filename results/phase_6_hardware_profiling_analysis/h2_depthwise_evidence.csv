@@ -1,5 +1,5 @@
-model,precision,latency_ms,total_flops,accuracy
-alexnet_depthwisesep,fp32,3.2510435581207275,40984576.0,44.39001083374024
-alexnet_depthwisesep,int8,4.184360504150391,40984576.0,41.46906137466431
-vgg_style,fp32,3.1335794925689697,465170432.0,51.81480646133423
-vgg_style,int8,7.404576539993286,465170432.0,51.18874311447144
+model,precision,device,latency_ms,total_flops,accuracy
+alexnet_depthwisesep,fp32,nvidia_geforce_rtx_4060_laptop_gpu_rafael_predator_phn16_71,0.4823601245880127,40984576,44.39001083374024
+alexnet_depthwisesep,int8,nvidia_geforce_rtx_4060_laptop_gpu_rafael_predator_phn16_71,0.6916093826293945,40984576,41.46906137466431
+vgg_style,fp32,nvidia_geforce_rtx_4060_laptop_gpu_rafael_predator_phn16_71,0.5830442905426025,465170432,51.81480646133423
+vgg_style,int8,nvidia_geforce_rtx_4060_laptop_gpu_rafael_predator_phn16_71,1.3699722290039062,465170432,51.18874311447144

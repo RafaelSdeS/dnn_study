@@ -1,0 +1,5 @@
+device,in_ch,out_ch,latency_median_ms,latency_mean_ms,latency_std_ms,n
+nvidia_geforce_rtx_4060_laptop_gpu_rafael_predator_phn16_71,16.0,16.0,0.1932692527770996,0.1932692527770996,,1
+nvidia_geforce_rtx_4060_laptop_gpu_rafael_predator_phn16_71,32.0,32.0,0.2457594871520996,0.2457594871520996,,1
+nvidia_geforce_rtx_4060_laptop_gpu_rafael_predator_phn16_71,64.0,64.0,0.3830850124359131,0.3830850124359131,,1
+nvidia_geforce_rtx_4060_laptop_gpu_rafael_predator_phn16_71,128.0,128.0,0.777209997177124,0.777209997177124,,1

@@ -1,5 +1,6 @@
 import gzip
 import json
+import re
 import time
 from dataclasses import asdict
 from pathlib import Path
@@ -70,6 +71,65 @@ def compute_detection_summary(
     }
 
 
+def compute_segmentation_summary(
+    model, image_size: int, val_loader, device, checkpoint_path: str | Path | None = None,
+) -> dict:
+    """Params, FLOPs, disk size, and inference latency/throughput for a trained segmentation model.
+
+    Mirrors compute_detection_summary, adapted to DeepLabV3Segmenter's batched-tensor forward
+    signature (model(images) -> logits) instead of detection's list-of-tensors one.
+    """
+    model = model.eval().to(device)
+    params_m = sum(p.numel() for p in model.parameters()) / 1e6
+
+    macs = flops = None
+    try:
+        from fvcore.nn import FlopCountAnalysis
+        dummy = torch.zeros(1, 3, image_size, image_size, device=device)
+        analysis = FlopCountAnalysis(model, (dummy,))
+        analysis.unsupported_ops_warnings(False)
+        analysis.uncalled_modules_warnings(False)
+        macs = analysis.total()
+        flops = macs * 2
+    except Exception:
+        pass
+
+    latency_ms = throughput = None
+    try:
+        with torch.no_grad():
+            n_warmup = 0
+            for images, _ in val_loader:
+                model(images.to(device))
+                n_warmup += images.shape[0]
+                if n_warmup >= 20:
+                    break
+
+            total_images = 0
+            t0 = time.perf_counter()
+            for images, _ in val_loader:
+                model(images.to(device))
+                total_images += images.shape[0]
+                if total_images >= 200:
+                    break
+            if device.type == "cuda":
+                torch.cuda.synchronize()
+            elapsed = time.perf_counter() - t0
+        if total_images > 0 and elapsed > 0:
+            latency_ms = (elapsed / total_images) * 1000
+            throughput = total_images / elapsed
+    except Exception:
+        pass
+
+    return {
+        "params_m": params_m,
+        "macs": macs,
+        "flops": flops,
+        "model_size_mb": disk_mb(checkpoint_path) if checkpoint_path else None,
+        "latency_ms_per_image": latency_ms,
+        "throughput_img_per_s": throughput,
+    }
+
+
 def disk_mb(path: str | Path) -> float | None:
     """File size in MB; None if file doesn't exist."""
     p = Path(path)
@@ -83,6 +143,27 @@ def gzip_mb(path: str | Path) -> float | None:
     if not p.exists():
         return None
     return len(gzip.compress(p.read_bytes())) / (1024 ** 2)
+
+
+def _sdpa_flop_jit(inputs, outputs):
+    """MACs for aten::scaled_dot_product_attention (Phase 8 D7): fvcore has no built-in
+    handler for this fused op -- nn.MultiheadAttention (vit_tiny/deit_tiny) dispatches to
+    it directly, so without this handler every attention layer's QK^T + softmax*V MACs
+    are silently dropped from compute_flops()'s total. Verified against the standard
+    transformer FLOP-counting formula (2 * num_heads * seq_len^2 * head_dim per layer,
+    e.g. Kaplan et al. 2020 Sec 2.1): exact match on vit_tiny (delta = 9,734,400 MACs
+    for its 6 layers, batch=1). A no-op for every pre-Phase-8 model -- they contain no
+    scaled_dot_product_attention call, so this handler is never invoked for them.
+    """
+    from fvcore.nn.jit_handles import get_shape
+    q_shape, k_shape, v_shape = get_shape(inputs[0]), get_shape(inputs[1]), get_shape(inputs[2])
+    *batch_dims, seq_q, head_dim = q_shape
+    seq_k = k_shape[-2]
+    head_dim_v = v_shape[-1]
+    batch = 1
+    for b in batch_dims:
+        batch *= b
+    return batch * seq_q * seq_k * head_dim + batch * seq_q * seq_k * head_dim_v
 
 
 def compute_flops(model, input_size: tuple = (1, 3, 64, 64)) -> dict:
@@ -99,6 +180,7 @@ def compute_flops(model, input_size: tuple = (1, 3, 64, 64)) -> dict:
     analysis = FlopCountAnalysis(model, inp)
     analysis.unsupported_ops_warnings(False)
     analysis.uncalled_modules_warnings(False)
+    analysis.set_op_handle("aten::scaled_dot_product_attention", _sdpa_flop_jit)
     macs = analysis.total()
     return {"macs": macs, "flops": macs * 2}
 
@@ -225,6 +307,84 @@ def make_run_summary(
         "avg_gpu_temp_c": avg_gpu_temp_c,
         "total_gpu_energy_wh": total_gpu_energy_wh,
     }
+
+
+_CLASSIFICATION_LOG_RE = re.compile(
+    r"Epoch\s+(?P<epoch>\d+)/\d+ \| "
+    r"train_loss=(?P<train_loss>[\d.]+) train_acc=(?P<train_acc>[\d.]+)% \| "
+    r"val_loss=(?P<val_loss>[\d.]+) val_acc=(?P<val_acc>[\d.]+)% val_top5=(?P<val_top5>[\d.]+)% \| "
+    r"lr=(?P<lr>[\d.eE+-]+) peak_mem=(?P<peak_mem_mb>[\d.]+)MB time=(?P<epoch_time_s>[\d.]+)s"
+)
+
+
+def parse_classification_log(path: str | Path) -> pd.DataFrame:
+    """Reconstruct per-epoch history from a ml.trainer.Trainer / ml.distillation_trainer.DistillationTrainer
+    text log -- both emit the same fixed line per epoch (see Trainer.fit's self.logger.info call).
+    Only source of per-epoch curves for runs whose *_resume.pth (the sole checkpoint that ever
+    held the full history list) is gone, which is the common case once a run finishes.
+    """
+    rows = []
+    for line in Path(path).read_text(errors="ignore").splitlines():
+        m = _CLASSIFICATION_LOG_RE.search(line)
+        if m:
+            rows.append({k: (int(v) if k == "epoch" else float(v)) for k, v in m.groupdict().items()})
+    return pd.DataFrame(rows)
+
+
+_DETSEG_LOG_RE = re.compile(
+    r"Epoch (?P<epoch>\d+)/\d+ \| Loss: (?P<loss>[\d.]+) \([^)]*\) \| "
+    r"(?P<metric_name>mAP|mIoU): (?P<metric_value>[\d.]+)(?: \(@\.50: [\d.]+\))? \| "
+    r"LR: (?P<lr>[\d.eE+-]+) \| Time: (?P<epoch_time_s>[\d.]+)s"
+)
+
+
+def parse_detseg_log(path: str | Path) -> pd.DataFrame:
+    """Reconstruct per-epoch history from a ml.det_seg_trainer.DetectionTrainer/SegmentationTrainer
+    text log. Detection logs mAP, segmentation logs mIoU -- whichever is present in the line comes
+    back as `metric_name`/`metric_value` so callers don't need to know the task ahead of time.
+    """
+    rows = []
+    for line in Path(path).read_text(errors="ignore").splitlines():
+        m = _DETSEG_LOG_RE.search(line)
+        if m:
+            d = m.groupdict()
+            rows.append({
+                "epoch": int(d["epoch"]), "loss": float(d["loss"]),
+                "metric_name": d["metric_name"], "metric_value": float(d["metric_value"]),
+                "lr": float(d["lr"]), "epoch_time_s": float(d["epoch_time_s"]),
+            })
+    return pd.DataFrame(rows)
+
+
+def load_tensorboard_scalars(event_dir: str | Path) -> pd.DataFrame:
+    """Every scalar scripts/train.py's SummaryWriter logged under event_dir, long-form
+    (wall_time, step, tag, value). Needs `tensorboard` (already in environment.yml, just
+    `pip install tensorboard` if the current kernel lacks it).
+    """
+    from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
+    acc = EventAccumulator(str(event_dir), size_guidance={"scalars": 0})
+    acc.Reload()
+    rows = [
+        {"wall_time": e.wall_time, "step": e.step, "tag": tag, "value": e.value}
+        for tag in acc.Tags().get("scalars", [])
+        for e in acc.Scalars(tag)
+    ]
+    return pd.DataFrame(rows)
+
+
+def split_tensorboard_sessions(df: pd.DataFrame) -> pd.DataFrame:
+    """Tag load_tensorboard_scalars's output with a `session` index per tag.
+
+    scripts/train.py opens one SummaryWriter per model and reuses it across both the FP32
+    and QAT stages, so `step` (the epoch number) resets back near 0 partway through the
+    event file(s) when QAT starts -- plotting raw `step` would interleave two different
+    stages' epochs into one sawtooth line. Every step decrease marks a new stage boundary;
+    a SLURM requeue mid-stage does NOT trigger this, since Trainer.fit(resume_from=...)
+    continues the epoch count instead of resetting it.
+    """
+    df = df.sort_values("wall_time").reset_index(drop=True)
+    df["session"] = df.groupby("tag", group_keys=False)["step"].apply(lambda s: (s.diff() < 0).cumsum())
+    return df
 
 
 def build_comparison_table(rows: list[dict]) -> pd.DataFrame:

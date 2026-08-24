@@ -1,13 +1,14 @@
 #!/bin/bash
 #
 # Multi-node Phase 7 job submission for PCAD cluster.
-# Submits detection training across 3 nodes (one backbone per node).
+# Submits detection (or segmentation) training across 3 nodes (one backbone per node).
 # Optionally chains QAT/INT8 runs after FP32 completes.
 #
 # Usage:
 #   bash scripts/submit_phase7_multinode.sh                 # FP32 only, from-scratch backbones
 #   bash scripts/submit_phase7_multinode.sh qat             # FP32 + QAT
 #   bash scripts/submit_phase7_multinode.sh qat int8        # FP32 + QAT + INT8
+#   bash scripts/submit_phase7_multinode.sh segmentation qat int8  # same, segmentation task
 #   bash scripts/submit_phase7_multinode.sh pretrained      # same, but init backbones from
 #                                                            # their Tiny-ImageNet classification
 #                                                            # checkpoints instead of random init
@@ -20,7 +21,6 @@ cd "$PROJECT_ROOT"
 
 # Configuration
 MODELS=("alexnet_bottleneck" "alexnet_fire" "alexnet_tv")
-EXPERIMENT="phase7_detection"
 PARTITION="tupi"   # RTX 4090 nodes; alternatives: shared (K20m, weak), grace (L40s), beagle (GTX1080Ti)
 TIME="24:00:00"
 MEM="32G"
@@ -30,6 +30,7 @@ GPUS=1
 CKPT_ROOT="outputs/pcad/archive_legacy_phases/phase_4_5_large_scale"
 
 # Options
+TASK="detection"   # or: segmentation
 DRY_RUN=false
 RUN_QAT=false
 RUN_INT8=false
@@ -38,6 +39,9 @@ RUN_PRETRAINED=false
 # Parse arguments
 for arg in "$@"; do
     case "$arg" in
+        detection|segmentation)
+            TASK="$arg"
+            ;;
         --dry-run)
             DRY_RUN=true
             ;;
@@ -53,6 +57,8 @@ for arg in "$@"; do
             ;;
     esac
 done
+
+EXPERIMENT="phase7_${TASK}"
 
 # Suffix for job names/log files, distinguishing a pretrained-init sweep from the
 # from-scratch one (mirrors train_det_seg.py's run_id "_pretrained" suffix).
@@ -74,7 +80,7 @@ echo ""
 # Create log directory
 mkdir -p outputs/detection_segmentation/phase7/logs
 
-echo "Submitting FP32 detection training (3 nodes, parallel)..."
+echo "Submitting FP32 ${TASK} training (3 nodes, parallel)..."
 echo ""
 
 # Submit all FP32 jobs in parallel
@@ -83,15 +89,15 @@ for model in "${MODELS[@]}"; do
     job_name="p7_${model#alexnet_}_fp32${name_suffix}"
     log_file="outputs/detection_segmentation/phase7/logs/p7_${model}_fp32${name_suffix}_%j.log"
     extra_args=""
-    [ "$model" = "alexnet_tv" ] && extra_args="--skip-anchor-check"
+    [ "$TASK" = "detection" ] && [ "$model" = "alexnet_tv" ] && extra_args="--skip-anchor-check"
     [ "$RUN_PRETRAINED" = true ] && extra_args="$extra_args --pretrained-ckpt ${CKPT_ROOT}/${model}/checkpoints/${model}_best.pth"
 
     if [ "$DRY_RUN" = true ]; then
-        echo "[DRY-RUN] sbatch --job-name=$job_name --time=$TIME --mem=$MEM --gpus=$GPUS --partition=$PARTITION --output=$log_file scripts/slurm/det_seg.sbatch detection fp32 $model $EXPERIMENT $extra_args"
+        echo "[DRY-RUN] sbatch --job-name=$job_name --time=$TIME --mem=$MEM --gpus=$GPUS --partition=$PARTITION --output=$log_file scripts/slurm/det_seg.sbatch $TASK fp32 $model $EXPERIMENT $extra_args"
         fp32_job_ids+=("DRY_RUN_ID")
     else
         echo "Submitting: $job_name"
-        output=$(sbatch --job-name="$job_name" --time="$TIME" --mem="$MEM" --gpus="$GPUS" --partition="$PARTITION" --output="$log_file" scripts/slurm/det_seg.sbatch detection fp32 "$model" "$EXPERIMENT" "$extra_args" 2>&1)
+        output=$(sbatch --job-name="$job_name" --time="$TIME" --mem="$MEM" --gpus="$GPUS" --partition="$PARTITION" --output="$log_file" scripts/slurm/det_seg.sbatch $TASK fp32 "$model" "$EXPERIMENT" "$extra_args" 2>&1)
         job_id=$(echo "$output" | grep -oP 'Submitted batch job \K[0-9]+' || echo "")
         if [ -z "$job_id" ]; then
             echo "  ERROR submitting $model: $output"
@@ -129,11 +135,11 @@ if [ "$RUN_QAT" = true ]; then
         [ "$RUN_PRETRAINED" = true ] && extra_args="--pretrained-ckpt ${CKPT_ROOT}/${model}/checkpoints/${model}_best.pth"
 
         if [ "$DRY_RUN" = true ]; then
-            echo "[DRY-RUN] sbatch --job-name=$job_name --time=$TIME --mem=$MEM --gpus=$GPUS --partition=$PARTITION --output=$log_file --dependency=afterok:$depend_on scripts/slurm/det_seg.sbatch detection qat $model $EXPERIMENT $extra_args"
+            echo "[DRY-RUN] sbatch --job-name=$job_name --time=$TIME --mem=$MEM --gpus=$GPUS --partition=$PARTITION --output=$log_file --dependency=afterok:$depend_on scripts/slurm/det_seg.sbatch $TASK qat $model $EXPERIMENT $extra_args"
             qat_job_ids+=("DRY_RUN_ID")
         else
             echo "Submitting: $job_name (depends on FP32 job $depend_on)"
-            output=$(sbatch --job-name="$job_name" --time="$TIME" --mem="$MEM" --gpus="$GPUS" --partition="$PARTITION" --output="$log_file" --dependency="afterok:$depend_on" --kill-on-invalid-dep=yes scripts/slurm/det_seg.sbatch detection qat "$model" "$EXPERIMENT" "$extra_args" 2>&1)
+            output=$(sbatch --job-name="$job_name" --time="$TIME" --mem="$MEM" --gpus="$GPUS" --partition="$PARTITION" --output="$log_file" --dependency="afterok:$depend_on" --kill-on-invalid-dep=yes scripts/slurm/det_seg.sbatch $TASK qat "$model" "$EXPERIMENT" "$extra_args" 2>&1)
             job_id=$(echo "$output" | grep -oP 'Submitted batch job \K[0-9]+' || echo "")
             if [ -z "$job_id" ]; then
                 echo "  ERROR: $output"
@@ -166,10 +172,10 @@ if [ "$RUN_QAT" = true ]; then
             [ "$RUN_PRETRAINED" = true ] && extra_args="--pretrained-ckpt ${CKPT_ROOT}/${model}/checkpoints/${model}_best.pth"
 
             if [ "$DRY_RUN" = true ]; then
-                echo "[DRY-RUN] sbatch --job-name=$job_name --time=$TIME --mem=$MEM --gpus=$GPUS --partition=$PARTITION --output=$log_file --dependency=afterok:$depend_on scripts/slurm/det_seg.sbatch detection int8 $model $EXPERIMENT $extra_args"
+                echo "[DRY-RUN] sbatch --job-name=$job_name --time=$TIME --mem=$MEM --gpus=$GPUS --partition=$PARTITION --output=$log_file --dependency=afterok:$depend_on scripts/slurm/det_seg.sbatch $TASK int8 $model $EXPERIMENT $extra_args"
             else
                 echo "Submitting: $job_name (depends on QAT job $depend_on)"
-                output=$(sbatch --job-name="$job_name" --time="$TIME" --mem="$MEM" --gpus="$GPUS" --partition="$PARTITION" --output="$log_file" --dependency="afterok:$depend_on" --kill-on-invalid-dep=yes scripts/slurm/det_seg.sbatch detection int8 "$model" "$EXPERIMENT" "$extra_args" 2>&1)
+                output=$(sbatch --job-name="$job_name" --time="$TIME" --mem="$MEM" --gpus="$GPUS" --partition="$PARTITION" --output="$log_file" --dependency="afterok:$depend_on" --kill-on-invalid-dep=yes scripts/slurm/det_seg.sbatch $TASK int8 "$model" "$EXPERIMENT" "$extra_args" 2>&1)
                 job_id=$(echo "$output" | grep -oP 'Submitted batch job \K[0-9]+' || echo "")
                 if [ -z "$job_id" ]; then
                     echo "  ERROR: $output"

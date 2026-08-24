@@ -9,6 +9,7 @@ import torch
 import torch.nn as nn
 import torch.ao.quantization as tq
 import torch.profiler
+from torch.autograd import DeviceType
 
 
 class GpuSampler:
@@ -218,43 +219,37 @@ def profile_layer_latency_int8(
     return elapsed_ms
 
 
-def detect_winograd_via_speedup(
-    in_ch: int,
-    out_ch: int,
-    input_shape: tuple,
-    device: torch.device,
-    warmup: int = 50,
-    iters: int = 200,
-    speedup_threshold: float = 1.8,
-    groups: int = 1,
-) -> dict:
+def conv_multiplies_per_flop(kernel_size: int, algorithm: str, input_resolution: int = 64) -> float:
     """
-    Empirical Winograd detection: compare 3x3 vs. 5x5 latency.
+    Analytic multiplies-per-output-pixel-per-channel-pair for direct / Winograd / FFT conv.
 
-    Winograd only accelerates 3x3, not 5x5. If 3x3 is significantly faster
-    than 5x5, Winograd is likely active.
+    Hardware-independent op count -- the actual "does the algorithm save work" claim, as
+    opposed to inferring it from measured latency (which also carries memory-traffic,
+    launch-overhead, and cuDNN-engine-selection noise; see profile_kernel_trace for the
+    ground-truth version of that).
 
     Args:
-        groups: Conv2d groups (1 = dense, in_ch = depthwise) — must match the
-            row this comparison is attached to, since Winograd eligibility
-            depends on groups=1.
+        kernel_size: Conv kernel size.
+        algorithm: "direct", "winograd_f2" (F(2x2,3x3), kernel_size must be 3),
+            "winograd_f4" (F(4x4,3x3), kernel_size must be 3), or "fft".
+        input_resolution: Spatial size (square), only used by "fft" to size the padded
+            transform.
 
     Returns:
-        {
-            "speedup_ratio": float (5x5_latency / 3x3_latency),
-            "winograd_inferred": bool (ratio > threshold),
-        }
+        Multiplies per output pixel per (in_ch, out_ch) pair.
     """
-    latency_3x3 = profile_layer_latency(3, in_ch, out_ch, input_shape, device, warmup, iters, groups=groups)
-    latency_5x5 = profile_layer_latency(5, in_ch, out_ch, input_shape, device, warmup, iters, groups=groups)
-
-    ratio = latency_5x5 / latency_3x3 if latency_3x3 > 0 else 0
-    winograd_inferred = ratio > speedup_threshold
-
-    return {
-        "speedup_ratio": ratio,
-        "winograd_inferred": winograd_inferred,
-    }
+    if algorithm == "direct":
+        return float(kernel_size ** 2)
+    if algorithm in ("winograd_f2", "winograd_f4"):
+        if kernel_size != 3:
+            raise ValueError("Winograd F(m,3) op count only applies to kernel_size=3")
+        m = 2 if algorithm == "winograd_f2" else 4
+        return ((m + kernel_size - 1) / m) ** 2
+    if algorithm == "fft":
+        pad = input_resolution + kernel_size - 1
+        bins = pad * (pad // 2 + 1)
+        return 4 * bins / (input_resolution ** 2)
+    raise ValueError(f"Unknown algorithm: {algorithm}")
 
 
 def profile_model_latency(
@@ -387,10 +382,9 @@ def profile_kernel_trace(
     device: torch.device,
 ) -> dict:
     """
-    Profile model using torch.profiler and extract per-op durations.
-
-    Flags whether any op name contains 'winograd'. Best-effort only:
-    cuDNN's Winograd kernel naming isn't stable across versions.
+    Profile model using torch.profiler and extract per-op durations, including the name
+    of the actual CUDA kernel cuDNN selected -- ground truth for which algorithm (implicit
+    GEMM / FFT / Winograd) ran, instead of inferring it from a 3x3-vs-5x5 speedup ratio.
 
     Args:
         model: PyTorch model.
@@ -399,35 +393,64 @@ def profile_kernel_trace(
 
     Returns:
         {
-            "winograd_trace_detected": bool,
-            "op_timings": dict (op_name -> duration_us),
+            "winograd_trace_detected": bool (best-effort: cuDNN's Winograd kernel naming
+                isn't stable across versions, so a False here doesn't rule it out),
+            "top_cuda_kernel": str or None -- the device-side kernel with the highest
+                self device time. For a bare single-layer forward pass (the layer
+                sweep's use case) this is the convolution kernel cuDNN selected.
+            "op_timings": dict (op_name -> device_time_total_us, wrapper aten ops
+                included -- inclusive times, for context only).
         }
     """
     model = model.to(device).eval()
 
     op_timings = {}
-    winograd_detected = False
 
+    # CPU activity must be recorded too, or CUDA kernels launched from Python ops don't
+    # get attributed in key_averages().
     with torch.profiler.profile(
-        activities=[torch.profiler.ProfilerActivity.CUDA],
+        activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
         record_shapes=True,
     ) as prof:
         with torch.no_grad():
             _ = model(input_tensor.to(device))
 
     for evt in prof.key_averages():
-        if evt.device_type == "cuda":
-            op_name = evt.key
-            duration_us = evt.cuda_time_total
-            op_timings[op_name] = duration_us
+        if evt.device_time_total > 0:
+            op_timings[evt.key] = evt.device_time_total
 
-            if "winograd" in op_name.lower():
-                winograd_detected = True
+    # top_cuda_kernel must come from the device-side kernel entries only (device_type ==
+    # DeviceType.CUDA -- an enum, not the string "cuda"; that string comparison was an
+    # earlier bug here). Ranking op_timings instead would always surface the outermost
+    # CPU-side dispatcher (aten::conv2d), whose device_time_total is inclusive of every
+    # child kernel and therefore >= the real kernel's own time -- which is how a run of
+    # 288 layer configs came back with cudnn_kernel_name == "aten::conv2d" on all of them.
+    # self_device_time_total on these leaf kernel entries is their own execution time.
+    kernel_timings = {
+        evt.key: evt.self_device_time_total
+        for evt in prof.key_averages()
+        if evt.device_type == DeviceType.CUDA and evt.self_device_time_total > 0
+    }
+    winograd_detected = any("winograd" in name.lower() for name in kernel_timings)
+    top_cuda_kernel = max(kernel_timings, key=kernel_timings.get) if kernel_timings else None
 
     return {
         "winograd_trace_detected": winograd_detected,
+        "top_cuda_kernel": top_cuda_kernel,
         "op_timings": op_timings,
     }
+
+
+def _winograd_kernel_transform(weight: torch.Tensor) -> torch.Tensor:
+    """G-side transform of the kernel into the Winograd domain: (out_ch, in_ch, 3, 3) ->
+    (out_ch, in_ch, 4, 4). Shared by winograd_conv2d_f23 and the split-transform path in
+    profile_layer_conv_winograd, which precomputes this once outside the timed loop --
+    real inference does the same, since weights (unlike the input) are static."""
+    G = torch.tensor([[1.0, 0.0, 0.0],
+                       [0.5, 0.5, 0.5],
+                       [0.5, -0.5, 0.5],
+                       [0.0, 0.0, 1.0]], device=weight.device)
+    return torch.einsum("xr,ocrs,ys->ocxy", G, weight, G)
 
 
 def winograd_conv2d_f23(x: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
@@ -447,14 +470,26 @@ def winograd_conv2d_f23(x: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
     Returns:
         (batch, out_ch, height, width) -- same shape as F.conv2d(x, weight, padding=1).
     """
+    U = _winograd_kernel_transform(weight)
+    return winograd_conv2d_f23_transformed(x, U)
+
+
+def winograd_conv2d_f23_transformed(x: torch.Tensor, U: torch.Tensor) -> torch.Tensor:
+    """Same computation as winograd_conv2d_f23, but takes an already Winograd-domain
+    kernel U (out_ch, in_ch, 4, 4) from _winograd_kernel_transform, instead of a raw
+    (out_ch, in_ch, 3, 3) weight -- only the input-side transform runs per call.
+
+    Args:
+        x: (batch, in_ch, height, width).
+        U: (out_ch, in_ch, 4, 4), from _winograd_kernel_transform(weight).
+
+    Returns:
+        (batch, out_ch, height, width) -- same shape as F.conv2d(x, weight, padding=1).
+    """
     device = x.device
     batch, in_ch, height, width = x.shape
-    out_ch = weight.shape[0]
+    out_ch = U.shape[0]
 
-    G = torch.tensor([[1.0, 0.0, 0.0],
-                       [0.5, 0.5, 0.5],
-                       [0.5, -0.5, 0.5],
-                       [0.0, 0.0, 1.0]], device=device)
     BT = torch.tensor([[1.0, 0.0, -1.0, 0.0],
                         [0.0, 1.0, 1.0, 0.0],
                         [0.0, -1.0, 1.0, 0.0],
@@ -471,13 +506,32 @@ def winograd_conv2d_f23(x: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
     tiles = x_pad.unfold(2, 4, 2).unfold(3, 4, 2)  # (b, c, n_tile_h, n_tile_w, 4, 4)
 
     V = torch.einsum("xr,bcHWrs,ys->bcHWxy", BT, tiles, BT)
-    U = torch.einsum("xr,ocrs,ys->ocxy", G, weight, G)
     M = torch.einsum("ocxy,bcHWxy->boHWxy", U, V)
     Y = torch.einsum("px,boHWxy,qy->boHWpq", AT, M, AT)
 
     n_tile_h, n_tile_w = Y.shape[2], Y.shape[3]
     out = Y.permute(0, 1, 2, 4, 3, 5).reshape(batch, out_ch, n_tile_h * 2, n_tile_w * 2)
     return out[..., :height, :width]
+
+
+# torch.compile artifacts, built once and reused across calls -- compiling per-call would
+# time compilation itself instead of the kernel it produces.
+_compiled_winograd_f23 = None
+_compiled_winograd_f23_transformed = None
+
+
+def _get_compiled_winograd_f23():
+    global _compiled_winograd_f23
+    if _compiled_winograd_f23 is None:
+        _compiled_winograd_f23 = torch.compile(winograd_conv2d_f23, mode="max-autotune")
+    return _compiled_winograd_f23
+
+
+def _get_compiled_winograd_f23_transformed():
+    global _compiled_winograd_f23_transformed
+    if _compiled_winograd_f23_transformed is None:
+        _compiled_winograd_f23_transformed = torch.compile(winograd_conv2d_f23_transformed, mode="max-autotune")
+    return _compiled_winograd_f23_transformed
 
 
 def profile_layer_conv_winograd(
@@ -488,14 +542,15 @@ def profile_layer_conv_winograd(
     device: torch.device,
     warmup: int = 50,
     iters: int = 200,
+    compile: bool = False,
 ) -> dict:
     """
     Profile the hand-rolled Winograd F(2x2,3x3) convolution above -- a real transform,
     not cuDNN's internal kernel selection. Only meaningful for kernel_size=3, stride=1,
     groups=1 (F(2,3)'s domain); mirrors profile_layer_conv_fft's kernel_size>=5
-    restriction on the other side. The kernel transform is redone every timed
-    iteration (not cached across iterations), matching profile_layer_conv_fft's
-    per-iteration kernel_fft, so the two are comparable on the same basis.
+    restriction on the other side. The kernel transform U is precomputed once before the
+    timed loop (weights are static in real inference, unlike the input) -- only the
+    input-side transform, elementwise multiply, and output-side transform are timed.
 
     Args:
         kernel_size: must be 3; anything else is skipped (see FFT's kernel_size<5 note).
@@ -503,6 +558,11 @@ def profile_layer_conv_winograd(
         input_shape: (batch, channels, height, width).
         device: torch.device.
         warmup, iters: profiling parameters.
+        compile: if True, times `torch.compile(winograd_conv2d_f23_transformed,
+            mode="max-autotune")` instead of the eager function -- isolates how much of
+            the eager-vs-cuDNN gap is Python/dispatch overhead vs. the algorithm itself.
+            Compilation happens once (module-level cache) and is absorbed into `warmup`,
+            not the timed loop.
 
     Returns:
         {"latency_ms": float or None, "note": str}
@@ -513,29 +573,65 @@ def profile_layer_conv_winograd(
             "note": f"Skipped: kernel_size={kernel_size} != 3; F(2x2,3x3) only applies to 3x3 kernels",
         }
 
+    conv_fn = _get_compiled_winograd_f23_transformed() if compile else winograd_conv2d_f23_transformed
+
     input_tensor = torch.randn(input_shape, device=device)
     weight = torch.randn(out_ch, in_ch, 3, 3, device=device)
 
-    for _ in range(warmup):
-        with torch.no_grad():
-            _ = winograd_conv2d_f23(input_tensor, weight)
+    # winograd_conv2d_f23's einsums lower to matmul, which defaults to full-FP32 precision
+    # (torch.backends.cuda.matmul.allow_tf32=False) -- unlike cuDNN's conv path, which already
+    # defaults to TF32 tensor cores. Without this, "vs cuDNN" isn't a fair comparison; applies
+    # to both eager and compiled so compiled-vs-eager isn't confounded by a precision change.
+    prior_precision = torch.get_float32_matmul_precision()
+    torch.set_float32_matmul_precision("high")
+    try:
+        U = _winograd_kernel_transform(weight)
 
-    if device.type == "cuda":
-        torch.cuda.synchronize(device)
-    start_time = time.time()
+        for _ in range(warmup):
+            with torch.no_grad():
+                _ = conv_fn(input_tensor, U)
 
-    for _ in range(iters):
-        with torch.no_grad():
-            _ = winograd_conv2d_f23(input_tensor, weight)
+        if device.type == "cuda":
+            torch.cuda.synchronize(device)
+        start_time = time.time()
 
-    if device.type == "cuda":
-        torch.cuda.synchronize(device)
-    elapsed_ms = (time.time() - start_time) * 1000 / iters
+        for _ in range(iters):
+            with torch.no_grad():
+                _ = conv_fn(input_tensor, U)
+
+        if device.type == "cuda":
+            torch.cuda.synchronize(device)
+        elapsed_ms = (time.time() - start_time) * 1000 / iters
+    finally:
+        torch.set_float32_matmul_precision(prior_precision)
 
     return {
         "latency_ms": elapsed_ms,
-        "note": "Hand-rolled Winograd F(2x2,3x3); stride=1, groups=1 only",
+        "note": ("torch.compile'd Winograd F(2x2,3x3), kernel transform precomputed (max-autotune, TF32); "
+                  "stride=1, groups=1 only"
+                  if compile else
+                  "Hand-rolled Winograd F(2x2,3x3), kernel transform precomputed (TF32); stride=1, groups=1 only"),
     }
+
+
+def _next_smooth5(n: int) -> int:
+    """Smallest integer >= n whose only prime factors are 2, 3, 5.
+
+    cuFFT is fast on these "smooth" sizes and falls back to slow Bluestein convolution on
+    sizes with large prime factors. Padding to exactly the minimum linear-convolution size
+    (input_size + kernel_size - 1) can land on one of those (e.g. at input=64: k=5 gives
+    68=2^2*17, k=11 gives 74=2*37) and tank performance for no algorithmic reason -- a few
+    extra zero-padded rows/columns of amortized-filter FFT are cheaper than that penalty.
+    """
+    candidate = n
+    while True:
+        m = candidate
+        for p in (2, 3, 5):
+            while m % p == 0:
+                m //= p
+        if m == 1:
+            return candidate
+        candidate += 1
 
 
 def profile_layer_conv_fft(
@@ -550,8 +646,10 @@ def profile_layer_conv_fft(
     """
     Profile FFT-based convolution (FP32 only, no stride support).
 
-    FFT-based conv: zero-pad input and kernel to (input_size + kernel_size - 1),
-    apply rfft2, multiply, sum over input channels, irfft2, crop.
+    FFT-based conv: zero-pad input and kernel to a 5-smooth size >= (input_size +
+    kernel_size - 1), apply rfft2, multiply, sum over input channels, irfft2, crop. The
+    filter FFT is precomputed once (real inference does the same, since weights are
+    static); only the input-side FFT, multiply, and inverse FFT are timed per iteration.
 
     Only meaningful for kernel_size >= 5 (FFT overhead is a loss for 2x2/3x3).
 
@@ -576,43 +674,38 @@ def profile_layer_conv_fft(
             "note": f"Skipped: kernel_size={kernel_size} < 5; FFT overhead too high",
         }
 
-    # Pad to linear convolution size
-    pad_h = height + kernel_size - 1
-    pad_w = width + kernel_size - 1
+    pad_h = _next_smooth5(height + kernel_size - 1)
+    pad_w = _next_smooth5(width + kernel_size - 1)
 
     input_tensor = torch.randn(input_shape, device=device, dtype=torch.float32)
     kernels = torch.randn(out_ch, in_ch, kernel_size, kernel_size, device=device, dtype=torch.float32)
 
+    # Filter transform is static per weight -- precompute once. Redoing it every iteration
+    # (the old behavior) FFTs out_ch*in_ch filters per call (16384 FFTs of ~74x74 at
+    # C=128, ~368MB allocated) vs. in_ch FFTs for the input, and dominated the measurement.
+    kernel_padded = torch.nn.functional.pad(
+        kernels, (0, pad_w - kernel_size, 0, pad_h - kernel_size), mode="constant", value=0,
+    )
+    kernel_fft = torch.fft.rfft2(kernel_padded, dim=(-2, -1))
+
     torch.cuda.synchronize(device) if device.type == "cuda" else None
 
     for _ in range(warmup):
-        # Pad input and kernels
         input_padded = torch.nn.functional.pad(
             input_tensor,
             (0, pad_w - width, 0, pad_h - height),
             mode="constant",
             value=0,
         )
-        kernel_padded = torch.nn.functional.pad(
-            kernels,
-            (0, pad_w - kernel_size, 0, pad_h - kernel_size),
-            mode="constant",
-            value=0,
-        )
-
-        # FFT-based convolution
         input_fft = torch.fft.rfft2(input_padded, dim=(-2, -1))
-        kernel_fft = torch.fft.rfft2(kernel_padded, dim=(-2, -1))
 
         # Multiply and sum over input channels
         # input_fft: (batch, in_ch, pad_h, pad_w//2+1)
         # kernel_fft: (out_ch, in_ch, pad_h, pad_w//2+1)
         output_fft = torch.einsum("bchw,ochw->bohw", input_fft, kernel_fft)
 
-        # IRFFT
+        # IRFFT, cropped to valid output size
         output = torch.fft.irfft2(output_fft, s=(pad_h, pad_w), dim=(-2, -1))
-
-        # Crop to valid output size
         output = output[..., :height, :width]
 
     torch.cuda.synchronize(device) if device.type == "cuda" else None
@@ -625,15 +718,7 @@ def profile_layer_conv_fft(
             mode="constant",
             value=0,
         )
-        kernel_padded = torch.nn.functional.pad(
-            kernels,
-            (0, pad_w - kernel_size, 0, pad_h - kernel_size),
-            mode="constant",
-            value=0,
-        )
-
         input_fft = torch.fft.rfft2(input_padded, dim=(-2, -1))
-        kernel_fft = torch.fft.rfft2(kernel_padded, dim=(-2, -1))
         output_fft = torch.einsum("bchw,ochw->bohw", input_fft, kernel_fft)
         output = torch.fft.irfft2(output_fft, s=(pad_h, pad_w), dim=(-2, -1))
         output = output[..., :height, :width]
@@ -643,5 +728,5 @@ def profile_layer_conv_fft(
 
     return {
         "latency_ms": elapsed_ms,
-        "note": "FFT-based convolution; stride=1 only",
+        "note": "FFT-based convolution, filter FFT precomputed, padded to a 5-smooth size; stride=1 only",
     }

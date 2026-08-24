@@ -183,7 +183,11 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
         model_run_name = f"{experiment_name}_{model_name}"
         run_root, checkpoints_dir, logs_dir, tb_dir, results_dir = _make_model_runs(runtime_paths.root, experiment_name, model_name)
 
-        model_cfg = replace(trainer_cfg, lr=spec.get("lr", trainer_cfg.lr))
+        model_cfg = replace(
+            trainer_cfg,
+            lr=spec.get("lr", trainer_cfg.lr),
+            weight_decay=spec.get("weight_decay", trainer_cfg.weight_decay),
+        )
         resolved_config = {
             "experiment": experiment_cfg,
             "runtime": runtime_cfg,

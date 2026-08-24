@@ -1,0 +1,17 @@
+{
+  "val_mAP": [
+    0.0640205517411232
+  ],
+  "val_mAP50": [
+    0.22484345734119415
+  ],
+  "note": "INT8 evaluation only (no training)",
+  "summary": {
+    "params_m": 1.663514,
+    "macs": null,
+    "flops": null,
+    "model_size_mb": 3.4664669036865234,
+    "latency_ms_per_image": null,
+    "throughput_img_per_s": null
+  }
+}

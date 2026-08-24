@@ -15,6 +15,7 @@ import logging
 import os
 import sys
 import time
+import warnings
 from datetime import datetime
 from pathlib import Path
 
@@ -25,7 +26,6 @@ import torch.nn as nn
 from ml.profiling import (
     profile_layer_latency_per_batch_resolution,
     profile_layer_latency_int8,
-    detect_winograd_via_speedup,
     profile_model_with_efficiency_metrics,
     profile_kernel_trace,
     profile_layer_conv_fft,
@@ -131,9 +131,9 @@ def load_completed_configs(output_path: Path) -> set:
                             record["in_ch"],
                             record["out_ch"],
                         )
-                    elif record["kind"] == "winograd_custom":
+                    elif record["kind"] in ("winograd_custom", "winograd_compiled"):
                         key = (
-                            "winograd_custom",
+                            record["kind"],
                             record["kernel_size"],
                             record["in_ch"],
                             record["out_ch"],
@@ -217,6 +217,7 @@ def profile_layer_sweep(
         layer_configs
         + len([k for k in kernel_sizes if k >= fft_min_kernel_size]) * len(layer_channels)
         + len(layer_channels)  # custom Winograd sweep (kernel_size=3 only)
+        + len(layer_channels)  # torch.compile'd Winograd sweep (kernel_size=3 only)
     )
 
     i = 0
@@ -263,7 +264,7 @@ def profile_layer_sweep(
                                         kernel_size, in_ch, in_ch, input_shape,
                                         warmup=warmup, iters=iters, groups=groups,
                                     )
-                                    winograd_info = None  # Winograd here is specifically about the GPU (H1's scope)
+                                    cudnn_kernel_name = None  # CPU INT8 has no cuDNN kernel
                                 else:
                                     latency_ms = profile_layer_latency_per_batch_resolution(
                                         kernel_size,
@@ -276,10 +277,19 @@ def profile_layer_sweep(
                                         iters=iters,
                                         groups=groups,
                                     )
-                                    winograd_info = detect_winograd_via_speedup(
-                                        in_ch, in_ch, input_shape, device, warmup=warmup // 2, iters=iters // 2,
-                                        groups=groups,
-                                    )
+                                    # Ground truth for which cuDNN algorithm actually ran (implicit
+                                    # GEMM / FFT / Winograd), replacing the old 3x3-vs-5x5
+                                    # speedup-ratio inference -- only meaningful on the GPU cuDNN
+                                    # dispatches on, not the CPU fp32_cpu companion row below.
+                                    cudnn_kernel_name = None
+                                    if device.type == "cuda":
+                                        trace_conv = nn.Conv2d(
+                                            in_ch, in_ch, kernel_size, stride=1,
+                                            padding=(kernel_size - 1) // 2, bias=False, groups=groups,
+                                        )
+                                        trace_input = torch.randn(input_shape, device=device)
+                                        trace_result = profile_kernel_trace(trace_conv, trace_input, device)
+                                        cudnn_kernel_name = trace_result["top_cuda_kernel"]
 
                                 result = {
                                     "kind": "layer",
@@ -292,7 +302,7 @@ def profile_layer_sweep(
                                     "groups": groups,
                                     "groups_mode": groups_mode,
                                     "latency_ms": latency_ms,
-                                    "winograd_speedup_info": winograd_info,
+                                    "cudnn_kernel_name": cudnn_kernel_name,
                                     "device": device_tag,
                                 }
 
@@ -316,7 +326,7 @@ def profile_layer_sweep(
                                         )
                                         fp32_cpu_result = {**result, "precision": "fp32_cpu",
                                                             "latency_ms": fp32_cpu_latency,
-                                                            "winograd_speedup_info": None}
+                                                            "cudnn_kernel_name": None}
                                         if not dry_run:
                                             append_result_atomic(output_path, fp32_cpu_result)
                                         logger.info(f"[{i}/{total_configs}] layer k={kernel_size} ch={in_ch} "
@@ -399,6 +409,43 @@ def profile_layer_sweep(
         except Exception as e:
             logger.error(f"[{i}/{total_configs}] Error profiling Winograd config {key}: {e}")
 
+    # torch.compile'd Winograd F(2x2,3x3) sweep -- same shapes as winograd_custom above, isolates
+    # how much of the eager-vs-cuDNN gap (see notebook cell 12) is Python/dispatch overhead.
+    logger.info("Starting torch.compile'd Winograd F(2x2,3x3) sweep")
+    for in_ch in layer_channels:
+        i += 1
+
+        key = ("winograd_compiled", 3, in_ch, in_ch)
+
+        if key in completed:
+            logger.info(f"[{i}/{total_configs}] Skipping compiled Winograd config {key}")
+            continue
+
+        try:
+            input_shape = (1, in_ch, 64, 64)
+            winograd_compiled_result = profile_layer_conv_winograd(
+                3, in_ch, in_ch, input_shape, device, warmup=warmup, iters=iters, compile=True
+            )
+
+            result = {
+                "kind": "winograd_compiled",
+                "kernel_size": 3,
+                "in_ch": in_ch,
+                "out_ch": in_ch,
+                "latency_ms": winograd_compiled_result.get("latency_ms"),
+                "note": winograd_compiled_result.get("note"),
+                "device": device_tag,
+            }
+
+            if not dry_run:
+                append_result_atomic(output_path, result)
+
+            logger.info(f"[{i}/{total_configs}] Compiled Winograd k=3 ch={in_ch}: "
+                       f"{winograd_compiled_result['latency_ms'] or 'N/A'}")
+
+        except Exception as e:
+            logger.error(f"[{i}/{total_configs}] Error profiling compiled Winograd config {key}: {e}")
+
 
 def profile_model_sweep(
     config: dict,
@@ -447,7 +494,29 @@ def profile_model_sweep(
 
                 # Convert to INT8 if needed
                 if precision == "int8":
-                    model_qat = build_qat_from_model(model, model_name, device)
+                    # get_default_qat_qconfig("fbgemm")'s activation observer bakes in
+                    # reduce_range=True, which warns (at observer construction, i.e.
+                    # inside prepare_qat) that it's deprecated in favor of explicit
+                    # quant_min/quant_max -- an upstream default in
+                    # ml/quantization.py's prepare_qat_model (shared with the real QAT
+                    # training pipeline), not something to change just for this sweep.
+                    with warnings.catch_warnings():
+                        warnings.filterwarnings(
+                            "ignore", message=".*reduce_range will be deprecated.*", category=UserWarning,
+                        )
+                        model_qat = build_qat_from_model(model, model_name, device)
+                    # Calibration pass for the QAT observers -- without this, convert()
+                    # quantizes every activation with default (never-observed) qparams
+                    # and PyTorch warns "must run observer before calling
+                    # calculate_qparams" on every layer. Random input matches this
+                    # sweep's scope: profiling runs freshly constructed (untrained)
+                    # models (see configs/profiling.yaml), so there's no real
+                    # checkpoint's activation distribution to calibrate against anyway
+                    # -- same synthetic-calibration caveat as profile_layer_latency_int8.
+                    calib_input = torch.randn(input_size, device=device)
+                    with torch.no_grad():
+                        for _ in range(10):
+                            model_qat(calib_input)
                     model = convert_to_int8(model_qat)
                     model = model.to("cpu")  # INT8 inference on CPU
                     profile_device = torch.device("cpu")

@@ -10,7 +10,24 @@
 > não ao dnn_study.** Cópia deste plano também salva lá em `docs/plano_relatorio_acuracia.md`.
 >
 > Escrito em 2026-08-06, antes da implementação. Branch alvo: `acuracia_quantizacao`
-> (a partir de `winograd_f43`).
+> (a partir de `winograd_f43`; a branch já existe no remoto e contém este plano em
+> `docs/plano_relatorio_acuracia.md` — commit `743a2cd`).
+>
+> **Revisado em 2026-08-06** após conferir o RTL e o estado da máquina. As larguras que
+> constavam na v1 estavam erradas (vinham de defaults obsoletos, não do top module) — ver §0.
+>
+> **Revisado em 2026-08-07**: ACC decidido em 40b pro estudo (diverge do RTL, que diz 44 — ver
+> §0); TF instalado e ImageNet-1k baixado, então a divisão Fase A (sem TF) / Fase B (com TF) não
+> existe mais como estava — ver §6. Vetores `f43_sim_build_*` confirmados inutilizáveis e sem
+> regenerador de dado real (`gen_f43_system_vectors.py` só gera sintético) — ver §1.
+>
+> **Atualização do Thomas (07/08, por mensagem):** `f43_winograd_hw` ficou desatualizado após
+> mudanças no RTL — a âncora de bit-exatidão passa a ser `gen_f43_system_vectors.py`, que é o que
+> a equipe do FPGA compara contra o hardware real hoje (ver §1, §8). K do packing deve considerar
+> o pior caso de 512 acumulações, das camadas de 512 canais de entrada da VGG16 (ver §7). E o
+> packing sozinho não dobra a velocidade: ganho estimado ~1,38x contando também o lado de memória;
+> chegar perto de 2x depende de uma melhoria de acesso à memória em paralelo (Thomas), cujo
+> detalhe fica pro artigo, não pro relatório (ver Objetivo).
 
 ## Por que isso está no dnn_study
 
@@ -29,8 +46,85 @@ dnn_study é o projeto de pesquisa em Winograd que motivou o pedido. Duas conex�
 ## Objetivo
 
 Achar o **menor U e menor V com `U + 2V ≤ 27`** e acurácia aceitável, pra destravar o packing de
-2 multiplicações por DSP48E2. Hoje U=16, V=16 → `16 + 2×16 = 48`. Tentativa anterior com U=15,
-V=14 → 43, ainda estoura.
+2 multiplicações por DSP48E2.
+
+> **Correção do Thomas (07/08):** packing sozinho não dobra a velocidade. Contando também o lado
+> de memória, o ganho estimado do packing isolado é **~1,38x**. Chegar perto de 2x depende de
+> combinar isso com uma melhoria de acesso à memória que ele está trabalhando em paralelo — o
+> número combinado fica pro artigo, não é entregável deste relatório.
+
+---
+
+## 0. Baseline: U=16, V=20, ACC=44 — todos confirmados no código
+
+Quatro fontes descreviam larguras diferentes. **V=20 confirmado com o Thomas em 06/08** e **ACC=44
+confirmado por leitura direta do código em 07/08** (não só do RTL — `gen_f43_system_vectors.py`
+concorda, ver abaixo), ambos batendo com o que está commitado (`winocnn_top_f43.v:63-67`,
+autoridade porque o top module sobrescreve os parâmetros de todos os submódulos):
+
+| Fonte | U | V | ACC | O que era |
+|---|---|---|---|---|
+| Mensagem original | 26 | 16 | 48 | design pré-`f2a52f0`, V armazenado pré-transformado |
+| Correção por WhatsApp (06/08) | 16 | 16 | 40 | idem — ainda descrevendo o design antigo |
+| `winocnn_top_f43.v:63-67` | 16 | 20 | 44 | atual, pós-`f2a52f0` |
+| v1 deste plano (errado) | 16 | 16 | 48 | — |
+| Decidido pro estudo em 07/08 (antes de checar o código) | 16 | 20 | 40 | ACC não reconciliado |
+| **Confirmado no código (07/08)** | **16** | **20** | **44** | **RTL e `gen_f43_system_vectors.py` concordam** |
+
+As duas primeiras linhas não eram pedido de largura — eram descrição do design **antes** de
+`f2a52f0` (commit do próprio Thomas, `2026-08-05 22:34`, *"Volta filter transform... 9 ao invés
+dos 36 transformados"*), quando V era um valor pré-transformado de 16 bits armazenado em memória.
+Esse commit moveu a transformada pra dentro do chip; V virou `RAW_W(8) + POST_SHIFT(12) = 20`,
+calculado on-chip. As duas descrições "V=16" batiam entre si porque as duas descreviam o design
+antigo — não porque o antigo estivesse certo.
+
+**ACC reconciliado (07/08): 44, não 40.** A decisão de usar 40 pro estudo tinha sido tomada sem
+reconciliar com o `ACC_W=44` do mesmo commit `f2a52f0` de onde V=20 saiu. Checando o código
+diretamente: `winocnn_top_f43.v:67` tem `localparam integer ACC_W = 44`, e
+`gen_f43_system_vectors.py:277` imprime `max|M|={max_absM} (ACC_W=44 aguenta {2**43})` — os dois
+concordam. Regra adotada a partir daqui: **o código é a fonte de verdade**, não a decisão anterior
+do plano. `wino_bitwidth_study.py` já usa `ACC_W=44` (ver §1, §11).
+
+O `26` da mensagem original vem de defaults obsoletos em `wino_pe_f43.v:32-33`, comentados no
+próprio arquivo como `// largura de U (exemplo)`. `wino_systolic_array_f43.v:27-29` repete esses
+defaults e ainda traz `ACC_W=48`; `wino_output_transform_f43.v:17` tem default `ACC_W=40`. Nenhum
+deles vale — o top passa os valores explicitamente.
+
+**Distância real do packing: `16 + 2×20 = 56`**, não 48.
+
+### O ponto que muda o pedido: V=20 não é precisão de peso
+
+`winocnn_top_f43.v:23` já tem `RAW_W = 8` — **os pesos já são INT8**. A largura de V decompõe
+exatamente em:
+
+```
+V_DATA_W = RAW_W + POST_SHIFT = 8 + 12 = 20
+```
+
+com `POST_SHIFT=12` vindo da transformada de filtro on-chip (`winocnn_top_f43.v:80-83`): G escalada
+2^10, aplicada 2×, menos os `ROUND_BITS=8` descartados no meio.
+
+Ou seja: **12 dos 20 bits de V são escala de ponto fixo da transformada G, não informação de peso.**
+
+Consequências diretas:
+
+- "Diminuir a precisão pra INT8" já foi feito. Não sobra nada pra ganhar do lado do peso.
+- Encolher V = reduzir a escala da transformada G, que mapeia 1-pra-1 em
+  `f43_vpre_int(g, vpre_bits)` — e `validate_transforms_f43.py` **já varre `vpre_bits ∈ {4..8}`**.
+  Metade da resposta da pergunta 1 sai de uma rodada do script que já existe.
+- Mas mesmo com `vpre_bits=4` → V=12 → `16 + 2×12 = 40 > 27`. Chegar a ≤27 com escala **uniforme**
+  exigiria V≈7, menos bits que o próprio peso INT8. **Com escala uniforme, o veredito registrado em
+  `f43_equations.md` provavelmente está certo.**
+
+### A saída: escala por posição
+
+Os coeficientes inteiros de G vão de 43 a 1024 e as normas-linha de `B^T` têm espalhamento
+parecido. Boa parte de U e de V é gasta representando esse espalhamento, não informação. Escala
+**por posição do tile** (uma escala pra cada uma das 36 posições, escolhida pra que `U·V` tenha
+escala uniforme) recupera esses bits, custa shifts constantes em LUT e **zero DSP** — as estruturas
+de multiplicação por constante já estão lá.
+
+Essa é a contribuição que o relatório pode ter de mais forte, e não estava na v1 do plano.
 
 ---
 
@@ -61,14 +155,44 @@ Commit `b25db96`: *"F(4,3) fundação numérica: golden validado (U=15b, cosine 
 **Não é preciso escrever simulador nem gerador de matriz.** O trabalho é levantar o que existe de
 um tile isolado para a rede inteira.
 
+> **Atualização do Thomas (07/08):** `f43_winograd_hw` ficou desatualizado após mudanças recentes
+> no RTL — não serve mais de referência de bit-exatidão. A âncora passa a ser
+> `gen_f43_system_vectors.py`, que é o que a equipe usa hoje pra comparar contra o hardware real
+> (ver §8). Isso não muda a limitação já registrada acima (o script continua só gerando dado
+> sintético, sem flag de entrada real) — muda só qual saída serve de golden pra checagem
+> bit-a-bit de `wino_bitwidth_study.py`.
+
+### Vetores de VGG16 commitados: confirmados inutilizáveis, sem regenerador de dado real
+
+`scripts/f43_sim_build_L2/` e `scripts/f43_sim_build_L3/` têm ativação + peso das 13 convs da
+VGG16, uma pasta por camada — mas **confirmados stale (07/08)**: `wgt.mem` tem 864 valores
+(= 24×36) na faixa −192…256, fora de INT8. É **V pré-transformado do fluxo antigo**, anterior ao
+commit `f2a52f0` (*"Volta filter transform... 9 ao invés dos 36 transformados"*), que moveu a
+transformada pra dentro do chip. Confirmado via `git log` (o arquivo para em `d896cac`, antes de
+`f2a52f0`) e via diff de `gen_f43_system_vectors.py` (formato mudou de 36 `V_pre` de 16b pra 9
+coefs crus de `RAW_W` bits). **Não usar.**
+
+`gen_f43_system_vectors.py`, o único gerador de vetores no repo, **não tem como regenerar com dado
+real** — só aceita `--seed` e gera pesos/ativações sintéticos via `rng.integers(...)`, sem flag de
+entrada de arquivo. Isso derruba a premissa original de que "as perguntas 1, 2, 3 e 5 rodam hoje,
+só com numpy, sem TensorFlow" — dado real de VGG16 pra qualquer uma dessas perguntas precisa vir de
+fora, e isso significa TF de qualquer jeito (ver §6).
+
+**Estado em 07/08:** TF instalado (`Winograd-FPGA/.venv`, TF 2.21.0, CPU-only, `keras.applications.
+vgg16` OK) e o val set do ImageNet-1k baixado (mirror Kaggle `titericz/imagenet1k-val`, 50.000
+imagens, 6,4 GB, em `~/.cache/kagglehub/datasets/titericz/imagenet1k-val/versions/1/imagenet-val/`
+— aceito no lugar do canal oficial, ver §5). `scripts/dump_vgg16_tensors.py` ainda não foi escrito
+— é o próximo passo real, ver §6.
+
 ### O gap
 
-O que existe hoje roda em **tiles 6×6 aleatórios**, mede **cosine de um tile**, e varre **só V**.
-Falta:
+O que existe hoje (`validate_transforms_f43.py` + `wino_bitwidth_study.py`, já commitados) roda em
+**tiles aleatórios**, com acumulação sobre N_IC generalizada e ancorada contra o golden de
+`gen_f43_system_vectors.py` (§8 — reescrito 07/08, self-check ainda não executado). Falta:
 
-- ativações **reais** da VGG16 em vez de tile aleatório
-- **acumulação sobre N_IC** — onde vive a pergunta 2 (sensibilidade a N_IC) e o guard band do packing
-- varrer **U** também, não só V
+- ativações **reais** da VGG16 em vez de tile aleatório — `dump_vgg16_tensors.py` escrito (07/08),
+  ainda não executado (§6)
+- rodar o grid completo em `u_bits`/`v_bits` (`f43_layer_sweep` já parametrizado nos dois, §7)
 - acurácia **top-1 fim-a-fim**, não cosine de tile
 - truncamento intermediário nos 2 estágios de cada transform (pergunta 3)
 - F(2,3)/F(4,3)/F(6,3) lado a lado no mesmo benchmark (pergunta 5)
@@ -85,11 +209,19 @@ golden). A pergunta do pedido é outra: qual o mínimo com **perda de acurácia 
 que ninguém mediu. Todo o estreitamento até hoje foi sob restrição "bit-exato" (`9fafe59`
 *"Estreita U de 26→20 bits: bit-exato"*, `34211f2` *"De-reset: bit-exato"*).
 
-**Relaxar de "bit-exato" para "acurácia aceitável" é a contribuição do relatório** — e é o único
-caminho que pode levar `U+2V` de 43 para ≤27.
+**Relaxar de "bit-exato" para "acurácia aceitável" é a contribuição do relatório.**
 
-Se a resposta medida for "nem relaxando dá", isso também é entregável: fecha a questão com número
-em vez de estimativa, e vira parágrafo de artigo.
+Só que, pela conta de §0, relaxar sozinho **não basta**: mesmo com `vpre_bits=4` o total fica em 40.
+São dois eixos, não um:
+
+1. relaxar bit-exatidão → derruba `vpre_bits`, e com ele V;
+2. **escala por posição** → tira dos dois operandos os bits gastos com o espalhamento dos
+   coeficientes de G e `B^T`.
+
+O relatório precisa medir os dois. Se com os dois ainda não fechar ≤27, isso também é entregável:
+fecha a questão com número em vez de estimativa, e vira parágrafo de artigo.
+
+*(O arquivo `f43_equations.md` está em `winograd_f43`/`acuracia_quantizacao`, não em `master`.)*
 
 ---
 
@@ -107,14 +239,47 @@ troca DSP por Fmax e sai no zero. Toda recomendação do relatório vem com cust
 
 ## 4. Pré-requisito: calibração de escala
 
-`vgg16/export_vgg16_all_convs.py:468-469` tem `--act-scale` e `--wgt-scale` com default **1.0**.
-Peso de VGG16 vive em |w| < 0,5, então `round(w × 1.0)` zera quase todos.
+> **Correção da v1.** A v1 dizia que o default `1.0` zerava os pesos e que por isso a acurácia
+> nunca tinha sido medida. A primeira metade está errada: o default é mesmo `1.0`
+> (`vgg16/export_vgg16_all_convs.py:468-469`), mas os `.mem` commitados têm valores escalados
+> de verdade (−192…256, nada de zeros), então os exports reais passaram uma escala. **A conclusão
+> se mantém pelo motivo certo, não por esse.**
 
-Isso não quebra o fluxo atual — o testbench compara RTL contra o modelo Python usando *os mesmos*
-valores quantizados, então casa em PASS de qualquer jeito. Mas significa que **acurácia nunca foi
-medida neste acelerador**, e `vgg16/resultados.txt` é só ciclos/throughput.
+O motivo certo: o testbench compara RTL contra o modelo Python usando *os mesmos* valores
+quantizados, então casa em PASS independente da escala estar boa ou ruim. **Nunca houve comparação
+contra a saída FP32 da rede** — `vgg16/resultados.txt` é só ciclos/throughput. Acurácia de fato
+nunca foi medida neste acelerador.
+
+O export grava `act_scale`/`wgt_scale` no `meta_path` de cada caso (`:449-450`), mas esses arquivos
+de metadados **não estão commitados** — só `case.txt`, `*.mem` e `ref_core*.txt`. Então a escala
+usada nos vetores existentes é desconhecida e precisa ser re-derivada (ou perguntada).
 
 Escala por percentil, por camada, INT8 e INT16 — antes de qualquer número de acurácia.
+
+> **Achado (07/08, com dado real da VGG16 já em mãos — ver §6): calibração por percentil simples
+> não fecha.** Tentativa 1 — escalar ativação e peso cada um pro próprio range INT8 (percentil do
+> valor individual) — **satura 97–100% das saídas em todas as 13 camadas**. Tentativa 2 — escalar
+> pelo range da SAÍDA acumulada (percentil da conv direta real) — satura 0%, mas **os pesos
+> colapsam pra zero** no arredondamento (a escala de peso necessária fica pequena demais pro INT8
+> individual do peso sobreviver).
+>
+> A causa aparece direto nos dados reais extraídos (`vgg16/real_tensors/`):
+>
+> | camada | std ativação | std peso |
+> |---|---|---|
+> | `block1_conv1` | 70.6 | 0.207 |
+> | `block3_conv1` | 601.5 | 0.017 |
+> | `block4_conv1` | 651.2 | 0.010 |
+> | `block5_conv1` | 137.5 | 0.009 |
+>
+> VGG16 não tem BatchNorm — a ativação cresce ~2 ordens de grandeza da entrada até o meio da rede
+> (o peso encolhe pra compensar, ajustado no treino). O `>>>POST_SHIFT` de saída é uma constante
+> **fixa** no RTL (§0), não uma escala por camada recalibrável — então nenhuma escolha de
+> `act_scale`/`wgt_scale` por camada resolve as duas pontas ao mesmo tempo com essa constante fixa.
+> Isso **bloqueia números de erro/acurácia confiáveis** até resolver (não bloqueia o resto: self-
+> check, dump de dado real, e a matemática pré-clamp do kernel já estão validados — ver §6, §8).
+>
+> Não é bug de código — é uma pergunta de design em aberto, adicionada a §11.
 
 ---
 
@@ -122,49 +287,136 @@ Escala por percentil, por camada, INT8 e INT16 — antes de qualquer número de 
 
 | Arquivo | O que faz |
 |---|---|
-| `scripts/dump_vgg16_tensors.py` | **novo, usa TF uma vez.** Roda VGG16 Keras, salva ativação de entrada + pesos das 13 convs como `.npy`. Depois disso TF sai do caminho. |
-| `scripts/wino_bitwidth_study.py` | **novo, numpy puro.** Importa o kernel de `validate_transforms_f43.py`, generaliza pra camada inteira (acumulação N_IC), parametriza U/V/acc/truncamentos, varre o grid, escreve CSV. |
+| `scripts/dump_vgg16_tensors.py` | **escrito e RODADO (07/08).** Roda VGG16 Keras nas imagens do val set, salva tiles 6×6 de ativação real + pesos das 13 convs em `vgg16/real_tensors/*.npy` (`tensors`), mais o subset estratificado em `vgg16/accuracy_subset.txt` (`subset`, 5000 imagens). Reaproveita o padrão de `vgg16/export_vgg16_all_convs.py`. |
+| `scripts/wino_bitwidth_study.py` | **reescrito e self-check RODADO, passando (07/08).** Âncora trocada de `f43_winograd_hw` (stale) pro golden de `gen_f43_system_vectors.py` (§1, §8); `f43_layer_core` (pré-clamp) + `f43_layer_sweep` (com clamp) pro grid. |
 | `docs/relatorio_acuracia_bitwidth.md` | **novo.** O relatório final. |
 
-TF precisa de venv dentro do repo do FPGA. Não está instalado nesta máquina (nem no env global,
-nem no `.venv` do dnn_study), e `scripts/layer_configs.py:13-33` aponta pra `/home/thomas/UFRGS/...`.
+### Estado dos pré-requisitos nesta máquina (conferido 2026-08-07)
+
+| Item | Estado | Bloqueia |
+|---|---|---|
+| numpy / Python 3.12 | ✅ `.venv` do dnn_study | — |
+| Branch `acuracia_quantizacao` | ✅ checked out, commits pushados (`615e000`) | — |
+| `validate_transforms_f43.py` | ✅ na branch alvo | — |
+| Kernel N_IC generalizado + âncora | ✅ `wino_bitwidth_study.py` reescrito (âncora = `gen_f43_system_vectors.py`), self-check **rodado, passando** | — |
+| TensorFlow | ✅ instalado (`.venv` próprio, TF 2.21.0, CPU-only) | — |
+| Pesos VGG16 Keras | ✅ baixados (528 MB, primeiro `VGG16(weights='imagenet')`, 07/08) | — |
+| **Val set ImageNet-1k** | ✅ baixado — mirror Kaggle `titericz/imagenet1k-val`, 50.000 imagens, 6,4 GB, `~/.cache/kagglehub/datasets/titericz/imagenet1k-val/versions/1/imagenet-val/` | — |
+| Vetores VGG16 por camada (`f43_sim_build_*`) | ❌ confirmados stale (formato pré-`f2a52f0`) — não usar | dado real via vetores antigos |
+| `gen_f43_system_vectors.py` como regenerador de dado real | ❌ só gera sintético, sem flag de entrada de arquivo | dado real via esse script |
+| `validate_transforms.py` (F(2,3)) | ✅ cherry-picked de `origin/winograd_f63` (07/08) | — |
+| `validate_transforms_f63.py` | ✅ cherry-picked de `origin/winograd_f63` (07/08) — **é o correto pra F(6,3)**, ver nota abaixo | — |
+| `dump_vgg16_tensors.py` | ✅ escrito e RODADO (07/08) — dados reais em `vgg16/real_tensors/` | — |
+| **Calibração `act_scale`/`wgt_scale`** | ❌ **bloqueada** — ver achado novo em §4 | números de erro/acurácia confiáveis |
+| `pillow`, `scipy` no `.venv` do FPGA | ✅ instalados (07/08) — faltavam pro `dump_vgg16_tensors.py` e pros `validate_transforms*` cherry-picked | — |
+| Disco | ✅ ~43 GB livres (após TF venv + ImageNet) | — |
+
+**Achado do cherry-pick (07/08):** os dois arquivos de `winograd_f63` têm o mesmo nome de módulo
+(`validate_transforms.py` no docstring) e cabeçalho quase idêntico, mas **não são intercambiáveis
+pra pergunta 5**: `validate_transforms.py`'s matrizes F(6,3) (`_f63_matrices_known`) têm 3 linhas de
+`BT_1d` marcadas `# ← uncertain` e o próprio arquivo admite no `test_f63`: *"As matrizes F(6,3)...
+precisam ser corrigidas"*. `validate_transforms_f63.py` tem a versão corrigida
+(`_f63_matrices_canonical` + `f63_winograd_hw_path` com `BT_F63_X4`/`POST_SHIFT_F63` exatos do RTL)
+e é o que deve ser usado — `validate_transforms.py` serve só como fonte do F(2,3) (`f23_winograd_int`,
+idêntico nos dois arquivos).
+
+> **Correção da v1:** o plano dizia que `scripts/layer_configs.py:13-33` apontava pra
+> `/home/thomas/UFRGS/...`. Não aponta — esse arquivo externalizou os paths pra
+> `scripts/project_paths.env` (local, não versionado), com `WINOCNN_ROOT` auto-detectado.
+> Os `/home/thomas/UFRGS/...` que sobraram estão em artefatos gerados do Vivado
+> (`scripts/f43_sim_build_L2/xsim.dir/*/xsim_script.tcl`), que este trabalho não usa.
 
 ---
 
 ## 6. Passos
 
-1. venv com TF; `dump_vgg16_tensors.py` roda uma vez.
-2. Calibrar `act_scale`/`wgt_scale` por camada (percentil), INT8 e INT16.
-3. Generalizar `f43_winograd_hw` pra camada completa com acumulação sobre N_IC, mantendo
-   compatibilidade bit-exata com o kernel atual (é o teste de ancoragem).
-4. Grid `u_bits × v_bits × chunk_K` × 13 camadas. O transform de entrada é calculado **uma vez**
-   por camada em precisão exata; cada `u_bits` do grid é só um shift em cima — o grid inteiro sai
-   de uma transformada. Simular em `float64`: exato para inteiro até 2^53, e o sinal mais largo é
-   o acumulador de 40b, então dá semântica inteira bit-exata usando numpy normal.
+A divisão original em "Fase A sem TF" / "Fase B com TF" não existe mais: dado real de VGG16 pra
+qualquer pergunta precisa de TF (§1), e TF já está instalado. O que separa os passos agora é só
+dependência real (o que já rodou vs. o que falta escrever), não infraestrutura.
+
+### Já feito (07/08)
+
+- ~~`git checkout acuracia_quantizacao`~~ — feito, commits pushados (`615e000`).
+- ~~Generalizar `f43_winograd_hw` pra N_IC~~ — `wino_bitwidth_study.py` escrito e commitado,
+  self-check passando: N_IC=1 bit-idêntico ao golden (200 amostras), N_IC∈{3,16,512} com cosine
+  >0.999 contra soma de convs diretas.
+- ~~Instalar TF~~ — `.venv` próprio no repo do FPGA, TF 2.21.0, CPU-only, `keras.applications.vgg16`
+  confirmado importável.
+- ~~Baixar val set do ImageNet-1k~~ — mirror Kaggle, 50.000 imagens, 6,4 GB (§5).
+- ~~Cherry-pick de `validate_transforms.py`/`validate_transforms_f63.py`~~ — feito (07/08); ver
+  nota em §5 sobre qual dos dois usar pra F(6,3).
+- ~~Trocar a âncora de `wino_bitwidth_study.py`~~ — reescrito (07/08) pra usar o golden de
+  `gen_f43_system_vectors.py` em vez de `f43_winograd_hw` (stale); adicionado `f43_layer_core`
+  (pré-clamp) + `f43_layer_sweep` (com clamp), parametrizados em `u_bits`/`v_bits`. **Self-check
+  RODADO e passando** (07/08): N_IC=1 bit-idêntico ao golden (200 amostras); N_IC∈{3,16,512}
+  cosine >0.999 contra soma de convs diretas (pré-clamp); sweep de `v_bits` monotônico. Achado no
+  caminho: testar linearidade DEPOIS do clamp de saída com dado não calibrado sempre satura e não
+  prova nada sobre o kernel — por isso a separação pré-clamp/pós-clamp.
+- ~~Rodar `dump_vgg16_tensors.py`~~ — RODADO (07/08). `tensors`: 32 imagens, tiles reais + pesos
+  salvos em `vgg16/real_tensors/` pras 13 camadas (canais batem com `layer_configs.py`, incluindo
+  N_IC=512 em block4_conv2/3 e block5_conv1-3 — confirma o pior caso do Thomas é real). `subset`:
+  5000 imagens (5/classe × 1000 classes) em `vgg16/accuracy_subset.txt`. Precisou instalar
+  `pillow`+`scipy` no `.venv` do repo do FPGA (faltavam).
+
+### Falta
+
+1. ~~Rodar o self-check~~ — feito, passando.
+2. ~~Rodar `dump_vgg16_tensors.py`~~ — feito.
+3. **Calibrar `act_scale`/`wgt_scale` por camada — BLOQUEADO, ver achado novo em §4.** Duas
+   tentativas de calibração por percentil simples falharam (satura tudo, ou zera os pesos) por
+   causa do range dinâmico de ativação da VGG16 (sem BatchNorm) combinado com o `POST_SHIFT` fixo
+   do RTL. Precisa de esquema de calibração mais esperto (talvez por canal, não por tensor inteiro)
+   ou confirmar com o Thomas se há alguma escala de saída por camada no RTL além do shift fixo.
+4. Grid `u_bits × v_bits × chunk_K` × 13 camadas, **mais o eixo de escala por posição** (§0):
+   uniforme vs. por-posição. O transform de entrada é calculado **uma vez** por camada em precisão
+   exata; cada `u_bits` do grid é só um shift em cima — o grid inteiro sai de uma transformada.
+   Simular em `float64`: exato para inteiro até 2^53, e o sinal mais largo é o acumulador
+   (`ACC_W=44`, confirmado em `winocnn_top_f43.v:67` — ver §11), então dá semântica inteira
+   bit-exata usando numpy normal.
 5. Erro por camada vs conv direta FP32: médio abs, máx abs, SNR, cosine (mantém a métrica atual).
 6. **Pergunta 2** — correlacionar SNR com N_IC nas 13 camadas. A hipótese tem base: erro
-   independente de média zero cresce ~√N, sinal ~N, então SNR melhora ~√N_IC. Medir e ajustar.
+   independente de média zero cresce ~√N, sinal ~N, então SNR melhora ~√N_IC.
    *`block1_conv1` (N_IC=3) já é caso patológico conhecido por outro motivo
    (`research_first_layer_problem.md`) e custa 186 ciclos de ~13k totais — "roda essa camada mais
    larga" é provavelmente grátis.*
 7. **Pergunta 3** — varrer truncamento entre os 2 estágios de `wino_input_transform` e de
-   `wino_output_transform`.
-8. **Pergunta 4** — quantificar round-to-nearest vs truncamento (o `>>>` do output transform é
-   piso, com viés DC que acumula sobre N_IC; corrigir custa 1 somador); saturação vs wrap; pontos
-   de interpolação alternativos (±1/2 é shift-friendly e melhor condicionado que ±2 — Barabasz &
-   Gregg, ACM TOMS 2020). Cada um com custo estimado em LUT (ver §3).
+   `wino_output_transform`. Alvos concretos já identificados: `ROUND_BITS=8` do filter transform
+   (`wino_filter_transform_f43.v:66`) e `T_F43_W = DATA_W+5` do input transform.
+8. **Pergunta 4** — ver §6.1.
 9. **Pergunta 5** — F(2,3)/F(4,3)/F(6,3) no mesmo benchmark, reusando `validate_transforms.py` e
    `validate_transforms_f63.py`.
-10. **Acurácia** top-1/top-5 dos 3–5 configs finalistas: VGG16 completa, ~5k imgs do val do
-    ImageNet-1k. Reportar também **concordância top-1 vs VGG16 FP32** (isola o erro do acelerador
-    do erro do modelo).
+10. **Acurácia** top-1/top-5 dos 3–5 configs finalistas: VGG16 completa, subset amostrado do val
+    do ImageNet-1k. Reportar também **concordância top-1 vs VGG16 FP32** (isola o erro do
+    acelerador do erro do modelo).
+
+### 6.1 Pergunta 4 — o que já está feito no RTL
+
+> **Correção da v1.** O plano dizia que o `>>>` do output transform era piso, com viés DC, e que
+> corrigir custaria 1 somador. **Já está corrigido.**
+> `wino_output_transform_f43.v:67,73-74` faz `sum = y_comb + ROUND_BIAS; shifted = sum >>> POST_SHIFT`
+> com `ROUND_BIAS = 1 <<< (POST_SHIFT-1)` — round-half-up. As linhas `:76-78` ainda **saturam** em
+> INT8 em vez de dar wrap. O filter transform faz o mesmo (`:77-79`, round-half-up nos `ROUND_BITS`).
+
+Então arredondamento e saturação — as duas compensações mais óbvias e baratas — **já foram gastas**.
+Sobra medir:
+
+- **escala por posição do tile** (§0) — o item de maior ganho esperado, custo em shifts constantes;
+- pontos de interpolação alternativos (±1/2 é shift-friendly e melhor condicionado que ±2 —
+  Barabasz & Gregg, ACM TOMS 2020);
+- resíduo de round-half-up vs round-half-even (half-up ainda tem viés assimétrico no empate
+  negativo; efeito pequeno, mas acumula sobre N_IC=512 — vale quantificar antes de descartar).
+
+Cada um com custo estimado em LUT (ver §3).
 
 ---
 
 ## 7. Packing: a restrição é 3D, não 2D
 
+Ponto de partida real: **U=16, V=20 → 56** (§0). O caminho até ≤27 passa por derrubar `POST_SHIFT`
+*e* por escala por posição — nenhum dos dois sozinho chega lá.
+
 `U + 2V ≤ 27` vale se cada produto for desempacotado a cada ciclo. Acumulando empacotado (que é o
-que `wino_pe.v` faz), o guard band absorve também o crescimento da acumulação:
+que `wino_pe_f43.v` faz), o guard band absorve também o crescimento da acumulação:
 
 ```
 P·U = (V1·U)·2^s + V2·U
@@ -177,6 +429,11 @@ com K acumulações, a parte baixa cresce até  v + u + ceil(log2 K)
 | 1 (desempacota todo ciclo) | `2V + U ≤ 26` | V=8, U=10 |
 | 16 | `2V + U ≤ 22` | V=7, U=8 |
 | 256 | `2V + U ≤ 18` | V=5, U=8 |
+| **512 (pior caso VGG16 — camadas com 512 canais de entrada)** | `2V + U ≤ 17` | V=5, U=7 |
+
+**K=512 é o alvo de dimensionamento real (Thomas, 07/08):** as camadas mais pesadas da VGG16
+(bloco 5, 512→512 canais) batem nesse pior caso, não em K≤256. A fronteira por K reportada no
+relatório precisa cobrir esse ponto.
 
 Reportar a fronteira por K — K menor custa mais drenagem em LUT, que é o trade a decidir com o
 histórico de Fmax em mãos (§3). Packing signed×signed pede termo de correção (Xilinx WP486;
@@ -186,9 +443,10 @@ já existe `paper_dlpack_2024.md` como referência de packing INT8 em UltraScale
 
 ## 8. Verificação
 
-- **Âncora:** rodar o kernel novo com as larguras de hoje e exigir saída **bit-idêntica** a
-  `f43_winograd_hw` de `validate_transforms_f43.py`. Se não bater, o modelo está errado e nenhuma
-  recomendação vale.
+- **Âncora:** rodar o kernel novo com as larguras de hoje e exigir saída **bit-idêntica** à
+  referência de `gen_f43_system_vectors.py` (atualizado 07/08 — `f43_winograd_hw` de
+  `validate_transforms_f43.py` ficou desatualizado após mudanças no RTL, ver §1). Se não bater, o
+  modelo está errado e nenhuma recomendação vale.
 - `python3 scripts/validate_transforms_f43.py` continua passando (não é modificado, só importado).
 - Cross-check analítico: crescimento de U medido bate com o bound L1 de `B^T` do F(4,3)
   (norma-linha 10 → ~6,6 bits sobre INT8 → 15b, que é o U=15b do golden `b25db96`).
@@ -199,7 +457,8 @@ já existe `paper_dlpack_2024.md` como referência de packing INT8 em UltraScale
 ## 9. Fora de escopo
 
 - Não editar `.v` nenhum. O estudo recomenda; a mudança de RTL é do Thomas.
-- Não rodar xsim (`scripts/layer_configs.py:13-33` aponta pra `/home/thomas/UFRGS/...`).
+- Não rodar xsim — os `xsim_script.tcl` gerados apontam pra `/home/thomas/UFRGS/...` e o Vivado
+  não está nesta máquina. Os `.mem` são lidos direto, sem simulador.
 - Commits vão na branch `acuracia_quantizacao`, nunca direto em `winograd_f43`.
 - Nada disso toca o pipeline do dnn_study (Fases 1–9).
 
@@ -215,3 +474,46 @@ já existe `paper_dlpack_2024.md` como referência de packing INT8 em UltraScale
 3. pontos do pipeline de transform redundantes em precisão
 4. técnicas de compensação sem custo de DSP, ordenadas por ganho/custo em LUT
 5. comparação F(2,3)/F(4,3)/F(6,3) de erro no mesmo benchmark
+
+Infraestrutura (TF, ImageNet, dado real das 13 camadas) está pronta (§5, §6) — o bloqueio agora é
+a calibração de escala (§4), não infraestrutura. A ordem natural continua sendo entregar as
+perguntas 1–3 e 5 primeiro (não dependem do sampling/top-1) e fechar a pergunta 1 com acurácia
+top-1 fim-a-fim por último, mas nenhuma delas produz número confiável antes de resolver §4.
+
+---
+
+## 11. Perguntas em aberto pro Thomas
+
+~~1. V é 16 ou 20?~~ **Resolvido 06/08: V=20**, design pós-`f2a52f0` confirmado como o atual (§0).
+
+~~2. `f43_sim_build_*/wgt.mem` é peso cru INT8 ou V pré-transformado?~~ **Resolvido por conferência
+própria (não precisou perguntar):** confirmado V pré-transformado do fluxo antigo — `git log`
+mostra `wgt.mem` parado em `d896cac`, anterior a `f2a52f0`; o diff de `f2a52f0` em
+`gen_f43_system_vectors.py` muda exatamente esse formato (36 `V_pre` de 16b → 9 coefs crus de
+`RAW_W` bits). Os vetores commitados não são utilizáveis como estão, e não há regenerador de dado
+real no repo — dado real vem de `dump_vgg16_tensors.py` daqui pra frente (§6).
+
+~~3. Existe cópia do val do ImageNet-1k no lab?~~ **Não perguntado — resolvido usando mirror do
+Kaggle** (`titericz/imagenet1k-val`, 50.000 imagens, 6,4 GB), aceito como equivalente ao canal
+oficial pro propósito deste estudo (07/08). Não bloqueia mais nada.
+
+~~4. `ACC=40` ou `ACC_W=44`?~~ **Resolvido 07/08: ACC=44.** Confirmado direto no código, não só no
+RTL: `winocnn_top_f43.v:67` (`localparam integer ACC_W = 44`) e o próprio
+`gen_f43_system_vectors.py:277` (`max|M|={max_absM} (ACC_W=44 aguenta {2**43})`) concordam. A
+decisão de usar 40 pro estudo (07/08, antes desta checagem) foi descartada — regra geral adotada:
+o que está no código é a verdade, não a nota do plano. `wino_bitwidth_study.py` já usa `ACC_W=44`.
+
+**Bloqueante, novo (07/08):**
+
+2. **Existe alguma escala de saída por camada no RTL além do `POST_SHIFT` fixo?** Com dado real da
+   VGG16, nenhuma calibração simples de `act_scale`/`wgt_scale` por percentil resolve ao mesmo
+   tempo "peso não zera" e "saída não satura" — ver achado em §4. Se o RTL só tem o shift fixo
+   mesmo, a calibração vai precisar de algo mais esperto (escala por canal, não por tensor inteiro)
+   e vale confirmar com o Thomas se isso é aceitável do lado do hardware antes de investir tempo
+   nisso. Bloqueia qualquer número de erro/acurácia do relatório até resolver.
+
+Em aberto, não bloqueante:
+
+1. **Qual `act_scale`/`wgt_scale` foi usado nos exports antigos de `f43_sim_build_*`?** Os
+   metadados (`vgg16/export_vgg16_all_convs.py:449-450`) não estão commitados. Menos crítico agora
+   que o estudo calibra escala do zero (§4) em vez de reusar os vetores antigos.

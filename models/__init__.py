@@ -16,3 +16,7 @@ from .final_architecture import (
     AlexNetFinalBottleneckFire, AlexNetFinalFireResidual,
     AlexNetFinalBottleneckResidual, AlexNetFinalDepthwiseFire,
 )
+from .vit_variants import (
+    vit_tiny, deit_tiny, swin_pico_w2, swin_pico_w4, swin_pico_w8,
+    swin_pico_poolmixer, hybrid_bottleneck_swin,
+)

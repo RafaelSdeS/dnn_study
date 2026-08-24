@@ -70,7 +70,21 @@ class Trainer:
         model = self.model.to(self.device)
         criterion = nn.CrossEntropyLoss(label_smoothing=cfg.label_smoothing)
         optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=cfg.epochs)
+        if cfg.warmup_epochs > 0:
+            # Same LinearLR+SequentialLR composition as ml/det_seg_trainer.py's fit();
+            # transformer training (Phase 8) diverges early without warmup far more
+            # often than the CNN-tuned defaults this loop was built for.
+            warmup = torch.optim.lr_scheduler.LinearLR(
+                optimizer, start_factor=0.1, total_iters=cfg.warmup_epochs
+            )
+            cosine = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer, T_max=cfg.epochs - cfg.warmup_epochs
+            )
+            scheduler = torch.optim.lr_scheduler.SequentialLR(
+                optimizer, schedulers=[warmup, cosine], milestones=[cfg.warmup_epochs]
+            )
+        else:
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=cfg.epochs)
         scaler = torch.amp.GradScaler("cuda") if cfg.use_amp else None
 
         start_epoch = 0
@@ -92,7 +106,10 @@ class Trainer:
 
         # Load full training state if resuming
         if resume_from is not None and Path(resume_from).exists():
-            state = load_resume_state(resume_from, model, optimizer, scheduler, scaler, device=str(self.device))
+            state = load_resume_state(
+                resume_from, model, optimizer, scheduler, scaler,
+                device=str(self.device), reset_scheduler=cfg.reset_scheduler_on_resume,
+            )
             start_epoch = state["epoch"] + 1
             best_val_acc = state["best_val_acc"]
             best_val_top5 = state["best_val_top5"]
@@ -103,6 +120,12 @@ class Trainer:
                 if k in history:
                     history[k] = v
             wandb_run_id = state["wandb_run_id"]
+            if cfg.reset_scheduler_on_resume:
+                # scheduler was just constructed fresh above (correct T_max for the new
+                # cfg.epochs) but never stepped -- fast-forward it to start_epoch instead
+                # of loading the checkpoint's stale, wrong-T_max scheduler state.
+                for _ in range(start_epoch):
+                    scheduler.step()
 
         best_path = self.save_dir / f"{self.run_name}_best.pth"
         resume_path = self.save_dir / f"{self.run_name}_resume.pth"
@@ -116,7 +139,7 @@ class Trainer:
             if self.epoch_callback is not None:
                 self.epoch_callback(epoch, model)
 
-            if torch.cuda.is_available():
+            if self.device.type == "cuda":
                 torch.cuda.reset_peak_memory_stats(self.device)
 
             with GpuSampler() as gpu_sampler:
@@ -129,7 +152,7 @@ class Trainer:
             epoch_time = time.time() - epoch_start
             peak_mem = (
                 torch.cuda.max_memory_allocated(self.device) / (1024 ** 2)
-                if torch.cuda.is_available() else 0.0
+                if self.device.type == "cuda" else 0.0
             )
             n_batches = len(self.train_loader)
             images_per_sec = (n_batches * self.train_loader.batch_size) / epoch_time if epoch_time > 0 else None
@@ -302,7 +325,7 @@ class Trainer:
             data = data.to(self.device)
             model(data)
             total_images += data.size(0)
-        if torch.cuda.is_available():
+        if self.device.type == "cuda":
             torch.cuda.synchronize()
         elapsed = time.perf_counter() - t0
 

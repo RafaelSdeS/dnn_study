@@ -1,0 +1,7 @@
+device,groups_mode,batch_size,2.0,3.0,5.0,7.0,9.0,11.0
+RTX 4060 Laptop (local),dense,1.0,Direct (scudnn),Winograd,TF32 (cutlass),TF32 (cutlass),TF32 (xmma),TF32 (xmma)
+RTX 4060 Laptop (local),dense,8.0,Direct (scudnn),Winograd,TF32 (xmma),TF32 (xmma),TF32 (cutlass),TF32 (cutlass)
+RTX 4060 Laptop (local),dense,64.0,Direct (scudnn),TF32 (xmma),Direct (scudnn),TF32 (xmma),TF32 (xmma),TF32 (xmma)
+RTX 4060 Laptop (local),depthwise,1.0,Depthwise (generic),Depthwise (generic),Depthwise (generic),Depthwise (generic),Depthwise (generic),Depthwise (generic)
+RTX 4060 Laptop (local),depthwise,8.0,Depthwise (generic),Depthwise (generic),Depthwise (generic),Depthwise (generic),Depthwise (generic),Depthwise (generic)
+RTX 4060 Laptop (local),depthwise,64.0,Depthwise (generic),Depthwise (generic),Depthwise (generic),Depthwise (generic),Depthwise (generic),Depthwise (generic)
