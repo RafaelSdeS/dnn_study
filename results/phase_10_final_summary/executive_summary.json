@@ -8,7 +8,7 @@
     "Phase 8 \u2014 Efficient ViT / Hybrid-Attention",
     "Phase 9 \u2014 PCAD Bypass Ablation"
   ],
-  "n_classification_models": 31,
+  "n_classification_models": 33,
   "n_detection_runs": 18,
   "n_segmentation_runs": 9,
   "best_fp32_overall": {
@@ -22,7 +22,7 @@
     "fp32_size_mb": 28.751924514770508,
     "int8_size_mb": NaN,
     "params_m": 2.480072,
-    "macs": 25799936,
+    "macs": 25799936.0,
     "fp32_latency_ms_per_image": 0.13218055479992472,
     "fp32_throughput_img_per_s": 7565.4093108751995,
     "param_efficiency_top1_per_m": 23.414642800692885,
@@ -41,7 +41,7 @@
     "fp32_size_mb": 18.353315353393555,
     "int8_size_mb": 1.5610408782958984,
     "params_m": 1.602376,
-    "macs": 460179456,
+    "macs": 460179456.0,
     "fp32_latency_ms_per_image": 0.15241547669938882,
     "fp32_throughput_img_per_s": 6561.01349846718,
     "param_efficiency_top1_per_m": 28.60751783601352,
