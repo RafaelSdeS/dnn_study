@@ -628,7 +628,12 @@ observadas em classificação transferem para predição densa — detecção de
 \cite{liu2016ssd}) e segmentação semântica (DeepLabV3 \cite{chen2017rethinking}) — usando os três
 mesmos \textit{backbones} (\texttt{AlexNetBottleneck}, \texttt{AlexNetFire},
 \texttt{AlexNetTV}) sobre PASCAL VOC \cite{everingham2010pascal} (detecção: \textit{trainval}
-2007+2012, teste 2007; segmentação: \textit{train}/\textit{val} 2012).
+2007+2012, teste 2007; segmentação: \textit{train}/\textit{val} 2012). As métricas usadas são
+\textbf{mAP} (\textit{mean Average Precision}) \cite{everingham2010pascal}, a área média sob a
+curva precisão-recall por classe em detecção — resume acerto de localização (IoU entre caixa
+predita e caixa-verdade) e de classificação num único número —, e \textbf{mIoU} (\textit{mean
+Intersection over Union}) \cite{long2015fcn}, a sobreposição média entre máscara predita e
+máscara-verdade por classe em segmentação.
 
 Uma investigação preliminar revelou recall de âncora (fração de caixas-verdade cobertas por algum
 \textit{anchor box} do \texttt{DefaultBoxGenerator}) de apenas 0,76--0,80 para os três
@@ -973,8 +978,6 @@ competitivo em acurácia, não em eficiência.
 
 \section{Trabalhos Futuros}
 
-\subsection{Extensões em curto prazo}
-
 \begin{enumerate}
 \item \textit{Fine-tuning} pós-poda estruturada: Recuperar acurácia do \texttt{AlexNetBottleneck} podado
 (46,1\% menos parâmetros, 0,385M $\to$ 0,207M), mantendo Winograd-elegibilidade via \texttt{groups=1} —
@@ -986,37 +989,14 @@ já feita neste estudo), explorando os 7,19 bits/peso efetivos já usados por IN
 validando hipótese de tensor cores ser artefato de GPU.
 \end{enumerate}
 
-\subsection{Extensões em médio/longo prazo}
-
-\subsubsection{Transferência para Predição Densa: Detecção e Segmentação}
-
-A investigação central (Eixo 6) está concluída — os três \textit{backbones} têm resultados
-válidos de detecção e segmentação, FP32/QAT/INT8, pós-correção do recall de âncora. Duas lacunas
-específicas permanecem: (i) recuperar o \textit{checkpoint} QAT/INT8 de \texttt{AlexNetFire} sob o
-código atual (pós-correção do operador de concatenação quantizada) para calcular seu
-\textit{true\_size\_mb} real, hoje substituído pelo tamanho bruto do \textit{checkpoint}; (ii)
-instrumentar diretamente a latência por estágio (\textit{backbone} vs. \textit{head}) do
-\textit{pipeline} de detecção/segmentação, em vez de comparar contra a latência apenas do
-\textit{backbone} medida no Eixo 3 sob resolução e protocolo diferentes (H4).
-
-\subsubsection{Arquiteturas Eficientes Baseadas em Atenção (ViT Híbrido)}
-
-A investigação central (Eixo 7) também está concluída para os sete modelos planejados.
-Duas extensões ficam para trabalho futuro: (i) estender o perfilamento de Winograd
-(\texttt{ml/profiling.py}) para discriminar tempo de dispositivo por submódulo
-(\textit{stem} CNN vs. estágio de atenção) em vez de apenas no nível do modelo inteiro, permitindo
-verificar diretamente se a fração Winograd-elegível de um híbrido escala com a fração de
-\textit{stem} convolucional, como H5 previu mas não pôde medir; (ii) investigar se um
-ViT/DeiT de contagem de parâmetros comparável às CNNs Pareto-ótimas deste estudo ($\sim$0,3--0,7M,
-em vez dos 2,76M de \texttt{vit\_tiny}/\texttt{deit\_tiny}) preserva o ganho de destilação — o
-resultado atual confirma que destilação ajuda, mas não isola completamente esse efeito do efeito
-de escala do modelo.
-
 \begin{sloppypar}
-Com essas extensões, esperamos consolidar o framework de kernel-restriction + compensation como um
-princípio de design prático para arquiteturas CNN eficientes em aceleradores Winograd — um
-princípio que este relatório já mostrou se estender, ainda que de forma específica por mecanismo,
-para além de classificação (predição densa) e além de CNNs puras (atenção local).
+As investigações centrais de transferência para predição densa (Eixo 6 — detecção e segmentação)
+e de atenção local eficiente (Eixo 7) já estão concluídas, com resultados completos apresentados
+neste relatório (Seções~\ref{sec:contrib6} e~\ref{sec:contrib7}); as lacunas pontuais remanescentes
+de cada uma estão descritas em suas respectivas "Limitações deste eixo". Esses dois eixos
+confirmam que o framework de kernel-restriction + compensation se estende, ainda que de forma
+específica por mecanismo, para além de classificação (predição densa) e além de CNNs puras
+(atenção local).
 \end{sloppypar}
 
 \section*{Agradecimentos}
@@ -1108,6 +1088,10 @@ image segmentation,'' \textit{arXiv preprint arXiv:1706.05587}, 2017.
 M. Everingham, L. Van Gool, C. K. I. Williams, J. Winn, and A. Zisserman, ``The Pascal Visual
 Object Classes (VOC) Challenge,'' \textit{International Journal of Computer Vision}, vol. 88,
 no. 2, pp. 303--338, 2010.
+
+\bibitem{long2015fcn}
+J. Long, E. Shelhamer, and T. Darrell, ``Fully convolutional networks for semantic segmentation,''
+in \textit{Proc. IEEE Conference on Computer Vision and Pattern Recognition (CVPR)}, 2015.
 
 \bibitem{dosovitskiy2020vit}
 A. Dosovitskiy \textit{et al.}, ``An image is worth 16x16 words: Transformers for image
@@ -1218,7 +1202,9 @@ INT8: \textit{backend} / dispositivo & fbgemm / CPU \\
 A Tabela~\ref{tab:per_model_training} lista, por modelo, a taxa de aprendizado inicial (FP32), o
 número de épocas efetivamente treinadas até o melhor \textit{checkpoint} em cada estágio —
 FP32 e QAT (\textit{early stopping} pode interromper antes do orçamento de cada estágio) — e o
-tempo de treino medido em cada estágio. As épocas e o tempo de QAT não puderam ser recuperados
+tempo de treino medido em cada estágio, e a acurácia top-1 final em FP32 e INT8 (já apresentada,
+por eixo, nas tabelas do corpo do texto — consolidada aqui num único lugar). As épocas e o tempo
+de QAT não puderam ser recuperados
 para os modelos treinados antes do Eixo 7 — os \textit{checkpoints}/\textit{logs} desse estágio já
 não estão presentes localmente, e o resumo persistente (\texttt{results/*\_summary.json}) grava
 apenas a época e o tempo do melhor \textit{checkpoint} FP32 quando ambos os estágios rodam
@@ -1244,45 +1230,45 @@ comparáveis entre si nem com as medições de latência do Eixo 3, que usam exc
 RTX 4060 Laptop (Seção~\ref{sec:profiling}).
 
 \begin{table*}[!t]
-\caption{Taxa de aprendizado, épocas efetivas (FP32/QAT) e tempo de treino (FP32/QAT) por modelo}
+\caption{Taxa de aprendizado, épocas efetivas (FP32/QAT), tempo de treino (FP32/QAT) e acurácia top-1 (FP32/INT8) por modelo}
 \label{tab:per_model_training}
 \centering
 \setlength{\tabcolsep}{4pt}
 \resizebox{\textwidth}{!}{%
-\begin{tabular}{@{}llccccc@{}}
+\begin{tabular}{@{}llccccccc@{}}
 \toprule
-\textbf{Família} & \textbf{Modelo} & \textbf{LR} & \textbf{Ép. FP32} & \textbf{Ép. QAT} & \textbf{T. FP32 (min)} & \textbf{T. QAT (min)} \\
+\textbf{Família} & \textbf{Modelo} & \textbf{LR} & \textbf{Ép. FP32} & \textbf{Ép. QAT} & \textbf{T. FP32 (min)} & \textbf{T. QAT (min)} & \textbf{Top-1 FP32 (\%)} & \textbf{Top-1 INT8 (\%)} \\
 \midrule
 \multirow{4}{*}{Baselines irrestritos}
- & AlexNetTV (pré-trein.) & 3$\times10^{-4}$ & 79 & — & 63,2 & — \\
- & MobileNetV2 (pré-trein.) & 1$\times10^{-4}$ & 27 & — & 14,8 & — \\
- & ResNet18 (pré-trein.) & 1$\times10^{-4}$ & 15 & — & 7,1 & — \\
- & VGG-Style & 1$\times10^{-3}$ & 62 & — & 30,5 & — \\
+ & AlexNetTV (pré-trein.) & 3$\times10^{-4}$ & 79 & — & 63,2 & — & 32,88 & 31,90 \\
+ & MobileNetV2 (pré-trein.) & 1$\times10^{-4}$ & 27 & — & 14,8 & — & 58,00 & — \\
+ & ResNet18 (pré-trein.) & 1$\times10^{-4}$ & 15 & — & 7,1 & — & 53,91 & — \\
+ & VGG-Style & 1$\times10^{-3}$ & 62 & — & 30,5 & — & 51,81 & 51,19 \\
 \midrule
 \multirow{3}{*}{Restrição ingênua}
- & AlexNet3x3-FC & 3$\times10^{-4}$ & 37 & — & 29,1 & — \\
- & AlexNet3x3-GAP & 3$\times10^{-4}$ & 43 & — & 16,3 & — \\
- & AlexNetSmallKernel & 3$\times10^{-4}$ & 62 & — & 24,5 & — \\
+ & AlexNet3x3-FC & 3$\times10^{-4}$ & 37 & — & 29,1 & — & 35,79 & 36,19 \\
+ & AlexNet3x3-GAP & 3$\times10^{-4}$ & 43 & — & 16,3 & — & 40,32 & 37,02 \\
+ & AlexNetSmallKernel & 3$\times10^{-4}$ & 62 & — & 24,5 & — & 45,84 & 36,16 \\
 \midrule
 \multirow{5}{*}{Tentativas de compensação}
- & AlexNetBottleneck & 1$\times10^{-3}$ & 76 & — & 29,6 & — \\
- & AlexNetFire & 1$\times10^{-3}$ & 41 & — & 21,7 & — \\
- & Bottleneck + Fire (\texttt{AlexNetFinalBottleneckFire}) & 1$\times10^{-3}$ & 40 & — & 13,9 & — \\
- & Bottleneck + Residual (\texttt{AlexNetFinalBottleneckResidual}) & 1$\times10^{-3}$ & 38 & — & 15,6 & — \\
- & Depthwise + Fire (\texttt{AlexNetFinalDepthwiseFire}) & 1$\times10^{-3}$ & 76 & — & 27,3 & — \\
+ & AlexNetBottleneck & 1$\times10^{-3}$ & 76 & — & 29,6 & — & 44,62 & 44,54 \\
+ & AlexNetFire & 1$\times10^{-3}$ & 41 & — & 21,7 & — & 43,98 & 44,30 \\
+ & Bottleneck + Fire (\texttt{AlexNetFinalBottleneckFire}) & 1$\times10^{-3}$ & 40 & — & 13,9 & — & 42,29 & 44,00 \\
+ & Bottleneck + Residual (\texttt{AlexNetFinalBottleneckResidual}) & 1$\times10^{-3}$ & 38 & — & 15,6 & — & 45,10 & 45,98 \\
+ & Depthwise + Fire (\texttt{AlexNetFinalDepthwiseFire}) & 1$\times10^{-3}$ & 76 & — & 27,3 & — & 43,46 & 42,79 \\
 \midrule
 \multirow{2}{*}{Arquitetura híbrida final}
- & Fire + Residual (\texttt{AlexNetFinalFireResidual}) & 1$\times10^{-3}$ & 77 & — & 28,8 & — \\
- & AlexNetFireBypass & 1$\times10^{-3}$ & 152 & — & 86,2 & — \\
+ & Fire + Residual (\texttt{AlexNetFinalFireResidual}) & 1$\times10^{-3}$ & 77 & — & 28,8 & — & 49,79 & 49,20 \\
+ & AlexNetFireBypass & 1$\times10^{-3}$ & 152 & — & 86,2 & — & 49,03 & 49,86 \\
 \midrule
 \multirow{7}{*}{Atenção local (Eixo 7)}
- & swin\_pico\_w2 & 5$\times10^{-4}$ & 146 & 99 & 156,1 & 107,3 \\
- & swin\_pico\_w4 & 5$\times10^{-4}$ & 143 & 91 & 150,2 & 97,3 \\
- & swin\_pico\_w8 & 5$\times10^{-4}$ & 144 & 80 & 80,7 & 44,8 \\
- & swin\_pico\_poolmixer & 5$\times10^{-4}$ & 143 & 99 & 80,6 & 55,5 \\
- & hybrid\_bottleneck\_swin & 5$\times10^{-4}$ & 144 & 96 & 85,9 & 56,7 \\
- & vit\_tiny & 5$\times10^{-4}$ & 125 & 89 & 59,6 & 65,8 \\
- & deit\_tiny & 5$\times10^{-4}$ & 212 & 62 & 108,4 & 46,1 \\
+ & swin\_pico\_w2 & 5$\times10^{-4}$ & 146 & 99 & 156,1 & 107,3 & 30,64 & 33,25 \\
+ & swin\_pico\_w4 & 5$\times10^{-4}$ & 143 & 91 & 150,2 & 97,3 & 31,27 & 33,89 \\
+ & swin\_pico\_w8 & 5$\times10^{-4}$ & 144 & 80 & 80,7 & 44,8 & 33,03 & 36,99 \\
+ & swin\_pico\_poolmixer & 5$\times10^{-4}$ & 143 & 99 & 80,6 & 55,5 & 28,21 & 30,76 \\
+ & hybrid\_bottleneck\_swin & 5$\times10^{-4}$ & 144 & 96 & 85,9 & 56,7 & 33,64 & 40,18 \\
+ & vit\_tiny & 5$\times10^{-4}$ & 125 & 89 & 59,6 & 65,8 & 40,35 & 42,44 \\
+ & deit\_tiny & 5$\times10^{-4}$ & 212 & 62 & 108,4 & 46,1 & 46,38 & 47,66 \\
 \bottomrule
 \end{tabular}%
 }
@@ -1304,7 +1290,9 @@ em épocas distintas em ambos os estágios (125/89 e 212/62, FP32/QAT respectiva
 
 A Tabela~\ref{tab:phase7_training} lista, por \textit{backbone}, tarefa e variante (treinada do
 zero ou com \textit{backbone} pré-treinado no Tiny ImageNet-200, Seção~\ref{sec:contrib6}), a
-época do melhor \textit{checkpoint} e o tempo de treino FP32, todos executados nos nós RTX 4090 do
+época do melhor \textit{checkpoint}, o tempo de treino FP32 e a métrica FP32 correspondente (mAP
+para detecção, já apresentada na Tabela~\ref{tab:phase7_detection} apenas para a variante do zero;
+mIoU para segmentação, Tabela~\ref{tab:phase7_segmentation}), todos executados nos nós RTX 4090 do
 cluster PCAD (partição \texttt{tupi}). Segmentação não tem variante pré-treinada
 (\texttt{--pretrained-ckpt} não é suportado para essa tarefa, Seção~\ref{sec:contrib6}). O
 orçamento de detecção foi ampliado para até 1000 épocas com paciência de \textit{early stopping}
@@ -1319,22 +1307,22 @@ estágios QAT e INT8, com orçamento de época próprio e mais curto, não são 
 brevidade; ver Seção~\ref{sec:contrib6} para as métricas finais de cada estágio.
 
 \begin{table*}[!t]
-\caption{Eixo 6 — melhor época e tempo de treino FP32 por backbone e variante}
+\caption{Eixo 6 — melhor época, tempo de treino FP32 e métrica FP32 (mAP para detecção, mIoU para segmentação) por backbone e variante}
 \label{tab:phase7_training}
 \centering
-\begin{tabular}{@{}llccc@{}}
+\begin{tabular}{@{}llcccc@{}}
 \toprule
-\textbf{Backbone} & \textbf{Tarefa} & \textbf{Variante} & \textbf{Melhor época} & \textbf{Tempo (h)} \\
+\textbf{Backbone} & \textbf{Tarefa} & \textbf{Variante} & \textbf{Melhor época} & \textbf{Tempo (h)} & \textbf{Métrica FP32} \\
 \midrule
-AlexNetBottleneck & Detecção & do zero & 549 & 29,7 \\
-AlexNetFire & Detecção & do zero & 772 & 68,6 \\
-AlexNetTV & Detecção & do zero & 927 & 115,0 \\
-AlexNetBottleneck & Detecção & pré-treinado & 709 & 56,1 \\
-AlexNetFire & Detecção & pré-treinado & 596 & 88,4 \\
-AlexNetTV & Detecção & pré-treinado & 791 & 125,1 \\
-AlexNetBottleneck & Segmentação & do zero & 84 & 0,5 \\
-AlexNetFire & Segmentação & do zero & 154 & 1,1 \\
-AlexNetTV & Segmentação & do zero & 99 & 0,6 \\
+AlexNetBottleneck & Detecção & do zero & 549 & 29,7 & 20,98\% (mAP) \\
+AlexNetFire & Detecção & do zero & 772 & 68,6 & 8,94\% (mAP) \\
+AlexNetTV & Detecção & do zero & 927 & 115,0 & 16,94\% (mAP) \\
+AlexNetBottleneck & Detecção & pré-treinado & 709 & 56,1 & 20,83\% (mAP) \\
+AlexNetFire & Detecção & pré-treinado & 596 & 88,4 & 8,93\% (mAP) \\
+AlexNetTV & Detecção & pré-treinado & 791 & 125,1 & 18,10\% (mAP) \\
+AlexNetBottleneck & Segmentação & do zero & 84 & 0,5 & 0,1784 (mIoU) \\
+AlexNetFire & Segmentação & do zero & 154 & 1,1 & 0,1703 (mIoU) \\
+AlexNetTV & Segmentação & do zero & 99 & 0,6 & 0,1634 (mIoU) \\
 \bottomrule
 \end{tabular}
 \end{table*}
