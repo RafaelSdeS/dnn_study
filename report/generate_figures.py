@@ -32,17 +32,8 @@ from pathlib import Path
 OUTPUT_DIR = Path("report/figures")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-# Vivid, saturated categorical palette -- the earlier muted/desaturated version read as flat
-# and washed out on screen, so this trades "sober IEEE" for clearly distinguishable, punchy colors.
-BLUE = "#1565c0"
-RED = "#dc2626"
-GREEN = "#16a34a"
-PURPLE = "#9333ea"
-AMBER = "#d97706"
-
-TEXT_PRIMARY = "#1a1a1a"
-TEXT_SECONDARY = "#4d4d4d"
-GRID = "#d9d9d9"
+# Palette shared with generate_architecture_figures.py -- see report/palette.py.
+from palette import BLUE, RED, GREEN, PURPLE, AMBER, TEXT_PRIMARY, TEXT_SECONDARY, GRID
 
 df = pd.read_csv("results/results_aggregate/results_cross_phase.csv")
 _p4 = pd.read_csv("results/phase_4_compression_and_final_architecture_training/final_comparison.csv")

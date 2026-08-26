@@ -17,14 +17,11 @@ from pathlib import Path
 OUTPUT_DIR = Path("report/figures")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-# Color palette
-COLOR_1x1 = "#888888"      # Gray: 1×1 conv
-COLOR_3x3 = "#16a34a"      # Green: 3×3 conv
-COLOR_POOL = "#d9d9d9"     # Light: pooling
-COLOR_GAP = "#4d4d4d"      # Dark: global avg pool
-COLOR_FC = "#1565c0"       # Blue: classifier
-TEXT_COLOR = "#1a1a1a"
-LINE_COLOR = "#4d4d4d"
+# Palette shared with generate_figures.py -- see report/palette.py.
+from palette import BLUE as COLOR_FC, GREEN as COLOR_3x3, GRID as COLOR_POOL
+from palette import TEXT_PRIMARY as TEXT_COLOR, TEXT_SECONDARY as LINE_COLOR
+
+COLOR_1x1 = "#888888"      # Gray: 1×1 conv -- this diagram's own color, no report-wide counterpart
 
 def draw_conv_box(ax, x, y, width, height, label, color, fontsize=8):
     """Draw a single convolution box."""
