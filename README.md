@@ -27,9 +27,13 @@ jupyter lab
 6. `notebooks/phase_4_compression_and_final_architecture_training/final_architecture_qat.ipynb` — Phase 4: Combines Phase 3's best mechanisms into final hybrid architectures
 7. `notebooks/phase_5_cross_phase_results_analysis/final_analysis_phase5.ipynb` — Phase 5: Cross-phase results analysis and figure generation
 8. `notebooks/phase_6_hardware_profiling_analysis/hardware_profiling_phase6.ipynb` — Phase 6: Hardware profiling & Winograd efficiency validation (RTX 4090)
-9. `notebooks/phase_9_pcad_bypass_ablation_analysis/phase9_ablation_analysis.ipynb` — Phase 9: Cross-phase PCAD results (bypass ablation, large-scale runs)
+9. `notebooks/phase_7_detection_segmentation_analysis/phase7_results_analysis.ipynb` — Phase 7: Detection/segmentation results analysis (training itself is CLI-only via `scripts/train_det_seg.py`; see `docs/PHASE7_QUICKSTART.md`)
+10. `notebooks/phase_8_efficient_vit/vit_qat_phase8.ipynb` — Phase 8: vit_tiny/deit_tiny FP32→distill/QAT→INT8 (the 2 of 7 Phase 8 models `scripts/train.py` can't drive)
+11. `notebooks/phase_8_efficient_vit/phase8_results_analysis.ipynb` — Phase 8: cross-phase results analysis
+12. `notebooks/phase_9_pcad_bypass_ablation_analysis/phase9_ablation_analysis.ipynb` — Phase 9: Cross-phase PCAD results (bypass ablation, large-scale runs)
+13. `notebooks/phase_10_final_summary/` — Phase 10: final cross-project rollup (classification + detection + segmentation) across Phases 1–4/8/9
 
-Phase 7 (detection/segmentation) has no notebook — it's CLI-only via `scripts/train_det_seg.py`; see `docs/PHASE7_QUICKSTART.md`. Phase 8 is planned only (`ideas/PHASE8_PLAN.md`), no code yet. Full model/phase inventory: `CLAUDE.md`.
+Full model/phase inventory: `CLAUDE.md`.
 
 ---
 
@@ -66,8 +70,9 @@ All notebooks import from `ml/`:
 | 3a — Compensation | `compensation.py` | Architectural compensations for small kernels (bottleneck, residual, SE, etc.) |
 | 3b — Efficient Hybrids | `tinyhybridnet.py` | TinyHybridNet, TinyMobileNetV2 (MobileNet-style efficient CNNs) |
 | 4 — Final Architecture | `final_architecture.py` | Combines Phase 3's best mechanisms into final hybrid models |
+| 8 — Efficient ViT / Hybrid Attention | `vit_variants.py` | vit_tiny, deit_tiny, swin_pico_{w2,w4,w8}, swin_pico_poolmixer, hybrid_bottleneck_swin (implemented, training submitted to PCAD) |
 
-Phases 6–9 (hardware profiling, detection/segmentation, bypass ablation) reuse these model files rather than adding new ones. Full model inventory + per-phase file map: `CLAUDE.md`.
+Phases 6, 7, 9 (hardware profiling, detection/segmentation, bypass ablation) reuse Phase 1–4 model files rather than adding new ones. Full model inventory + per-phase file map: `CLAUDE.md`.
 
 ### `configs/` — Hyperparameter Defaults
 

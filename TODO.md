@@ -266,26 +266,28 @@ Models: reuse Phase 3's Pareto-optimal backbones (Bottleneck, Fire) as feature e
 
 ---
 
-## Phase 8 — Efficient Vision Transformers & Hybrid Attention Architectures
+## Phase 8 — Efficient Vision Transformers & Hybrid Attention Architectures ✅ (implemented, training submitted to PCAD)
 
 Explore whether attention-based models can match or exceed CNN efficiency within Winograd constraints. Investigate local-attention Vision Transformers as an alternative paradigm to small-kernel CNNs.
 
+**Status:** All 7 models implemented (`models/vit_variants.py`); training submitted to PCAD 2026-08-21, results not yet in. Hypotheses H1–H5 and the D6 QAT-for-attention revision are tracked in `ideas/PHASE8_PLAN.md` / `docs/PHASE8_LOG.md`, not here.
+
 Models:
 
-- [ ] Vision Transformer (ViT-Tiny) with local attention windows (e.g., 3×3 or 5×5 patches, local self-attention)
-- [ ] DeiT-Tiny (Knowledge-distilled ViT)
-- [ ] Hybrid CNN-Transformer (small-kernel CNN stem + local transformer blocks)
-- [ ] Lightweight attention variant (linear attention or depthwise attention)
+- ✅ Vision Transformer (ViT-Tiny)
+- ✅ DeiT-Tiny (Knowledge-distilled ViT, H4)
+- ✅ Hybrid CNN-Transformer (small-kernel CNN stem + local transformer blocks, H2)
+- ✅ Swin-style local-window variants: `swin_pico_{w2,w4,w8}` (H1 window sweep), `swin_pico_poolmixer` (H5)
 
 For each variant:
 
-- [ ] FP32 training
-- [ ] QAT fine-tuning
-- [ ] INT8 conversion
-- [ ] FP32 vs INT8 evaluation
-- [ ] Compare accuracy, latency, model size, and quantization robustness vs Phase 5–6 CNNs
-- [ ] Assess Winograd deployment feasibility (attention ops, memory layout)
-- [ ] Determine whether attention can substitute for large receptive fields in resource-constrained inference
+- ✅ FP32 training
+- ✅ QAT fine-tuning
+- ✅ INT8 conversion
+- [ ] FP32 vs INT8 evaluation — pending PCAD results
+- [ ] Compare accuracy, latency, model size, and quantization robustness vs Phase 5–6 CNNs — pending PCAD results
+- [ ] Assess Winograd deployment feasibility (attention ops, memory layout) — see H5 in `ideas/PHASE8_PLAN.md`
+- [ ] Determine whether attention can substitute for large receptive fields in resource-constrained inference — pending PCAD results
 
 ---
 
@@ -317,6 +319,8 @@ plan: `ideas/PHASE9_PLAN.md`.
 ## Phase 10 — Extended Architecture Search (Future)
 
 Note: Phase 9 is already executed — see `ideas/PHASE9_PLAN.md` (bypass ablation, structured pruning, compression measurement). This section was originally numbered "Phase 9" before that work existed; renumbered to avoid collision.
+
+Note: this is unrelated to `notebooks/phase_10_final_summary/` / `results/phase_10_final_summary/`, which is a completed cross-project rollup (classification + detection + segmentation summary across Phases 1–4/8/9), not this NAS work. Same number, two different things — the rollup got there first.
 
 If Phase 8 yields promising hybrid results, consider automated architecture search (NAS or evolutionary search) to discover optimal kernel-size, depth, width, and attention-ratio combinations under Winograd constraints.
 
