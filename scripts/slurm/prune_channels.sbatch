@@ -15,9 +15,9 @@ export MKL_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
 
 # Only matters for --finetune-epochs runs (long enough to hit a wall-clock limit); a plain
 # --dry-run/--evaluate call just exits before the signal ever fires. Same requeue pattern as
-# train.sbatch: forward Slurm's pre-timeout SIGUSR1 to the child so scripts.prune_channels'
+# train.sbatch: forward Slurm's pre-timeout SIGUSR1 to the child so scripts.phase9.prune_channels'
 # own handler can request_stop() and checkpoint, then requeue onto the next node.
-python -m scripts.prune_channels "$@" &
+python -m scripts.phase9.prune_channels "$@" &
 child=$!
 trap 'kill -USR1 "$child" 2>/dev/null || true; wait "$child"; scontrol requeue "$SLURM_JOB_ID" 2>/dev/null || true' USR1
 wait "$child"

@@ -9,8 +9,8 @@ Skips `*_resume.pth` (transient per-epoch training state, not a deployable artif
 any `.pth` that already has a `.pth.gz` sibling (idempotent — safe to re-run).
 
 Usage:
-    python -m scripts.backfill_gzip
-    python -m scripts.backfill_gzip --root checkpoints --root outputs/pcad/checkpoints
+    python -m scripts.phase7_tools.backfill_gzip
+    python -m scripts.phase7_tools.backfill_gzip --root checkpoints --root outputs/pcad/checkpoints
 """
 from __future__ import annotations
 

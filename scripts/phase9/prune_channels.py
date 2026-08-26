@@ -1,8 +1,8 @@
 """Structured (channel) pruning CLI — Phase 9 Task 2.
 
-    python -m scripts.prune_channels --model alexnet_bottleneck --ratio 0.4 --runtime local --dry-run
-    python -m scripts.prune_channels --model alexnet_bottleneck --ratio 0.4 --runtime local --evaluate
-    python -m scripts.prune_channels --model alexnet_bottleneck --ratio 0.4 --runtime local --finetune-epochs 200
+    python -m scripts.phase9.prune_channels --model alexnet_bottleneck --ratio 0.4 --runtime local --dry-run
+    python -m scripts.phase9.prune_channels --model alexnet_bottleneck --ratio 0.4 --runtime local --evaluate
+    python -m scripts.phase9.prune_channels --model alexnet_bottleneck --ratio 0.4 --runtime local --finetune-epochs 200
 
 Mechanics pass (ideas/PHASE9_PLAN.md Task 2): prunes each `_AlexBottleneck` block's
 internal squeeze width, then checks the result still forward-passes and (with

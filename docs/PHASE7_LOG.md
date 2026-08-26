@@ -108,7 +108,7 @@ Phase 7.
 
 **Commit:** (uncommitted this session)
 
-- **A1 (diagnose):** Ran `scripts/check_anchor_recall.py` to completion for all 3 backbones at both
+- **A1 (diagnose):** Ran `scripts/phase7_tools/check_anchor_recall.py` to completion for all 3 backbones at both
   256px and 512px (previously never finished — earlier attempts were killed by SIGKILL/OOM on the
   dev laptop, unrelated to the anchor logic itself). Confirmed recall well below the 95% bar at
   every combination (0.76–0.80) and resolution-independent — ruling out "just use bigger images"
@@ -145,12 +145,12 @@ Phase 7.
 - **Environment note:** this diagnostic work ran on the local laptop (not PCAD) as a workaround
   while PCAD's frontend node had CPU problems. `.venv` had drifted from `requirements.txt` (missing
   `sympy` + several other pinned packages) — resynced via `pip install -r requirements.txt`.
-  `scripts/check_anchor_recall.py` gained a `--num-workers` override (yaml default is 4, but the
+  `scripts/phase7_tools/check_anchor_recall.py` gained a `--num-workers` override (yaml default is 4, but the
   laptop needed 0 to avoid OOM at 512px — a milder version of the same `num_workers`-at-512px
   fragility already noted in `configs/experiments/phase7_diag_512.yaml`'s comment about job
   805529's segfault).
 - **A4 attempt 1 (failed, PCAD, jobs 809066-809074):** First post-fix retrain submission
-  (`bash scripts/submit_phase7_multinode.sh qat int8`) crashed all 3 FP32 jobs immediately after
+  (`bash scripts/pcad/submit_phase7_multinode.sh qat int8`) crashed all 3 FP32 jobs immediately after
   the anchor-recall check (which passed) — `RuntimeError` on `load_state_dict` inside
   `trainer.fit(resume_from=...)`. Root cause: `ml/det_seg_trainer.py`'s `fit()` unconditionally
   auto-resumes from `<run_dir>/<run_id>_resume.pth` if the path exists (`ml/checkpoint.py`'s
@@ -215,7 +215,7 @@ numbers; they are invalid, not just low.**
 now have valid metrics on disk (`outputs/detection_segmentation/phase7/ssd_*_phase7_detection*`).
 The INT8 observer-calibration crash (job 811101) is resolved — `scripts/train_det_seg.py`'s `int8`
 branch now saves a checkpoint and computes a size/params summary (backfilled onto older runs via
-`scripts/backfill_int8_size.py`), and the Fire backbone's INT8 concat-quantization mismatch is
+`scripts/phase7_tools/backfill_int8_size.py`), and the Fire backbone's INT8 concat-quantization mismatch is
 fixed (`models/compensation.py`, commit `565fef4`). Real numbers and a first read: `ideas/BEST_MODELS.md`
 Phase 7 section.
 

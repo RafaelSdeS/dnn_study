@@ -2,14 +2,14 @@
 """Quick anchor/GT-box overlap check — bounded sample, no training.
 
 Usage:
-    python scripts/check_anchor_recall.py --model alexnet_bottleneck --img-size 256 512
+    python scripts/phase7_tools/check_anchor_recall.py --model alexnet_bottleneck --img-size 256 512
 """
 import argparse
 import sys
 from dataclasses import replace
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import yaml
 

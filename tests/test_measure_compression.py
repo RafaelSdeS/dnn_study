@@ -2,7 +2,7 @@
 import torch
 import torch.nn as nn
 
-from scripts.measure_compression import cluster_weights
+from scripts.phase9.measure_compression import cluster_weights
 
 
 def _tiny_model():

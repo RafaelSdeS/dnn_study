@@ -52,16 +52,20 @@ scripts/                  # CLI entry points (used instead of notebooks for PCAD
   profile_hardware.py      # Phase 6 hardware profiling CLI
   aggregate_results.py     # Aggregates per-model summary JSONs from a cluster submit-sweep into one CSV
   winograd_quant_error.py  # Phase 6 extension: INT8 quantization error from Winograd F(2x2,3x3) transforms
-  measure_compression.py   # Phase 9 Task 3: entropy/k-means weight-compression headroom above plain gzip;
-                           #   --evaluate actually clusters the weights and measures real accuracy vs. FP32
-  prune_channels.py        # Phase 9 Task 2: structured (channel) pruning CLI;
-                           #   --finetune-epochs fine-tunes the pruned model then runs it through QAT->INT8
-  check_anchor_recall.py / backfill_gzip.py / backfill_int8_size.py  # one-off Phase 7 diagnostics / backfill tools
   oneoff_dilated_gap_local.py  # one-off lighter-budget local smoke run for alexnet_dilated_gap
-  migrate_pcad_gitignored.sh  # merges gitignored artifacts (*.pth, *.log) left in pre-reorg folder names after a pull
-  submit_phase7_simple.sh / submit_phase7_multinode.sh  # PCAD Phase 7 detection submission (simple vs FP32→QAT→INT8 chaining) — see docs/PHASE7_MULTINODE.md
-  submit_phase7_segmentation.sh / submit_phase7_segmentation_multinode.sh  # same, for segmentation (no --pretrained-ckpt support)
-  slurm/*.sbatch           # sbatch templates — train.sbatch/profile.sbatch submitted by cluster.py, det_seg.sbatch by the submit_phase7_*.sh scripts, others called directly
+  phase7_tools/            # Phase 7 one-off diagnostics / backfill tools (`python -m scripts.phase7_tools.<name>`)
+    check_anchor_recall.py / backfill_gzip.py / backfill_int8_size.py / backfill_int8_size_segmentation.py
+    diagnose_segmentation_quality.py / measure_true_model_size_detection.py / measure_true_model_size_segmentation.py
+  phase9/                  # Phase 9 CLIs (`python -m scripts.phase9.<name>`)
+    measure_compression.py # Task 3: entropy/k-means weight-compression headroom above plain gzip;
+                           #   --evaluate actually clusters the weights and measures real accuracy vs. FP32
+    prune_channels.py      # Task 2: structured (channel) pruning CLI;
+                           #   --finetune-epochs fine-tunes the pruned model then runs it through QAT->INT8
+  pcad/                    # PCAD submission wrappers
+    migrate_pcad_gitignored.sh  # merges gitignored artifacts (*.pth, *.log) left in pre-reorg folder names after a pull
+    submit_phase7_simple.sh / submit_phase7_multinode.sh  # PCAD Phase 7 detection submission (simple vs FP32→QAT→INT8 chaining) — see docs/PHASE7_MULTINODE.md
+    submit_phase7_segmentation.sh / submit_phase7_segmentation_multinode.sh  # same, for segmentation (no --pretrained-ckpt support)
+  slurm/*.sbatch           # sbatch templates — train.sbatch/profile.sbatch submitted by cluster.py, det_seg.sbatch by the pcad/submit_phase7_*.sh scripts, others called directly
 tests/                    # pytest: test_registry, test_checkpoint, test_config, test_trainer_smoke,
                           #   test_quantization, test_profiling, test_train_cli
 notebooks/                # Organized by phase + purpose

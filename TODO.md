@@ -304,12 +304,12 @@ plan: `ideas/PHASE9_PLAN.md`.
   bypass alone accounts for ~55% of Phase 4's full gain.** Runs:
   `outputs/pcad/phase_9_bypass_ablation/`, results CSVs:
   `outputs/pcad/results_aggregate/results_phase_9_fire_bypass*.csv`.
-- ✅ **Task 2 — Structured channel pruning** (`scripts/prune_channels.py`): prunes
+- ✅ **Task 2 — Structured channel pruning** (`scripts/phase9/prune_channels.py`): prunes
   `_AlexBottleneck`'s internal squeeze width. Verified against the real PCAD-trained checkpoint at
   ratio 0.4: params 385,000 → 207,399 (53.9% reduction), forward pass OK, every remaining conv
   stays `groups=1`. Accuracy collapses without fine-tuning (top1=0.50%), as expected — a
   fine-tuning loop to recover accuracy is out of scope for this phase.
-- ✅ **Task 3 — Compression measurement** (`scripts/measure_compression.py`): compares nominal
+- ✅ **Task 3 — Compression measurement** (`scripts/phase9/measure_compression.py`): compares nominal
   INT8 vs Shannon-entropy vs k-means weight-clustering (16/32/64 clusters) bits/weight. Full table
   for `alexnet_fire`: INT8 nominal 8.00 bits/weight (0.489 MB) vs. entropy 7.19 (0.440 MB) vs.
   k-means k=16/32/64 at 4/5/6 bits (0.245/0.306/0.367 MB).

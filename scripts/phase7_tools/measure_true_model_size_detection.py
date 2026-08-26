@@ -1,18 +1,18 @@
-"""Measure the *true* deployable size of Phase 7 segmentation checkpoints.
+"""Measure the *true* deployable size of Phase 7 detection (SSD) checkpoints.
 
-The on-disk `*_best.pth` size (what the notebook's `ckpt_size_mb` reads) and the existing
-`summary.model_size_mb` (from compute_segmentation_summary / scripts/backfill_int8_size_segmentation.py)
-both still include backbone_full's dead weight -- see ml.det_seg_models.trim_dead_backbone_weights
-for why: DetSegBackbone carries the *entire* classification network for pretrained-checkpoint
-loading, but forward() only uses a prefix of its `.features` and never touches `.classifier`.
-For alexnet_tv that dead weight is ~57M of ~58M "backbone" params (its stock torchvision
-classifier), so the raw checkpoint size barely reflects the deployed model and barely shrinks
-across FP32/QAT/INT8. This script rebuilds each stage's model from its checkpoint, drops that
-dead weight, and writes the honest size to metrics.json as `summary.true_size_mb` (existing
-fields are left alone for comparison).
+Detection counterpart to scripts/phase7_tools/measure_true_model_size_segmentation.py -- same bug, same fix.
+The existing `summary.model_size_mb` (from compute_detection_summary / scripts/phase7_tools/backfill_int8_size.py)
+still includes DetSegBackbone's dead weight: see ml.det_seg_models.trim_dead_backbone_weights for
+why. For alexnet_tv that dead weight is ~57M of ~58.5M "backbone" params (its stock torchvision
+classifier), so alexnet_tv's raw model_size_mb (~223MB) made it look far less size-efficient than
+bottleneck/fire in the accuracy-per-MB plot -- once true size is used, alexnet_tv is actually the
+most efficient of the three (true FP32 size ~4.1MB vs. bottleneck's ~5.8MB), matching what Part B
+(segmentation) already showed with true_size_mb. This script rebuilds each stage's model from its
+checkpoint, drops the dead weight, and writes the honest size to metrics.json as
+`summary.true_size_mb` (existing fields are left alone for comparison).
 
 Usage:
-    python -m scripts.measure_true_model_size_segmentation
+    python -m scripts.phase7_tools.measure_true_model_size_detection
 """
 from __future__ import annotations
 
@@ -25,12 +25,12 @@ import torch
 import yaml
 
 from ml.det_seg_models import (
-    build_deeplabv3_segmenter, build_qat_deeplabv3_segmenter, convert_deeplabv3_to_int8,
+    build_ssd_detector, build_qat_ssd_detector, convert_ssd_to_int8,
     trim_dead_backbone_weights,
 )
 
 RUN_NAME_RE = re.compile(
-    r"^seg_(?P<model>alexnet_(?:bottleneck|fire|tv))_(?P<stage>fp32|qat|int8)"
+    r"^ssd_(?P<model>alexnet_(?:bottleneck|fire|tv))_(?P<stage>fp32|qat|int8)"
     r"(?P<pretrained>_pretrained)?_(?P<exp>.+)$"
 )
 
@@ -57,7 +57,7 @@ def write_true_size(run_dir: Path, model: torch.nn.Module) -> None:
 def measure(phase7_dir: Path) -> None:
     device = torch.device("cpu")
 
-    for run_dir in sorted(phase7_dir.glob("seg_*")):
+    for run_dir in sorted(phase7_dir.glob("ssd_*")):
         if not run_dir.is_dir():
             continue
         m = RUN_NAME_RE.match(run_dir.name)
@@ -73,14 +73,14 @@ def measure(phase7_dir: Path) -> None:
         img_size = config["data"]["img_size"]
         state = torch.load(ckpt_path, map_location=device, weights_only=False)
 
-        fp32_skeleton = build_deeplabv3_segmenter(model_name, num_classes=21, image_size=img_size)
+        fp32_skeleton = build_ssd_detector(model_name, num_classes=21, image_size=img_size)
         if m.group("stage") == "fp32":
             model = fp32_skeleton
             model.load_state_dict(state)
             print(f"[measure] {run_dir.name} (fp32)")
             write_true_size(run_dir, model)
         else:
-            model_qat = build_qat_deeplabv3_segmenter(fp32_skeleton, device)
+            model_qat = build_qat_ssd_detector(fp32_skeleton, device)
             try:
                 model_qat.load_state_dict(state)
             except RuntimeError as e:
@@ -90,15 +90,15 @@ def measure(phase7_dir: Path) -> None:
             write_true_size(run_dir, model_qat)
 
             # Derive the matching INT8 run's true size too, same conversion the training
-            # script does at eval time -- see scripts/backfill_int8_size_segmentation.py.
+            # script does at eval time -- see scripts/phase7_tools/backfill_int8_size.py.
             int8_dir = run_dir.parent / run_dir.name.replace("_qat_", "_int8_")
             if not int8_dir.is_dir():
                 continue
-            model_qat2 = build_qat_deeplabv3_segmenter(
-                build_deeplabv3_segmenter(model_name, num_classes=21, image_size=img_size), device
+            model_qat2 = build_qat_ssd_detector(
+                build_ssd_detector(model_name, num_classes=21, image_size=img_size), device
             )
             model_qat2.load_state_dict(state)
-            model_int8 = convert_deeplabv3_to_int8(model_qat2)
+            model_int8 = convert_ssd_to_int8(model_qat2)
             print(f"[measure] {int8_dir.name} (int8, derived from {run_dir.name})")
             write_true_size(int8_dir, model_int8)
 

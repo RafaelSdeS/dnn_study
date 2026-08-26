@@ -5,16 +5,16 @@
 # Optionally chains QAT/INT8 runs after FP32 completes.
 #
 # Usage:
-#   bash scripts/submit_phase7_multinode.sh                 # FP32 only, from-scratch backbones
-#   bash scripts/submit_phase7_multinode.sh qat             # FP32 + QAT
-#   bash scripts/submit_phase7_multinode.sh qat int8        # FP32 + QAT + INT8
-#   bash scripts/submit_phase7_multinode.sh segmentation qat int8  # same, segmentation task
-#   bash scripts/submit_phase7_multinode.sh pretrained      # same, but init backbones from
+#   bash scripts/pcad/submit_phase7_multinode.sh                 # FP32 only, from-scratch backbones
+#   bash scripts/pcad/submit_phase7_multinode.sh qat             # FP32 + QAT
+#   bash scripts/pcad/submit_phase7_multinode.sh qat int8        # FP32 + QAT + INT8
+#   bash scripts/pcad/submit_phase7_multinode.sh segmentation qat int8  # same, segmentation task
+#   bash scripts/pcad/submit_phase7_multinode.sh pretrained      # same, but init backbones from
 #                                                            # their Tiny-ImageNet classification
 #                                                            # checkpoints instead of random init
 #                                                            # (separate run_id tree, doesn't
 #                                                            # collide with the from-scratch sweep)
-#   bash scripts/submit_phase7_multinode.sh --dry-run       # Show commands without submitting
+#   bash scripts/pcad/submit_phase7_multinode.sh --dry-run       # Show commands without submitting
 
 PROJECT_ROOT=$(git rev-parse --show-toplevel)
 cd "$PROJECT_ROOT"

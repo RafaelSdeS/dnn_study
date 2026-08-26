@@ -1,5 +1,5 @@
-"""scripts/prune_channels.py CLI: new --finetune-* flags parse with sane defaults."""
-from scripts.prune_channels import build_parser
+"""scripts/phase9/prune_channels.py CLI: new --finetune-* flags parse with sane defaults."""
+from scripts.phase9.prune_channels import build_parser
 
 
 def test_finetune_epochs_defaults_to_zero_off():

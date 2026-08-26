@@ -10,4 +10,4 @@ set -e
 cd $(git rev-parse --show-toplevel)
 source .venv/bin/activate
 
-python scripts/check_anchor_recall.py --model alexnet_bottleneck alexnet_fire alexnet_tv --img-size 512
+python scripts/phase7_tools/check_anchor_recall.py --model alexnet_bottleneck alexnet_fire alexnet_tv --img-size 512

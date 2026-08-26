@@ -16,4 +16,4 @@ fi
 export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
 export MKL_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
 
-python -m scripts.measure_compression "$@"
+python -m scripts.phase9.measure_compression "$@"

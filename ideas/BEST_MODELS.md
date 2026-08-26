@@ -349,17 +349,17 @@ FireResidual drops –0.59pp under QAT).
 little once training is run to completion — a plain Fire backbone plus one residual shortcut gets
 nearly all of the benefit at Fire's exact parameter count, and quantizes better doing it.
 
-**Task 2 — structured channel pruning** (`scripts/prune_channels.py`, `alexnet_bottleneck`,
+**Task 2 — structured channel pruning** (`scripts/phase9/prune_channels.py`, `alexnet_bottleneck`,
 ratio 0.4): 385,000 → 207,399 params (53.9%), forward-passes cleanly, every remaining `Conv2d`
 stays `groups=1` (Winograd-eligible by construction). Unfine-tuned accuracy collapses as expected
 (top1=0.50%, top5=2.35%) — this is a mechanics/Winograd-eligibility check, not a competitive
-pruned-accuracy result. `scripts/prune_channels.py --finetune-epochs` already implements the
+pruned-accuracy result. `scripts/phase9/prune_channels.py --finetune-epochs` already implements the
 fine-tuning loop (full FP32→QAT→INT8, mirrors `scripts/train.py`) but every PCAD submission
 attempt (jobs 812276-812278) crashed before Python ran — `scripts/slurm/prune_channels.sbatch`
 used a stale `TRAIN_REPO_ROOT`/conda-activate pattern that broke in a non-interactive batch shell.
 Fixed to match `det_seg.sbatch`'s proven `git rev-parse`+`.venv` pattern; not yet resubmitted.
 
-**Task 3 — compression headroom** (`scripts/measure_compression.py`, `alexnet_fire`): real INT8
+**Task 3 — compression headroom** (`scripts/phase9/measure_compression.py`, `alexnet_fire`): real INT8
 weights use 7.19 bits/weight (vs. 8.00 nominal); k-means weight-sharing at 16/32/64 clusters
 (4/5/6-bit) all beat the real on-disk gzip ratio (1.18×), with up to ~2.2× headroom at 16 clusters
 (weights-only) — gzip's DEFLATE is only capturing a fraction of the achievable compression on top

@@ -247,7 +247,7 @@ def run_detection(args):
 
         # Save the converted checkpoint and its real size (fp32/qat both do this; int8 didn't
         # until now, so past runs' metrics.json has accuracy but no summary — see
-        # scripts/backfill_int8_size.py for backfilling those).
+        # scripts/phase7_tools/backfill_int8_size.py for backfilling those).
         int8_ckpt_path = run_dir / f"{run_id}_best.pth"
         torch.save(model_int8.state_dict(), int8_ckpt_path)
         history["summary"] = compute_detection_summary(

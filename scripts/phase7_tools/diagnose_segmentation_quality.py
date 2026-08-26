@@ -9,7 +9,7 @@ prediction histogram is background-only), and a qualitative image/GT/pred grid.
 Runs FP32 checkpoints only (best-trained stage, most informative for this question).
 
 Usage:
-    python -m scripts.diagnose_segmentation_quality
+    python -m scripts.phase7_tools.diagnose_segmentation_quality
 """
 from __future__ import annotations
 

@@ -15,8 +15,8 @@ gzip size of the actual INT8 checkpoint file is reported separately as context â
 file includes biases/BN params/quantization metadata gzip also compresses, so its
 ratio isn't directly comparable to the weights-only numbers above it.
 
-    python -m scripts.measure_compression --model alexnet_fire --runtime local
-    python -m scripts.measure_compression --model alexnet_fire --runtime local --evaluate
+    python -m scripts.phase9.measure_compression --model alexnet_fire --runtime local
+    python -m scripts.phase9.measure_compression --model alexnet_fire --runtime local --evaluate
 
 --evaluate closes the gap left open by the measurement-only pass: it actually snaps
 each Conv2d/Linear weight to its nearest k-means centroid (not just sizes the result)

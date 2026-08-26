@@ -8,10 +8,10 @@
 # backbones only train from scratch.
 #
 # Usage:
-#   bash scripts/submit_phase7_segmentation_multinode.sh                 # FP32 only
-#   bash scripts/submit_phase7_segmentation_multinode.sh qat             # FP32 + QAT
-#   bash scripts/submit_phase7_segmentation_multinode.sh qat int8        # FP32 + QAT + INT8
-#   bash scripts/submit_phase7_segmentation_multinode.sh --dry-run       # Show commands without submitting
+#   bash scripts/pcad/submit_phase7_segmentation_multinode.sh                 # FP32 only
+#   bash scripts/pcad/submit_phase7_segmentation_multinode.sh qat             # FP32 + QAT
+#   bash scripts/pcad/submit_phase7_segmentation_multinode.sh qat int8        # FP32 + QAT + INT8
+#   bash scripts/pcad/submit_phase7_segmentation_multinode.sh --dry-run       # Show commands without submitting
 
 PROJECT_ROOT=$(git rev-parse --show-toplevel)
 cd "$PROJECT_ROOT"

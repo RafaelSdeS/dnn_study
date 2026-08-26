@@ -121,7 +121,7 @@ from the loss rather than being applied after the fact.
 - **Fits here because:** it's the "trained" version of what `measure_compression.py --evaluate`
   already does post-hoc — likely to close the accuracy gap the post-hoc k-means approach pays.
 - **Would touch:** a new fine-tuning loop with a mixture-prior regularization term, probably its
-  own script alongside `scripts/measure_compression.py` rather than modifying it in place.
+  own script alongside `scripts/phase9/measure_compression.py` rather than modifying it in place.
 - **Tradeoff:** meaningfully more implementation work than the other items here (custom
   regularized training loop, not just a post-hoc pass); best framed as a follow-up to the existing
   Phase 9 Task 3 result if that headroom turns out to matter.

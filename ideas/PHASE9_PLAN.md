@@ -264,7 +264,7 @@ H1's Result above for the full breakdown.
 
 ---
 
-## Task 2 — Structured (channel) pruning, scoped (`ml/pruning.py`, `scripts/prune_channels.py`) — Done
+## Task 2 — Structured (channel) pruning, scoped (`ml/pruning.py`, `scripts/phase9/prune_channels.py`) — Done
 
 **Scope refinement made during implementation:** rather than a general channel-propagation
 pruner (rank any conv's output, propagate to whatever consumes it — the "riskiest part" flagged
@@ -285,7 +285,7 @@ work if this scoped version proves useful.
    square) — the block's third (expand) conv only has its *input* narrowed, its output channel
    count (the block's public `out_ch`) is never touched. Every resulting conv keeps `groups=1` by
    construction. `ml/pruning.py::prune_bottleneck_block`/`prune_model_channels`.
-3. **CLI:** `python -m scripts.prune_channels --model alexnet_bottleneck --ratio 0.4 --runtime local`,
+3. **CLI:** `python -m scripts.phase9.prune_channels --model alexnet_bottleneck --ratio 0.4 --runtime local`,
    `--dry-run` prints the before/after `mid_ch` per block with no checkpoint/model build;
    `--evaluate` additionally runs `Trainer.evaluate()` on the real Tiny-ImageNet val set.
 
@@ -314,7 +314,7 @@ Scope & Effort.
 
 ---
 
-## Task 3 — Compression measurement (`scripts/measure_compression.py`) — Done
+## Task 3 — Compression measurement (`scripts/phase9/measure_compression.py`) — Done
 
 One-off measurement script, not part of the `ml/` package surface since it produces a report, not
 reusable training/quantization infra. **Correction from the original scope:** uses
@@ -407,7 +407,7 @@ the propagation problem this note originally raised.
 ### 3. `scipy` (not `sklearn`) availability — Resolved
 `sklearn` is **not** installed in this project's `.venv` (checked directly). `scipy` is
 (1.17.1) — `scipy.cluster.vq.kmeans2` covers Task 3's k-means step with no new dependency, so
-`scripts/measure_compression.py` uses that instead of `sklearn.cluster.KMeans`. See Task 3's
+`scripts/phase9/measure_compression.py` uses that instead of `sklearn.cluster.KMeans`. See Task 3's
 correction note.
 
 ---
@@ -423,7 +423,7 @@ correction note.
       `outputs/pcad/phase_9_bypass_ablation/fire_bypass/alexnet_fire_bypass/results/alexnet_fire_bypass_summary.json`
 - [x] `pytest tests/` passes, in particular `test_registry.py` and `test_quantization.py`, after
       adding the new model/registration
-- [x] `scripts/prune_channels.py --dry-run` prints channel counts without writing files
+- [x] `scripts/phase9/prune_channels.py --dry-run` prints channel counts without writing files
 - [x] Pruned model forward-passes at `(1,3,64,64)` and every remaining `Conv2d.groups == 1`
 - [x] `Trainer.evaluate()` runs without shape errors on the pruned (unfine-tuned) model — real run
       against `outputs/pcad/archive_legacy_phases/phase_4_5_large_scale/alexnet_bottleneck`, see Task 2 results
