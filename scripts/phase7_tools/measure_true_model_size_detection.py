@@ -83,9 +83,22 @@ def measure(phase7_dir: Path) -> None:
             model_qat = build_qat_ssd_detector(fp32_skeleton, device)
             try:
                 model_qat.load_state_dict(state)
-            except RuntimeError as e:
-                print(f"  [skip] {run_dir.name}: checkpoint doesn't match current QAT prep code: {e}")
-                continue
+            except RuntimeError:
+                # Older checkpoints (pre Fire-module INT8-concat fix) lack the FloatFunctional
+                # cat's activation_post_process observer buffers -- a handful of scalar
+                # tensors (scale/zero_point/min_val/max_val) added later, never present in
+                # weights trained before the fix. strict=False leaves those at their freshly
+                # -initialized defaults; since they're a few bytes total against an MB-scale
+                # state_dict, true_size_mb is unaffected to reported precision. Verified against
+                # bottleneck/tv, whose true-vs-raw gap (~0.2MB, dead backbone weight trimmed) is
+                # the same magnitude with or without this fallback.
+                missing, unexpected = model_qat.load_state_dict(state, strict=False)
+                if unexpected:
+                    print(f"  [skip] {run_dir.name}: unexpected keys beyond the known observer "
+                          f"gap, not just missing ones -- needs manual review: {unexpected}")
+                    continue
+                print(f"  [note] {run_dir.name}: loaded with strict=False, "
+                      f"{len(missing)} missing observer buffer(s) left at default init")
             print(f"[measure] {run_dir.name} (qat)")
             write_true_size(run_dir, model_qat)
 
@@ -97,7 +110,7 @@ def measure(phase7_dir: Path) -> None:
             model_qat2 = build_qat_ssd_detector(
                 build_ssd_detector(model_name, num_classes=21, image_size=img_size), device
             )
-            model_qat2.load_state_dict(state)
+            model_qat2.load_state_dict(state, strict=False)
             model_int8 = convert_ssd_to_int8(model_qat2)
             print(f"[measure] {int8_dir.name} (int8, derived from {run_dir.name})")
             write_true_size(int8_dir, model_int8)

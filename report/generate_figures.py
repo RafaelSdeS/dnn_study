@@ -21,6 +21,7 @@ Data source: results/results_aggregate/results_cross_phase.csv +
 results/phase_4_compression_and_final_architecture_training/final_comparison.csv
 """
 
+import json
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -388,7 +389,12 @@ print("✓ phase6_latency_vs_kernel_size.png")
 plt.close()
 
 
-# ====== Figure: Accuracy vs. Size — every model discussed in this report, FP32 & INT8 ======
+# ====== Figure: Accuracy vs. Size — 15-model subset, data source for the MACs companion below ======
+# NOT the report's "accuracy_vs_size_all_models.png" (that's the real 33-model/4-panel figure from
+# notebooks/phase_10_final_summary/final_summary.ipynb, cell 12 -- copied in as a file below; this
+# script previously duplicated the filename with a simplified single-panel/15-model reproduction,
+# silently overwriting the real one, while the report's caption/prose kept describing the 33-model
+# version. This block now only exists to build size_acc_df/DISPLAY_NAME for the MACs figure).
 # Same visual language as the accuracy-vs-latency Pareto figure above (gray FP32->INT8 connector,
 # BLUE/RED circle/square markers, log-x, offset-search labels) but x-axis is model size instead of
 # latency. Phase 4/9 hybrids aren't in results_cross_phase.csv (three different CSV schemas across
@@ -415,12 +421,29 @@ for base in ["alexnet_final_fire_residual", "alexnet_final_bottleneck_fire",
     _p4_pairs.append({"model": base, "fp32_top1": fp32_row["top1_%"], "fp32_size_mb": fp32_row["size_MB"],
                        "int8_top1": int8_row["top1_%"], "int8_size_mb": int8_row["size_MB"]})
 
-_p9 = pd.read_csv("outputs/pcad/results_aggregate/results_phase_9_fire_bypass_large_scale.csv").iloc[0]
+# The aggregate CSV this used to read (outputs/pcad/results_aggregate/results_phase_9_fire_bypass_
+# large_scale.csv) was a git-ignored artifact removed by a later repo cleanup; the run's own
+# per-model summary JSON has the same numbers and is still tracked.
+_p9 = json.load(open(
+    "outputs/pcad/phase_9_bypass_ablation/fire_bypass_large_scale/alexnet_fire_bypass/"
+    "results/alexnet_fire_bypass_summary.json"))
 _p4_pairs.append({"model": "alexnet_fire_bypass", "fp32_top1": _p9["fp32_top1"],
                    "fp32_size_mb": _p9["fp32_size_mb"], "int8_top1": _p9["int8_top1"],
                    "int8_size_mb": _p9["int8_size_mb"]})
 
 size_acc_df = pd.concat([size_acc_rows, pd.DataFrame(_p4_pairs)], ignore_index=True)
+
+# MACs for the same 15 models, reused below for the MACs-vs-accuracy companion figure. The 10
+# base models are in model_details_cross_phase.csv; the Phase 4/9 hybrids aren't (same schema gap
+# as the accuracy/size data above), so their MACs come from their own per-model summary JSONs.
+_macs_by_model = pd.read_csv("results/results_aggregate/model_details_cross_phase.csv") \
+    .set_index("model_name")["macs"].to_dict()
+for _base in ["alexnet_final_fire_residual", "alexnet_final_bottleneck_fire",
+              "alexnet_final_bottleneck_residual", "alexnet_final_depthwise_fire"]:
+    _macs_by_model[_base] = json.load(open(
+        f"results/phase_4_compression_and_final_architecture_training/{_base}_summary.json"))["macs"]
+_macs_by_model["alexnet_fire_bypass"] = _p9["macs"]
+size_acc_df["macs_m"] = size_acc_df["model"].map(_macs_by_model) / 1e6
 
 DISPLAY_NAME = {
     "alexnet_tv": "AlexNet (irrestrita)", "alexnet_3x3_fc": "AlexNet3x3-FC",
@@ -494,9 +517,233 @@ ax.add_artist(leg1)
 
 ax.grid(alpha=0.3)
 
-fig.suptitle("Acurácia vs. tamanho: todos os modelos discutidos neste relatório (FP32 e INT8)",
+fig.suptitle("Acurácia vs. tamanho: 15-modelo subset (Fases 1-4/9), fonte da Figura MACs",
              fontsize=12, color=TEXT_PRIMARY)
 fig.tight_layout()
-plt.savefig(OUTPUT_DIR / "accuracy_vs_size_all_models.png", dpi=150, bbox_inches="tight", facecolor="white")
+plt.savefig(OUTPUT_DIR / "accuracy_vs_size_15model_subset.png", dpi=150, bbox_inches="tight", facecolor="white")
+print("✓ accuracy_vs_size_15model_subset.png (not embedded in the report -- data source only)")
+plt.close()
+
+# ====== Figure: Accuracy vs. Size — real 33-model, 4-panel figure (the report's actual
+# "accuracy_vs_size_all_models.png") ======
+# Reproduced here from notebooks/phase_10_final_summary/final_summary.ipynb, cell 12, instead of
+# copying that cell's PNG output in as a file: the notebook labels each of the 6 groups "Phase N —
+# ..." (English, and "Phase" doesn't appear anywhere else in this Portuguese-language report), and
+# renders the color legend at the notebook's small default size. Both are fixed below by relabeling
+# PHASE_DIRS in Portuguese from the start (everything downstream -- PHASE_ORDER, the legend --
+# derives from those strings) and by bumping the legend's fontsize/handle size. The underlying data
+# assembly (PHASE_DIRS, SHARED_COLS, cross-frame dedup, pareto_front_mask) is otherwise unchanged
+# from the notebook, so the two 8/33 and 5/30 Pareto-front counts in the report's caption still hold.
+def _load_summary_jsons(root: Path, group_label: str) -> pd.DataFrame:
+    if not root.exists():
+        return pd.DataFrame()
+    rows = []
+    for path in sorted(root.rglob("*_summary.json")):
+        if path.name == "experiment_summary.json" or path.name.endswith("_compression_summary.json"):
+            continue
+        rows.append(json.loads(path.read_text()))
+    df = pd.DataFrame(rows)
+    if df.empty:
+        return df
+    df["phase"] = group_label
+    if "model_name" in df.columns and "epochs" in df.columns:
+        df = df.sort_values("epochs").drop_duplicates(subset="model_name", keep="last").reset_index(drop=True)
+    return df
+
+
+GROUP_DIRS = {
+    "Baselines externos": Path("results/phase_1_baseline_training"),
+    "Variantes AlexNet (kernel restrito)": Path("results/phase_2_kernel_restriction_training"),
+    "Compensação estrutural": Path("results/phase_3_compensation_and_hybrids_training"),
+    "Arquitetura final": Path("results/phase_4_compression_and_final_architecture_training"),
+    "Ablação do atalho (bypass)": Path("outputs/pcad/phase_9_bypass_ablation"),
+}
+_group8_csv = Path("results/phase_8_efficient_vit_hybrid_attention_analysis/phase8_comparison.csv")
+
+_frames = [_load_summary_jsons(d, label) for label, d in GROUP_DIRS.items()]
+if _group8_csv.exists():
+    _df8 = pd.read_csv(_group8_csv)
+    _df8["phase"] = "Atenção local eficiente"
+    _frames.append(_df8)
+
+_shared_cols = [
+    "phase", "model_name", "fp32_top1", "fp32_top5", "int8_top1", "int8_top5",
+    "fp32_size_mb", "int8_size_mb",
+]
+_frames = [f for f in _frames if not f.empty]
+df_all_classification = pd.concat(
+    [f[[c for c in _shared_cols if c in f.columns]] for f in _frames], ignore_index=True,
+) if _frames else pd.DataFrame(columns=_shared_cols)
+df_all_classification = df_all_classification.drop_duplicates(subset="model_name", keep="last").reset_index(drop=True)
+GROUP_ORDER = sorted(df_all_classification["phase"].dropna().unique().tolist())
+GROUP_CMAP = plt.get_cmap("tab10")
+
+
+def _pareto_front_mask(xs, ys):
+    xs, ys = np.asarray(xs, float), np.asarray(ys, float)
+    dominated = np.zeros(len(xs), dtype=bool)
+    for i in range(len(xs)):
+        for j in range(len(xs)):
+            if i != j and xs[j] <= xs[i] and ys[j] >= ys[i] and (xs[j] < xs[i] or ys[j] > ys[i]):
+                dominated[i] = True
+                break
+    return ~dominated
+
+
+_panels = [
+    ("fp32_size_mb", "fp32_top1", "FP32", "Top-1"),
+    ("fp32_size_mb", "fp32_top5", "FP32", "Top-5"),
+    ("int8_size_mb", "int8_top1", "INT8", "Top-1"),
+    ("int8_size_mb", "int8_top5", "INT8", "Top-5"),
+]
+with plt.style.context("seaborn-v0_8-whitegrid"):
+    fig, axes = plt.subplots(2, 2, figsize=(15, 11), facecolor="white")
+    for ax, (size_col, acc_col, precision, metric) in zip(axes.flat, _panels):
+        df_size = df_all_classification[
+            df_all_classification[acc_col].notna() & df_all_classification[size_col].notna()
+        ].copy()
+        mask = _pareto_front_mask(df_size[size_col].values, df_size[acc_col].values)
+        pf = df_size[mask].sort_values(size_col)
+        point_colors = [GROUP_CMAP(GROUP_ORDER.index(p) % 10) for p in df_size["phase"]]
+        ax.scatter(df_size[size_col], df_size[acc_col], c=point_colors, s=90,
+                   edgecolors="white", lw=0.5, alpha=0.9, zorder=3)
+        ax.step(pf[size_col], pf[acc_col], where="post", color="black", lw=1.2, ls="--", alpha=0.6, zorder=2)
+        for _, row in pf.iterrows():
+            ax.annotate(row["model_name"], (row[size_col], row[acc_col]), xytext=(5, 5),
+                       textcoords="offset points", fontsize=7, fontweight="bold")
+        ax.set_xscale("log")
+        ax.set_xlabel(f"Tamanho {precision} do modelo (MB, escala log)")
+        ax.set_ylabel(f"Acurácia {precision} {metric} (%)")
+        ax.set_title(f"{precision} {metric} (fronteira de Pareto: {len(pf)}/{len(df_size)})")
+
+    handles = [plt.Rectangle((0, 0), 1, 1, color=GROUP_CMAP(i % 10)) for i in range(len(GROUP_ORDER))]
+    fig.legend(handles, GROUP_ORDER, loc="lower center", bbox_to_anchor=(0.5, -0.05), ncol=3,
+              fontsize=14, title="Grupo de modelos", title_fontsize=15,
+              handlelength=1.8, handleheight=1.8, markerscale=1.5)
+    fig.suptitle("Acurácia vs. Tamanho — Fronteiras de Pareto (todos os modelos de classificação)",
+                fontsize=13)
+    plt.tight_layout(rect=[0, 0.08, 1, 0.97])
+    plt.savefig(OUTPUT_DIR / "accuracy_vs_size_all_models.png", bbox_inches="tight", facecolor="white")
 print("✓ accuracy_vs_size_all_models.png")
+plt.close()
+
+
+# ====== Figure: MACs vs. Accuracy — same 15 models, same visual language ======
+# MACs don't change between FP32 and INT8 (same architecture, same multiply-accumulate count), so
+# each model is a single x position with a vertical FP32->INT8 connector instead of the diagonal
+# one above.
+point_colors = size_acc_df["model"].map(MODEL_GROUP).map(GROUP_COLORS)
+
+fig, ax = plt.subplots(figsize=(13, 7), facecolor="white")
+
+for _, row in size_acc_df.iterrows():
+    ax.plot([row["macs_m"], row["macs_m"]], [row["fp32_top1"], row["int8_top1"]],
+            color="0.85", linewidth=1, zorder=1)
+
+ax.scatter(size_acc_df["macs_m"], size_acc_df["fp32_top1"], marker="o", c=point_colors,
+           s=100, alpha=0.9, zorder=3, edgecolors="white", linewidths=0.7)
+ax.scatter(size_acc_df["macs_m"], size_acc_df["int8_top1"], marker="s", c=point_colors,
+           s=100, alpha=0.9, zorder=3, edgecolors="white", linewidths=0.7)
+
+fp32_frontier = _pareto_frontier(size_acc_df["macs_m"], size_acc_df["fp32_top1"])
+int8_frontier = _pareto_frontier(size_acc_df["macs_m"], size_acc_df["int8_top1"])
+ax.plot([p[0] for p in fp32_frontier], [p[1] for p in fp32_frontier], linestyle="--",
+        color="0.3", linewidth=1.8, zorder=2)
+ax.plot([p[0] for p in int8_frontier], [p[1] for p in int8_frontier], linestyle=":",
+        color="0.3", linewidth=1.8, zorder=2)
+
+ax.set_xscale("log")
+ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:g}"))
+
+all_xs = pd.concat([size_acc_df["macs_m"], size_acc_df["macs_m"]]).to_numpy()
+all_ys = pd.concat([size_acc_df["fp32_top1"], size_acc_df["int8_top1"]]).to_numpy()
+labels = [DISPLAY_NAME[m] for m in size_acc_df["model"]] * 2
+_label_points(ax, all_xs, all_ys, labels, fontsize=7)
+
+ax.set_xlabel("MACs (M, log scale)", fontsize=11, color=TEXT_PRIMARY)
+ax.set_ylabel("Top-1 accuracy (%)", fontsize=11, color=TEXT_PRIMARY)
+
+leg1 = ax.legend(handles=shape_legend, loc="lower left", fontsize=8.5, frameon=False)
+group_legend = [Patch(facecolor=c, label=g) for g, c in GROUP_COLORS.items()]
+ax.legend(handles=group_legend, loc="center right", bbox_to_anchor=(1.0, 0.62),
+          fontsize=8.5, frameon=False)
+ax.add_artist(leg1)
+
+ax.grid(alpha=0.3)
+
+fig.suptitle("Acurácia vs. MACs: todos os modelos discutidos neste relatório (FP32 e INT8)",
+             fontsize=12, color=TEXT_PRIMARY)
+fig.tight_layout()
+plt.savefig(OUTPUT_DIR / "macs_vs_accuracy_all_models.png", dpi=150, bbox_inches="tight", facecolor="white")
+print("✓ macs_vs_accuracy_all_models.png")
+plt.close()
+
+
+# ====== Figure: Eixo 6 detection accuracy vs. true model size (bigger legend) ======
+# Reproduced from notebooks/phase_7_detection_segmentation_analysis/phase7_results_analysis.ipynb,
+# cell 19 -- same 9 post-anchor-fix, non-pretrained SSD detection runs (3 backbones x FP32/QAT/INT8),
+# same true_size_mb-with-model_size_mb-fallback logic, same MODEL_COLORS (PALETTE[2]/[1]/[0] for
+# bottleneck/fire/tv) and FP32/QAT/INT8 marker shapes -- just both legends enlarged (were
+# fontsize=8.5, matching this report's other small-legend figures before the Figure 4 fix).
+_p7_dir = Path("outputs/detection_segmentation/phase7")
+_p7_models = ["alexnet_bottleneck", "alexnet_fire", "alexnet_tv"]
+# ml/plotting.py's PALETTE[2]/[1]/[0] -- same colors the source notebook used.
+_p7_colors = {"alexnet_bottleneck": "#1baf7a", "alexnet_fire": "#eb6834", "alexnet_tv": "#2a78d6"}
+_p7_markers = {"fp32": "o", "qat": "s", "int8": "^"}
+
+_p7_rows = []
+for _model in _p7_models:
+    for _stage in ("fp32", "qat", "int8"):
+        _run = _p7_dir / f"ssd_{_model}_{_stage}_phase7_detection" / "metrics.json"
+        _d = json.loads(_run.read_text())
+        _mAP = _d["best_val_mAP"] if "best_val_mAP" in _d else _d["val_mAP"][0]
+        _summary = _d["summary"]
+        _true = _summary.get("true_size_mb")
+        _size_mb = _true if _true is not None else _summary.get("model_size_mb")
+        _p7_rows.append({"model": _model, "stage": _stage, "mAP": _mAP, "size_mb": _size_mb,
+                         "is_true": _true is not None})
+p7_df = pd.DataFrame(_p7_rows)
+
+fig, ax = plt.subplots(figsize=(7.5, 5), facecolor="white")
+for _model in _p7_models:
+    sub = p7_df[p7_df.model == _model].set_index("stage")
+    pts = [(sub.loc[s, "size_mb"], sub.loc[s, "mAP"]) for s in ("fp32", "qat", "int8") if s in sub.index]
+    xs, ys = zip(*pts)
+    ax.plot(xs, ys, color="0.8", linewidth=1, zorder=1)
+
+any_estimated = False
+for _, row in p7_df.iterrows():
+    any_estimated = any_estimated or not row["is_true"]
+    ax.scatter(row["size_mb"], row["mAP"], s=100, marker=_p7_markers[row["stage"]],
+              facecolor=_p7_colors[row["model"]] if row["is_true"] else "none",
+              edgecolor=_p7_colors[row["model"]], linewidth=0.7 if row["is_true"] else 1.6, zorder=3)
+
+ax.set_xscale("log")
+ax.set_xlabel("Model size (MB, log scale)")
+ax.set_ylabel("Detection mAP")
+_title = "Accuracy vs. True Model Size (FP32/QAT/INT8"
+_title += "; hollow = uncorrected/estimated size)" if any_estimated else ")"
+ax.set_title(_title)
+
+stage_legend = [
+    Line2D([0], [0], marker="o", color="w", markerfacecolor="0.4", markeredgecolor="black", markersize=13, label="FP32"),
+    Line2D([0], [0], marker="s", color="w", markerfacecolor="0.4", markeredgecolor="black", markersize=13, label="QAT"),
+    Line2D([0], [0], marker="^", color="w", markerfacecolor="0.4", markeredgecolor="black", markersize=13, label="INT8"),
+]
+if any_estimated:
+    stage_legend.append(Line2D([0], [0], marker="o", color="w", markerfacecolor="none",
+                               markeredgecolor="0.4", markersize=13, label="size uncorrected/estimated"))
+model_legend = [Line2D([0], [0], marker="o", color="w", markerfacecolor=c, markersize=13, label=m)
+               for m, c in _p7_colors.items()]
+leg1 = ax.legend(handles=stage_legend, loc="upper left", fontsize=13, frameon=False)
+# Below the axes, not "lower right" -- at this legend size that corner sat on top of the
+# alexnet_fire QAT/INT8 points (the two lowest-mAP, ~0.06-0.065, near x=3.5-6.6 MB).
+ax.legend(handles=model_legend, loc="upper center", bbox_to_anchor=(0.5, -0.13), ncol=3,
+          fontsize=13, frameon=False)
+ax.add_artist(leg1)
+ax.grid(alpha=0.3)
+
+fig.tight_layout()
+plt.savefig(OUTPUT_DIR / "phase7_accuracy_vs_size.png", dpi=150, bbox_inches="tight", facecolor="white")
+print("✓ phase7_accuracy_vs_size.png")
 plt.close()
