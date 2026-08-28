@@ -751,6 +751,101 @@ utilizada), mas seu tamanho real é de apenas 4,10 MB — menor que os 5,76 MB d
 \texttt{AlexNetBottleneck} — tornando-o o \textit{backbone} mais eficiente em tamanho real nas duas
 tarefas, um resultado que o tamanho bruto do \textit{checkpoint} escondia por completo.
 
+\textbf{Comparação com a literatura.} Antes de comparar valores absolutos, uma ressalva
+metodológica central sobre a própria métrica: o mAP da Tabela~\ref{tab:phase7_detection} é a média
+sobre 10 limiares de IoU (0,50--0,95, convenção COCO — \texttt{torchmetrics}, chave \texttt{"map"},
+\texttt{ml/det\_seg\_trainer.py:276}), \emph{não} o mAP@IoU=0,5 de limiar único que toda a
+literatura de detecção citada abaixo usa (convenção PASCAL VOC). O mesmo treino já calcula esse
+mAP@0,5 (chave \texttt{"map\_50"}, \texttt{ml/det\_seg\_trainer.py:277}); é ele, não o mAP da
+Tabela~\ref{tab:phase7_detection}, que a Tabela~\ref{tab:lit_comparison_detection} usa abaixo, para
+comparar de fato a mesma métrica. Em segmentação essa discrepância não existe — o mIoU usado
+(\textit{macro} sobre 21 classes, \texttt{ignore\_index=255} para pixels de fronteira,
+\texttt{ml/det\_seg\_trainer.py:320--322}) já segue a convenção padrão da literatura —, mas outras
+três diferenças de protocolo permanecem, checáveis no código: os \textit{backbones}
+(0,39--0,52M parâmetros) são pré-treinados em Tiny ImageNet-200 (64$\times$64, 200 classes), não em
+ImageNet completo; a segmentação usa o \textit{split} original de VOC2012
+(\texttt{ml/det\_seg\_data.py}, 1.464 imagens de treino) a 256px, sem o aumento via anotações SBD
+usado por praticamente toda a literatura de segmentação ($\sim$10.582 imagens, 480--513px de
+\textit{crop}); e a detecção treina por apenas 30 épocas sobre VOC07+12 \textit{trainval}, uma
+fração do orçamento de $\sim$240 épocas-equivalente do SSD original. As Tabelas
+\ref{tab:lit_comparison_detection}--\ref{tab:lit_comparison_segmentation} situam os três
+\textit{backbones} contra referências de detecção e segmentação eficientes usando acurácia por
+megabyte de modelo real implantado (\textit{true\_size\_mb}) — um eixo de comparação mais justo que
+a acurácia bruta, e mais alinhado à motivação de eficiência deste projeto.
+
+\begin{table}[!t]
+\caption{Detecção: eficiência acurácia/tamanho vs. literatura (VOC, mAP@IoU=0,5 por MB de modelo
+real — mesma convenção da literatura citada; note-se que difere do mAP médio sobre IoU 0,5--0,95 da
+Tabela~\ref{tab:phase7_detection})}
+\label{tab:lit_comparison_detection}
+\centering
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Modelo} & \textbf{Tam. (MB)} & \textbf{mAP@0,5} & \textbf{mAP@0,5/MB} \\
+\midrule
+SSD300 (VGG16) \cite{liu2016ssd} & $\sim$105 & 77,2\% & 0,73 \\
+Fire SSD \cite{liau2018firessd} & $\sim$26 & 70,7\% & 2,72 \\
+MobileNet-SSD \cite{howard2017mobilenets} & 22,0 & 68,0\% & 3,09 \\
+Pelee \cite{wang2018pelee} & 21,7 & 70,9\% & 3,26 \\
+Tiny-DSOD \cite{li2018tinydsod} & 3,8 & 72,1\% & \textbf{18,97} \\
+\midrule
+\texttt{AlexNetFire} FP32 & 6,26 & 29,27\% & 4,68 \\
+\texttt{AlexNetBottleneck} FP32 & 5,76 & 47,46\% & 8,25 \\
+\texttt{AlexNetTV} FP32 & 4,10 & 37,67\% & 9,19 \\
+\texttt{AlexNetFire} INT8 & $\sim$3,3 & 22,48\% & $\sim$6,49 \\
+\texttt{AlexNetTV} INT8 & 2,22 & 33,09\% & 14,92 \\
+\texttt{AlexNetBottleneck} INT8 & 3,14 & 47,83\% & \textbf{15,23} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[!t]
+\caption{Segmentação: eficiência acurácia/tamanho vs. literatura (VOC2012, mIoU por MB de modelo real)}
+\label{tab:lit_comparison_segmentation}
+\centering
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Modelo} & \textbf{Tam. (MB)} & \textbf{mIoU} & \textbf{mIoU/MB} \\
+\midrule
+FCN-8s (VGG16) \cite{long2015fcn} & $\sim$536 & 62,2\% & 0,116 \\
+DeepLabv3 (ResNet-101) \cite{chen2017rethinking} & $\sim$236 & 85,7\% & 0,363 \\
+DeepLabv3 + MobileNetV2 \cite{sandler2018mobilenetv2} & $\sim$18 & 70,0--75,7\% & 3,88--4,19 \\
+\midrule
+\texttt{AlexNetFire} FP32 & 12,63 & 17,03\% & 1,35 \\
+\texttt{AlexNetBottleneck} FP32 & 12,13 & 17,84\% & 1,47 \\
+\texttt{AlexNetTV} FP32 & 10,26 & 16,34\% & 1,59 \\
+\texttt{AlexNetBottleneck} INT8 & 11,19 & 17,91\% & 1,60 \\
+\texttt{AlexNetTV} INT8 & 9,32 & 16,21\% & \textbf{1,74} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Duas leituras, já com a métrica de detecção corrigida para mAP@0,5. Primeiro, contra modelos densos
+clássicos não desenhados para eficiência de implantação (SSD300/VGG16, FCN-8s/VGG16,
+DeepLabv3/ResNet-101), os três \textit{backbones} vencem com folga em acurácia por MB —
+$\sim$21$\times$ (\texttt{AlexNetBottleneck} INT8 vs. SSD300) em detecção, $\sim$15$\times$
+(\texttt{AlexNetTV} INT8 vs. FCN-8s) e $\sim$4,8$\times$ (vs. DeepLabv3/ResNet-101) em segmentação
+— mas essa comparação favorece o \textit{design} deste projeto quase por construção, já que aqueles
+\textit{baselines} nunca miraram tamanho de implantação; a comparação com DeepLabv3/ResNet-101
+mistura ainda \textit{splits} distintos (85,7\% é medido no \textit{test set} oficial via servidor
+de submissão, contra o \textit{split} \textit{val} usado aqui e por DeepLabv3+MobileNetV2 —
+\textit{test} tende a reportar levemente mais alto). Segundo, contra \textit{designs} mobile-first
+dedicados a esse mesmo objetivo, o quadro em detecção muda bastante depois da correção de métrica:
+\texttt{AlexNetBottleneck}/\texttt{AlexNetTV} INT8 (14,9--15,2 mAP@0,5/MB) já \emph{superam}
+MobileNet-SSD, Pelee e Fire SSD (2,7--3,3) por $4,7$--$5,6\times$, e ficam a apenas
+$\sim$1,25$\times$ de \texttt{Tiny-DSOD} (18,97) — o \textit{design} dedicado ainda vence, mas por
+uma margem pequena, não pela ordem de grandeza que a métrica COCO sugeriria se usada por engano. Em
+segmentação, onde a métrica já era diretamente comparável, a distância dos mobile-first permanece
+maior: DeepLabv3+MobileNetV2 é $\sim$2,2--2,4$\times$ mais eficiente em mIoU/MB que o melhor ponto
+deste estudo — sugerindo que, nessa tarefa, a diferença de dado (VOC2012 sem aumento SBD, 256px)
+pesa mais do que pesou em detecção. Uma ressalva de justiça permanece: nenhuma referência
+mobile-first citada reporta uma variante INT8 no artigo original, então a comparação usa o FP32
+delas contra o INT8 (mais compacto) destes modelos — em FP32 puro,
+\texttt{AlexNetBottleneck}/\texttt{AlexNetTV} já ficam em 8,3--9,2 mAP@0,5/MB, também acima de
+MobileNet-SSD/Pelee/Fire SSD e a $\sim$2$\times$ de \texttt{Tiny-DSOD}. \texttt{AlexNetFire} é o
+pior dos três nesta métrica em ambas as tarefas, reforçando o achado anterior de que o mecanismo
+Fire não transfere bem para predição densa.
+
 \textbf{Limitações deste eixo.} Qualquer estatística de correlação aqui usa $n\leq3$
 \textit{backbones} e tem poder estatístico desprezível — leia-se como descritivo, não como
 evidência. O recall de âncora de \texttt{AlexNetTV} (0,932) permanece abaixo da meta de 0,95,
@@ -760,7 +855,11 @@ QAT/INT8 de \texttt{AlexNetFire} antecede uma correção do operador de concaten
 módulo \textit{Fire}, então carrega sob o código atual apenas com \texttt{strict=False} (40 \textit{buffers}
 de observador de quantização ausentes, todos escalares de poucos \textit{bytes} cada — sem relação
 com peso de modelo real); com essa ressalva, \textit{true\_size\_mb} foi recalculado normalmente para
-os dois estágios (Figura~\ref{fig:phase7_accuracy_vs_size}).
+os dois estágios (Figura~\ref{fig:phase7_accuracy_vs_size}). Os tamanhos de modelo da literatura nas
+Tabelas~\ref{tab:lit_comparison_detection}--\ref{tab:lit_comparison_segmentation} são estimados a
+partir da contagem de parâmetros reportada em cada artigo (params $\times$ 4 bytes, FP32) quando o
+tamanho de \textit{checkpoint} não é informado diretamente — uma aproximação, não o tamanho de
+arquivo real.
 
 \subsection{Eixo 7: Atenção Local Eficiente}
 \label{sec:contrib7}
@@ -810,14 +909,6 @@ $\in\{2,4,8\}$ — análogo, em atenção, da curva de restrição de kernel do 
 \label{fig:phase8_h1}
 \end{figure}
 
-\begin{figure}[!t]
-\centering
-\includegraphics[width=\linewidth]{figures/phase8_h3_quantization_robustness.png}
-\caption{Queda (na verdade, ganho) de acurácia FP32$\to$INT8 para os sete modelos de
-atenção local, comparados às CNNs de compensação do Eixo 5.}
-\label{fig:phase8_h3}
-\end{figure}
-
 Cinco resultados, um deles claramente contra-intuitivo. Primeiro, a acurácia top-1 cresce
 monotonicamente com o tamanho de janela tanto em FP32 (30,64\%$\to$31,27\%$\to$33,03\% para
 janelas 2/4/8) quanto em INT8 (33,25\%$\to$33,89\%$\to$36,99\%) — o tamanho de janela reproduz, em
@@ -830,9 +921,11 @@ tamanho equivalente: \texttt{AlexNetFireBypass} (Eixo 4) ocupa quase o mesmo tam
 ($\sim$0,55 MB) e atinge 49,86\% contra 40,18\% do híbrido. Terceiro, o resultado mais
 contra-intuitivo deste eixo: em vez de menos robustos à quantização que as CNNs de
 compensação (hipótese original, motivada pela exclusão de LayerNorm/atenção do QAT), os sete
-modelos de atenção local \emph{ganham} acurácia sob INT8 — de $+$1,28 a $+$6,54 p.p., superando os
+modelos de atenção local \emph{ganham} acurácia sob INT8 — de $+$1,28 a $+$6,54 p.p. (coluna
+$\Delta$QAT, Tabela~\ref{tab:phase8_models}), superando os
 ganhos já notáveis das próprias CNNs de compensação (\texttt{AlexNetFire} $+$0,33 p.p.,
-\texttt{AlexNetFireBypass} $+$0,84 p.p., Eixos 1 e 4). Uma leitura plausível é que, ao
+\texttt{AlexNetFireBypass} $+$0,84 p.p., Eixos 1 e 4); a mesma comparação FP32 vs. INT8, para
+todos os 33 modelos do estudo, aparece na Figura~\ref{fig:accuracy_vs_size}. Uma leitura plausível é que, ao
 manter LayerNorm/atenção intactos em FP32 e converter apenas as camadas Linear/Conv, o
 \textit{fine-tuning} de QAT funciona como regularização adicional sobre a fração convertida do
 modelo, sem o custo de precisão que a conversão completa da atenção teria imposto — mas o mecanismo
@@ -1135,6 +1228,23 @@ H. Touvron, M. Cord, M. Douze, F. Massa, A. Sablayrolles, and H. Jégou, ``Train
 image transformers \& distillation through attention,'' in \textit{Proc. International Conference
 on Machine Learning (ICML)}, 2021.
 
+\bibitem{howard2017mobilenets}
+A. G. Howard, M. Zhu, B. Chen, D. Kalenichenko, W. Wang, T. Weyand, M. Andreetto, and H. Adam,
+``MobileNets: Efficient convolutional neural networks for mobile vision applications,''
+\textit{arXiv preprint arXiv:1704.04861}, 2017.
+
+\bibitem{wang2018pelee}
+R. J. Wang, X. Li, and C. X. Ling, ``Pelee: A real-time object detection system on mobile
+devices,'' in \textit{Advances in Neural Information Processing Systems (NeurIPS)}, 2018.
+
+\bibitem{li2018tinydsod}
+Y. Li, J. Li, W. Lin, and J. Li, ``Tiny-DSOD: Lightweight object detection for resource-restricted
+usages,'' in \textit{Proc. British Machine Vision Conference (BMVC)}, 2018.
+
+\bibitem{liau2018firessd}
+H. Liau, N. Yamini, and Y. Wong, ``Fire SSD: Wide fire modules based single shot detector on edge
+device,'' \textit{arXiv preprint arXiv:1806.05363}, 2018.
+
 \end{thebibliography}
 
 \clearpage
@@ -1187,16 +1297,10 @@ por identidade adicionado a cada estágio, sem nenhum parâmetro extra.}
 \label{sec:apendice_treinamento}
 
 A Tabela~\ref{tab:hyperparams} resume o protocolo de hiperparâmetros compartilhado por todos os
-modelos (Seção~\ref{sec:dados}), fixado nos arquivos \texttt{configs/training.yaml},
-\texttt{configs/qat.yaml} e \texttt{configs/data.yaml} do repositório. O otimizador é AdamW
-\cite{loshchilov2019adamw} com \textit{learning rate} decaído por \textit{cosine annealing}
-(\texttt{T\_max} = número de épocas do estágio); a taxa de aprendizado inicial, porém, é um
-hiperparâmetro \emph{por modelo} (registrado junto à arquitetura, não um valor único global) — a
-Tabela~\ref{tab:per_model_training} lista o valor usado por cada um. No treino QAT, as estatísticas
-de \textit{running mean/var} da BatchNorm são congeladas na época 3 e os observadores de
-quantização (que calibram escala e \textit{zero-point}) são desativados na época 5 — prática
-recomendada por \cite{jacob2018quantization} para estabilizar a escala de quantização antes do
-restante do \textit{fine-tuning} ajustar os pesos a ela.
+modelos (\texttt{configs/training.yaml}, \texttt{qat.yaml}, \texttt{data.yaml}); a taxa de
+aprendizado inicial é um hiperparâmetro por modelo, listada na Tabela~\ref{tab:per_model_training}.
+No QAT, a BatchNorm é congelada na época 3 e os observadores de quantização desativados na época 5,
+seguindo a prática recomendada por \cite{jacob2018quantization}.
 
 \begin{table*}[!t]
 \caption{Hiperparâmetros de treinamento compartilhados}
@@ -1226,35 +1330,22 @@ INT8: \textit{backend} / dispositivo & fbgemm / CPU \\
 \end{tabular}
 \end{table*}
 
-A Tabela~\ref{tab:per_model_training} lista, por modelo, a taxa de aprendizado inicial (FP32), o
-número de épocas efetivamente treinadas até o melhor \textit{checkpoint} em cada estágio —
-FP32 e QAT (\textit{early stopping} pode interromper antes do orçamento de cada estágio) — e o
-tempo de treino medido em cada estágio, e a acurácia top-1 final em FP32 e INT8 (já apresentada,
-por eixo, nas tabelas do corpo do texto — consolidada aqui num único lugar). As épocas e o tempo
-de QAT não puderam ser recuperados
-para os modelos treinados antes do Eixo 7 — os \textit{checkpoints}/\textit{logs} desse estágio já
-não estão presentes localmente, e o resumo persistente (\texttt{results/*\_summary.json}) grava
-apenas a época e o tempo do melhor \textit{checkpoint} FP32 quando ambos os estágios rodam
-(\texttt{ml/reporting.py}); essas células aparecem como ``—''. A conversão para INT8 não é um
-estágio treinado (apenas calibração/\textit{eval} estático em CPU, ordem de segundos) e por isso
-não tem uma coluna de tempo própria. O agrupamento
-por família replica o da Figura~\ref{fig:kernel_cost}. O tempo total é o produto entre épocas e
-tempo médio por época — os modelos das famílias \textit{baselines irrestritos} e
-\textit{restrição ingênua}/\texttt{AlexNetBottleneck}/\texttt{AlexNetFire} foram treinados
-localmente (GPU única, RTX 4060 Laptop); as arquiteturas híbridas do Eixo 2
-(\texttt{Bottleneck+Fire}, \texttt{Bottleneck+Residual}, \texttt{Depthwise+Fire}) e da
-arquitetura híbrida final (\texttt{AlexNetFinalFireResidual} e \texttt{AlexNetFireBypass}) foram
-treinadas nos nós RTX 4090 do cluster PCAD (\texttt{configs/slurm/tupi\_4090.yaml}); o
-\texttt{AlexNetFireBypass}, em particular, usou um orçamento de épocas maior que os demais
-modelos do estudo, daí as 152 épocas efetivas e 86,2 min de treino na tabela — bem acima do
-restante. Os sete modelos de atenção local do Eixo 7 também foram treinados nos nós RTX
-4090 do PCAD, com taxa de aprendizado e \textit{weight decay} únicos para toda a família
-(5$\times10^{-4}$ / 0,05, receita de \cite{touvron2021distillation}) em vez do valor por modelo
-usado nas demais famílias — \texttt{swin\_pico\_\{w2,w4,w8,poolmixer\}} e
-\texttt{hybrid\_bottleneck\_swin} via \texttt{scripts/train.py}; \texttt{vit\_tiny}/\texttt{deit\_tiny}
-via o \textit{notebook} dedicado (Seção~\ref{sec:contrib7}). Os tempos por época \emph{não} são diretamente
-comparáveis entre si nem com as medições de latência do Eixo 3, que usam exclusivamente a
-RTX 4060 Laptop (Seção~\ref{sec:profiling}).
+A Tabela~\ref{tab:per_model_training} consolida, por modelo, taxa de aprendizado, épocas e tempo de
+treino por estágio (FP32/QAT) e acurácia final (FP32/INT8), agrupados como na
+Figura~\ref{fig:kernel_cost}. Células ``—'' de QAT valem para modelos anteriores ao Eixo 7, cujos
+\textit{checkpoints}/\textit{logs} de QAT não foram preservados; INT8 não é um estágio treinado
+(calibração estática em segundos) e por isso não tem coluna de tempo. \textit{Baselines}
+irrestritos, restrição ingênua, \texttt{AlexNetBottleneck} e \texttt{AlexNetFire} treinaram
+localmente (RTX 4060 Laptop); as híbridas do Eixo 2, a arquitetura híbrida final e os sete modelos
+do Eixo 7 treinaram no cluster PCAD (RTX 4090) — tempos entre os dois ambientes, e frente à
+latência do Eixo 3 (RTX 4060, Seção~\ref{sec:profiling}), não são comparáveis. O
+\texttt{AlexNetFireBypass} usou um orçamento de épocas maior que os demais por rodar no PCAD (152
+vs. $\sim$40--77), daí seu tempo desproporcional. Os modelos do Eixo 7 compartilham uma única taxa
+de aprendizado/\textit{weight decay} ($5\times10^{-4}$/0,05, receita de
+\cite{touvron2021distillation}) em vez do valor por modelo das demais famílias; a maioria treinou
+via \texttt{scripts/train.py} e encerrou por \textit{early stopping} (paciência 50) bem antes do
+teto de época, exceto \texttt{vit\_tiny}/\texttt{deit\_tiny}, via \textit{notebook} dedicado
+(Seção~\ref{sec:contrib7}).
 
 \begin{table*}[!t]
 \caption{Taxa de aprendizado, épocas efetivas (FP32/QAT), tempo de treino (FP32/QAT) e acurácia top-1 (FP32/INT8) por modelo}
@@ -1300,17 +1391,6 @@ RTX 4060 Laptop (Seção~\ref{sec:profiling}).
 \end{tabular}%
 }
 \end{table*}
-
-Os cinco primeiros modelos de atenção local (\texttt{swin\_pico\_*}, \texttt{hybrid\_bottleneck\_swin})
-encerraram o estágio FP32 entre as épocas 143 e 146, bem abaixo do orçamento de 1000 —
-consistente com \textit{early stopping} por estagnação da métrica (paciência 50) em vez de um
-limite de tempo de execução. No estágio QAT (orçamento de 100 épocas), \texttt{swin\_pico\_w2} e
-\texttt{swin\_pico\_poolmixer} atingiram o teto de 99 sem estagnar, enquanto os demais
-(\texttt{swin\_pico\_w4}, \texttt{swin\_pico\_w8}, \texttt{hybrid\_bottleneck\_swin}) encerraram
-antes via \textit{early stopping} (91, 80 e 96, respectivamente), com tempos de QAT
-correspondentemente mais curtos (Tabela~\ref{tab:per_model_training}); \texttt{vit\_tiny}/\texttt{deit\_tiny},
-treinados via \textit{notebook} dedicado em vez do \texttt{sbatch} compartilhado, também encerraram
-em épocas distintas em ambos os estágios (125/89 e 212/62, FP32/QAT respectivamente).
 
 \subsection{Dados de Treinamento — Predição Densa (Eixo 6)}
 \label{sec:apendice_treinamento_fase7}
