@@ -153,5 +153,34 @@ notebook execution or training run this session (per `CLAUDE.md`'s workflow rule
 `hybrid_bottleneck_swin`) submitted to PCAD via
 `scripts.cluster submit-sweep --experiment phase8 --runtime pcad` (`tupi_4090`, one
 job per model). `vit_tiny`/`deit_tiny` still need the notebook run manually (not a
-`sbatch`-submittable job in this project's current tooling). Task 7 (cross-phase
-analysis notebook) not started — blocked on these results.
+`sbatch`-submittable job in this project's current tooling).
+
+## Stage 11 — Checkpoint-Restore Bug Found; FP32 Backfilled (2026-08-29)
+
+All 7 models finished training and Task 7's cross-phase comparison notebook ran
+(`results/phase_8_efficient_vit_hybrid_attention_analysis/phase8_comparison.csv`). While
+writing up results, the swin/hybrid models' apparent INT8 "gains" turned out to be an
+artifact: `ml/trainer.py`'s `Trainer.fit()` returned with `self.model` still holding the
+**last** epoch's weights instead of reloading `{run_name}_best.pth` before returning.
+`scripts/train.py`'s post-fit `evaluate()` call therefore measured different weights
+than `build_qat()`/`load_best_model()` picked up for the QAT stage — FP32 was scored on
+the last epoch, INT8 on (a QAT run starting from) the best epoch. For runs with a long
+post-peak early-stopping tail this read as spurious INT8 accuracy gains of up to +6.5pp.
+
+Fixed in `ml/trainer.py` (`fit()` now reloads `best_path` into `self.model` before
+returning; also fixes `convert_to_int8(qat_model)`'s input to use the best QAT epoch,
+matching what `scripts/train_det_seg.py`'s INT8 stage already did explicitly). Regression
+test: `tests/test_trainer_smoke.py::test_fit_restores_best_checkpoint_not_last_epoch`
+(scripts a decaying val accuracy, asserts the live model matches the saved best
+checkpoint, not the resume checkpoint, after `fit()` returns).
+
+`scripts/backfill_best_epoch_eval.py` re-evaluates FP32 from the surviving
+`{model}_best.pth` for the 5 CLI-trained Phase 8 models (`vit_tiny`/`deit_tiny` used the
+notebook's `load_best_model()` path directly and were never affected) plus Phase 9's
+`alexnet_fire_bypass` — no retraining, just re-scoring already-saved checkpoints. INT8
+was only rebuilt where a full-precision QAT-best checkpoint also survived; for the 5
+Phase 8 models it didn't (only the already-converted last-epoch INT8 model was kept), so
+their INT8 numbers are left as previously measured — see the script's docstring for the
+`alexnet_fire_bypass` case, which has its own separate reason INT8 couldn't be rebuilt
+either. Corrected numbers are in Table `tab:phase8_models` (Eixo 7) of `report/ic_report.tex`
+and `ideas/BEST_MODELS.md`'s Phase 8 section.

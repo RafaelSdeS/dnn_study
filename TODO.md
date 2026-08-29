@@ -266,11 +266,11 @@ Models: reuse Phase 3's Pareto-optimal backbones (Bottleneck, Fire) as feature e
 
 ---
 
-## Phase 8 — Efficient Vision Transformers & Hybrid Attention Architectures ✅ (implemented, training submitted to PCAD)
+## Phase 8 — Efficient Vision Transformers & Hybrid Attention Architectures ✅ (done)
 
 Explore whether attention-based models can match or exceed CNN efficiency within Winograd constraints. Investigate local-attention Vision Transformers as an alternative paradigm to small-kernel CNNs.
 
-**Status:** All 7 models implemented (`models/vit_variants.py`); training submitted to PCAD 2026-08-21, results not yet in. Hypotheses H1–H5 and the D6 QAT-for-attention revision are tracked in `ideas/PHASE8_PLAN.md` / `docs/PHASE8_LOG.md`, not here.
+**Status:** All 7 models trained, results in (see `ideas/BEST_MODELS.md`'s Phase 8 section). FP32 accuracy for the 5 CLI-trained models was corrected 2026-08-29 after a `Trainer.fit()` checkpoint-restore bug (see `ml/trainer.py`, `scripts/backfill_best_epoch_eval.py`); `vit_tiny`/`deit_tiny` were unaffected. Hypotheses H1–H5 and the D6 QAT-for-attention revision are tracked in `ideas/PHASE8_PLAN.md` / `docs/PHASE8_LOG.md`, not here.
 
 Models:
 
@@ -284,10 +284,10 @@ For each variant:
 - ✅ FP32 training
 - ✅ QAT fine-tuning
 - ✅ INT8 conversion
-- [ ] FP32 vs INT8 evaluation — pending PCAD results
-- [ ] Compare accuracy, latency, model size, and quantization robustness vs Phase 5–6 CNNs — pending PCAD results
-- [ ] Assess Winograd deployment feasibility (attention ops, memory layout) — see H5 in `ideas/PHASE8_PLAN.md`
-- [ ] Determine whether attention can substitute for large receptive fields in resource-constrained inference — pending PCAD results
+- ✅ FP32 vs INT8 evaluation
+- ✅ Compare accuracy, latency, model size, and quantization robustness vs Phase 5–6 CNNs
+- ✅ Assess Winograd deployment feasibility (attention ops, memory layout) — H5 confirmed (no Winograd trigger), but not attention-specific: no model has a stride-1 3×3 conv, the only structure that triggers `F(2×2,3×3)`
+- ✅ Determine whether attention can substitute for large receptive fields in resource-constrained inference — mixed: `deit_tiny` (46.38%) is competitive with `VGGStyle` at similar size but 5–7× larger than Pareto-optimal compensation CNNs
 
 ---
 

@@ -1,6 +1,6 @@
 # Summary
 
-Results after implementing phases 1–4, 6, and 9. **Most baselines (MobileNetV2, ResNet18, VGGStyle) show superior accuracy to pure AlexNet models, but Phase 2–4 AlexNet variants achieve competitive accuracy at 100–1000× smaller model sizes.** Phase 4's final hybrid architectures push AlexNet-family accuracy past 49% for the first time — within 3pp of VGGStyle — while Phase 9 shows a single residual bypass, with zero added parameters, closes most of that gap on its own. Phase 7 detection has completed a valid retrain (anchor-recall bug fixed) across all 3 backbones — see the Phase 7 section below; segmentation has also completed PCAD runs for all 3 backbones, not yet analyzed. Phase 5 is this document plus `results/phase_5_cross_phase_results_analysis/`; Phase 8 is planned only, no results yet.
+Results after implementing phases 1–4, 6, 8, and 9. **Most baselines (MobileNetV2, ResNet18, VGGStyle) show superior accuracy to pure AlexNet models, but Phase 2–4 AlexNet variants achieve competitive accuracy at 100–1000× smaller model sizes.** Phase 4's final hybrid architectures push AlexNet-family accuracy past 49% for the first time — within 3pp of VGGStyle — while Phase 9 shows a single residual bypass, with zero added parameters, now *exceeds* that hybrid's own FP32 gain outright (see Phase 9 below; corrected 2026-08-29 after a `Trainer.fit()` checkpoint-restore bug, `ml/trainer.py`). Phase 7 detection has completed a valid retrain (anchor-recall bug fixed) across all 3 backbones — see the Phase 7 section below; segmentation has also completed PCAD runs for all 3 backbones, not yet analyzed. Phase 8 (does local self-attention match small-kernel CNNs?) has results in for all 7 models — see the Phase 8 section below. Phase 5 is this document plus `results/phase_5_cross_phase_results_analysis/`.
 
 ---
 
@@ -11,22 +11,32 @@ Results after implementing phases 1–4, 6, and 9. **Most baselines (MobileNetV2
 | 1 | **MobileNetV2** | 1 | 57.99% | 2.48 | 28.75 | 2.01 |
 | 2 | **ResNet18** | 1 | 53.91% | 11.28 | 129.21 | 0.42 |
 | 3 | **VGGStyle** | 1 | 51.81% | 2.41 | 27.58 | 1.88 |
-| 4 | **AlexNetFinalFireResidual** | 4 | **49.79%** | 0.70 | 8.09 | 6.15 |
-| 5 | **AlexNetFireBypass** | 9 | **49.03%** | 0.52 | 5.99 | **8.18** |
+| 4 | **AlexNetFireBypass** | 9 | **50.57%** | 0.52 | 5.99 | 8.44 |
+| 5 | **AlexNetFinalFireResidual** | 4 | **49.79%** | 0.70 | 8.09 | 6.15 |
 | 6 | **AlexNetResidual** | 3 | **48.01%** | 60.67 | 694.41 | 0.07 |
-| 7 | **AlexNetSmallKernel** | 2 | **45.84%** | 1.60 | 18.35 | 2.50 |
-| 8 | **AlexNetFinalBottleneckResidual** | 4 | **45.10%** | 0.57 | 6.65 | 6.78 |
-| 9 | **AlexNetBottleneck** | 3 | **44.62%** | 0.39 | 4.49 | **9.93** |
-| 10 | **AlexNetStacked** | 2 | **44.56%** | 60.48 | 692.25 | 0.06 |
-| 11 | **AlexNetDepthwiseSep** | 3 | **44.39%** | 0.31 | 3.65 | **12.15** |
-| 12 | **AlexNetFire** | 3 | **43.98%** | 0.52 | 5.99 | 7.34 |
-| 13 | **AlexNetFinalDepthwiseFire** | 4 | **43.46%** | 0.47 | 5.51 | 7.88 |
-| 14 | **AlexNetFinalBottleneckFire** | 4 | **42.29%** | 0.51 | 5.88 | 7.19 |
+| 7 | **deit_tiny** | 8 | **46.38%** | 2.76 | 33.20 | 1.40 |
+| 8 | **AlexNetSmallKernel** | 2 | **45.84%** | 1.60 | 18.35 | 2.50 |
+| 9 | **AlexNetFinalBottleneckResidual** | 4 | **45.10%** | 0.57 | 6.65 | 6.78 |
+| 10 | **AlexNetBottleneck** | 3 | **44.62%** | 0.39 | 4.49 | **9.93** |
+| 11 | **AlexNetStacked** | 2 | **44.56%** | 60.48 | 692.25 | 0.06 |
+| 12 | **AlexNetDepthwiseSep** | 3 | **44.39%** | 0.31 | 3.65 | **12.15** |
+| 13 | **AlexNetFire** | 3 | **43.98%** | 0.52 | 5.99 | 7.34 |
+| 14 | **AlexNetFinalDepthwiseFire** | 4 | **43.46%** | 0.47 | 5.51 | 7.88 |
+| 15 | **AlexNetFinalBottleneckFire** | 4 | **42.29%** | 0.51 | 5.88 | 7.19 |
+| 16 | **vit_tiny** | 8 | 40.35% | 2.76 | 33.20 | 1.22 |
+| 17 | **hybrid_bottleneck_swin** | 8 | 40.23% | 0.27 | 3.14 | 12.81 |
+| 18 | **swin_pico_w8** | 8 | 36.75% | 0.32 | 3.91 | 9.40 |
+| 19 | **swin_pico_w4** | 8 | 33.53% | 0.32 | 3.77 | 8.90 |
+| 20 | **swin_pico_w2** | 8 | 32.95% | 0.32 | 3.76 | 8.78 |
+| 21 | **swin_pico_poolmixer** | 8 | 30.98% | 0.23 | 2.66 | 11.65 |
 
-All 9 original Phase 1–3 models are still here, just renumbered — rows 4, 5, 8, 13, and 14 are the
-new Phase 4/9 additions. **The "Analysis by Dimension" section below still discusses the
-Phase 1–3-only picture** (written before Phase 4/9 existed) — read it with the new rows above in
-mind; Phase 4 and 9 get their own dedicated analysis further down instead.
+Rows 4, 5, 9, 14, and 15 are the Phase 4/9 additions; rows 7 and 16–21 are Phase 8's seven
+attention models (`deit_tiny`/`vit_tiny` global attention, the rest local/windowed). Row 4's
+FP32 accuracy was corrected 2026-08-29 (was 49.03%) — see the Phase 9 section below. **Both the
+"Analysis by Dimension" section and the "Recommended Models to Continue Investigating" tiers
+below still discuss the Phase 1–3-only picture** (written before Phase 4/8/9 existed) — read
+them with the new rows above in mind; Phase 4, 8, and 9 get their own dedicated analysis
+further down instead.
 
 ---
 
@@ -334,20 +344,34 @@ work. Full plan: `ideas/PHASE9_PLAN.md`.
 | Run | Epochs | FP32 Top-1 | INT8 Top-1 | Quant. Δ |
 |---|---|---|---|---|
 | Initial (PCAD job 806654) | 66 | 47.05% | 47.16% | +0.11pp (gain) |
-| **Large-scale (final)** | **152** | **49.03%** | **49.86%** | **+0.84pp (gain)** |
+| **Large-scale (final, corrected)** | **152** | **50.57%** | **49.86%** | **–0.71pp (drop)** |
 
-**The bypass-alone fraction of Phase 4's total gain grew substantially with more training.** The
-original ~55% estimate (git commit `924d553`) came from the 66-epoch initial run; the 152-epoch
-large-scale run shows bypass alone closing **87% of the FP32 gap** to `AlexNetFinalFireResidual`
-(5.05pp of 5.82pp) and **fully exceeding it on INT8** (49.86% vs. 49.20% — the bypass-only model,
-despite fewer total architectural changes, edges out the full Phase 4 hybrid once quantized). Zero
-added parameters (0.516M, identical to `AlexNetFire`), and it keeps Fire's quantization-gain
-property (INT8 improves over FP32) that the full Phase 4 hybrid loses (see Phase 4 table above:
-FireResidual drops –0.59pp under QAT).
+**Corrected 2026-08-29:** the large-scale run's FP32 number was originally read as 49.03% —
+`Trainer.fit()` returned the last epoch's weights instead of reloading the best checkpoint, so
+FP32 (measured post-fit) and INT8 (measured from a QAT run that correctly started from the best
+checkpoint) were scored on different weights. `ml/trainer.py` is fixed and this run's FP32 was
+re-evaluated from the surviving best checkpoint (`scripts/backfill_best_epoch_eval.py`); INT8 is
+unchanged (the QAT stage already started from the correct checkpoint). See `docs/PHASE8_LOG.md`
+Stage 11 and `report/ic_report.tex` Eixo 4.
+
+**The bypass-alone fraction of Phase 4's total gain grew substantially with more training — and
+the correction pushes it further still.** The original ~55% estimate (git commit `924d553`) came
+from the 66-epoch initial run. The 152-epoch large-scale run's isolated shortcut now *exceeds* the
+full hybrid's FP32 gain outright: +6.59pp over `AlexNetFire` vs. the full hybrid's +5.81pp
+(previously read as closing ~87% of that gap, not surpassing it). It also still beats the hybrid
+on raw INT8 accuracy (49.86% vs. 49.20%). But unlike the pre-correction reading, it does **not**
+keep Fire's quantization-gain property — corrected FP32 is *higher* than INT8, a –0.71pp drop,
+close to the full hybrid's own –0.59pp drop (see Phase 4 table above). Zero added parameters
+(0.516M, identical to `AlexNetFire`) either way.
+
+**Training-budget caveat, now more load-bearing:** `AlexNetFireBypass` ran 152 epochs vs.
+`AlexNetFinalFireResidual`'s 77 (PCAD's larger epoch budget vs. what was available locally) — part
+of the larger FP32 gain may reflect that longer training, not the residual shortcut alone.
 
 **Practical implication:** the stem change in `AlexNetFinalFireResidual` contributes comparatively
 little once training is run to completion — a plain Fire backbone plus one residual shortcut gets
-nearly all of the benefit at Fire's exact parameter count, and quantizes better doing it.
+most or all of the benefit at Fire's exact parameter count — but, corrected, it no longer quantizes
+better doing it; both the isolated shortcut and the full hybrid lose a comparable amount under QAT.
 
 **Task 2 — structured channel pruning** (`scripts/phase9/prune_channels.py`, `alexnet_bottleneck`,
 ratio 0.4): 385,000 → 207,399 params (53.9%), forward-passes cleanly, every remaining `Conv2d`
@@ -368,3 +392,73 @@ is a measurement-only signal that a real weight-sharing pipeline would be worth 
 
 Full tables and methodology: `ideas/PHASE9_PLAN.md` (Tasks 1–3). Reproducible analysis notebook:
 `notebooks/phase_9_pcad_bypass_ablation_analysis/phase9_ablation_analysis.ipynb`.
+
+---
+
+## Phase 8 — Efficient Local Attention: does windowed self-attention match small-kernel CNNs?
+
+Tests whether local self-attention (windowed Swin / ViT) reproduces small-kernel CNNs'
+accuracy/efficiency/quantization profile, and whether it's structurally Winograd-incompatible
+regardless of window size. 7 models (`models/vit_variants.py`); hypotheses H1–H5 and build
+history: `ideas/PHASE8_PLAN.md`, `docs/PHASE8_LOG.md`.
+
+**Note on corrected data:** FP32 accuracy for 5 of these 7 models (all but `vit_tiny`/`deit_tiny`,
+which used the notebook's `load_best_model()` path and were unaffected) was corrected 2026-08-29
+after finding `Trainer.fit()` returned the last epoch's weights instead of reloading the best
+checkpoint — see the Phase 9 section above and `scripts/backfill_best_epoch_eval.py`. INT8 numbers
+for these 5 could not be rebuilt (no full-precision QAT-best checkpoint survived) and are left as
+previously measured.
+
+| Model | Params (M) | MACs (M) | FP32 Top-1 | INT8 Top-1 | ΔQAT | Size (MB) | Acc/MB |
+|---|---|---|---|---|---|---|---|
+| **deit\_tiny** | 2.76 | 185.5 | **46.38%** | 47.66% | +1.28pp | 33.20 | 1.40 |
+| vit\_tiny | 2.76 | 185.5 | 40.35% | 42.44% | +2.10pp | 33.20 | 1.22 |
+| hybrid\_bottleneck\_swin | 0.27 | 30.3 | 40.23% | 40.18% | –0.06pp | 3.14 | **12.81** |
+| swin\_pico\_w8 | 0.32 | 35.3 | 36.75% | 36.99% | +0.24pp | 3.91 | 9.40 |
+| swin\_pico\_w4 | 0.32 | 31.8 | 33.53% | 33.89% | +0.36pp | 3.77 | 8.90 |
+| swin\_pico\_w2 | 0.32 | 30.9 | 32.95% | 33.25% | +0.31pp | 3.76 | 8.78 |
+| swin\_pico\_poolmixer | 0.23 | 21.2 | 30.98% | 30.76% | –0.22pp | 2.66 | 11.65 |
+
+**Hypothesis results** (full detail in `ideas/PHASE8_PLAN.md`):
+
+- **H1 (window size is attention's kernel-size analogue): CONFIRMED.** Accuracy grows
+  monotonically with window ∈ {2,4,8} in both FP32 (32.95→33.53→36.75%) and INT8
+  (33.25→33.89→36.99%) — restricting the local receptive field costs accuracy here too.
+- **H2 (CNN stem + local attention beats both pure paradigms): PARTIAL.**
+  `hybrid_bottleneck_swin` beats max-window Swin (`swin_pico_w8`) by +3.19pp INT8 at similar size
+  (0.542 vs. 0.803 MB), but doesn't close the gap to compensation CNNs at equal size —
+  `AlexNetFireBypass` occupies nearly the same INT8 footprint (~0.55 MB) and hits 49.86% vs. the
+  hybrid's 40.18%.
+- **H3 (attention is less quantization-robust than Phase 3's patterns): REJECTED, opposite of
+  expected.** 5 of 7 models *gain* accuracy under INT8 (+0.24 to +2.10pp: the three
+  `swin_pico_{w2,w4,w8}`, `vit_tiny`, `deit_tiny`); only `swin_pico_poolmixer` (–0.22pp) and
+  `hybrid_bottleneck_swin` (–0.06pp, near-zero) drop, and only slightly. Plausible mechanism:
+  keeping LayerNorm/attention in FP32 and converting only Linear/Conv turns QAT fine-tuning into
+  extra regularization on the converted fraction — speculative, and doesn't explain the two
+  non-gaining models.
+- **H4 (DeiT distillation recovers most of the data-hungriness gap): CONFIRMED.** `deit_tiny`
+  beats `vit_tiny` (identical architecture/hyperparameters, distillation loss only) by +6.04pp
+  FP32 / +5.22pp INT8; the gain from a frozen `MobileNetV2` teacher survives quantization, making
+  `deit_tiny` this axis's strongest model.
+- **H5 (attention is structurally Winograd-incompatible): CONFIRMED, but not attention-specific.**
+  No model triggers a Winograd kernel in any config — expected, since none contain a stride-1 3×3
+  conv (the only structure that triggers `F(2×2,3×3)`; patch-embed convs use stride = kernel
+  size). Doesn't isolate attention as the cause: pure CNNs without stride-1 3×3
+  (`AlexNetBottleneck`, `ResNet18`) also never trigger Winograd.
+
+**Size-based Pareto frontier:** `hybrid_bottleneck_swin` is the steepest single step on the whole
+7-model FP32 frontier (+9.25pp for +0.47MB over `swin_pico_poolmixer`) — ahead of even the final
+jump to `MobileNetV2` (+6.18pp). Under INT8 the frontier shrinks from 7 to 5 models and only
+`swin_pico_poolmixer` survives as a local-attention point; `hybrid_bottleneck_swin` gets dominated
+by `AlexNetDepthwiseSep` (smaller *and* more accurate). `swin_pico_poolmixer` is no longer the
+worst model in the study — it edges out Phase 2's `AlexNet2x2`/`AlexNet2x2-FC` — but still trails
+every other `swin_pico` variant, including the most window-restricted one.
+
+**Key caveat:** `vit_tiny`/`deit_tiny` carry 2.76M params — ~9× the `swin_pico` family
+(0.23–0.32M) and close in scale to `VGGStyle` (2.41M) — 5–7× the Pareto-optimal compensation CNNs
+(`AlexNetBottleneck` 0.39M, `AlexNetFire`/`AlexNetFireBypass` 0.52M) they compete with on
+accuracy. `deit_tiny`'s headline number should be read against that size, not as a free win.
+
+Full methodology, hypothesis acceptance criteria, and build history: `ideas/PHASE8_PLAN.md`,
+`docs/PHASE8_LOG.md`. Cross-phase comparison data:
+`results/phase_8_efficient_vit_hybrid_attention_analysis/phase8_comparison.csv`.

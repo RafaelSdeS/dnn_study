@@ -1,7 +1,10 @@
 # Phase 8 — Efficient Vision Transformers & Hybrid Attention Architectures (Implementation Plan)
 
-**STATUS (2026-08-21):** Tasks 1–6 implemented, training submitted to PCAD; Task 7
-(cross-phase analysis) not started, blocked on results. See `docs/PHASE8_LOG.md` for the
+**STATUS (2026-08-29):** Tasks 1–7 complete — all 7 models trained on PCAD, results in
+(`ideas/BEST_MODELS.md`'s Phase 8 section, `results/phase_8_efficient_vit_hybrid_attention_analysis/`).
+FP32 accuracy for the 5 CLI-trained models was corrected after a `Trainer.fit()` checkpoint-restore
+bug found 2026-08-29 (`vit_tiny`/`deit_tiny` unaffected — see `docs/PHASE8_LOG.md`'s newest stage).
+See `docs/PHASE8_LOG.md` for the
 build history. One material deviation from this plan: **D6's QAT strategy for
 `vit_tiny`/`deit_tiny` changed** — `swap_quantizable_mha()` cannot drive this codebase's
 eager-mode `tq.prepare_qat()` (verified; PyTorch's custom-module conversion path crashes
