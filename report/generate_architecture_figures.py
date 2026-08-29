@@ -84,7 +84,7 @@ def draw_fire_module(ax, x, y, stage_num, in_ch, squeeze_ch, expand_ch):
     concat_box = FancyBboxPatch((concat_x, concat_y), 0.25, h*1.5, boxstyle="round,pad=0.05",
                                edgecolor=LINE_COLOR, facecolor="#f0f0f0", linewidth=2, linestyle='--')
     ax.add_patch(concat_box)
-    ax.text(concat_x + 0.125, concat_y + h*0.75, "concat", ha='center', va='center',
+    ax.text(concat_x + 0.125, concat_y + h*0.75, "concat.", ha='center', va='center',
            fontsize=7, color=TEXT_COLOR, style='italic')
 
     # Arrows to concat
@@ -154,21 +154,21 @@ ax.set_ylim(-3, 6)
 ax.axis('off')
 
 y_start = 2.5
-ax.text(0.3, y_start + 1.2, "Input: 3 × 64 × 64", fontsize=13, fontweight='bold', color=TEXT_COLOR)
+ax.text(0.3, y_start + 1.2, "Entrada: 3 × 64 × 64", fontsize=13, fontweight='bold', color=TEXT_COLOR)
 
 # Title
-ax.text(8, y_start + 1.6, "AlexNetBottleneck (Phase 3)\n44.62% top-1 · 1.69 MB (FP32)",
+ax.text(8, y_start + 1.6, "AlexNetBottleneck (Eixo 1)\n44,62% top-1 · 1,69 MB (FP32)",
        ha='center', fontsize=14, fontweight='bold', color=TEXT_COLOR)
 
 # Legend
 legend_y = y_start - 0.1
 ax.add_patch(FancyBboxPatch((8.5, legend_y - 0.15), 0.15, 0.15, boxstyle="round,pad=0.01",
                            edgecolor=LINE_COLOR, facecolor=COLOR_1x1, linewidth=1))
-ax.text(8.75, legend_y + 0.15, "1×1 conv", fontsize=8, color=TEXT_COLOR)
+ax.text(8.75, legend_y + 0.15, "conv 1×1", fontsize=8, color=TEXT_COLOR)
 
 ax.add_patch(FancyBboxPatch((8.5, legend_y - 0.45), 0.15, 0.15, boxstyle="round,pad=0.01",
                            edgecolor=LINE_COLOR, facecolor=COLOR_3x3, linewidth=1))
-ax.text(8.75, legend_y - 0.25, "3×3 conv", fontsize=8, color=TEXT_COLOR)
+ax.text(8.75, legend_y - 0.25, "conv 3×3", fontsize=8, color=TEXT_COLOR)
 
 # Draw 5 bottleneck stages
 x = 0.3
@@ -195,10 +195,10 @@ ax.text(x - 0.15, y_start - 0.35, "GAP", fontsize=7, ha='center', color=TEXT_COL
 # Classifier head
 fc_x = x
 draw_conv_box(ax, fc_x, y_start, 0.35, 0.4, "Linear\n256→200", COLOR_FC, fontsize=7)
-ax.text(fc_x + 0.175, y_start - 0.25, "Classifier", fontsize=7, ha='center', color=TEXT_COLOR)
+ax.text(fc_x + 0.175, y_start - 0.25, "Classificador", fontsize=7, ha='center', color=TEXT_COLOR)
 
 # Key insight
-ax.text(6, 0.3, "Sequential bottleneck: 1×1 squeeze → 3×3 core → 1×1 expand (per stage)",
+ax.text(6, 0.3, "Bottleneck sequencial: 1×1 squeeze → núcleo 3×3 → 1×1 expand (por estágio)",
        ha='center', fontsize=9, color=TEXT_COLOR, bbox=dict(boxstyle='round', facecolor='#f0f0f0', alpha=0.8))
 
 plt.tight_layout()
@@ -215,25 +215,25 @@ ax.set_ylim(-3.5, 6)
 ax.axis('off')
 
 y_start = 2.0
-ax.text(0.2, y_start + 0.8, "Input: 3 × 64 × 64", fontsize=10, fontweight='bold', color=TEXT_COLOR)
+ax.text(0.2, y_start + 0.8, "Entrada: 3 × 64 × 64", fontsize=10, fontweight='bold', color=TEXT_COLOR)
 
 # Title
-ax.text(7, y_start + 1.2, "AlexNetFire (Phase 3)\n44.0% top-1 · 5.99 MB (FP32)",
+ax.text(7, y_start + 1.2, "AlexNetFire (Eixo 1)\n44,0% top-1 · 5,99 MB (FP32)",
        ha='center', fontsize=11, fontweight='bold', color=TEXT_COLOR)
 
 # Legend
 legend_y = y_start - 0.1
 ax.add_patch(FancyBboxPatch((11, legend_y - 0.15), 0.15, 0.15, boxstyle="round,pad=0.01",
                            edgecolor=LINE_COLOR, facecolor=COLOR_1x1, linewidth=1))
-ax.text(11.25, legend_y + 0.15, "1×1 conv", fontsize=8, color=TEXT_COLOR)
+ax.text(11.25, legend_y + 0.15, "conv 1×1", fontsize=8, color=TEXT_COLOR)
 
 ax.add_patch(FancyBboxPatch((11, legend_y - 0.45), 0.15, 0.15, boxstyle="round,pad=0.01",
                            edgecolor=LINE_COLOR, facecolor=COLOR_3x3, linewidth=1))
-ax.text(11.25, legend_y - 0.25, "3×3 conv", fontsize=8, color=TEXT_COLOR)
+ax.text(11.25, legend_y - 0.25, "conv 3×3", fontsize=8, color=TEXT_COLOR)
 
 ax.add_patch(FancyBboxPatch((11, legend_y - 0.75), 0.15, 0.15, boxstyle="round,pad=0.01",
                            edgecolor=LINE_COLOR, facecolor="#f0f0f0", linewidth=1, linestyle='--'))
-ax.text(11.25, legend_y - 0.55, "concat", fontsize=8, color=TEXT_COLOR)
+ax.text(11.25, legend_y - 0.55, "concat.", fontsize=8, color=TEXT_COLOR)
 
 # Draw 5 Fire modules
 x = 0.3
@@ -259,10 +259,10 @@ ax.text(x - 0.4, y_start - 0.35, "GAP", fontsize=7, ha='center', color=TEXT_COLO
 
 fc_x = x
 draw_conv_box(ax, fc_x, y_start, 0.35, 0.4, "Linear\n256→200", COLOR_FC, fontsize=7)
-ax.text(fc_x + 0.175, y_start - 0.25, "Classifier", fontsize=7, ha='center', color=TEXT_COLOR)
+ax.text(fc_x + 0.175, y_start - 0.25, "Classificador", fontsize=7, ha='center', color=TEXT_COLOR)
 
 # Key insight
-ax.text(7, -1.8, "Parallel Fire: 1×1 squeeze → parallel paths (1×1 + 3×3) → concatenate",
+ax.text(7, -1.8, "Fire paralelo: 1×1 squeeze → caminhos paralelos (1×1 + 3×3) → concatenação",
        ha='center', fontsize=9, color=TEXT_COLOR, bbox=dict(boxstyle='round', facecolor='#f0f0f0', alpha=0.8))
 
 plt.tight_layout()
@@ -279,21 +279,21 @@ ax.set_ylim(-3.5, 6)
 ax.axis('off')
 
 y_start = 2.0
-ax.text(0.2, y_start + 0.8, "Input: 3 × 64 × 64", fontsize=10, fontweight='bold', color=TEXT_COLOR)
+ax.text(0.2, y_start + 0.8, "Entrada: 3 × 64 × 64", fontsize=10, fontweight='bold', color=TEXT_COLOR)
 
 # Title
-ax.text(7, y_start + 1.2, "AlexNetFinalFireResidual (Phase 4)\n49.89% top-1 · 8.09 MB (FP32)",
+ax.text(7, y_start + 1.2, "AlexNetFinalFireResidual (Eixo 2)\n49,89% top-1 · 8,09 MB (FP32)",
        ha='center', fontsize=11, fontweight='bold', color=TEXT_COLOR)
 
 # Legend
 legend_y = y_start - 0.1
 ax.add_patch(FancyBboxPatch((10.5, legend_y - 0.15), 0.15, 0.15, boxstyle="round,pad=0.01",
                            edgecolor=LINE_COLOR, facecolor=COLOR_1x1, linewidth=1))
-ax.text(10.75, legend_y + 0.15, "1×1 conv", fontsize=8, color=TEXT_COLOR)
+ax.text(10.75, legend_y + 0.15, "conv 1×1", fontsize=8, color=TEXT_COLOR)
 
 ax.add_patch(FancyBboxPatch((10.5, legend_y - 0.45), 0.15, 0.15, boxstyle="round,pad=0.01",
                            edgecolor=LINE_COLOR, facecolor=COLOR_3x3, linewidth=1))
-ax.text(10.75, legend_y - 0.25, "3×3 conv", fontsize=8, color=TEXT_COLOR)
+ax.text(10.75, legend_y - 0.25, "conv 3×3", fontsize=8, color=TEXT_COLOR)
 
 ax.add_patch(mpatches.Rectangle((10.5, legend_y - 0.75), 0.15, 0.15,
                                edgecolor="#d946ef", facecolor="none", linewidth=2))
@@ -327,10 +327,10 @@ ax.text(x - 0.5, y_start - 0.35, "GAP", fontsize=7, ha='center', color=TEXT_COLO
 
 fc_x = x
 draw_conv_box(ax, fc_x, y_start, 0.35, 0.4, "Linear\n256→200", COLOR_FC, fontsize=7)
-ax.text(fc_x + 0.175, y_start - 0.25, "Classifier", fontsize=7, ha='center', color=TEXT_COLOR)
+ax.text(fc_x + 0.175, y_start - 0.25, "Classificador", fontsize=7, ha='center', color=TEXT_COLOR)
 
 # Key insight
-ax.text(7, -1.8, "Fire + Residual: Fire modules with identity bypass (⊕) on each block",
+ax.text(7, -1.8, "Fire + Residual: módulos Fire com atalho identidade (⊕) em cada bloco",
        ha='center', fontsize=9, color=TEXT_COLOR, bbox=dict(boxstyle='round', facecolor='#f0f0f0', alpha=0.8))
 
 plt.tight_layout()
@@ -347,25 +347,25 @@ ax.set_ylim(-3.5, 6)
 ax.axis('off')
 
 y_start = 2.0
-ax.text(0.2, y_start + 0.8, "Input: 3 × 64 × 64", fontsize=10, fontweight='bold', color=TEXT_COLOR)
+ax.text(0.2, y_start + 0.8, "Entrada: 3 × 64 × 64", fontsize=10, fontweight='bold', color=TEXT_COLOR)
 
 # Title
-ax.text(7, y_start + 1.2, "AlexNetFireBypass (Phase 9)\n49.0% top-1 · 5.99 MB (FP32)",
+ax.text(7, y_start + 1.2, "AlexNetFireBypass (Eixo 4)\n49,0% top-1 · 5,99 MB (FP32)",
        ha='center', fontsize=11, fontweight='bold', color=TEXT_COLOR)
 
 # Legend
 legend_y = y_start - 0.1
 ax.add_patch(FancyBboxPatch((11, legend_y - 0.15), 0.15, 0.15, boxstyle="round,pad=0.01",
                            edgecolor=LINE_COLOR, facecolor=COLOR_1x1, linewidth=1))
-ax.text(11.25, legend_y + 0.15, "1×1 conv", fontsize=8, color=TEXT_COLOR)
+ax.text(11.25, legend_y + 0.15, "conv 1×1", fontsize=8, color=TEXT_COLOR)
 
 ax.add_patch(FancyBboxPatch((11, legend_y - 0.45), 0.15, 0.15, boxstyle="round,pad=0.01",
                            edgecolor=LINE_COLOR, facecolor=COLOR_3x3, linewidth=1))
-ax.text(11.25, legend_y - 0.25, "3×3 conv", fontsize=8, color=TEXT_COLOR)
+ax.text(11.25, legend_y - 0.25, "conv 3×3", fontsize=8, color=TEXT_COLOR)
 
 ax.add_patch(mpatches.Rectangle((11, legend_y - 0.75), 0.15, 0.15,
                                edgecolor="#16a34a", facecolor="none", linewidth=2, linestyle=':'))
-ax.text(11.25, legend_y - 0.55, "bypass", fontsize=8, color=TEXT_COLOR)
+ax.text(11.25, legend_y - 0.55, "atalho", fontsize=8, color=TEXT_COLOR)
 
 # Draw stem (3 Fire modules)
 x = 0.3
@@ -395,7 +395,7 @@ bypass_y_top = y_start + 0.6
 bypass_y_bot = y_start - 0.6
 ax.annotate('', xy=(fire5_x + 0.2, bypass_y_bot), xytext=(fire4_x + 0.6, bypass_y_top),
            arrowprops=dict(arrowstyle='->', lw=2.5, color="#16a34a", linestyle=':', connectionstyle="arc3,rad=0.5"))
-ax.text((fire4_x + fire5_x + 0.9) / 2, y_start + 1.0, "identity bypass", fontsize=8, color="#16a34a",
+ax.text((fire4_x + fire5_x + 0.9) / 2, y_start + 1.0, "atalho identidade", fontsize=8, color="#16a34a",
        bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
 
 # GAP + Classifier
@@ -405,10 +405,10 @@ ax.text(x - 0.4, y_start - 0.35, "GAP", fontsize=7, ha='center', color=TEXT_COLO
 
 fc_x = x
 draw_conv_box(ax, fc_x, y_start, 0.35, 0.4, "Linear\n256→200", COLOR_FC, fontsize=7)
-ax.text(fc_x + 0.175, y_start - 0.25, "Classifier", fontsize=7, ha='center', color=TEXT_COLOR)
+ax.text(fc_x + 0.175, y_start - 0.25, "Classificador", fontsize=7, ha='center', color=TEXT_COLOR)
 
 # Key insight
-ax.text(7, -1.8, "Fire + Single Bypass: identical to Fire (stem + 5 modules), BUT fire4→fire5 identity bypass",
+ax.text(7, -1.8, "Fire + atalho único: idêntico ao Fire (stem + 5 módulos), MAS com atalho identidade fire4→fire5",
        ha='center', fontsize=9, color=TEXT_COLOR, bbox=dict(boxstyle='round', facecolor='#f0f0f0', alpha=0.8))
 
 plt.tight_layout()
