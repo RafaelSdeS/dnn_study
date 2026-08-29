@@ -89,3 +89,41 @@ def test_zero_accuracy_run_still_saves_a_best_checkpoint(tmp_path):
 
     assert results["history"]["val_acc"][0] == 0.0
     assert (tmp_path / "zero_acc_best.pth").exists()
+
+
+class _DecayingValTrainer(Trainer):
+    """Scripts val accuracy to peak on epoch 1 and decay, so best epoch != last epoch
+    deterministically (real training on 8 random samples wouldn't guarantee that)."""
+
+    SCRIPTED_ACC = [50.0, 40.0, 30.0]
+
+    def _validate(self, model, criterion):
+        model.eval()
+        acc = self.SCRIPTED_ACC[len(self._seen)]
+        self._seen.append(acc)
+        return 1.0, acc, acc
+
+
+def test_fit_restores_best_checkpoint_not_last_epoch(tmp_path):
+    """Regression: fit() used to leave the LAST epoch's weights in self.model, so a caller
+    evaluating right after fit() (scripts/train.py) measured a different model than the one
+    saved as {name}_best.pth -- the one build_qat()/load_best_model() reloads for QAT."""
+    loader = _tiny_loader()
+    cfg = TrainerConfig(epochs=3, lr=0.5, use_amp=False, early_stopping_patience=None)
+    trainer = _DecayingValTrainer(
+        _tiny_model(), loader, loader, cfg, torch.device("cpu"),
+        tmp_path, "restore", num_classes=5,
+    )
+    trainer._seen = []
+
+    results = trainer.fit()
+    assert results["best_epoch"] == 0  # epoch 1 scored best
+
+    best = torch.load(tmp_path / "restore_best.pth", weights_only=False)["model_state_dict"]
+    last = torch.load(tmp_path / "restore_resume.pth", weights_only=False)["model_state_dict"]
+    # Guard against a vacuous assertion: the lr has to have actually moved the weights.
+    assert any(not torch.equal(last[k], best[k]) for k in best), "weights never changed"
+
+    live = trainer.model.state_dict()
+    for key, tensor in best.items():
+        assert torch.equal(live[key], tensor), f"{key} kept the last epoch's weights"

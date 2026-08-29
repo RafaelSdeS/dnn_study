@@ -240,6 +240,20 @@ class Trainer:
                 self.logger.info("Stop requested after epoch %d", epoch + 1)
                 break
 
+        # Restore the best checkpoint before returning. Without this, self.model keeps the
+        # LAST epoch's weights, so scripts/train.py's post-fit evaluate() measured a
+        # different model than the one saved as _best.pth -- the same checkpoint that
+        # build_qat()/load_best_model() then picks up for the QAT stage. FP32 and INT8
+        # ended up measured on different weights (last epoch vs. best + QAT), which read
+        # as spurious "INT8 accuracy gains" of up to +6.5pp for runs with a long
+        # post-peak tail. Also makes convert_to_int8(qat_model) use the best QAT epoch,
+        # matching what scripts/train_det_seg.py already does explicitly.
+        if best_path.exists():
+            best_state = torch.load(best_path, map_location=str(self.device), weights_only=False)
+            model.load_state_dict(best_state.get("model_state_dict", best_state))
+            self.logger.info("Restored best checkpoint (epoch %d) into the model", best_epoch + 1)
+
+        # From history, so these stay the LAST epoch's numbers regardless of the restore.
         final_val_top1 = history["val_acc"][-1] if history["val_acc"] else 0.0
         final_val_top5 = history["val_top5"][-1] if history["val_top5"] else 0.0
         total_training_time_s = elapsed_time_s + (time.time() - train_start)
