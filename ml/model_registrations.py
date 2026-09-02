@@ -39,10 +39,12 @@ from models import (
     TinyMobileNetV2,
     vit_tiny,
     deit_tiny,
+    vit_tiny_convstem,
     swin_pico_w2,
     swin_pico_w4,
     swin_pico_w8,
     swin_pico_poolmixer,
+    swin_pico_convstem,
     hybrid_bottleneck_swin,
 )
 
@@ -173,6 +175,25 @@ register_model(
     "hybrid_bottleneck_swin",
     hybrid_bottleneck_swin,
     fuse_map=find_fuse_groups(hybrid_bottleneck_swin()),
+    lr=5e-4,
+    weight_decay=0.05,
+)
+
+# 3x3-restricted conv stem in front of attention (H5 follow-up) -- unlike the models
+# above, these DO have fusable Conv-BN-ReLU triples in their stem (find_fuse_groups
+# recurses into ViTTinyConvStem's conv_stem_configs Sequential / SwinPico's replaced
+# features[0][0]), see models/vit_variants.py for why.
+register_model(
+    "vit_tiny_convstem",
+    vit_tiny_convstem,
+    fuse_map=find_fuse_groups(vit_tiny_convstem()),
+    lr=5e-4,
+    weight_decay=0.05,
+)
+register_model(
+    "swin_pico_convstem",
+    swin_pico_convstem,
+    fuse_map=find_fuse_groups(swin_pico_convstem()),
     lr=5e-4,
     weight_decay=0.05,
 )

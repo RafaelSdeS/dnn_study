@@ -21,7 +21,7 @@ from torchvision.models.swin_transformer import (
     SwinTransformerBlock,
     _patch_merging_pad,
 )
-from torchvision.models.vision_transformer import Encoder, EncoderBlock, VisionTransformer
+from torchvision.models.vision_transformer import ConvStemConfig, Encoder, EncoderBlock, VisionTransformer
 
 from .compensation import _AlexBottleneck, _float_functional
 
@@ -305,6 +305,62 @@ def vit_tiny(num_classes: int = 200) -> nn.Module:
 deit_tiny = vit_tiny
 
 
+# ─── ViT with a Winograd-eligible 3x3 conv stem ────────────────────────────────
+#
+# Investigation finding: no attention model in this repo has a real Winograd target.
+# ViTTiny/SwinPico patchify with a single big-kernel conv (8x8 / 4x4, any stride is
+# Winograd-irrelevant for a non-overlapping patchify anyway); hybrid_bottleneck_swin's
+# _AlexBottleneck stem has 3x3 convs but both blocks run stride=2 -- F(2x2,3x3) only
+# triggers on stride=1, groups=1 convs (ml/profiling.py's winograd_conv2d_f23), so even
+# that "3x3" stem is Winograd-ineligible. This is the first one with a genuine dense
+# stride=1 3x3 conv in the pipeline.
+
+def _dense_relu(inplace: bool = True) -> nn.Module:
+    """torchvision's Conv2dNormActivation always calls activation_layer(inplace=True);
+    this project's QAT rule (CLAUDE.md) requires every ReLU inplace=False."""
+    return nn.ReLU(inplace=False)
+
+
+# Xiao et al. 2021 ("Early Convolutions Help Transformers See Better") stem, restricted
+# to 3x3 kernels. Stride-2-first-then-dense mirrors AlexNet3x3FC's own stem
+# (models/alexnet_variants.py): a stride=2 3x3 downsamples first, then stride=1 3x3s
+# run dense -- only the middle layer here (32x32, stride=1) is Winograd-eligible; the
+# other three are downsampling (stride=2) and, like the patchify conv they replace,
+# outside Winograd's applicability. Reaches the same 8x8 grid as ViTTiny's patch_size=8.
+_CONV_STEM_3X3 = [
+    ConvStemConfig(out_channels=32, kernel_size=3, stride=2, activation_layer=_dense_relu),   # 64->32
+    ConvStemConfig(out_channels=64, kernel_size=3, stride=1, activation_layer=_dense_relu),   # 32->32, dense: Winograd-eligible
+    ConvStemConfig(out_channels=64, kernel_size=3, stride=2, activation_layer=_dense_relu),   # 32->16
+    ConvStemConfig(out_channels=192, kernel_size=3, stride=2, activation_layer=_dense_relu),  # 16->8
+]
+
+
+class ViTTinyConvStem(nn.Module):
+    """ViTTiny with its 8x8 non-overlapping patchify replaced by _CONV_STEM_3X3. Same
+    encoder as ViTTiny (num_layers=6, num_heads=3, hidden_dim=192, mlp_dim=768) and the
+    same 8x8 token grid -- patchify method is the only variable that changes."""
+
+    def __init__(self, num_classes: int = 200):
+        super().__init__()
+        self.quant = tq.QuantStub()
+        self.dequant = tq.DeQuantStub()
+        self.vit = _QuantizableVisionTransformer(
+            image_size=64, patch_size=8, num_layers=6, num_heads=3,
+            hidden_dim=192, mlp_dim=768, num_classes=num_classes,
+            conv_stem_configs=_CONV_STEM_3X3,
+        )
+
+    def forward(self, x):
+        x = self.quant(x)
+        x = self.vit(x)
+        x = self.dequant(x)
+        return x
+
+
+def vit_tiny_convstem(num_classes: int = 200) -> nn.Module:
+    return ViTTinyConvStem(num_classes=num_classes)
+
+
 # ─── Swin-Pico (H1 window-size sweep) ──────────────────────────────────────────
 
 class SwinPico(nn.Module):
@@ -313,7 +369,7 @@ class SwinPico(nn.Module):
     window_size=8 is full/global attention at the 8x8 stage, H1's "unrestricted"
     sweep endpoint. attn_layer lets D5's pool-mixer variant reuse this class."""
 
-    def __init__(self, num_classes: int = 200, window_size: int = 4, attn_layer=None):
+    def __init__(self, num_classes: int = 200, window_size: int = 4, attn_layer=None, conv_stem: bool = False):
         super().__init__()
         # D4: window_size must divide the 16x16 first-stage grid, else
         # shifted_window_attention silently pads instead of failing loudly.
@@ -326,6 +382,21 @@ class SwinPico(nn.Module):
             window_size=[window_size, window_size], num_classes=num_classes,
             block=block,
         )
+        if conv_stem:
+            # SwinTransformer has no conv_stem_configs hook (unlike VisionTransformer) --
+            # replace the single 4x4-kernel patchify conv in-place with a 3x3-restricted
+            # stack, same stride-2-first-then-dense pattern as _CONV_STEM_3X3 above.
+            # Output stays (B, embed_dim, 16, 16), so permute/DeQuantStub/norm right
+            # after it (see _QuantizableSwinTransformer.__init__) need no changes.
+            embed_dim = 48
+            self.swin.features[0][0] = nn.Sequential(
+                nn.Conv2d(3, embed_dim, 3, stride=2, padding=1, bias=False),
+                nn.BatchNorm2d(embed_dim), nn.ReLU(inplace=False),          # 64->32
+                nn.Conv2d(embed_dim, embed_dim, 3, stride=1, padding=1, bias=False),
+                nn.BatchNorm2d(embed_dim), nn.ReLU(inplace=False),          # 32->32, dense: Winograd-eligible
+                nn.Conv2d(embed_dim, embed_dim, 3, stride=2, padding=1, bias=False),
+                nn.BatchNorm2d(embed_dim), nn.ReLU(inplace=False),          # 32->16
+            )
 
     def forward(self, x):
         x = self.quant(x)
@@ -348,6 +419,10 @@ def swin_pico_w4(num_classes: int = 200) -> nn.Module:
 
 def swin_pico_w8(num_classes: int = 200) -> nn.Module:
     return swin_pico(num_classes=num_classes, window_size=8)
+
+
+def swin_pico_convstem(num_classes: int = 200, window_size: int = 4) -> nn.Module:
+    return SwinPico(num_classes=num_classes, window_size=window_size, conv_stem=True)
 
 
 # ─── Lightweight-attention Swin-Pico (D5 / H5 cross-check) ────────────────────
@@ -445,10 +520,12 @@ def demo() -> None:
     ctors = {
         "vit_tiny": vit_tiny,
         "deit_tiny": deit_tiny,
+        "vit_tiny_convstem": vit_tiny_convstem,
         "swin_pico_w2": swin_pico_w2,
         "swin_pico_w4": swin_pico_w4,
         "swin_pico_w8": swin_pico_w8,
         "swin_pico_poolmixer": swin_pico_poolmixer,
+        "swin_pico_convstem": swin_pico_convstem,
         "hybrid_bottleneck_swin": hybrid_bottleneck_swin,
     }
     x = torch.randn(2, 3, 64, 64)
@@ -457,7 +534,11 @@ def demo() -> None:
         out = model(x)
         assert out.shape == (2, 200), f"{name}: expected (2, 200), got {tuple(out.shape)}"
         n_params = sum(p.numel() for p in model.parameters())
-        assert 0.5e6 <= n_params <= 15e6, f"{name}: param count {n_params} outside sane 0.5M-15M bound"
+        # ponytail: 0.2M floor, not 0.5M -- swin_pico_w2/w4/w8 (~0.32M) and
+        # swin_pico_poolmixer (~0.23M, parameter-free pooling has no QKV/proj weights)
+        # are legitimately this small; bound only needs to catch a gross
+        # hidden_dim/num_layers typo, not gatekeep an already-validated model.
+        assert 0.2e6 <= n_params <= 15e6, f"{name}: param count {n_params} outside sane 0.2M-15M bound"
         print(f"{name}: OK, {n_params / 1e6:.2f}M params")
 
 
