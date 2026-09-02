@@ -627,14 +627,15 @@ def _pareto_front_mask(xs, ys):
     return ~dominated
 
 
+# ponytail: top-5 panels dropped -- the report's prose only ever discusses the top-1 frontiers,
+# so a 2x2 (top-1+top-5 x FP32+INT8) grid was paying clutter for a metric nobody reads. Re-add a
+# top-5 row here if the discussion in ic_report.tex grows to actually use it.
 _panels = [
     ("fp32_size_mb", "fp32_top1", "FP32", "Top-1"),
-    ("fp32_size_mb", "fp32_top5", "FP32", "Top-5"),
     ("int8_size_mb", "int8_top1", "INT8", "Top-1"),
-    ("int8_size_mb", "int8_top5", "INT8", "Top-5"),
 ]
 with plt.style.context("seaborn-v0_8-whitegrid"):
-    fig, axes = plt.subplots(2, 2, figsize=(15, 11), facecolor="white")
+    fig, axes = plt.subplots(1, 2, figsize=(15, 6.5), facecolor="white")
     for ax, (size_col, acc_col, precision, metric) in zip(axes.flat, _panels):
         df_size = df_all_classification[
             df_all_classification[acc_col].notna() & df_all_classification[size_col].notna()
@@ -642,24 +643,29 @@ with plt.style.context("seaborn-v0_8-whitegrid"):
         mask = _pareto_front_mask(df_size[size_col].values, df_size[acc_col].values)
         pf = df_size[mask].sort_values(size_col)
         point_colors = [GROUP_CMAP(GROUP_ORDER.index(p) % 10) for p in df_size["phase"]]
-        ax.scatter(df_size[size_col], df_size[acc_col], c=point_colors, s=90,
+        ax.scatter(df_size[size_col], df_size[acc_col], c=point_colors, s=110,
                    edgecolors="white", lw=0.5, alpha=0.9, zorder=3)
         ax.step(pf[size_col], pf[acc_col], where="post", color="black", lw=1.2, ls="--", alpha=0.6, zorder=2)
-        for _, row in pf.iterrows():
-            ax.annotate(row["model_name"], (row[size_col], row[acc_col]), xytext=(5, 5),
-                       textcoords="offset points", fontsize=7, fontweight="bold")
+        # ponytail: labels alternate above/below the point instead of a fixed offset, since the
+        # Pareto front is a monotonic up-right staircase and same-direction offsets stack labels
+        # from adjacent points on top of each other. Swap for adjustText if this stops being enough.
+        for i, (_, row) in enumerate(pf.iterrows()):
+            dy = 6 if i % 2 == 0 else -14
+            ax.annotate(row["model_name"], (row[size_col], row[acc_col]), xytext=(6, dy),
+                       textcoords="offset points", fontsize=9, fontweight="bold",
+                       va="bottom" if dy > 0 else "top")
         ax.set_xscale("log")
         ax.set_xlabel(f"Tamanho {precision} do modelo (MB, escala log)")
         ax.set_ylabel(f"Acurácia {precision} {metric} (%)")
         ax.set_title(f"{precision} {metric} (fronteira de Pareto: {len(pf)}/{len(df_size)})")
 
     handles = [plt.Rectangle((0, 0), 1, 1, color=GROUP_CMAP(i % 10)) for i in range(len(GROUP_ORDER))]
-    fig.legend(handles, GROUP_ORDER, loc="lower center", bbox_to_anchor=(0.5, -0.05), ncol=3,
+    fig.legend(handles, GROUP_ORDER, loc="lower center", bbox_to_anchor=(0.5, -0.08), ncol=3,
               fontsize=14, title="Grupo de modelos", title_fontsize=15,
               handlelength=1.8, handleheight=1.8, markerscale=1.5)
     fig.suptitle("Acurácia vs. Tamanho — Fronteiras de Pareto (todos os modelos de classificação)",
                 fontsize=13)
-    plt.tight_layout(rect=[0, 0.08, 1, 0.97])
+    plt.tight_layout(rect=[0, 0.12, 1, 0.95])
     plt.savefig(OUTPUT_DIR / "accuracy_vs_size_all_models.png", bbox_inches="tight", facecolor="white")
 print("✓ accuracy_vs_size_all_models.png")
 plt.close()
@@ -697,7 +703,7 @@ ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:g}"))
 # label sits above the vertical connector rather than between the two markers.
 _label_points(ax, size_acc_df["macs_m"].to_numpy(),
               size_acc_df[["fp32_top1", "int8_top1"]].max(axis=1).to_numpy(),
-              [DISPLAY_NAME[m] for m in size_acc_df["model"]], fontsize=7)
+              [DISPLAY_NAME[m] for m in size_acc_df["model"]], fontsize=9)
 
 ax.set_xlabel("MACs (M, escala log)", fontsize=11, color=TEXT_PRIMARY)
 ax.set_ylabel("Acurácia top-1 (%)", fontsize=11, color=TEXT_PRIMARY)
@@ -707,9 +713,9 @@ ax.set_ylabel("Acurácia top-1 (%)", fontsize=11, color=TEXT_PRIMARY)
 # point or its label.
 group_legend = _group_legend(size_acc_df["model"].map(MODEL_GROUP))
 leg1 = ax.legend(handles=group_legend, loc="upper left", bbox_to_anchor=(1.01, 1.0),
-                  fontsize=8.5, frameon=False)
+                  fontsize=11, frameon=False)
 ax.legend(handles=shape_legend, loc="lower left", bbox_to_anchor=(1.01, 0.0),
-          fontsize=8.5, frameon=False)
+          fontsize=11, frameon=False)
 ax.add_artist(leg1)
 
 ax.grid(alpha=0.3)
