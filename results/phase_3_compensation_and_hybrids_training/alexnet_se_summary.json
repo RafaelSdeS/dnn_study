@@ -17,7 +17,7 @@
   "int8_loss": null,
   "int8_top1_top5_gap": null,
   "quantization_drop_top1": null,
-  "fp32_size_mb": 659.7523059844971,
+  "fp32_size_mb": 219.9145908355713,
   "int8_size_mb": null,
   "params_m": 57.646288,
   "compression_ratio": null,
@@ -30,5 +30,6 @@
   "int8_throughput_img_per_s": null,
   "avg_epoch_time_s": 48.82184954484304,
   "total_training_time_s": 297.8844792842865,
-  "peak_gpu_mem_mb": 1122.060546875
+  "peak_gpu_mem_mb": 1122.060546875,
+  "fp32_size_excludes_optimizer": true
 }

@@ -17,10 +17,10 @@
   "int8_loss": 2.093930959701538,
   "int8_top1_top5_gap": 24.331331253051758,
   "quantization_drop_top1": 0.626063346862793,
-  "fp32_size_mb": 27.58481216430664,
+  "fp32_size_mb": 9.20516586303711,
   "int8_size_mb": 2.3767032623291016,
   "params_m": 2.405288,
-  "compression_ratio": 11.606334118999067,
+  "compression_ratio": 3.873081679543078,
   "param_efficiency_top1_per_m": 21.556670136798587,
   "macs": 231086080,
   "flops": 462172160,
@@ -30,5 +30,6 @@
   "int8_throughput_img_per_s": 760.3666374661507,
   "avg_epoch_time_s": 29.492008917471942,
   "total_training_time_s": 2009.6125140190125,
-  "peak_gpu_mem_mb": 504.4853515625
+  "peak_gpu_mem_mb": 504.4853515625,
+  "fp32_size_excludes_optimizer": true
 }

@@ -1,5 +1,6 @@
 """make_run_summary/build_comparison_table coverage - previously untested despite feeding
 every results table (final_comparison.csv, experiment_summary.json)."""
+import pytest
 from ml.reporting import build_comparison_table, make_run_summary
 
 
@@ -72,6 +73,21 @@ def test_make_run_summary_handles_missing_int8_results():
     assert summary["compression_ratio"] is None  # int8_size_mb=0 must not raise ZeroDivisionError
 
 
+def test_make_run_summary_avg_epoch_time_ignores_suspend_outlier():
+    fit_results = _fit_results()
+    # e.g. one epoch's wall-clock timer spans a laptop suspend (~9000s) between two normal ~10s epochs.
+    fit_results["history"]["epoch_time_s"] = [10.0, 10.0, 9013.3, 10.0, 10.0]
+    summary = make_run_summary(
+        name="swin_pico_convstem", mode="fp32_only", fit_results=fit_results,
+        fp32_eval={"top1": 45.0, "top5": 70.0, "loss": 2.0},
+        params_m=1.5, fp32_size_mb=6.0, int8_size_mb=0.0,
+        fp32_benchmark={"latency_ms_per_image": 4.0, "throughput_img_per_s": 250.0},
+        flops_results={"macs": 500_000, "flops": 1_000_000},
+    )
+
+    assert summary["avg_epoch_time_s"] == 10.0
+
+
 def test_build_comparison_table_sorts_by_precision_then_descending_top1_when_present():
     rows = [
         {"precision": "int8", "top1_%": 40.0},
@@ -93,3 +109,31 @@ def test_build_comparison_table_returns_input_order_when_sort_columns_absent():
     df = build_comparison_table(rows)
 
     assert list(df["model_name"]) == ["b", "a"]
+
+
+def test_disk_mb_excludes_optimizer_state(tmp_path):
+    """disk_mb must measure the weights, not the training checkpoint wrapped around them.
+
+    save_checkpoint() stores AdamW state (2 momentum buffers/param) next to the weights, so
+    measuring the file raw reported ~3x the model size on the FP32 side while the INT8 side
+    (a bare torch.save(model, ...)) was measured model-only -- inflating every recorded
+    compression ratio by ~3x.
+    """
+    import torch
+    import torch.nn as nn
+    from ml.checkpoint import save_checkpoint
+    from ml.reporting import disk_mb
+
+    model = nn.Linear(512, 512)
+    opt = torch.optim.AdamW(model.parameters())
+    model(torch.randn(4, 512)).sum().backward()
+    opt.step()  # materialize the momentum buffers
+
+    ckpt = tmp_path / "m_best.pth"
+    save_checkpoint(ckpt, model, opt, None, 0, {"val_acc": 1.0})
+    weights_only = tmp_path / "m.pth"
+    torch.save(model.state_dict(), weights_only)
+
+    raw_file_mb = ckpt.stat().st_size / (1024 ** 2)
+    assert raw_file_mb > 2.5 * disk_mb(ckpt), "checkpoint should be ~3x its weights"
+    assert disk_mb(ckpt) == pytest.approx(disk_mb(weights_only), rel=0.02)

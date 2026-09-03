@@ -2,33 +2,41 @@
 
 Results after implementing phases 1–4, 6, 8, and 9. **Most baselines (MobileNetV2, ResNet18, VGGStyle) show superior accuracy to pure AlexNet models, but Phase 2–4 AlexNet variants achieve competitive accuracy at 100–1000× smaller model sizes.** Phase 4's final hybrid architectures push AlexNet-family accuracy past 49% for the first time — within 3pp of VGGStyle — while Phase 9 shows a single residual bypass, with zero added parameters, now *exceeds* that hybrid's own FP32 gain outright (see Phase 9 below; corrected 2026-08-29 after a `Trainer.fit()` checkpoint-restore bug, `ml/trainer.py`). Phase 7 detection has completed a valid retrain (anchor-recall bug fixed) across all 3 backbones — see the Phase 7 section below; segmentation has also completed PCAD runs for all 3 backbones, not yet analyzed. Phase 8 (does local self-attention match small-kernel CNNs?) has results in for all 7 models — see the Phase 8 section below. Phase 5 is this document plus `results/phase_5_cross_phase_results_analysis/`.
 
+>**Size convention (corrected 2026-09-02).** All `Size (MB)` figures are **weights only**
+>(the serialized `model_state_dict`). They previously reported the raw `{model}_best.pth`
+>training checkpoint, which also carries AdamW's two momentum buffers — ~3x the model — while
+>the INT8 column was already weights-only, so every FP32-vs-INT8 size claim was inflated ~3x
+>(recorded ~11.9x compression where the true FP32->INT8 ratio is ~4x). Fixed in
+>`ml/reporting.py`; data backfilled by `scripts/backfill_model_size.py`. Accuracies, params
+>and MACs are unaffected, and no ranking changed.
+
 ---
 
 ## Overall Rankings — FP32 Top-1 Accuracy
 
 | Rank | Model | Phase | Accuracy | Params (M) | Size (MB) | Efficiency (Acc/MB) |
 |------|-------|-------|----------|-----------|-----------|-------------------|
-| 1 | **MobileNetV2** | 1 | 57.99% | 2.48 | 28.75 | 2.01 |
-| 2 | **ResNet18** | 1 | 53.91% | 11.28 | 129.21 | 0.42 |
-| 3 | **VGGStyle** | 1 | 51.81% | 2.41 | 27.58 | 1.88 |
-| 4 | **AlexNetFireBypass** | 9 | **50.57%** | 0.52 | 5.99 | 8.44 |
-| 5 | **AlexNetFinalFireResidual** | 4 | **49.79%** | 0.70 | 8.09 | 6.15 |
-| 6 | **AlexNetResidual** | 3 | **48.01%** | 60.67 | 694.41 | 0.07 |
-| 7 | **deit_tiny** | 8 | **46.38%** | 2.76 | 33.20 | 1.40 |
-| 8 | **AlexNetSmallKernel** | 2 | **45.84%** | 1.60 | 18.35 | 2.50 |
-| 9 | **AlexNetFinalBottleneckResidual** | 4 | **45.10%** | 0.57 | 6.65 | 6.78 |
-| 10 | **AlexNetBottleneck** | 3 | **44.62%** | 0.39 | 4.49 | **9.93** |
-| 11 | **AlexNetStacked** | 2 | **44.56%** | 60.48 | 692.25 | 0.06 |
-| 12 | **AlexNetDepthwiseSep** | 3 | **44.39%** | 0.31 | 3.65 | **12.15** |
-| 13 | **AlexNetFire** | 3 | **43.98%** | 0.52 | 5.99 | 7.34 |
-| 14 | **AlexNetFinalDepthwiseFire** | 4 | **43.46%** | 0.47 | 5.51 | 7.88 |
-| 15 | **AlexNetFinalBottleneckFire** | 4 | **42.29%** | 0.51 | 5.88 | 7.19 |
-| 16 | **vit_tiny** | 8 | 40.35% | 2.76 | 33.20 | 1.22 |
-| 17 | **hybrid_bottleneck_swin** | 8 | 40.23% | 0.27 | 3.14 | 12.81 |
-| 18 | **swin_pico_w8** | 8 | 36.75% | 0.32 | 3.91 | 9.40 |
-| 19 | **swin_pico_w4** | 8 | 33.53% | 0.32 | 3.77 | 8.90 |
-| 20 | **swin_pico_w2** | 8 | 32.95% | 0.32 | 3.76 | 8.78 |
-| 21 | **swin_pico_poolmixer** | 8 | 30.98% | 0.23 | 2.66 | 11.65 |
+| 1 | **MobileNetV2** | 1 | 57.99% | 2.48 | 9.69 | 5.98 |
+| 2 | **ResNet18** | 1 | 53.91% | 11.28 | 43.07 | 1.25 |
+| 3 | **VGGStyle** | 1 | 51.81% | 2.41 | 9.21 | 5.63 |
+| 4 | **AlexNetFireBypass** | 9 | **50.57%** | 0.52 | 2.01 | 25.16 |
+| 5 | **AlexNetFinalFireResidual** | 4 | **49.79%** | 0.70 | 2.71 | 18.34 |
+| 6 | **AlexNetResidual** | 3 | **48.01%** | 60.67 | 231.49 | 0.21 |
+| 7 | **deit_tiny** | 8 | **46.38%** | 2.76 | 10.55 | 4.39 |
+| 8 | **AlexNetSmallKernel** | 2 | **45.84%** | 1.60 | 6.12 | 7.49 |
+| 9 | **AlexNetFinalBottleneckResidual** | 4 | **45.10%** | 0.57 | 2.24 | 20.17 |
+| 10 | **AlexNetBottleneck** | 3 | **44.62%** | 0.39 | 1.51 | **29.54** |
+| 11 | **AlexNetStacked** | 2 | **44.56%** | 60.48 | 230.77 | 0.19 |
+| 12 | **AlexNetDepthwiseSep** | 3 | **44.39%** | 0.31 | 1.23 | **36.07** |
+| 13 | **AlexNetFire** | 3 | **43.98%** | 0.52 | 2.01 | 21.88 |
+| 14 | **AlexNetFinalDepthwiseFire** | 4 | **43.46%** | 0.47 | 1.85 | 23.52 |
+| 15 | **AlexNetFinalBottleneckFire** | 4 | **42.29%** | 0.51 | 1.97 | 21.44 |
+| 16 | **vit_tiny** | 8 | 40.35% | 2.76 | 10.55 | 3.82 |
+| 17 | **hybrid_bottleneck_swin** | 8 | 40.23% | 0.27 | 1.05 | 38.34 |
+| 18 | **swin_pico_w8** | 8 | 36.75% | 0.32 | 1.38 | 26.55 |
+| 19 | **swin_pico_w4** | 8 | 33.53% | 0.32 | 1.26 | 26.63 |
+| 20 | **swin_pico_w2** | 8 | 32.95% | 0.32 | 1.25 | 26.36 |
+| 21 | **swin_pico_poolmixer** | 8 | 30.98% | 0.23 | 0.89 | 34.97 |
 
 Rows 4, 5, 9, 14, and 15 are the Phase 4/9 additions; rows 7 and 16–21 are Phase 8's seven
 attention models (`deit_tiny`/`vit_tiny` global attention, the rest local/windowed). Row 4's
@@ -62,14 +70,14 @@ further down instead.
 
 | Model | Acc/MB | Accuracy | Size (MB) | Quantization Drop |
 |-------|--------|----------|-----------|------------------|
-| **AlexNetDepthwiseSep** | 12.15 | 44.39% | 3.65 | –2.92pp ⚠️ |
-| **AlexNetBottleneck** | 9.93 | 44.62% | 4.49 | –0.08pp ✓ |
-| **AlexNetFire** | 7.34 | 43.98% | 5.99 | +0.33pp ✓ |
-| **AlexNetSmallKernel** | 2.50 | 45.84% | 18.35 | –9.89pp ⚠️ |
-| **VGGStyle** | 1.88 | 51.81% | 27.58 | –0.63pp ✓ |
-| **MobileNetV2** | 2.01 | 57.99% | 28.75 | — |
+| **AlexNetDepthwiseSep** | 36.07 | 44.39% | 1.23 | –2.92pp ⚠️ |
+| **AlexNetBottleneck** | 29.54 | 44.62% | 1.51 | –0.08pp ✓ |
+| **AlexNetFire** | 21.88 | 43.98% | 2.01 | +0.33pp ✓ |
+| **AlexNetSmallKernel** | 7.49 | 45.84% | 6.12 | –9.89pp ⚠️ |
+| **VGGStyle** | 5.63 | 51.81% | 9.21 | –0.63pp ✓ |
+| **MobileNetV2** | 5.98 | 57.99% | 9.69 | — |
 
-**Verdict:** **AlexNetBottleneck** and **AlexNetFire** are Pareto-optimal: tiny (~4–6 MB), competitive accuracy (43–44%), and **quantization-stable** (minimal INT8 drop).
+**Verdict:** **AlexNetBottleneck** and **AlexNetFire** are Pareto-optimal: tiny (~1.5–2 MB), competitive accuracy (43–44%), and **quantization-stable** (minimal INT8 drop).
 
 ---
 
@@ -107,7 +115,7 @@ further down instead.
 
 **Verdict:** 
 - Pure 3×3 or 2×2 restrictions are costly without compensation.
-- **Head type matters:** AlexNet3x3GAP (2.23 MB) vs AlexNet3x3FC (659 MB) shows GAP's 296× compression benefit.
+- **Head type matters:** AlexNet3x3GAP (8.79 MB) vs AlexNet3x3FC (219.75 MB) shows GAP's 25× compression benefit.
 - **AlexNetSmallKernel** (custom small-kernel design) recovers well and reaches 45.84% at tiny size.
 - Stacking small kernels helps but requires more params.
 
@@ -117,13 +125,13 @@ further down instead.
 
 | Mechanism | Model | Accuracy | Size (MB) | Params (M) | Eff. (Acc/MB) | QAT Drop | Status |
 |-----------|-------|----------|-----------|-----------|---------------|----------|--------|
-| **Bottleneck** | AlexNetBottleneck | 44.62% | 4.49 | 0.39 | 9.93 | –0.08pp | ✓✓ **Best** |
-| **Fire (squeezenet)** | AlexNetFire | 43.98% | 5.99 | 0.52 | 7.34 | +0.33pp | ✓✓ **Excellent** |
-| **Depthwise Sep** | AlexNetDepthwiseSep | 44.39% | 3.65 | 0.31 | 12.15 | –2.92pp | ⚠️ Unstable |
-| **Residual** | AlexNetResidual | 48.01% | 694.41 | 60.67 | 0.07 | –0.74pp | ✓ Best overall accuracy |
-| **Factorized** | AlexNetFactorized | 42.89% | 653.15 | 57.07 | 0.07 | –0.29pp | ✓ Good |
-| **Group Conv** | AlexNetGroupConv | 29.18% | 639.99 | 55.92 | 0.05 | –1.47pp | ❌ Poor |
-| **SE (Squeeze-Excite)** | AlexNetSE | **0.50%** | 659.75 | 57.65 | — | — | ❌ **Failed** |
+| **Bottleneck** | AlexNetBottleneck | 44.62% | 1.51 | 0.39 | 29.54 | –0.08pp | ✓✓ **Best** |
+| **Fire (squeezenet)** | AlexNetFire | 43.98% | 2.01 | 0.52 | 21.88 | +0.33pp | ✓✓ **Excellent** |
+| **Depthwise Sep** | AlexNetDepthwiseSep | 44.39% | 1.23 | 0.31 | 36.07 | –2.92pp | ⚠️ Unstable |
+| **Residual** | AlexNetResidual | 48.01% | 231.49 | 60.67 | 0.21 | –0.74pp | ✓ Best overall accuracy |
+| **Factorized** | AlexNetFactorized | 42.89% | 217.73 | 57.07 | 0.20 | –0.29pp | ✓ Good |
+| **Group Conv** | AlexNetGroupConv | 29.18% | 213.34 | 55.92 | 0.14 | –1.47pp | ❌ Poor |
+| **SE (Squeeze-Excite)** | AlexNetSE | **0.50%** | 219.91 | 57.65 | — | — | ❌ **Failed** |
 
 **Note:** **AlexNet3x3GAP** (moved to Phase 2) is a simple head-type variant (GAP vs FC), not a compensation mechanism; see Phase 2 section above.
 
@@ -140,18 +148,18 @@ further down instead.
 
 ### **Tier 1: Production-Ready (Accuracy + Efficiency + Stability)**
 1. **MobileNetV2** — Industry standard; 57.99% accuracy, proven quantization.
-2. **AlexNetBottleneck** — Tiny (4.5 MB), 44.62% accuracy, rock-solid QAT (–0.08pp drop).
-3. **AlexNetFire** — Tiny (6 MB), 43.98% accuracy, quantization *gain* (+0.33pp).
-4. **AlexNetSmallKernel** — Efficient (45.84%, 18 MB), but watch QAT stability (–9.89pp drop).
+2. **AlexNetBottleneck** — Tiny (1.5 MB), 44.62% accuracy, rock-solid QAT (–0.08pp drop).
+3. **AlexNetFire** — Tiny (2 MB), 43.98% accuracy, quantization *gain* (+0.33pp).
+4. **AlexNetSmallKernel** — Efficient (45.84%, 6.1 MB), but watch QAT stability (–9.89pp drop).
 
 ### **Tier 2: High-Accuracy Alternatives**
-5. **AlexNetResidual** — Best AlexNet variant (48.01%), good QAT stability (–0.74pp), but large (694 MB).
+5. **AlexNetResidual** — Best AlexNet variant (48.01%), good QAT stability (–0.74pp), but large (231 MB).
 6. **ResNet18** — Balanced baseline (53.91%), moderate size, baseline QAT reference.
 
 ### **Tier 3: Exploratory / Requires Tuning**
-7. **AlexNetDepthwiseSep** — Highest efficiency (12.15 Acc/MB) but poor quantization drop (–2.92pp); needs QAT tuning.
+7. **AlexNetDepthwiseSep** — Highest efficiency (36.07 Acc/MB) but poor quantization drop (–2.92pp); needs QAT tuning.
 8. **AlexNetStacked** — Good accuracy (44.56%) via stacking, but large and moderate QAT drop (–1.77pp).
-9. **AlexNetMixed** — Balanced compromise (38.74%, 20 MB), stable QAT (–0.75pp).
+9. **AlexNetMixed** — Balanced compromise (38.74%, 6.7 MB), stable QAT (–0.75pp).
 10. **VGGStyle** — Competitive baseline (51.81%), stable QAT (–0.63pp).
 
 ### **Not Recommended**
@@ -222,7 +230,7 @@ to its inverted-residual/depthwise structure; efficiency column is FP32-only for
 - **H3 (Pareto frontier beats baseline on accuracy/latency): 4/5 PASS.** `alexnet_bottleneck`,
   `alexnet_final_bottleneck_residual`, `alexnet_final_fire_residual`, and `vgg_style` all beat
   `alexnet_tv`'s accuracy/latency ratio. `mobilenetv2` does not — `alexnet_tv`'s FP32 latency turned out
-  to be the fastest of all 16 profiled configs (0.49ms despite a 662MB model), and `mobilenetv2`'s INT8
+  to be the fastest of all 16 profiled configs (0.49ms despite a 221MB model), and `mobilenetv2`'s INT8
   accuracy can't be checked (unmeasured). Not smoothed over — see notebook for full discussion.
 - **H4 (INT8 preserves latency ranking vs. FP32): PASS, unambiguous.** Spearman ρ=0.9999 (n=96 layer
   configs) — FP32 latency is a reliable proxy for INT8 latency ranking.
@@ -251,10 +259,10 @@ data: `results/phase_4_compression_and_final_architecture_training/`; notebooks:
 
 | Model | Mechanisms combined | FP32 Top-1 | INT8 Top-1 | QAT Δ | Size (MB) | Acc/MB |
 |---|---|---|---|---|---|---|
-| **AlexNetFinalFireResidual** | Fire + residual shortcuts | 49.79% | 49.20% | –0.59pp | 8.09 | 6.15 |
-| AlexNetFinalBottleneckResidual | Bottleneck + residual shortcuts | 45.10% | 45.98% | +0.88pp ✓ | 6.65 | 6.78 |
-| AlexNetFinalDepthwiseFire | Depthwise-separable stem + Fire body | 43.46% | 42.79% | –0.67pp | 5.51 | 7.88 |
-| AlexNetFinalBottleneckFire | Bottleneck stem + Fire body | 42.29% | 44.00% | +1.71pp ✓✓ | 5.88 | 7.19 |
+| **AlexNetFinalFireResidual** | Fire + residual shortcuts | 49.79% | 49.20% | –0.59pp | 2.71 | 18.34 |
+| AlexNetFinalBottleneckResidual | Bottleneck + residual shortcuts | 45.10% | 45.98% | +0.88pp ✓ | 2.24 | 20.17 |
+| AlexNetFinalDepthwiseFire | Depthwise-separable stem + Fire body | 43.46% | 42.79% | –0.67pp | 1.85 | 23.52 |
+| AlexNetFinalBottleneckFire | Bottleneck stem + Fire body | 42.29% | 44.00% | +1.71pp ✓✓ | 1.97 | 21.44 |
 
 ### Ablation — does combining mechanisms help, or does one alone explain the gain?
 
@@ -411,13 +419,13 @@ previously measured.
 
 | Model | Params (M) | MACs (M) | FP32 Top-1 | INT8 Top-1 | ΔQAT | Size (MB) | Acc/MB |
 |---|---|---|---|---|---|---|---|
-| **deit\_tiny** | 2.76 | 185.5 | **46.38%** | 47.66% | +1.28pp | 33.20 | 1.40 |
-| vit\_tiny | 2.76 | 185.5 | 40.35% | 42.44% | +2.10pp | 33.20 | 1.22 |
-| hybrid\_bottleneck\_swin | 0.27 | 30.3 | 40.23% | 40.18% | –0.06pp | 3.14 | **12.81** |
-| swin\_pico\_w8 | 0.32 | 35.3 | 36.75% | 36.99% | +0.24pp | 3.91 | 9.40 |
-| swin\_pico\_w4 | 0.32 | 31.8 | 33.53% | 33.89% | +0.36pp | 3.77 | 8.90 |
-| swin\_pico\_w2 | 0.32 | 30.9 | 32.95% | 33.25% | +0.31pp | 3.76 | 8.78 |
-| swin\_pico\_poolmixer | 0.23 | 21.2 | 30.98% | 30.76% | –0.22pp | 2.66 | 11.65 |
+| **deit\_tiny** | 2.76 | 185.5 | **46.38%** | 47.66% | +1.28pp | 10.55 | 4.39 |
+| vit\_tiny | 2.76 | 185.5 | 40.35% | 42.44% | +2.10pp | 10.55 | 3.82 |
+| hybrid\_bottleneck\_swin | 0.27 | 30.3 | 40.23% | 40.18% | –0.06pp | 1.05 | **38.34** |
+| swin\_pico\_w8 | 0.32 | 35.3 | 36.75% | 36.99% | +0.24pp | 1.38 | 26.55 |
+| swin\_pico\_w4 | 0.32 | 31.8 | 33.53% | 33.89% | +0.36pp | 1.26 | 26.63 |
+| swin\_pico\_w2 | 0.32 | 30.9 | 32.95% | 33.25% | +0.31pp | 1.25 | 26.36 |
+| swin\_pico\_poolmixer | 0.23 | 21.2 | 30.98% | 30.76% | –0.22pp | 0.89 | 34.97 |
 
 **Hypothesis results** (full detail in `ideas/PHASE8_PLAN.md`):
 

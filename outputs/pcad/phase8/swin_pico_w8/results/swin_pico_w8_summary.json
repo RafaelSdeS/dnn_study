@@ -106,11 +106,11 @@
   "int8_loss": 2.7340714931488037,
   "int8_top1_top5_gap": 26.93406045436859,
   "quantization_drop_top1": -0.2444744110107422,
-  "fp32_size_mb": 3.9094486236572266,
+  "fp32_size_mb": 1.3842897415161133,
   "int8_size_mb": 0.8030691146850586,
   "params_m": 0.32378,
-  "compression_ratio": 4.8681346999509545,
-  "fp32_gzip_mb": 3.446786880493164,
+  "compression_ratio": 1.7237491969280792,
+  "fp32_gzip_mb": 0.382976320054796,
   "int8_gzip_mb": 0.5863018035888672,
   "fp32_gzip_ratio": 1.1342298665990818,
   "int8_gzip_ratio": 1.3697196729897751,
@@ -131,5 +131,7 @@
   "avg_gpu_power_w": 81.72359648071127,
   "avg_gpu_utilization_pct": 14.474672639892072,
   "avg_gpu_temp_c": 43.89307675970559,
-  "total_gpu_energy_wh": 109.42577409887113
+  "total_gpu_energy_wh": 109.42577409887113,
+  "fp32_gzip_compression_ratio": 3.614557007905998,
+  "fp32_size_excludes_optimizer": true
 }

@@ -35,7 +35,7 @@ The following hypotheses drive Phase 6 experiments. Each is testable via measure
 - Winograd kernel use <10% of total model latency for alexnet_depthwisesep and mobilenetv2.
 - Empirical speedup detector does NOT flag 3×3 as Winograd-accelerated (speedup ratio <1.8 or no clear separation).
 - Despite lack of hardware acceleration, alexnet_depthwisesep beats vgg_style on latency due to architectural efficiency (lower FLOPs).
-- Latency comparison: alexnet_depthwisesep (3.65 MB, low FLOPs, no Winograd) should be <50% of vgg_style (27.58 MB, more FLOPs, Winograd-accelerated) on both 4060 and 4090.
+- Latency comparison: alexnet_depthwisesep (1.23 MB, low FLOPs, no Winograd) should be <50% of vgg_style (9.21 MB, more FLOPs, Winograd-accelerated) on both 4060 and 4090.
 
 **Evidence to Collect:**
 - Per-layer type classification: mark each layer as "dense 3×3 (Winograd-eligible)" vs. "depthwise 3×3 (not eligible)".

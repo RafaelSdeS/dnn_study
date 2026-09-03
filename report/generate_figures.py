@@ -257,7 +257,7 @@ ax.legend(handles=legend_handles, loc="center left", bbox_to_anchor=(1.02, 0.5),
           ncol=1, frameon=False, fontsize=12)
 
 fig.suptitle("Métodos de compressão além de INT8\n"
-             "(taxa = tamanho do checkpoint FP32 ÷ tamanho do checkpoint comprimido)",
+             "(taxa = tamanho teórico dos pesos em FP32 ÷ tamanho teórico após compressão)",
              fontsize=12, color=TEXT_PRIMARY)
 plt.savefig(OUTPUT_DIR / "extreme_compression_methods.png", dpi=150, bbox_inches="tight", facecolor="white")
 print("✓ extreme_compression_methods.png")

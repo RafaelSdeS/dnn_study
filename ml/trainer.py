@@ -113,13 +113,21 @@ class Trainer:
             start_epoch = state["epoch"] + 1
             best_val_acc = state["best_val_acc"]
             best_val_top5 = state["best_val_top5"]
-            best_epoch = start_epoch - 1
             patience_counter = state["patience_counter"]
             elapsed_time_s = state["elapsed_time_s"]
             for k, v in state["history"].items():
                 if k in history:
                     history[k] = v
             wandb_run_id = state["wandb_run_id"]
+            # best_epoch/best_val_loss aren't in the checkpoint -- recover them from the
+            # restored history so the resumed run's summary reports the whole run, not
+            # just the segment after the resume. best_val_loss is the loss AT the
+            # best-accuracy epoch (not the minimum loss), matching the loop below.
+            if history["val_acc"]:
+                best_epoch = max(range(len(history["val_acc"])), key=history["val_acc"].__getitem__)
+                best_val_loss = history["val_loss"][best_epoch]
+            else:
+                best_epoch = start_epoch - 1
             if cfg.reset_scheduler_on_resume:
                 # scheduler was just constructed fresh above (correct T_max for the new
                 # cfg.epochs) but never stepped -- fast-forward it to start_epoch instead
@@ -130,11 +138,11 @@ class Trainer:
         best_path = self.save_dir / f"{self.run_name}_best.pth"
         resume_path = self.save_dir / f"{self.run_name}_resume.pth"
         meta_path = self.save_dir / f"{self.run_name}_meta.json"
-        train_start = time.time()
+        train_start = time.monotonic()
 
         epoch = start_epoch - 1  # ponytail: keeps epoch bound if resume already reached cfg.epochs
         for epoch in range(start_epoch, cfg.epochs):
-            epoch_start = time.time()
+            epoch_start = time.monotonic()
 
             if self.epoch_callback is not None:
                 self.epoch_callback(epoch, model)
@@ -149,7 +157,7 @@ class Trainer:
             scheduler.step()
             lr = optimizer.param_groups[0]["lr"]
 
-            epoch_time = time.time() - epoch_start
+            epoch_time = time.monotonic() - epoch_start
             peak_mem = (
                 torch.cuda.max_memory_allocated(self.device) / (1024 ** 2)
                 if self.device.type == "cuda" else 0.0
@@ -206,7 +214,7 @@ class Trainer:
                 history=history,
                 wandb_run_id=wandb_run_id,
                 patience_counter=patience_counter,
-                elapsed_time_s=elapsed_time_s + (time.time() - train_start),
+                elapsed_time_s=elapsed_time_s + (time.monotonic() - train_start),
             )
             # Write metadata sidecar for quick access
             meta_path.write_text(json.dumps({"epoch": epoch, "best_val_acc": best_val_acc, "wandb_run_id": wandb_run_id}))
@@ -256,7 +264,7 @@ class Trainer:
         # From history, so these stay the LAST epoch's numbers regardless of the restore.
         final_val_top1 = history["val_acc"][-1] if history["val_acc"] else 0.0
         final_val_top5 = history["val_top5"][-1] if history["val_top5"] else 0.0
-        total_training_time_s = elapsed_time_s + (time.time() - train_start)
+        total_training_time_s = elapsed_time_s + (time.monotonic() - train_start)
         total_time_str = time.strftime("%H:%M:%S", time.gmtime(total_training_time_s))
 
         self.logger.info(

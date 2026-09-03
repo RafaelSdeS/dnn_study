@@ -1,6 +1,8 @@
+import io
 import gzip
 import json
 import re
+import statistics
 import time
 from dataclasses import asdict
 from pathlib import Path
@@ -130,19 +132,43 @@ def compute_segmentation_summary(
     }
 
 
-def disk_mb(path: str | Path) -> float | None:
-    """File size in MB; None if file doesn't exist."""
-    p = Path(path)
-    return p.stat().st_size / (1024 ** 2) if p.exists() else None
+def _model_bytes(path: str | Path) -> bytes | None:
+    """Serialized bytes of just the model weights; None if the file doesn't exist.
 
-
-def gzip_mb(path: str | Path) -> float | None:
-    """Gzip-compressed size in MB (lossless, Deep Compression-style entropy coding on top of
-    whatever precision the checkpoint is already saved at); None if file doesn't exist."""
+    save_checkpoint() stores optimizer + scheduler + history alongside the weights, and AdamW
+    keeps two momentum buffers per parameter -- so a `{name}_best.pth` file is ~3x the model
+    it holds. The INT8 artifact, by contrast, is written with a bare torch.save(model, ...)
+    and is model-only. Measuring both files raw made every FP32-vs-INT8 size comparison
+    apples-to-oranges and inflated the compression ratio by ~3x (recorded ~11.9x where the
+    true FP32->INT8 ratio is ~4x). Unwrapping model_state_dict here puts both sides on the
+    same footing for every caller.
+    """
     p = Path(path)
     if not p.exists():
         return None
-    return len(gzip.compress(p.read_bytes())) / (1024 ** 2)
+    try:
+        obj = torch.load(p, map_location="cpu", weights_only=True)
+    except Exception:
+        # A pickled nn.Module (the INT8 artifact) -- already model-only, measure as-is.
+        return p.read_bytes()
+    if isinstance(obj, dict) and "model_state_dict" in obj:
+        buf = io.BytesIO()
+        torch.save(obj["model_state_dict"], buf)
+        return buf.getvalue()
+    return p.read_bytes()
+
+
+def disk_mb(path: str | Path) -> float | None:
+    """Model size in MB (weights only, see _model_bytes); None if file doesn't exist."""
+    b = _model_bytes(path)
+    return len(b) / (1024 ** 2) if b is not None else None
+
+
+def gzip_mb(path: str | Path) -> float | None:
+    """Gzip-compressed model size in MB (lossless, Deep Compression-style entropy coding on top
+    of whatever precision the weights are already saved at); None if file doesn't exist."""
+    b = _model_bytes(path)
+    return len(gzip.compress(b)) / (1024 ** 2) if b is not None else None
 
 
 def _sdpa_flop_jit(inputs, outputs):
@@ -216,7 +242,15 @@ def make_run_summary(
     history = fit_results.get("history", {})
     final_train_loss = history.get("train_loss", [None])[-1]
     epoch_times = history.get("epoch_time_s", [])
-    avg_epoch_time_s = sum(epoch_times) / len(epoch_times) if epoch_times else None
+    if epoch_times:
+        # ponytail: a suspended/hibernated machine leaves one epoch's wall-clock time.time()
+        # delta covering the whole sleep (hours, vs. a normal epoch's seconds) -- drop anything
+        # past 3x the median rather than letting one outlier skew the run's reported average.
+        median_t = statistics.median(epoch_times)
+        clean_times = [t for t in epoch_times if t <= median_t * 3] or epoch_times
+        avg_epoch_time_s = sum(clean_times) / len(clean_times)
+    else:
+        avg_epoch_time_s = None
     peak_gpu_mem_mb = max(history.get("peak_gpu_mem_mb", [0]) or [0])
     avg_images_per_sec = _avg(history.get("images_per_sec", []))
     avg_batch_time_s = _avg(history.get("avg_batch_time_s", []))

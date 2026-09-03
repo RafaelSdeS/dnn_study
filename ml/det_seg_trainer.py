@@ -109,10 +109,10 @@ class DetectionTrainer:
 
         best_path = self.save_dir / f"{self.run_name}_best.pth"
         resume_path = self.save_dir / f"{self.run_name}_resume.pth"
-        train_start = time.time()
+        train_start = time.monotonic()
 
         for epoch in range(start_epoch, cfg.epochs):
-            epoch_start = time.time()
+            epoch_start = time.monotonic()
 
             if self.epoch_callback is not None:
                 self.epoch_callback(epoch, model)
@@ -128,7 +128,7 @@ class DetectionTrainer:
             scheduler.step()
             lr = optimizer.param_groups[0]["lr"]
 
-            epoch_time = time.time() - epoch_start
+            epoch_time = time.monotonic() - epoch_start
             peak_mem = (
                 torch.cuda.max_memory_allocated(self.device) / (1024 ** 2)
                 if self.device.type == "cuda" else 0.0
@@ -191,14 +191,14 @@ class DetectionTrainer:
                 best_val_acc=best_val_mAP,
                 history=history,
                 patience_counter=patience_counter,
-                elapsed_time_s=elapsed_time_s + (time.time() - train_start),
+                elapsed_time_s=elapsed_time_s + (time.monotonic() - train_start),
             )
 
             if cfg.early_stopping_patience is not None and patience_counter >= cfg.early_stopping_patience:
                 self.logger.info(f"Early stopping triggered after {cfg.early_stopping_patience} epochs without improvement")
                 break
 
-        elapsed_time_s += time.time() - train_start
+        elapsed_time_s += time.monotonic() - train_start
         history["total_time_s"] = elapsed_time_s
         history["best_epoch"] = best_epoch
         history["best_val_mAP"] = best_val_mAP
@@ -368,10 +368,10 @@ class SegmentationTrainer:
 
         best_path = self.save_dir / f"{self.run_name}_best.pth"
         resume_path = self.save_dir / f"{self.run_name}_resume.pth"
-        train_start = time.time()
+        train_start = time.monotonic()
 
         for epoch in range(start_epoch, cfg.epochs):
-            epoch_start = time.time()
+            epoch_start = time.monotonic()
 
             if self.epoch_callback is not None:
                 self.epoch_callback(epoch, model)
@@ -387,7 +387,7 @@ class SegmentationTrainer:
             scheduler.step()
             lr = optimizer.param_groups[0]["lr"]
 
-            epoch_time = time.time() - epoch_start
+            epoch_time = time.monotonic() - epoch_start
             peak_mem = (
                 torch.cuda.max_memory_allocated(self.device) / (1024 ** 2)
                 if self.device.type == "cuda" else 0.0
@@ -446,14 +446,14 @@ class SegmentationTrainer:
                 best_val_acc=best_val_mIoU,
                 history=history,
                 patience_counter=patience_counter,
-                elapsed_time_s=elapsed_time_s + (time.time() - train_start),
+                elapsed_time_s=elapsed_time_s + (time.monotonic() - train_start),
             )
 
             if cfg.early_stopping_patience is not None and patience_counter >= cfg.early_stopping_patience:
                 self.logger.info(f"Early stopping triggered after {cfg.early_stopping_patience} epochs without improvement")
                 break
 
-        elapsed_time_s += time.time() - train_start
+        elapsed_time_s += time.monotonic() - train_start
         history["total_time_s"] = elapsed_time_s
         history["best_epoch"] = best_epoch
         history["best_val_mIoU"] = best_val_mIoU

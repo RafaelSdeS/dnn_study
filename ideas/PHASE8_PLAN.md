@@ -104,14 +104,16 @@ H1) at a comparable parameter/FLOP budget.
 model) at ≤ 2× `alexnet_fire`'s **0.516M parameters**, and ≥ pure-Swin-Pico's accuracy at the same
 window size used in its attention stages.
 
-**⚠ Compare parameters, not `fp32_size_mb` (measured).** `fp32_size_mb` in
-`model_details_cross_phase.csv` is `disk_mb()` of the **training checkpoint**, which carries
-AdamW's two moment buffers alongside the weights — ≈11.5 bytes/param, not 4. `int8_size_mb` is
-the converted model, ≈1 byte/param. The two columns use different conventions, so any
-FP32-vs-INT8 or model-vs-model size claim stated in those MB figures is off by ~3×. Reference
-points: `alexnet_fire` 0.516M params / 5.99 MB ckpt, `alexnet_bottleneck` 0.385M / 4.49 MB,
-`vgg_style` 2.41M / 27.58 MB. Phase 8 reports **params and weights-only MB (`params × 4 B`)**
-alongside the legacy columns so the comparison is like-for-like.
+**✅ FIXED 2026-09-02 — `fp32_size_mb` is now weights-only.** This section used to warn that
+`fp32_size_mb` was `disk_mb()` of the **training checkpoint** (carrying AdamW's two moment
+buffers, ≈11.5 bytes/param instead of 4) while `int8_size_mb` was the converted model at
+≈1 byte/param — two different conventions, making any FP32-vs-INT8 or model-vs-model MB claim
+off by ~3×. That diagnosis was correct and the bug is now fixed in `ml/reporting.py`
+(`_model_bytes()` unwraps `model_state_dict`), with every summary JSON and CSV backfilled by
+`scripts/backfill_model_size.py`. Both columns are now weights-only, so MB figures are directly
+comparable and the recorded compression ratio dropped from ~11.9× to the expected ~4×.
+Corrected reference points: `alexnet_fire` 0.516M params / 2.01 MB, `alexnet_bottleneck`
+0.385M / 1.51 MB, `vgg_style` 2.41M / 9.21 MB.
 
 At the D3 configs this is already satisfied on the size side (measured): hybrid 0.281M params vs.
 `alexnet_fire` 0.516M — the hybrid is *smaller* than both Phase 3 Pareto models, so H2 is a clean

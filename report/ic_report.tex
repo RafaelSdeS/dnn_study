@@ -51,7 +51,7 @@ $\rightarrow$ INT8, comparando um baseline de kernel irrestrito, uma restrição
 (1$\times$1 $\rightarrow$ 3$\times$3 $\rightarrow$ 1$\times$1), módulos \textit{Fire}
 \cite{iandola2016squeezenet} e um atalho residual isolado — todos mantendo os kernels
 $\leq$3$\times$3. A variante com \textit{bottleneck} (\texttt{AlexNetBottleneck}) atinge 44,62\% de
-acurácia top-1 em FP32 com apenas 0,385M parâmetros (4,49 MB), superando a restrição ingênua em
+acurácia top-1 em FP32 com apenas 0,385M parâmetros (1,51 MB), superando a restrição ingênua em
 mais de 4 pontos percentuais com $6\times$ menos parâmetros. É também a que menos perde acurácia
 sob quantização INT8 em todo o estudo (-0,08 p.p.). Uma ablação subsequente isola o efeito de um
 único atalho residual adicionado a um bloco \textit{Fire}, sem nenhum parâmetro extra
@@ -220,6 +220,32 @@ Por não haver caminho INT8 estável para LayerNorm/\textit{softmax}/atenção n
 de QAT (Seção~\ref{sec:dados}), essas camadas permanecem em FP32 durante a conversão nos sete
 modelos acima — apenas as camadas Linear/Conv convertem para INT8.
 
+\subsection{Convenção de tamanho de modelo}
+\label{sec:convencao_tamanho}
+Todos os tamanhos em MB deste trabalho medem \emph{apenas os pesos} — o \texttt{state\_dict}
+serializado do modelo — tanto em FP32 quanto em INT8, de modo que as duas colunas sejam
+diretamente comparáveis.
+
+Essa convenção corrige um erro de medição presente até 2026-09-02. As funções
+\texttt{disk\_mb()}/\texttt{gzip\_mb()} (\texttt{ml/reporting.py}) mediam o arquivo bruto
+\texttt{\{modelo\}\_best.pth}, que é um \textit{checkpoint} de treino: além dos pesos, ele carrega
+o estado do otimizador AdamW (dois \textit{momentum buffers} por parâmetro), o \textit{scheduler} e
+o histórico — cerca de $3\times$ o tamanho do modelo. O artefato INT8, gravado com
+\texttt{torch.save(modelo)}, sempre conteve apenas os pesos. As duas colunas usavam convenções
+diferentes, e toda razão de compressão FP32$\to$INT8 saía inflada em $\sim$$3\times$: registrava-se
+$\sim$$11{,}9\times$ onde o limite teórico de 32 para 8 bits é $4\times$. Após a correção, a razão
+mediana medida é $3{,}94\times$, com máximo de $3{,}99\times$ — nenhum valor ultrapassa o teto
+teórico.
+
+A correção divide todos os tamanhos FP32 por um fator praticamente uniforme (0,333--0,337), de modo
+que \emph{nenhuma ordenação, fronteira de Pareto ou comparação relativa entre modelos muda}; apenas
+os valores absolutos em MB e as razões FP32/INT8 são afetados. Acurácias, contagens de parâmetros e
+MACs não dependem dessa medição. Onde o \textit{checkpoint} original sobreviveu, o valor foi
+remedido; nos demais casos ele foi recalculado de forma exata reconstruindo a arquitetura a partir
+do registro de modelos (o tamanho do \texttt{state\_dict} é determinado pela arquitetura), com erro
+máximo de 0,02\% contra os casos verificáveis. Os tamanhos de Eixo 6 (detecção/segmentação) usam
+\texttt{true\_size\_mb}, medido separadamente, e nunca foram afetados.
+
 \subsection{Perfilamento de hardware}
 \label{sec:profiling}
 As medições de latência (Eixo 3) foram feitas em uma única GPU NVIDIA RTX 4060 Laptop, em
@@ -251,9 +277,9 @@ Eixo 5) e a arquitetura híbrida final (\texttt{Fire-Residual}).}
 
 Os três \textit{baselines} externos da Figura~\ref{fig:kernel_cost} situam essa restrição num
 contexto mais amplo, fora do escopo Winograd-amigável ($\leq$3$\times$3) deste estudo: MobileNetV2
-pré-treinada atinge a maior acurácia do gráfico, 58,0\% de acurácia FP32 (28,75 MB); ResNet18
-pré-treinada atinge 53,9\% (129,21 MB, o maior checkpoint do gráfico); e VGG-Style — treinada do
-zero, sem pré-treino — 51,8\% (27,58 MB). Do lado da
+pré-treinada atinge a maior acurácia do gráfico, 58,0\% de acurácia FP32 (9,69 MB); ResNet18
+pré-treinada atinge 53,9\% (43,07 MB, o maior modelo do gráfico); e VGG-Style — treinada do
+zero, sem pré-treino — 51,8\% (9,21 MB). Do lado da
 restrição ingênua, o par completo citado na legenda é \texttt{AlexNet3x3-FC} (35,79\%, discutida
 abaixo) e \texttt{AlexNet2x2-FC} (30,53\%, treinada do zero) — kernel 2$\times$2 sozinho, sem
 compensação estrutural, fica abaixo até da baseline AlexNet pré-treinada de kernel irrestrito.
@@ -280,11 +306,11 @@ aplicado sobre uma área espacial bem maior no total.
 \textbf{Modelo} & \textbf{Params (M)} & \textbf{MACs (M)} & \textbf{Tam.\ FP32} & \textbf{Tam.\ INT8} & \textbf{Top-1 FP32} & \textbf{Top-1 INT8} & \textbf{$\Delta$QAT} \\
 & & & \textbf{(MB)} & \textbf{(MB)} & \textbf{(\%)} & \textbf{(\%)} & \textbf{(p.p.)} \\
 \midrule
-AlexNet (irrestrita, pré-treinada) & 57,82 & 94,9 & 661,75 & 55,33 & 32,88 & 31,90 & $-$0,98 \\
-AlexNet3x3-FC (do zero) & 57,61 & 222,3 & 659,26 & 55,12 & 35,79 & 36,19 & $+$0,40 \\
-AlexNet3x3-GAP & 2,30  & 167,0 & 26,37 & 2,23 & 40,32 & 37,02 & $-$3,29 \\
-\textbf{AlexNetBottleneck} & \textbf{0,39} & \textbf{39,5} & \textbf{4,49} & \textbf{0,43} & \textbf{44,62} & \textbf{44,54} & \textbf{$-$0,08} \\
-AlexNetFire & 0,52 & 177,7 & 5,99 & 0,55 & 43,98 & 44,30 & $+$0,33 \\
+AlexNet (irrestrita, pré-treinada) & 57,82 & 94,9 & 220,58 & 55,33 & 32,88 & 31,90 & $-$0,98 \\
+AlexNet3x3-FC (do zero) & 57,61 & 222,3 & 219,75 & 55,12 & 35,79 & 36,19 & $+$0,40 \\
+AlexNet3x3-GAP & 2,30  & 167,0 & 8,79 & 2,23 & 40,32 & 37,02 & $-$3,29 \\
+\textbf{AlexNetBottleneck} & \textbf{0,39} & \textbf{39,5} & \textbf{1,51} & \textbf{0,43} & \textbf{44,62} & \textbf{44,54} & \textbf{$-$0,08} \\
+AlexNetFire & 0,52 & 177,7 & 2,01 & 0,55 & 43,98 & 44,30 & $+$0,33 \\
 \bottomrule
 \end{tabular}
 \end{table*}
@@ -331,13 +357,13 @@ já vistas na Tabela~\ref{tab:kernel_restriction_cost}).
 \textbf{Arquitetura} & \textbf{Params} & \textbf{MACs} & \textbf{Tam.\ FP32} & \textbf{Tam.\ INT8} & \textbf{Top-1} & \textbf{Top-1} & \textbf{$\Delta$QAT} \\
  & \textbf{(M)} & \textbf{(M)} & \textbf{(MB)} & \textbf{(MB)} & \textbf{FP32 (\%)} & \textbf{INT8 (\%)} & \textbf{(p.p.)} \\
 \midrule
-AlexNetFire (base) & 0,52 & 177,7 & 5,99 & 0,55 & 43,98 & 44,30 & $+$0,33 \\
-AlexNetBottleneck (base) & 0,39 & 39,5 & 4,49 & 0,43 & 44,62 & 44,54 & $-$0,08 \\
+AlexNetFire (base) & 0,52 & 177,7 & 2,01 & 0,55 & 43,98 & 44,30 & $+$0,33 \\
+AlexNetBottleneck (base) & 0,39 & 39,5 & 1,51 & 0,43 & 44,62 & 44,54 & $-$0,08 \\
 \midrule
-Fire + Residual & 0,70 & 55,2 & 8,09 & 0,75 & 49,79 & 49,20 & $-$0,59 \\
-Bottleneck + Fire & 0,51 & 47,3 & 5,88 & 0,55 & 42,29 & 44,00 & $+$1,71 \\
-Bottleneck + Residual & 0,57 & 54,2 & 6,65 & 0,64 & 45,10 & 45,98 & $+$0,88 \\
-Depthwise + Fire & 0,47 & 30,1 & 5,51 & 0,51 & 43,46 & 42,79 & $-$0,67 \\
+Fire + Residual & 0,70 & 55,2 & 2,71 & 0,75 & 49,79 & 49,20 & $-$0,59 \\
+Bottleneck + Fire & 0,51 & 47,3 & 1,97 & 0,55 & 42,29 & 44,00 & $+$1,71 \\
+Bottleneck + Residual & 0,57 & 54,2 & 2,24 & 0,64 & 45,10 & 45,98 & $+$0,88 \\
+Depthwise + Fire & 0,47 & 30,1 & 1,85 & 0,51 & 43,46 & 42,79 & $-$0,67 \\
 \bottomrule
 \end{tabular}
 \end{table*}
@@ -523,7 +549,7 @@ Figura~\ref{fig:accuracy_vs_size} situa esse resultado no conjunto completo de m
 \begin{figure*}[!t]
 \centering
 \includegraphics[width=\linewidth]{figures/accuracy_vs_size_all_models.png}
-\caption{Acurácia top-1 vs. tamanho do \textit{checkpoint} (MB, escala log) para os 33 modelos de
+\caption{Acurácia top-1 vs. tamanho do modelo (pesos, MB, escala log) para os 33 modelos de
 classificação deste estudo (Fases 1--4, 8 e 9; o Eixo 6 mede mAP/mIoU, não top-1, e por
 isso não é comparável nesta mesma escala — omitida aqui). Dois painéis, FP32 (esquerda) e INT8
 (direita), cada um com sua própria fronteira de Pareto tamanho-acurácia (linha tracejada; apenas
@@ -535,13 +561,13 @@ passaram por QAT (\textit{residual adds} sem \texttt{FloatFunctional}, Seção~\
 \end{figure*}
 
 A Figura~\ref{fig:accuracy_vs_size} ordena todos os modelos de classificação do estudo segundo
-acurácia versus tamanho de \textit{checkpoint}, complementando a visão latência-cêntrica da
+acurácia versus tamanho do modelo, complementando a visão latência-cêntrica da
 Figura~\ref{fig:pareto_latency}. Quatro leituras se destacam.
 
 \textbf{Nem todo modelo de atenção na base da fronteira FP32 está lá pelo mesmo motivo.} A
-fronteira é uma escada de 7 modelos, de \texttt{swin\_pico\_poolmixer} (2,66 MB, 30,98\%) a
-\texttt{MobileNetV2} (28,75 MB, 58,00\%). O primeiro degrau, \texttt{swin\_pico\_poolmixer}, está
-lá por motivo trivial — é o menor \textit{checkpoint} do estudo, não um bom compromisso. Mas o
+fronteira é uma escada de 7 modelos, de \texttt{swin\_pico\_poolmixer} (0,89 MB, 30,98\%) a
+\texttt{MobileNetV2} (9,69 MB, 58,00\%). O primeiro degrau, \texttt{swin\_pico\_poolmixer}, está
+lá por motivo trivial — é o menor modelo do estudo, não um bom compromisso. Mas o
 segundo, \texttt{hybrid\_bottleneck\_swin} (+0,47 MB), é o degrau mais acentuado de toda a
 fronteira: +9,25 p.p. Esse salto sozinho já é maior que o salto final para
 \texttt{MobileNetV2} (+6,18 p.p.). \texttt{AlexNetDepthwiseSep} (+0,52 MB) soma outros +4,16 p.p.,
@@ -553,7 +579,7 @@ fronteira com +5,95 p.p.
 \texttt{hybrid\_bottleneck\_swin}, apesar do FP32 competitivo (40,23\%, Eixo 7), é dominado por
 \texttt{AlexNetDepthwiseSep} (0,40 MB, 41,47\%) — menor \emph{e} mais acurado. Mesmo
 \texttt{deit\_tiny} (46,38\% FP32, o melhor modelo de atenção) fica dentro da fronteira, não sobre
-ela: seu \textit{checkpoint} ($\sim$33,2 MB) é maior que o de \texttt{VGG-Style} (27,59 MB,
+ela: seu tamanho de pesos ($\sim$10,55 MB) é maior que o de \texttt{VGG-Style} (9,21 MB,
 51,81\%), que o domina em ambos os eixos.
 
 \textbf{O controle sem atenção não é mais o pior modelo do estudo, mas continua entre os mais
@@ -597,7 +623,7 @@ O eixo MACs também reordena o agrupamento de compensação visível por tamanho
 Figura~\ref{fig:accuracy_vs_size}: \texttt{AlexNetFire} e \texttt{AlexNetFireBypass} (177,7M MACs
 cada, já que o atalho por identidade não adiciona multiplicações) custam mais em computação que
 \texttt{AlexNetFinalFireResidual} (55,2M) e \texttt{AlexNetBottleneck} (39,5M) apesar de
-\textit{checkpoints} bem menores — o mesmo padrão "poucos parâmetros, muitos MACs" do módulo
+modelos bem menores — o mesmo padrão "poucos parâmetros, muitos MACs" do módulo
 \textit{Fire} já discutido no Eixo 1.
 
 \subsection{Eixo 5: Robustez de Quantização e Comparação de Métodos de Compressão}
@@ -680,7 +706,7 @@ reformatação de peso ou descontinuar a densidade que Winograd requer.
 \centering
 \includegraphics[width=\linewidth]{figures/extreme_compression_methods.png}
 \caption{Acurácia top-1 média por método de compressão além de INT8, com taxa de compressão
-(tamanho do checkpoint FP32 dividido pelo tamanho do checkpoint comprimido) e número de modelos
+(tamanho teórico dos pesos em FP32 dividido pelo tamanho teórico após compressão) e número de modelos
 ($n$) entre parênteses. INT4 PTQ (sem retreino) colapsa
 para 25,3\%; retreinar sob o mesmo INT4 (QAT) recupera para 43,3\% — o retreino, não a
 largura de bits em si, é o que preserva a acurácia. Precisão mista INT4/INT8 (QAT) supera até o
@@ -1025,13 +1051,13 @@ apenas Linear/Conv vão para INT8, mesma exclusão seletiva já usada para Batch
 \textbf{Modelo} & \textbf{Params (M)} & \textbf{MACs (M)} & \textbf{Tam.\ FP32} & \textbf{Tam.\ INT8} & \textbf{Top-1} & \textbf{Top-1} & \textbf{$\Delta$QAT} \\
  & & & \textbf{(MB)} & \textbf{(MB)} & \textbf{FP32 (\%)} & \textbf{INT8 (\%)} & \textbf{(p.p.)} \\
 \midrule
-swin\_pico\_w2 (janela 2) & 0,32 & 30,9 & 3,76 & 0,67 & 32,95 & 33,25 & $+$0,31 \\
-swin\_pico\_w4 (janela 4) & 0,32 & 31,8 & 3,77 & 0,68 & 33,53 & 33,89 & $+$0,36 \\
-swin\_pico\_w8 (janela 8) & 0,32 & 35,3 & 3,91 & 0,80 & 36,75 & 36,99 & $+$0,24 \\
-swin\_pico\_poolmixer & 0,23 & 21,2 & 2,66 & 0,30 & 30,98 & 30,76 & $-$0,22 \\
-hybrid\_bottleneck\_swin & 0,27 & 30,3 & 3,14 & 0,54 & 40,23 & 40,18 & $-$0,06 \\
-vit\_tiny & 2,76 & 185,5 & 33,20 & 5,66 & 40,35 & 42,44 & $+$2,10 \\
-\textbf{deit\_tiny} & 2,76 & 185,5 & \textbf{33,20} & \textbf{5,66} & \textbf{46,38} & \textbf{47,66} & $+$1,28 \\
+swin\_pico\_w2 (janela 2) & 0,32 & 30,9 & 1,25 & 0,67 & 32,95 & 33,25 & $+$0,31 \\
+swin\_pico\_w4 (janela 4) & 0,32 & 31,8 & 1,26 & 0,68 & 33,53 & 33,89 & $+$0,36 \\
+swin\_pico\_w8 (janela 8) & 0,32 & 35,3 & 1,38 & 0,80 & 36,75 & 36,99 & $+$0,24 \\
+swin\_pico\_poolmixer & 0,23 & 21,2 & 0,89 & 0,30 & 30,98 & 30,76 & $-$0,22 \\
+hybrid\_bottleneck\_swin & 0,27 & 30,3 & 1,05 & 0,54 & 40,23 & 40,18 & $-$0,06 \\
+vit\_tiny & 2,76 & 185,5 & 10,55 & 5,66 & 40,35 & 42,44 & $+$2,10 \\
+\textbf{deit\_tiny} & 2,76 & 185,5 & \textbf{10,55} & \textbf{5,66} & \textbf{46,38} & \textbf{47,66} & $+$1,28 \\
 \bottomrule
 \end{tabular}
 \end{table*}
@@ -1068,6 +1094,31 @@ LayerNorm/atenção em FP32 e converter apenas as camadas Linear/Conv, o \textit
 funciona como regularização adicional sobre a fração convertida do modelo — mas o mecanismo exato
 permanece especulativo, e não explica por que dois dos sete modelos não mostram esse efeito.
 
+\textbf{O custo da exclusão aparece no tamanho, não na acurácia.} A robustez acima é medida em
+acurácia; olhando o \emph{tamanho}, a mesma exclusão que preserva a acurácia cobra um preço claro.
+Manter LayerNorm/atenção em FP32 significa que uma fração grande dos pesos nunca converte, e a
+razão de compressão FP32$\to$INT8 mede isso diretamente: os seis modelos com atenção comprimem
+apenas 1,72--1,94$\times$, contra 3,08--3,99$\times$ (mediana 3,94$\times$) das CNNs das Fases
+1--4/9, que ficam próximas do teto teórico de 4$\times$ de 32 para 8 bits. A fração de parâmetros
+excluídos explica a diferença: 28,3--32,4\% nos seis modelos com atenção.
+
+O \texttt{swin\_pico\_poolmixer} funciona como controle deste efeito. Por substituir a atenção em
+janela por \textit{pooling} (o contraste do H5), quase nada nele é excluído do QAT --- 0,8\% dos
+parâmetros --- e ele comprime 2,91$\times$, cerca de 1,5$\times$ melhor que seus irmãos com
+atenção, apesar de ser o menor modelo do eixo. A ordenação segue a fração excluída, não a
+arquitetura em si. Os valores absolutos ficam abaixo do que essa fração sozinha preveria
+(4/(1+3f), com $f$ a fração excluída), porque escalas e \textit{zero-points} por canal somam um
+custo fixo que pesa proporcionalmente mais nos modelos menores --- é o que separa os
+2,91$\times$ medidos do \texttt{poolmixer} dos $\sim$3,9$\times$ que sua fração excluída sugeriria.
+
+A leitura conjunta com o H5 é que a atenção local é penalizada duas vezes no perfil de implantação
+visado por este trabalho: não aciona \textit{kernel} Winograd (por ausência de convoluções
+3$\times$3 de \textit{stride} 1) e, sob este \textit{pipeline} de QAT, converte para INT8 apenas
+parcialmente. Nenhuma das duas penalidades aparece na acurácia --- que é onde a hipótese original
+esperava encontrá-las. Ambas dependem, porém, da restrição de implementação descrita em D6, não de
+uma propriedade intrínseca da atenção: um \textit{pipeline} com suporte INT8 a
+LayerNorm/\textit{softmax} fecharia a distância de compressão sem tocar na arquitetura.
+
 A destilação DeiT confirma a hipótese: \texttt{deit\_tiny} supera
 \texttt{vit\_tiny} (mesma arquitetura, mesmos hiperparâmetros, só a função de perda muda) por
 $+$6,04 p.p. em FP32 e $+$5,22 p.p. em INT8. O ganho de destilar de um professor
@@ -1100,10 +1151,10 @@ código de perfilamento atual, discriminação por submódulo (\textit{stem} vs.
 do tempo de dispositivo; a mesma ressalva do Eixo 3 sobre a instabilidade do nome do
 \textit{kernel} cuDNN entre versões se aplica aqui, tornando a ausência de traço Winograd uma
 evidência fraca, não uma prova. A razão INT8/FP32 de tamanho reportada acima para a robustez de
-quantização usa o tamanho de
-\textit{checkpoint} em disco, não a contagem de parâmetros ponderada por precisão por módulo
-proposta originalmente para essa hipótese — uma proxy razoável de tamanho de implantação, mas não a
-mesma grandeza.
+quantização usa o tamanho serializado dos \emph{pesos} em ambos os lados (corrigido em
+2026-09-02; ver Seção~\ref{sec:convencao_tamanho}), não a contagem de parâmetros ponderada por
+precisão por módulo proposta originalmente para essa hipótese — uma proxy razoável de tamanho de
+implantação, mas não a mesma grandeza.
 
 \subsection{Síntese dos sete eixos}
 
@@ -1184,7 +1235,7 @@ eleva a acurácia acima da baseline pré-treinada é a combinação com um \text
 mecanismos de compensação leves — blocos \textit{bottleneck}, módulos \textit{Fire}, ou atalhos
 residuais isolados — nenhum dos quais reintroduz kernel $> 3\times 3$.
 
-Com apenas 0,385M parâmetros (4,49 MB) e 39,5M MACs — menos de um quarto dos MACs do módulo Fire
+Com apenas 0,385M parâmetros (1,51 MB) e 39,5M MACs — menos de um quarto dos MACs do módulo Fire
 (177,7M), a menor contagem de computação entre os mecanismos de compensação testados — o
 \texttt{AlexNetBottleneck} atinge 44,62\% de acurácia top-1 em FP32 e mantém 44,54\% após INT8
 (drop de apenas 0,08 p.p., o melhor do estudo). Entre os mecanismos de compensação estrutural testados,
@@ -1513,8 +1564,7 @@ teto de época, exceto \texttt{vit\_tiny}/\texttt{deit\_tiny}, via \textit{noteb
 de treino (época e tempo totais batem exatamente com as colunas desta tabela).
 
 \begin{table*}[!t]
-\caption{Taxa de aprendizado, épocas e tempo de treino (FP32/QAT), tamanho de \textit{checkpoint}
-(FP32/INT8) e acurácia top-1/top-5 (FP32/INT8) por modelo, 30 dos 33 do estudo (demais são
+\caption{Taxa de aprendizado, épocas e tempo de treino (FP32/QAT), tamanho do modelo (pesos, FP32/INT8) e acurácia top-1/top-5 (FP32/INT8) por modelo, 30 dos 33 do estudo (demais são
 reexecuções superadas). $^\dagger$ treinado localmente (RTX 4060); sem $\dagger$, PCAD (RTX 4090) —
 ver ressalva no texto anterior. $^*$ estimado, ver texto.}
 \label{tab:per_model_training}
@@ -1526,44 +1576,44 @@ ver ressalva no texto anterior. $^*$ estimado, ver texto.}
 \textbf{Família} & \textbf{Modelo} & \textbf{LR} & \textbf{Ép. FP32} & \textbf{Ép. QAT} & \textbf{T. FP32 (min)} & \textbf{T. QAT (min)} & \textbf{Tam. FP32 (MB)} & \textbf{Tam. INT8 (MB)} & \textbf{Top-1/Top-5 FP32 (\%)} & \textbf{Top-1/Top-5 INT8 (\%)} \\
 \midrule
 \multirow{4}{*}{Baselines irrestritos}
- & AlexNetTV$^\dagger$ (pré-trein.) & 3$\times10^{-4}$ & 79 & 2 & 63,2 & 6,9 & 661,75 & 55,33 & 32,88 / 58,22 & 31,90 / 57,24 \\
- & MobileNetV2$^\dagger$ (pré-trein.) & 1$\times10^{-4}$ & 27 & — & 14,8 & — & 28,75 & — & 58,00 / 81,51 & — \\
- & ResNet18$^\dagger$ (pré-trein.) & 1$\times10^{-4}$ & 15 & — & 7,1 & — & 129,21 & — & 53,91 / 77,80 & — \\
- & VGG-Style$^\dagger$ & 1$\times10^{-3}$ & 62 & 6 & 30,5 & 8,5 & 27,58 & 2,38 & 51,81 / 75,88 & 51,19 / 75,52 \\
+ & AlexNetTV$^\dagger$ (pré-trein.) & 3$\times10^{-4}$ & 79 & 2 & 63,2 & 6,9 & 220,58 & 55,33 & 32,88 / 58,22 & 31,90 / 57,24 \\
+ & MobileNetV2$^\dagger$ (pré-trein.) & 1$\times10^{-4}$ & 27 & — & 14,8 & — & 9,69 & — & 58,00 / 81,51 & — \\
+ & ResNet18$^\dagger$ (pré-trein.) & 1$\times10^{-4}$ & 15 & — & 7,1 & — & 43,07 & — & 53,91 / 77,80 & — \\
+ & VGG-Style$^\dagger$ & 1$\times10^{-3}$ & 62 & 6 & 30,5 & 8,5 & 9,21 & 2,38 & 51,81 / 75,88 & 51,19 / 75,52 \\
 \midrule
 \multirow{7}{*}{Restrição ingênua}
- & AlexNet3x3-FC$^\dagger$ & 3$\times10^{-4}$ & 37 & 15 & 29,1 & 16,7 & 659,26 & 55,12 & 35,79 / 61,28 & 36,19 / 62,16 \\
- & AlexNet3x3-GAP$^\dagger$ & 3$\times10^{-4}$ & 43 & 19 & 16,3 & 7,9 & 26,37 & 2,23 & 40,32 / 66,32 & 37,02 / 62,89 \\
- & AlexNet2x2-FC$^\dagger$ & 3$\times10^{-4}$ & 28 & 4 & 14,2 & 6,2 & 404,95 & 33,93 & 30,53 / 56,03 & 31,54 / 57,15 \\
- & AlexNet2x2-GAP$^\dagger$ & 3$\times10^{-4}$ & 44 & 16 & 15,5 & 6,3 & 12,06 & 1,04 & 33,15 / 58,95 & 30,82 / 56,09 \\
- & AlexNetMixed$^\dagger$ & 3$\times10^{-4}$ & 45 & 19 & 15,7 & 7,3 & 20,04 & 1,71 & 38,74 / 64,83 & 37,99 / 63,80 \\
- & AlexNetStacked$^\dagger$ & 1$\times10^{-3}$ & 92 & 13 & 88,8 & 26,5 & 692,26 & 57,94 & 45,22 / 70,96 & 42,31 / 68,35 \\
- & AlexNetSmallKernel$^\dagger$ & 3$\times10^{-4}$ & 62 & 18 & 24,5 & 15,8 & 18,35 & 1,56 & 45,84 / 71,08 & 36,16 / 61,60 \\
+ & AlexNet3x3-FC$^\dagger$ & 3$\times10^{-4}$ & 37 & 15 & 29,1 & 16,7 & 219,75 & 55,12 & 35,79 / 61,28 & 36,19 / 62,16 \\
+ & AlexNet3x3-GAP$^\dagger$ & 3$\times10^{-4}$ & 43 & 19 & 16,3 & 7,9 & 8,79 & 2,23 & 40,32 / 66,32 & 37,02 / 62,89 \\
+ & AlexNet2x2-FC$^\dagger$ & 3$\times10^{-4}$ & 28 & 4 & 14,2 & 6,2 & 134,98 & 33,93 & 30,53 / 56,03 & 31,54 / 57,15 \\
+ & AlexNet2x2-GAP$^\dagger$ & 3$\times10^{-4}$ & 44 & 16 & 15,5 & 6,3 & 4,02 & 1,04 & 33,15 / 58,95 & 30,82 / 56,09 \\
+ & AlexNetMixed$^\dagger$ & 3$\times10^{-4}$ & 45 & 19 & 15,7 & 7,3 & 6,68 & 1,71 & 38,74 / 64,83 & 37,99 / 63,80 \\
+ & AlexNetStacked$^\dagger$ & 1$\times10^{-3}$ & 92 & 13 & 88,8 & 26,5 & 230,77 & 57,94 & 45,22 / 70,96 & 42,31 / 68,35 \\
+ & AlexNetSmallKernel$^\dagger$ & 3$\times10^{-4}$ & 62 & 18 & 24,5 & 15,8 & 6,12 & 1,56 & 45,84 / 71,08 & 36,16 / 61,60 \\
 \midrule
 \multirow{10}{*}{Tentativas de compensação}
- & AlexNetBottleneck$^\dagger$ & 1$\times10^{-3}$ & 76 & 4 & 29,6 & 5,0 & 4,49 & 0,43 & 44,62 / 71,04 & 44,54 / 71,01 \\
- & AlexNetFire$^\dagger$ & 1$\times10^{-3}$ & 41 & 8 & 21,7 & 15,2 & 5,99 & 0,55 & 43,98 / 70,43 & 44,30 / 70,88 \\
- & AlexNetDepthwiseSep$^\dagger$ & 1$\times10^{-3}$ & 95 & 6 & 38,2 & 4,8 & 3,65 & 0,40 & 44,39 / 69,45 & 41,47 / 66,99 \\
- & AlexNetFactorized$^\dagger$ & 3$\times10^{-4}$ & 66 & 5 & 65,8 & 16,8 & 653,15 & 54,68 & 42,89 / 68,91 & 42,60 / 67,80 \\
- & AlexNetGroupConv$^\dagger$ & 1$\times10^{-3}$ & 91 & 4 & 68,6 & 9,6 & 639,99 & 53,54 & 29,18 / 57,07 & 27,71 / 55,10 \\
- & AlexNetResidual$^\dagger$ & 3$\times10^{-4}$ & 62 & 12 & 64,0 & 28,9 & 694,41 & 58,10 & 48,01 / 73,11 & 47,27 / 72,50 \\
- & AlexNetSE$^\dagger$ & 3$\times10^{-4}$ & 6* & — & 4,9* & — & 659,75 & — & 0,50 / 2,50 & — \\
- & Bottleneck + Fire & 1$\times10^{-3}$ & 40 & 13 & 13,9 & 9,4 & 5,88 & 0,55 & 42,29 / 68,54 & 44,00 / 70,15 \\
- & Bottleneck + Residual & 1$\times10^{-3}$ & 38 & 9 & 15,6 & 9,4 & 6,65 & 0,64 & 45,10 / 71,15 & 45,98 / 72,33 \\
- & Depthwise + Fire & 1$\times10^{-3}$ & 76 & 3 & 27,3 & 3,3 & 5,51 & 0,51 & 43,46 / 69,02 & 42,79 / 68,95 \\
+ & AlexNetBottleneck$^\dagger$ & 1$\times10^{-3}$ & 76 & 4 & 29,6 & 5,0 & 1,51 & 0,43 & 44,62 / 71,04 & 44,54 / 71,01 \\
+ & AlexNetFire$^\dagger$ & 1$\times10^{-3}$ & 41 & 8 & 21,7 & 15,2 & 2,01 & 0,55 & 43,98 / 70,43 & 44,30 / 70,88 \\
+ & AlexNetDepthwiseSep$^\dagger$ & 1$\times10^{-3}$ & 95 & 6 & 38,2 & 4,8 & 1,23 & 0,40 & 44,39 / 69,45 & 41,47 / 66,99 \\
+ & AlexNetFactorized$^\dagger$ & 3$\times10^{-4}$ & 66 & 5 & 65,8 & 16,8 & 217,73 & 54,68 & 42,89 / 68,91 & 42,60 / 67,80 \\
+ & AlexNetGroupConv$^\dagger$ & 1$\times10^{-3}$ & 91 & 4 & 68,6 & 9,6 & 213,34 & 53,54 & 29,18 / 57,07 & 27,71 / 55,10 \\
+ & AlexNetResidual$^\dagger$ & 3$\times10^{-4}$ & 62 & 12 & 64,0 & 28,9 & 231,49 & 58,10 & 48,01 / 73,11 & 47,27 / 72,50 \\
+ & AlexNetSE$^\dagger$ & 3$\times10^{-4}$ & 6* & — & 4,9* & — & 219,91 & — & 0,50 / 2,50 & — \\
+ & Bottleneck + Fire & 1$\times10^{-3}$ & 40 & 13 & 13,9 & 9,4 & 1,97 & 0,55 & 42,29 / 68,54 & 44,00 / 70,15 \\
+ & Bottleneck + Residual & 1$\times10^{-3}$ & 38 & 9 & 15,6 & 9,4 & 2,24 & 0,64 & 45,10 / 71,15 & 45,98 / 72,33 \\
+ & Depthwise + Fire & 1$\times10^{-3}$ & 76 & 3 & 27,3 & 3,3 & 1,85 & 0,51 & 43,46 / 69,02 & 42,79 / 68,95 \\
 \midrule
 \multirow{2}{*}{Arquitetura híbrida final}
- & Fire + Residual & 1$\times10^{-3}$ & 77 & 3 & 28,8 & 3,7 & 8,09 & 0,75 & 49,79 / 74,80 & 49,20 / 74,39 \\
- & AlexNetFireBypass & 1$\times10^{-3}$ & 152 & 50 & 86,2 & 27,8 & 5,99 & 0,55 & 50,57 / 74,90 & 49,86 / 74,56 \\
+ & Fire + Residual & 1$\times10^{-3}$ & 77 & 3 & 28,8 & 3,7 & 2,71 & 0,75 & 49,79 / 74,80 & 49,20 / 74,39 \\
+ & AlexNetFireBypass & 1$\times10^{-3}$ & 152 & 50 & 86,2 & 27,8 & 2,01 & 0,55 & 50,57 / 74,90 & 49,86 / 74,56 \\
 \midrule
 \multirow{7}{*}{Atenção local (Eixo 7)}
- & swin\_pico\_w2 & 5$\times10^{-4}$ & 146 & 99 & 156,1 & 107,3 & 3,76 & 0,67 & 32,95 / 59,97 & 33,25 / 60,45 \\
- & swin\_pico\_w4 & 5$\times10^{-4}$ & 143 & 91 & 150,2 & 97,3 & 3,77 & 0,68 & 33,53 / 60,73 & 33,89 / 61,20 \\
- & swin\_pico\_w8 & 5$\times10^{-4}$ & 144 & 80 & 80,7 & 44,8 & 3,91 & 0,80 & 36,75 / 63,51 & 36,99 / 63,93 \\
- & swin\_pico\_poolmixer & 5$\times10^{-4}$ & 143 & 99 & 80,6 & 55,5 & 2,66 & 0,30 & 30,98 / 57,60 & 30,76 / 57,84 \\
- & hybrid\_bottleneck\_swin & 5$\times10^{-4}$ & 144 & 96 & 85,9 & 56,7 & 3,14 & 0,54 & 40,23 / 66,65 & 40,18 / 66,35 \\
- & vit\_tiny & 5$\times10^{-4}$ & 125 & 89 & 59,6 & 65,8 & 33,20 & 5,66 & 40,35 / 65,58 & 42,44 / 66,38 \\
- & deit\_tiny & 5$\times10^{-4}$ & 212 & 62 & 108,4 & 46,1 & 33,20 & 5,66 & 46,38 / 72,09 & 47,66 / 71,34 \\
+ & swin\_pico\_w2 & 5$\times10^{-4}$ & 146 & 99 & 156,1 & 107,3 & 1,25 & 0,67 & 32,95 / 59,97 & 33,25 / 60,45 \\
+ & swin\_pico\_w4 & 5$\times10^{-4}$ & 143 & 91 & 150,2 & 97,3 & 1,26 & 0,68 & 33,53 / 60,73 & 33,89 / 61,20 \\
+ & swin\_pico\_w8 & 5$\times10^{-4}$ & 144 & 80 & 80,7 & 44,8 & 1,38 & 0,80 & 36,75 / 63,51 & 36,99 / 63,93 \\
+ & swin\_pico\_poolmixer & 5$\times10^{-4}$ & 143 & 99 & 80,6 & 55,5 & 0,89 & 0,30 & 30,98 / 57,60 & 30,76 / 57,84 \\
+ & hybrid\_bottleneck\_swin & 5$\times10^{-4}$ & 144 & 96 & 85,9 & 56,7 & 1,05 & 0,54 & 40,23 / 66,65 & 40,18 / 66,35 \\
+ & vit\_tiny & 5$\times10^{-4}$ & 125 & 89 & 59,6 & 65,8 & 10,55 & 5,66 & 40,35 / 65,58 & 42,44 / 66,38 \\
+ & deit\_tiny & 5$\times10^{-4}$ & 212 & 62 & 108,4 & 46,1 & 10,55 & 5,66 & 46,38 / 72,09 & 47,66 / 71,34 \\
 \bottomrule
 \end{tabular}%
 }
