@@ -184,3 +184,25 @@ their INT8 numbers are left as previously measured — see the script's docstrin
 `alexnet_fire_bypass` case, which has its own separate reason INT8 couldn't be rebuilt
 either. Corrected numbers are in Table `tab:phase8_models` (Eixo 7) of `report/ic_report.tex`
 and `ideas/BEST_MODELS.md`'s Phase 8 section.
+
+## Stage 12 — Model-Size Measurement Bug Found; FP32 Sizes Backfilled (2026-09-02)
+
+A sibling bug to Stage 11, found in the same results-write-up pass: `ml/reporting.py`'s
+`disk_mb()`/`gzip_mb()` measured the raw `{name}_best.pth` file. `save_checkpoint()` writes
+that file with the optimizer + scheduler + history alongside the weights, and AdamW alone
+keeps two momentum buffers per parameter — so the file is ~3x the model's actual weight
+size. The INT8 side is a bare `torch.save(model, ...)` and was already weights-only. Every
+FP32-vs-INT8 size comparison was therefore apples-to-oranges: `compression_ratio` came out
+~3x too high (~11.9x recorded where the true FP32→INT8 ratio is ~4x). Accuracies, params,
+and MACs were unaffected — this only touched the size/compression columns.
+
+Fixed in `ml/reporting.py` (`disk_mb()`/`gzip_mb()` now unwrap `model_state_dict` before
+measuring, via a new `_model_bytes()` helper shared by both). `scripts/backfill_model_size.py`
+re-measures `fp32_size_mb`/`fp32_gzip_mb` in every summary JSON: from the surviving
+checkpoint where one exists, else by rebuilding the architecture from `MODEL_REGISTRY` (exact,
+since state_dict size depends only on the architecture) or falling back to `/3.0` when neither
+is available. `--csvs` patches the same correction into the derived comparison CSVs. Phase 7
+detection/segmentation was out of scope: those checkpoints never carried optimizer state (their
+`model_size_mb` already sat within 4% of the separately-measured `true_size_mb`), so nothing
+there needed correcting. Corrected numbers are reflected in `CLAUDE.md`'s Results & rankings
+summary, `results/results_aggregate/`, and `report/ic_report.tex`.
