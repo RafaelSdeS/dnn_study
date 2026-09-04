@@ -52,14 +52,14 @@ $\rightarrow$ INT8, comparando um baseline de kernel irrestrito, uma restrição
 \cite{iandola2016squeezenet} e um atalho residual isolado — todos mantendo os kernels
 $\leq$3$\times$3. A variante com \textit{bottleneck} (\texttt{AlexNetBottleneck}) atinge 44,62\% de
 acurácia top-1 em FP32 com apenas 0,385M parâmetros (1,51 MB), superando a restrição ingênua em
-mais de 4 pontos percentuais com $6\times$ menos parâmetros. É também a que menos perde acurácia
+mais de 4 pontos percentuais com $6\times$ menos parâmetros. É também a CNN que menos perde acurácia
 sob quantização INT8 em todo o estudo (-0,08 p.p.). Uma ablação subsequente isola o efeito de um
 único atalho residual adicionado a um bloco \textit{Fire}, sem nenhum parâmetro extra
 (\texttt{AlexNetFireBypass}). Esse atalho sozinho supera, em acurácia FP32, uma arquitetura híbrida
 bem mais complexa que combina \textit{stem} novo e \textit{Fire+residual} (6,59 vs. 5,81 p.p. de
 ganho sobre o \textit{Fire} de base), e também vence no regime INT8 (49,86\% vs. 49,20\%) — embora
 não preserve esse ganho sob quantização. Uma ressalva importante: o \texttt{AlexNetFireBypass}
-treinou por um orçamento de épocas muito maior (152 vs. 77). Medições diretas de hardware (GPU
+treinou por um orçamento de épocas muito maior (152 vs. 71). Medições diretas de hardware (GPU
 NVIDIA RTX 4060, rastreamento de kernel CUDA em nível de camada) indicam que a aceleração
 Winograd depende de convoluções densas (não agrupadas), não apenas do tamanho do kernel, e que
 compete com \textit{tensor cores} em lotes maiores. Estendemos essas descobertas a duas frentes
@@ -75,7 +75,7 @@ O tamanho de janela reproduz monotonicamente a curva de restrição de kernel, e
 aciona um \textit{kernel} Winograd em nenhuma configuração — consistente com a ausência de
 convoluções 3$\times$3 de \textit{stride} 1 nessas arquiteturas. Cinco dos sete modelos, porém,
 \emph{ganham} acurácia sob quantização INT8 (até $+$2,10 p.p.), enquanto os outros dois caem
-apenas ligeiramente ($-$0,22 e $-$0,06 p.p.); a destilação DeiT é o modelo mais forte da família
+apenas ligeiramente ($-$0,22 e $-$0,06 p.p.); a destilação DeiT é o mais forte dos sete
 (46,38\% FP32), mas à custa de 5--7$\times$ mais parâmetros (2,76M) que as arquiteturas
 Pareto-ótimas deste estudo. Os resultados sugerem que compensação
 estrutural leve — e não kernels maiores — é uma via eficiente para recuperar acurácia em
@@ -233,7 +233,7 @@ original não sobreviveu, o tamanho FP32 foi recalculado de forma exata reconstr
 a partir do registro de modelos do projeto — o tamanho dos pesos serializados depende só da
 arquitetura, não dos pesos treinados.
 
-A razão de compressão FP32$\to$INT8 medida sob essa convenção tem mediana $3{,}94\times$ e máximo
+A razão de compressão FP32$\to$INT8 medida sob essa convenção tem mediana $3{,}92\times$ e máximo
 $3{,}99\times$, dentro do limite teórico de $4\times$ para a redução de 32 para 8 bits por peso. Os
 tamanhos de Eixo 6 (detecção/segmentação) usam o tamanho real medido do modelo efetivamente
 implantado (que exclui pesos do classificador pré-treinado original nunca usados no
@@ -271,7 +271,7 @@ Eixo 5) e a arquitetura híbrida final (\texttt{Fire-Residual}).}
 Os três \textit{baselines} externos da Figura~\ref{fig:kernel_cost} situam essa restrição num
 contexto mais amplo, fora do escopo Winograd-amigável ($\leq$3$\times$3) deste estudo: MobileNetV2
 pré-treinada atinge a maior acurácia do gráfico, 58,0\% de acurácia FP32 (9,69 MB); ResNet18
-pré-treinada atinge 53,9\% (43,07 MB, o maior modelo do gráfico); e VGG-Style — treinada do
+pré-treinada atinge 53,9\% (43,07 MB, o maior dos três \textit{baselines}); e VGG-Style — treinada do
 zero, sem pré-treino — 51,8\% (9,21 MB). Do lado da
 restrição ingênua, o par completo citado na legenda é \texttt{AlexNet3x3-FC} (35,79\%, discutida
 abaixo) e \texttt{AlexNet2x2-FC} (30,53\%, treinada do zero) — kernel 2$\times$2 sozinho, sem
@@ -299,7 +299,7 @@ aplicado sobre uma área espacial bem maior no total.
 \textbf{Modelo} & \textbf{Params (M)} & \textbf{MACs (M)} & \textbf{Tam.\ FP32} & \textbf{Tam.\ INT8} & \textbf{Top-1 FP32} & \textbf{Top-1 INT8} & \textbf{$\Delta$QAT} \\
 & & & \textbf{(MB)} & \textbf{(MB)} & \textbf{(\%)} & \textbf{(\%)} & \textbf{(p.p.)} \\
 \midrule
-AlexNet (irrestrita, pré-treinada) & 57,82 & 94,9 & 220,58 & 55,33 & 32,88 & 31,90 & $-$0,98 \\
+AlexNet (irrestrita, pré-treinada) & 57,82 & 94,9 & 220,58 & 55,33 & 32,89 & 31,90 & $-$0,98 \\
 AlexNet3x3-FC (do zero) & 57,61 & 222,3 & 219,75 & 55,12 & 35,79 & 36,19 & $+$0,40 \\
 AlexNet3x3-GAP & 2,30  & 167,0 & 8,79 & 2,23 & 40,32 & 37,02 & $-$3,29 \\
 \textbf{AlexNetBottleneck} & \textbf{0,39} & \textbf{39,5} & \textbf{1,51} & \textbf{0,43} & \textbf{44,62} & \textbf{44,54} & \textbf{$-$0,08} \\
@@ -311,14 +311,14 @@ AlexNetFire & 0,52 & 177,7 & 2,01 & 0,55 & 43,98 & 44,30 & $+$0,33 \\
 Restringir kernels a 3$\times$3 não custa acurácia neste protocolo — o oposto da hipótese
 inicial. Isolando a restrição de kernel da troca de \textit{head} e do pré-treino
 (\texttt{AlexNet3x3-FC} vs. baseline irrestrita, ambas com \textit{head} totalmente conectada), a
-restrição \emph{ganha} 2,9 p.p. (32,88\%$\to$35,79\%). Uma explicação plausível é que a
+restrição \emph{ganha} 2,9 p.p. (32,89\%$\to$35,79\%). Uma explicação plausível é que a
 \textit{head} totalmente conectada de 57M parâmetros da baseline overfita mais facilmente num
 dataset de imagens 64$\times$64. Como só a baseline é pré-treinada, porém, o resultado não separa
 "custo da restrição de kernel" de "efeito do pré-treino": é sugestivo, não conclusivo.
 
 A mudança de efeito isolado mais claro é a troca de \textit{head} para GAP
 (\texttt{AlexNet3x3-GAP}): mais 4,5 p.p. (35,79\%$\to$40,32\%) com $25\times$ menos parâmetros
-(57M $\to$ poucos milhares), consistente com redução de \textit{overfitting} dada a dimensão
+(57,6M $\to$ 2,30M, quase todos eliminados da \textit{head} FC), consistente com redução de \textit{overfitting} dada a dimensão
 reduzida do dataset.
 
 A compensação estrutural acrescenta ganhos além da troca de \textit{head}. O bloco
@@ -480,16 +480,18 @@ apesar do kernel pequeno.}
 \label{fig:pareto_latency}
 \end{figure*}
 
-Quatro de cinco arquiteturas com convolução 3$\times$3 densa (\texttt{AlexNetBottleneck},
-\texttt{AlexNetFire}, \texttt{AlexNetFinalBottleneckResidual}, \texttt{AlexNetFinalFireResidual})
-superam o baseline (AlexNetTV, irrestrito) na razão acurácia/latência. A latência em FP32 também é
+As cinco arquiteturas com convolução 3$\times$3 densa desta figura (\texttt{AlexNetBottleneck},
+\texttt{AlexNetFire}, \texttt{AlexNetFinalBottleneckResidual}, \texttt{AlexNetFinalFireResidual} e
+\texttt{VGG-Style}) superam o baseline (AlexNetTV, irrestrito) na razão acurácia/latência. A latência em FP32 também é
 um preditor razoável do \textit{ranking} de latência em INT8, mas só para convoluções densas
 (correlação de Spearman $\rho=0,99$, $n=24$); para \textit{depthwise} a correlação é sensivelmente
 mais fraca ($\rho=0,72$, $n=24$) — o \textit{backend} INT8 (fbgemm) tem
 \textit{kernels} otimizados só para 3$\times$3/5$\times$5 em convoluções agrupadas
 \cite{khudia2021fbgemm} e cai para um
 caminho genérico muito mais lento acima disso, o que quebra a correspondência FP32$\to$INT8 nesse
-subconjunto.
+subconjunto. Ambas as correlações são medidas em nível de camada, com FP32 e INT8 cronometrados na
+mesma CPU; o equivalente em nível de modelo compara FP32 em GPU com INT8 em CPU ($\rho=0,70$,
+$n=10$) e vale apenas como exploração.
 
 Por fim, avaliamos a competição com \textit{tensor cores} entre tamanhos de \textit{batch}, no
 mesmo experimento acima: em \textit{batch}=1 e 8 o cuDNN prefere Winograd em $k{=}3$; em
@@ -536,7 +538,7 @@ pela maior parte do ganho de acurácia, e que pode ser adicionado a \emph{custo 
 a robustez à quantização, porém, não acompanha esse ganho isolado.
 Um adendo importante, agora ainda mais relevante dado o tamanho do ganho: o
 \texttt{AlexNetFireBypass} foi treinado com um orçamento de épocas maior
-que o restante do estudo (152 épocas efetivas, contra 77 do \texttt{AlexNetFinalFireResidual} —
+que o restante do estudo (152 épocas efetivas, contra 71 do \texttt{AlexNetFinalFireResidual} —
 Tabela~\ref{tab:per_model_training} no apêndice), por ter sido executado no cluster PCAD da UFRGS
 sob um orçamento de época maior que o disponível localmente; parte do ganho de acurácia relatado
 aqui pode portanto também refletir esse treino mais longo, não apenas o atalho residual
@@ -551,7 +553,11 @@ classificação deste estudo (Fases 1--4, 8 e 9, incluindo o contrafactual
 \texttt{vit\_tiny\_convstem}/\texttt{swin\_pico\_convstem}; omitidos: o Eixo 6, que mede mAP/mIoU,
 não top-1, e por isso não é comparável nesta mesma escala, e \texttt{AlexNetSE}, cujo treino
 malsucedido ($\sim$0,5\% top-1, Tabela~\ref{tab:per_model_training}) não é um ponto real de
-eficiência). Dois painéis, FP32 (esquerda) e INT8
+eficiência). Três dos 34 pontos (\texttt{alexnet\_2x2}, \texttt{alexnet\_3x3}, \texttt{alexnet\_gap})
+são reexecuções curtas superadas de arquiteturas já presentes na figura
+(\texttt{AlexNet2x2-GAP}, \texttt{AlexNet3x3-FC}, \texttt{AlexNet3x3-GAP}): mesma arquitetura e
+mesmo tamanho, acurácia menor ou igual (\texttt{alexnet\_3x3} repete o mesmo resultado FP32 de
+\texttt{AlexNet3x3-FC}); nenhuma entra na fronteira. Dois painéis, FP32 (esquerda) e INT8
 (direita), cada um com sua própria fronteira de Pareto tamanho-acurácia (linha tracejada; apenas
 os modelos na fronteira são rotulados, para legibilidade). Cor indica a fase de origem do modelo
 (mesma legenda em ambos os painéis); hachura indica elegibilidade arquitetural a Winograd
@@ -572,23 +578,25 @@ Figura~\ref{fig:pareto_latency}. Quatro leituras se destacam.
 fronteira é uma escada de 7 modelos, de \texttt{swin\_pico\_poolmixer} (0,89 MB, 30,98\%) a
 \texttt{MobileNetV2} (9,69 MB, 58,00\%). O primeiro degrau, \texttt{swin\_pico\_poolmixer}, está
 lá por motivo trivial — é o menor modelo do estudo, não um bom compromisso. Mas o
-segundo, \texttt{hybrid\_bottleneck\_swin} (+0,47 MB), é o degrau mais acentuado de toda a
+segundo, \texttt{hybrid\_bottleneck\_swin} (+0,16 MB), é o degrau mais acentuado de toda a
 fronteira: +9,25 p.p. Esse salto sozinho já é maior que o salto final para
-\texttt{MobileNetV2} (+6,18 p.p.). \texttt{AlexNetDepthwiseSep} (+0,52 MB) soma outros +4,16 p.p.,
-e o \texttt{AlexNetFireBypass} corrigido (+1,50 MB sobre \texttt{AlexNetBottleneck}) entra na
+\texttt{MobileNetV2} (+6,18 p.p.). \texttt{AlexNetDepthwiseSep} (+0,18 MB) soma outros +4,16 p.p.,
+e o \texttt{AlexNetFireBypass} corrigido (+0,50 MB sobre \texttt{AlexNetBottleneck}) entra na
 fronteira com +5,95 p.p.
 
 \textbf{Sob INT8 quase nenhum sobrevive.} A fronteira encolhe para 5 modelos e só
 \texttt{swin\_pico\_poolmixer} (0,305 MB, 30,76\%) permanece como ponto de atenção local.
 \texttt{hybrid\_bottleneck\_swin}, apesar do FP32 competitivo (40,23\%, Eixo 7), é dominado por
 \texttt{AlexNetDepthwiseSep} (0,40 MB, 41,47\%) — menor \emph{e} mais acurado. Mesmo
-\texttt{deit\_tiny} (46,38\% FP32, o melhor modelo de atenção) fica dentro da fronteira, não sobre
+\texttt{deit\_tiny} (46,38\% FP32, o melhor dos sete modelos de atenção originais --- superado
+apenas pelo contrafactual \texttt{vit\_tiny\_convstem}, 48,00\%) fica dentro da fronteira, não sobre
 ela: seu tamanho de pesos ($\sim$10,55 MB) é maior que o de \texttt{VGG-Style} (9,21 MB,
 51,81\%), que o domina em ambos os eixos.
 
 \textbf{O controle sem atenção não é mais o pior modelo do estudo, mas continua entre os mais
-fracos.} \texttt{swin\_pico\_poolmixer} (30,98\%) supera por pouco a pior restrição ingênua da
-Fase 2 (\texttt{AlexNet2x2}, 30,02\%) e \texttt{AlexNet2x2-FC} (30,53\%) — \texttt{AlexNetSE} fica
+fracos.} \texttt{swin\_pico\_poolmixer} (30,98\%) supera por pouco \texttt{AlexNet2x2-FC} (30,53\%) e a
+reexecução curta de \texttt{AlexNet2x2-GAP} (27 épocas, 30,02\%; a execução de 44 épocas usada em
+todo o resto do relatório atinge 33,15\% --- ver legenda) — \texttt{AlexNetSE} fica
 fora da figura (colapso de treino, não um ponto real de eficiência; ver legenda). Mas fica atrás de toda outra variante \texttt{swin\_pico}, inclusive a
 mais restrita em janela (\texttt{swin\_pico\_w2}, 32,95\%). A hipótese de que a atenção em si, não
 apenas a arquitetura ao redor dela, contribui para a acurácia das demais variantes
@@ -618,7 +626,8 @@ Figura~\ref{fig:accuracy_vs_size}.}
 
 Na Figura~\ref{fig:macs_vs_accuracy}, a fronteira de Pareto FP32 tem só dois pontos:
 \texttt{swin\_pico\_poolmixer} (21,2M MACs, 30,98\%), que entra apenas por ser o modelo de menor
-custo computacional do estudo — a mesma leitura já feita para o eixo de tamanho — e
+custo computacional desta figura — a mesma leitura já feita para o eixo de tamanho; no conjunto
+completo do estudo o mínimo é \texttt{AlexNetDepthwiseSep}, com 19,8M MACs — e
 \texttt{MobileNetV2} (25,8M MACs, 58,00\%), que a domina de fato, com menos MACs que o próprio
 módulo \textit{Bottleneck} (39,5M) e a melhor acurácia do estudo. Na fronteira INT8, mais povoada,
 os modelos de atenção não avançam além desse degrau inicial: \texttt{hybrid\_bottleneck\_swin}
@@ -639,15 +648,17 @@ robustez sob quantização INT8 e compressão adicional.
 
 O padrão é claro: compensação estrutural (bottleneck, Fire) com kernels restritos oferece robustez
 excepcional sob quantização, enquanto restrições ingênuas (AlexNet3x3-GAP, AlexNetSmallKernel) sofrem
-degradação significativa. \texttt{AlexNetSmallKernel} é a variante mais enxuta do estudo: mesmo
+degradação significativa. \texttt{AlexNetSmallKernel} é uma variante deliberadamente enxuta: mesmo
 \textit{backbone} totalmente 3$\times$3 do \texttt{AlexNet3x3-GAP}, mas com canais bem mais estreitos
 (64$\rightarrow$128$\rightarrow$256$\rightarrow$256$\rightarrow$256) e, como o \texttt{AlexNet3x3-GAP},
-sem \textit{BatchNorm}. É o modelo mais compacto do estudo em número de parâmetros dentre as variantes
-de kernel restrito sem compensação, mas também o que mais sofre com a quantização: sem BN após cada
+sem \textit{BatchNorm}. Com 1,60M parâmetros é uma das variantes de kernel restrito sem compensação
+mais enxutas — atrás apenas do \texttt{AlexNet2x2-GAP} (1,05M) —, mas é a que mais sofre com a
+quantização em todo o estudo: sem BN após cada
 convolução e com canais estreitos, resta pouca margem de ativação para absorver o ruído de
 quantização — ao contrário de \texttt{AlexNetBottleneck}/\texttt{AlexNetFire}, que têm BN após toda
 convolução (Seção~\ref{sec:contrib1}). A Tabela~\ref{tab:quantization_robustness} agrupa por
-família todas as 14 variantes das Fases 2--3 com \textit{checkpoint} INT8 e mostra o
+família as 13 variantes das Fases 2--3 com \textit{checkpoint} INT8, mais o \textit{baseline}
+irrestrito da Fase 1, e mostra o
 $\Delta$QAT (\textit{top-1} INT8 $-$ FP32) de cada uma: o padrão não é uniforme dentro de cada
 família — \texttt{AlexNetDepthwiseSep} ($-$2,92 p.p.) cai tanto quanto variantes ingênuas
 medianas — mas o pior caso de compensação ($-$2,92) fica bem acima do pior caso ingênuo
@@ -680,7 +691,7 @@ compensação $-$0,86 p.p.\ vs.\ ingênua $-$2,51 p.p., quase $3\times$ maior) c
 & AlexNet2x2-FC & 30,53\% & 31,54\% & $+$1,01 \\
 & \textit{Média} & \textit{38,51\%} & \textit{36,00\%} & \textit{$-$2,51} \\
 \midrule
-Baseline irrestrito & AlexNetTV (pré-trein.) & 32,88\% & 31,90\% & $-$0,98 \\
+Baseline irrestrito & AlexNetTV (pré-trein.) & 32,89\% & 31,90\% & $-$0,98 \\
 \bottomrule
 \end{tabular}
 \end{table*}
@@ -702,7 +713,8 @@ modelos.
 
 Três ressalvas limitam a aplicabilidade imediata desses resultados: (i) INT4 PTQ sem retreino colapsa
 (25,3\%) porque a calibração de quantização com um único \textit{batch} não captura a distribuição real
-de ativações — o retreino (QAT) é crítico, triplicando a acurácia; (ii) INT4 em hardware real permanece
+de ativações — o retreino (QAT) é crítico, elevando a acurácia média de 25,3\% para 43,3\%
+($1,7\times$; nos 3 modelos com as duas medições, 27,7\%$\to$43,3\%); (ii) INT4 em hardware real permanece
 fora do escopo: o backend de quantização usado neste estudo (fbgemm) prioriza INT8, com suporte INT4 limitado;
 FPGA/aceleradores móveis suportam-no de forma inconsistente — esta medição é teórica; (iii) a
 compatibilidade com aceleração Winograd não é verificada — restrições de INT4 podem exigir
@@ -715,7 +727,9 @@ reformatação de peso ou descontinuar a densidade que Winograd requer.
 (tamanho teórico dos pesos em FP32 dividido pelo tamanho teórico após compressão) e número de modelos
 ($n$) entre parênteses. INT4 PTQ (sem retreino) colapsa
 para 25,3\%; retreinar sob o mesmo INT4 (QAT) recupera para 43,3\% — o retreino, não a
-largura de bits em si, é o que preserva a acurácia. Precisão mista INT4/INT8 (QAT) supera até o
+largura de bits em si, é o que preserva a acurácia. As duas médias cobrem conjuntos de modelos
+diferentes ($n{=}5$ vs.\ $n{=}3$); restrita aos 3 modelos com as duas medições, a recuperação vai
+de 27,7\% para 43,3\%. Precisão mista INT4/INT8 (QAT) supera até o
 INT4 QAT uniforme com taxa de compressão comparável. Métodos sub-INT4 mais agressivos (ternary,
 int2, binary, todos QAT) degradam progressivamente.}
 \label{fig:compression_methods}
@@ -742,8 +756,10 @@ Para o \texttt{AlexNetFire}, os pesos INT8 reais ocupam apenas 7,19 bits/peso de
 (contra 8,00 nominais), sugerindo margem para métodos de quantização com perda como
 \textit{weight-sharing}. Aplicamos \textit{k-means} clustering — o passo de codebook do Deep
 Compression \cite{han2016deepcompression} — em 16/32/64 \textit{clusters} (correspondendo a 4/5/6 bits
-nominais), e observamos que o arquivo comprimido com gzip em disco fica 1,18× menor que INT8 puro,
-chegando a $\sim$2,2× de \textit{headroom} adicional (só pesos) em 16 \textit{clusters}. É uma medição teórica, não uma avaliação de acurácia
+nominais), e comparamos com o que o gzip já obtém: comprimir o \textit{checkpoint} INT8 real em
+disco rende apenas 1,18× (0,553$\to$0,469 MB), enquanto os três \textit{codebooks} de
+\textit{k-means} superam essa marca, chegando a $\sim$2,2× (0,245 MB, só pesos, valor teórico) em
+16 \textit{clusters}. É uma medição teórica, não uma avaliação de acurácia
 real pós-\textit{clustering} nem uma mudança efetiva no formato de checkpoint — apenas um sinal de
 que uma pipeline real de \textit{weight-sharing} vale a pena construir (ver Trabalhos Futuros).
 
@@ -791,8 +807,9 @@ e~\ref{tab:phase7_training}.
 
 A Tabela~\ref{tab:phase7_detection} resume os resultados de detecção (variante treinada do zero;
 variantes com \textit{backbone} pré-treinado em Tiny ImageNet-200 seguem padrão semelhante —
-ganham pouco para \texttt{AlexNetBottleneck}, mas recuperam parte da queda de QAT/INT8 para
-\texttt{AlexNetFire} e \texttt{AlexNetTV}). A Tabela~\ref{tab:phase7_segmentation} resume
+praticamente não mudam para \texttt{AlexNetBottleneck} (ligeiramente pior nos três estágios), mas
+recuperam parte da queda de QAT/INT8 para \texttt{AlexNetFire} e \texttt{AlexNetTV};
+Tabela~\ref{tab:phase7_training}). A Tabela~\ref{tab:phase7_segmentation} resume
 segmentação.
 
 \begin{table}[!t]
@@ -901,12 +918,22 @@ Tabela~\ref{tab:lit_comparison_detection} usa. Em segmentação não há discrep
 (\textit{macro} sobre 21 classes, descartando pixels de fronteira não rotulados) já segue a
 convenção padrão da literatura.
 
-Três diferenças de protocolo, essas sim, permanecem. Os \textit{backbones} (0,39--0,52M parâmetros)
-são pré-treinados em Tiny ImageNet-200 (64$\times$64, 200 classes), não em ImageNet completo. A
+Duas diferenças de protocolo, essas sim, permanecem. Os \textit{backbones} são pequenos
+(0,39--0,52M parâmetros) e, nas execuções usadas nestas duas tabelas, treinados \emph{do zero} —
+sem pré-treino algum, enquanto quase toda a literatura citada parte de \textit{backbones}
+pré-treinados em ImageNet (os modelos de segmentação da Tabela~\ref{tab:lit_comparison_segmentation}
+são, além disso, pré-treinados em COCO). A exceção é \texttt{Tiny-DSOD}, também treinado do zero
+sobre VOC07+12 \cite{li2018tinydsod} — justamente a referência mais forte da
+Tabela~\ref{tab:lit_comparison_detection}, o que torna essa comparação específica a mais justa das
+cinco. A variante pré-treinada deste estudo (Tabela~\ref{tab:phase7_training}) usa Tiny
+ImageNet-200 (64$\times$64, 200 classes), não ImageNet. A
 segmentação usa o \textit{split} original de VOC2012 (1.464 imagens
 de treino) a 256px, sem o aumento via anotações SBD adotado por praticamente toda a literatura da
-área ($\sim$10.582 imagens, 480--513px de \textit{crop}). E a detecção treina por 30 épocas sobre
-VOC07+12 \textit{trainval}, uma fração do orçamento de $\sim$240 épocas-equivalente do SSD original.
+área ($\sim$10.582 imagens, 480--513px de \textit{crop}). O orçamento de épocas, em compensação,
+deixou de ser uma diferença: após a correção do recall de âncora a detecção passou a treinar com
+até 1000 épocas e \textit{early stopping} (paciência 50) sobre VOC07+12 \textit{trainval}, com
+melhor época entre 549 e 927 (Tabela~\ref{tab:phase7_training}) — no mesmo patamar ou acima das
+$\sim$240 épocas-equivalente do SSD original.
 As Tabelas~\ref{tab:lit_comparison_detection}--\ref{tab:lit_comparison_segmentation} comparam os
 três \textit{backbones} com referências eficientes por acurácia por megabyte de modelo real
 implantado (tamanho real medido) — eixo mais justo que a acurácia bruta, e mais alinhado à
@@ -966,8 +993,9 @@ Tiny-DSOD \cite{li2018tinydsod} & 3,8 & 72,1\% & \textbf{18,97} \\
 \textbf{Modelo} & \textbf{Tam. (MB)} & \textbf{mIoU} & \textbf{mIoU/MB} \\
 \midrule
 FCN-8s (VGG16) \cite{long2015fcn} & $\sim$536 & 62,2\% & 0,116 \\
-DeepLabv3 (ResNet-101) \cite{chen2017rethinking} & $\sim$236 & 85,7\% & 0,363 \\
-DeepLabv3 + MobileNetV2 \cite{sandler2018mobilenetv2} & $\sim$18 & 70,0--75,7\% & 3,88--4,19 \\
+DeepLabv3 (ResNet-101) \cite{chen2017rethinking} & $\sim$233 & 85,7\% & 0,368 \\
+DeepLabv3+MobileNetV2 \cite{sandler2018mobilenetv2} & $\sim$18,1 & 75,7\% & 4,19 \\
+\quad \textit{idem}, sem ASPP & $\sim$8,4 & 75,3\% & \textbf{8,92} \\
 \midrule
 \texttt{AlexNetFire} FP32 & 12,63 & 17,03\% & 1,35 \\
 \texttt{AlexNetBottleneck} FP32 & 12,13 & 17,84\% & 1,47 \\
@@ -984,13 +1012,14 @@ Em detecção, os três \textit{backbones} superam com folga os modelos densos c
 miraram tamanho de implantação: \texttt{AlexNetBottleneck} INT8 é $\sim$21$\times$ mais eficiente
 que SSD300. Mais informativo é o confronto com os \textit{designs} mobile-first, que perseguem
 exatamente esse objetivo — \texttt{AlexNetBottleneck} e \texttt{AlexNetTV} em INT8 superam
-MobileNet-SSD, Pelee e Fire SSD por $4,7$--$5,6\times$, e ficam a $\sim$1,25$\times$ de
+MobileNet-SSD, Pelee e Fire SSD por $4,6$--$5,6\times$, e ficam a $\sim$1,25$\times$ de
 \texttt{Tiny-DSOD}. O \textit{design} dedicado ainda vence, mas por margem estreita.
 
 Em segmentação a vantagem sobre os modelos densos se mantém ($\sim$15$\times$ sobre FCN-8s,
-$\sim$4,8$\times$ sobre DeepLabv3/ResNet-101), mas a distância para os mobile-first é maior que em
-detecção: DeepLabv3+MobileNetV2 é $\sim$2,2--2,4$\times$ mais eficiente em mIoU/MB que o melhor
-ponto deste estudo. A diferença de dado (VOC2012 sem aumento SBD, 256px) parece pesar mais nesta
+$\sim$4,7$\times$ sobre DeepLabv3/ResNet-101), mas a distância para os mobile-first é bem maior que
+em detecção: DeepLabv3+MobileNetV2 é $2,4\times$ mais eficiente em mIoU/MB que o melhor ponto deste
+estudo na variante com ASPP, e $5,1\times$ na variante sem ASPP (metade do tamanho por 0,4 p.p.\ de
+mIoU). A diferença de dado (VOC2012 sem aumento SBD, 256px) parece pesar mais nesta
 tarefa do que pesou em detecção. \texttt{AlexNetFire} é o pior dos três nas duas tarefas,
 reforçando o achado de que o mecanismo Fire não transfere bem para predição densa.
 
@@ -1009,7 +1038,10 @@ real medido foi recalculado normalmente para os dois estágios
 As comparações com a literatura carregam cinco ressalvas próprias. Os tamanhos de modelo das
 Tabelas~\ref{tab:lit_comparison_detection}--\ref{tab:lit_comparison_segmentation} são estimados a
 partir da contagem de parâmetros de cada artigo (params $\times$ 4 bytes, FP32) quando o tamanho de
-\textit{checkpoint} não é informado — aproximação, não tamanho de arquivo real. A linha marcada com
+\textit{checkpoint} não é informado — aproximação, não tamanho de arquivo real. Para as três
+referências de segmentação as contagens vêm todas da Tabela~7 de \cite{sandler2018mobilenetv2}
+(58,16M para o ResNet-101; 4,52M e 2,11M para as duas variantes MobileNetV2), de modo que as três
+linhas são medidas na mesma implementação. A linha marcada com
 $\dagger$ na Tabela~\ref{tab:lit_comparison_detection} usa o tamanho de \textit{checkpoint} bruto,
 não o tamanho real medido, que não foi calculado naquela execução. O estágio QAT não entra nestas
 duas tabelas: é um \textit{checkpoint} FP32 com quantização simulada, de tamanho praticamente igual
@@ -1082,7 +1114,8 @@ $\in\{2,4,8\}$ — análogo, em atenção, da curva de restrição de kernel do 
 \label{fig:phase8_h1}
 \end{figure}
 
-O tamanho de janela reproduz a curva de restrição de kernel. A acurácia top-1 cresce
+O tamanho de janela reproduz a curva de restrição de kernel (Figura~\ref{fig:phase8_h1}).
+A acurácia top-1 cresce
 monotonicamente com a janela tanto em FP32 (32,95\%$\to$33,53\%$\to$36,75\% para janelas 2/4/8)
 quanto em INT8 (33,25\%$\to$33,89\%$\to$36,99\%): restringir o campo receptivo por camada custa
 acurácia também neste paradigma.
@@ -1110,7 +1143,7 @@ permanece especulativo, e não explica por que dois dos sete modelos não mostra
 acurácia; olhando o \emph{tamanho}, a mesma exclusão que preserva a acurácia cobra um preço claro.
 Manter LayerNorm/atenção em FP32 significa que uma fração grande dos pesos nunca converte, e a
 razão de compressão FP32$\to$INT8 mede isso diretamente: os seis modelos com atenção comprimem
-apenas 1,72--1,94$\times$, contra 3,08--3,99$\times$ (mediana 3,94$\times$) das CNNs das Fases
+apenas 1,72--1,94$\times$, contra 3,08--3,99$\times$ (mediana 3,92$\times$) das CNNs das Fases
 1--4/9, que ficam próximas do teto teórico de 4$\times$ de 32 para 8 bits. A fração de parâmetros
 excluídos explica a diferença: 28,3--32,4\% nos seis modelos com atenção.
 
@@ -1135,7 +1168,8 @@ A destilação DeiT confirma a hipótese: \texttt{deit\_tiny} supera
 \texttt{vit\_tiny} (mesma arquitetura, mesmos hiperparâmetros, só a função de perda muda) por
 $+$6,04 p.p. em FP32 e $+$5,22 p.p. em INT8. O ganho de destilar de um professor
 \texttt{MobileNetV2} congelado sobrevive à quantização e faz de \texttt{deit\_tiny} o modelo mais
-forte deste eixo.
+forte entre os sete originais deste eixo --- superado apenas por \texttt{vit\_tiny\_convstem}
+(48,00\%/49,29\%, Tabela~\ref{tab:phase8_models}), o contrafactual discutido adiante.
 
 Nenhum dos sete modelos originais aciona Winograd em nenhuma configuração testada
 (traço de acionamento medido como falso em todos). O resultado, porém, já era previsível pela
@@ -1144,8 +1178,10 @@ estrutura que aciona Winograd $F(2\times2,3\times3)$. As únicas convoluções p
 \textit{patch embeddings} (4$\times$4 em \texttt{swin\_pico}, 8$\times$8 em
 \texttt{vit\_tiny}/\texttt{deit\_tiny}, ambos com \textit{stride} igual ao \textit{kernel}) e, no
 híbrido, um \textit{stem} \textit{bottleneck} de \textit{stride} 2. A medição confirma a
-expectativa, mas não isola a atenção como causa: CNNs puras sem 3$\times$3 de \textit{stride} 1 —
-\texttt{AlexNetBottleneck} e \texttt{ResNet18}, no próprio Eixo 3 — também não acionam Winograd.
+expectativa, mas não isola a atenção como causa: CNNs densas que \emph{contêm} essa estrutura —
+\texttt{AlexNetBottleneck} e \texttt{ResNet18}, medidas no próprio Eixo 3 — também não acionam
+Winograd em nível de modelo completo, de modo que a ausência de traço não distingue ``não tem
+convolução elegível'' de ``tem, mas o cuDNN escolheu outro algoritmo''.
 
 As duas linhas marcadas com $\dagger$ na Tabela~\ref{tab:phase8_models} preenchem essa lacuna ao
 nível arquitetural: \texttt{vit\_tiny\_convstem} e \texttt{swin\_pico\_convstem} repetem
@@ -1154,16 +1190,52 @@ nível arquitetural: \texttt{vit\_tiny\_convstem} e \texttt{swin\_pico\_convstem
 CNNs deste estudo. Ambas ganham acurácia por uma margem larga sobre o par sem essa camada
 ($+$7,65/$+$6,85 p.p.\ FP32/INT8 para \texttt{vit\_tiny\_convstem}; $+$8,34/$+$11,77 p.p.\ para
 \texttt{swin\_pico\_convstem}, Figura~\ref{fig:phase8_h5_convstem}), reforçando o achado já visto em \texttt{hybrid\_bottleneck\_swin}
-de que um \textit{stem} CNN ajuda frente à atenção pura --- mas isso resolve só a questão
-arquitetural: nenhuma das duas passou pelo \textit{pipeline} de perfilamento do Eixo 3, então o
-traço de acionamento permanece não medido para ambas; confirmar se o \textit{kernel} Winograd de
-fato aciona nesta camada fica para trabalho futuro.
+de que um \textit{stem} CNN ajuda frente à atenção pura.
+
+O rastreamento de \textit{kernel} dessas duas variantes, feito na mesma GPU do Eixo 3, separa
+elegibilidade de acionamento: \texttt{vit\_tiny\_convstem} \emph{aciona} Winograd — o \textit{trace}
+registra dois \textit{kernels} de nome Winograd (\texttt{generateWinograd\-Tiles\-Kernel} e
+\texttt{scudnn\_winograd\_128x128}), de forma estável em execuções repetidas —, mas
+\texttt{swin\_pico\_convstem} não, apesar de ter a mesma estrutura elegível. As duas camadas
+3$\times$3 de \textit{stride} 1 rodam na mesma resolução (32$\times$32) e diferem só em canais
+(32$\to$64 contra 48$\to$48); para a segunda, o cuDNN prefere um \textit{implicit GEMM}. É o mesmo
+padrão do Eixo 3 — a elegibilidade arquitetural é necessária, não suficiente: quem decide é a
+heurística do \textit{backend} para aquela configuração exata. Esses são os únicos dois modelos
+deste eixo com traço Winograd positivo ou sequer possível; nos sete originais o traço é negativo,
+como esperado pela ausência da estrutura.
+
+\textbf{O ganho não é grátis, e a comparação tem ressalvas.} A camada acrescentada eleva os MACs de
+31,8 para 59,3~M no \texttt{swin\_pico} ($+$86\%) e de 185,5 para 222,0~M no \texttt{vit\_tiny}
+($+$20\%), com parâmetros de 0,32 para 0,36~M e de 2,76 para 2,93~M --- parte do ganho pode vir de
+capacidade adicional, não da estrutura 3$\times$3 em si. Os orçamentos de treino também diferem,
+e em direções opostas (Tabela~\ref{tab:per_model_training}): \texttt{vit\_tiny\_convstem} treinou
+57 épocas FP32 contra 125 de \texttt{vit\_tiny}, o que torna seu $+$7,65 p.p. uma estimativa
+conservadora; já \texttt{swin\_pico\_convstem} treinou 245 contra 143 de \texttt{swin\_pico\_w4},
+de modo que parte dos $+$8,34 p.p. pode ser orçamento, não arquitetura. Somam-se a semente única e
+o hardware distinto (RTX 4060 local para as duas variantes $\dagger$, RTX 4090 no PCAD para as
+demais).
+
+Dois efeitos colaterais merecem registro. Primeiro, \texttt{swin\_pico\_convstem} tem $\Delta$QAT
+de $+$3,79 p.p., o maior ganho sob INT8 de todo o eixo --- entre os sete originais o maior era
+$+$2,10 p.p.\ de \texttt{vit\_tiny} --- coerente com o \textit{stem} convolucional ser inteiramente
+quantizável, ao contrário dos blocos de atenção. Segundo, e apesar disso, o \textit{stem} quase não
+alivia a penalidade de tamanho descrita acima: a razão de compressão FP32$\to$INT8 sobe de
+$\sim$1,86$\times$ para 1,97$\times$ (\texttt{swin\_pico\_convstem}) e 2,01$\times$
+(\texttt{vit\_tiny\_convstem}), ainda muito abaixo dos $\sim$3,9$\times$ das CNNs, porque a fração
+excluída do QAT continua dominada por LayerNorm/atenção.
+
+Ainda assim, é a configuração de atenção que mais se aproxima das CNNs de compensação a tamanho
+equivalente: \texttt{swin\_pico\_convstem} atinge 45,66\% INT8 a 0,72~MB contra 49,86\% de
+\texttt{AlexNetFireBypass} a $\sim$0,55~MB --- uma distância de $\sim$4,2 p.p., contra os
+$\sim$9,7 p.p.\ de \texttt{hybrid\_bottleneck\_swin} discutidos no início desta seção.
 
 \begin{figure*}[!t]
 \centering
 \includegraphics[width=\linewidth]{figures/phase8_h5_convstem_gain.png}
 \caption{Ganho de acurácia top-1 (FP32 e INT8) ao acrescentar um \textit{stem} 3$\times$3 de
-\textit{stride} 1 elegível a Winograd a \texttt{vit\_tiny} e \texttt{swin\_pico} (janela 4).}
+\textit{stride} 1 elegível a Winograd a \texttt{vit\_tiny} e \texttt{swin\_pico} (janela 4).
+O ganho não é grátis: a camada acrescenta MACs ($+$86\% no \texttt{swin\_pico}, $+$20\% no
+\texttt{vit\_tiny}) e os orçamentos de treino diferem entre os pares --- ver texto.}
 \label{fig:phase8_h5_convstem}
 \end{figure*}
 
@@ -1217,7 +1289,14 @@ mantém sua vantagem, \texttt{AlexNetFire} colapsa.
 \item \emph{Atenção Local Eficiente (Eixo 7)}: atenção em janelas reproduz a curva de restrição de
 kernel e não aciona Winograd — por ausência de convoluções elegíveis, não por um efeito da atenção
 em si; contra a expectativa inicial, cinco dos sete modelos \emph{ganham} acurácia sob INT8, e os
-outros dois caem apenas ligeiramente.
+outros dois caem apenas ligeiramente. O contrafactual dos dois modelos com \textit{stem}
+3$\times$3 acrescentado mostra que a elegibilidade a Winograd pode ser recuperada sem custo de
+acurácia --- os dois ganham 6,9--11,8 p.p.\ sobre seus pares ---, mas ao preço de mais MACs; e o
+rastreamento de \textit{kernel} confirma acionamento real de Winograd em um deles
+(\texttt{vit\_tiny\_convstem}), não no outro, reiterando que elegibilidade não garante acionamento.
+A penalidade que resta é de
+\emph{tamanho}: com LayerNorm/atenção fora do QAT, os modelos de atenção comprimem
+$\sim$1,7--2,0$\times$ contra $\sim$3,9$\times$ das CNNs.
 
 \end{enumerate}
 
@@ -1225,7 +1304,9 @@ outros dois caem apenas ligeiramente.
 \label{sec:discussao}
 
 Os modelos com compensação (bottleneck, Fire) mostram robustez excepcional sob quantização INT8
-($-$0,08 a +0,33 p.p.), enquanto a restrição ingênua sofre 3--10 p.p. de queda. Uma hipótese
+($-$0,08 a +0,33 p.p.), enquanto as restrições ingênuas mais frágeis chegam a 3--10 p.p.\ de
+queda (\texttt{AlexNet3x3-GAP} $-$3,29, \texttt{AlexNetSmallKernel} $-$9,67; a média da família é
+$-$2,51 p.p., Tabela~\ref{tab:quantization_robustness}). Uma hipótese
 plausível é que as convoluções 1$\times$1 do bottleneck/squeeze produzem ativações com
 distribuições mais regulares, facilitando a calibração de quantização. Um teste direto dessa
 hipótese permanece trabalho futuro.
@@ -1267,18 +1348,21 @@ mecanismos de compensação leves — blocos \textit{bottleneck}, módulos \text
 residuais isolados — nenhum dos quais reintroduz kernel $> 3\times 3$.
 
 Com apenas 0,385M parâmetros (1,51 MB) e 39,5M MACs — menos de um quarto dos MACs do módulo Fire
-(177,7M), a menor contagem de computação entre os mecanismos de compensação testados — o
-\texttt{AlexNetBottleneck} atinge 44,62\% de acurácia top-1 em FP32 e mantém 44,54\% após INT8
-(drop de apenas 0,08 p.p., o melhor do estudo). Entre os mecanismos de compensação estrutural testados,
-é o único que reduz memória \emph{e} computação simultaneamente frente à baseline restrita+GAP —
-relevante para um acelerador cujo custo escala principalmente com número de multiplicações.
+(177,7M), a menor contagem de computação entre os mecanismos de compensação \emph{densos} testados
+— o \texttt{AlexNetBottleneck} atinge 44,62\% de acurácia top-1 em FP32 e mantém 44,54\% após INT8
+(queda de apenas 0,08 p.p., a menor perda registrada entre as CNNs deste estudo — alguns modelos
+chegam a \emph{ganhar} acurácia sob INT8). Entre os mecanismos de compensação estrutural testados,
+é o único que reduz memória \emph{e} computação simultaneamente frente à baseline restrita+GAP
+\emph{sem} recorrer a convoluções \textit{depthwise}: o \texttt{AlexNetDepthwiseSep} reduz ainda
+mais os dois (0,314M, 1,23 MB, 19,8M MACs), mas ao preço da elegibilidade a Winograd (Eixo 3) —
+distinção relevante para um acelerador cujo custo escala principalmente com número de multiplicações.
 
 A ablação por atalho residual isolado revela que essa adição sozinha (zero parâmetros extras)
 iguala e supera, em FP32, o ganho de uma arquitetura híbrida muito mais completa nesta família de
 arquiteturas (6,59 p.p. sobre o \textit{Fire} de base, contra 5,81 p.p. do híbrido completo). O
 resultado sugere que simplicidade estrutural pode aproximar-se — e aqui superar — elaboração
 arquitetural complexa, ao menos em FP32. Uma ressalva crítica, porém: o \texttt{AlexNetFireBypass}
-usou um orçamento de épocas muito maior que o \texttt{AlexNetFinalFireResidual} (152 vs. 77
+usou um orçamento de épocas muito maior que o \texttt{AlexNetFinalFireResidual} (152 vs. 71
 épocas, Apêndice~\ref{sec:apendice_treinamento}), então parte desse ganho pode refletir o treino
 mais longo, não apenas a mudança arquitetural. Sob quantização, o atalho isolado não preserva
 vantagem alguma sobre o híbrido completo, caindo tanto quanto ele ($-$0,71 vs. $-$0,59 p.p.).
@@ -1314,8 +1398,9 @@ sete modelos de atenção local \emph{ganham} (\texttt{swin\_pico\_\{w2,w4,w8\}}
 \texttt{hybrid\_bottleneck\_swin}) caem ligeiramente. Uma leitura plausível para os ganhos que
 persistem é que manter LayerNorm/atenção em FP32 durante o QAT evita um caminho de quantização
 instável e transforma o restante do \textit{fine-tuning} em regularização adicional — mas o
-mecanismo não explica os dois casos que não ganham. A destilação DeiT é o modelo de atenção mais
-forte deste estudo (46,38\% FP32), mas usa 5--7$\times$ o número de parâmetros das CNNs
+mecanismo não explica os dois casos que não ganham. A destilação DeiT é o mais forte dos sete modelos de
+atenção originais (46,38\% FP32; só o contrafactual \texttt{vit\_tiny\_convstem}, com um
+\textit{stem} 3$\times$3 acrescentado, o supera com 48,00\%), mas usa 5--7$\times$ o número de parâmetros das CNNs
 Pareto-ótimas deste projeto (2,76M vs. 0,39--0,52M): competitivo em acurácia, não em eficiência.
 
 \section{Trabalhos Futuros}
@@ -1561,12 +1646,15 @@ treino por estágio (FP32/QAT) e acurácia final top-1/top-5 (FP32/INT8), agrupa
 Figura~\ref{fig:kernel_cost}. Épocas/tempo de QAT vêm do mesmo resumo de execução que registra a
 acurácia FP32/INT8 já reportada, garantindo a mesma execução (ao contrário de \textit{logs} de QAT
 residuais de uma execução \textit{large-scale} superada, arquivados à parte e não usados aqui).
-Época de QAT é a do melhor \textit{checkpoint}, como no FP32; o tempo soma a duração real por
-época, não o campo agregado de tempo total de treino — não confiável para os modelos da Fase 2
-(retorna 0 ou valores inconsistentes). Marcado com $*$, \texttt{AlexNetSE} é exceção: seu resumo de
-execução registra zero épocas apesar do treino ter rodado (colapso, não ausência) — o
-\textit{checkpoint} sobrevivente confirma melhor época 5 (6 épocas) e tempo total 297,9~s
-($\approx$4,9~min), única medida disponível. Células ``—'' de QAT valem só para
+A coluna de épocas é a contagem registrada no resumo de execução de cada modelo — a época do melhor
+\textit{checkpoint} onde o resumo a separa da contagem total; para alguns estágios de QAT sem esse
+campo, ela vem do \textit{log} e é a época de parada, não a do melhor \textit{checkpoint}. O tempo
+usa o campo agregado de tempo total de treino, exceto nos modelos da Fase 2 — onde ele retorna 0 ou
+valores inconsistentes — para os quais soma-se a duração real por época. Marcado com $*$, \texttt{AlexNetSE} é exceção: seu resumo de
+execução registra zero épocas apesar do treino ter rodado (colapso, não ausência). O tempo total
+que ele registra, 297,9~s ($\approx$4,9~min), dividido pelo tempo médio por época do mesmo resumo
+(48,8~s) dá 6 épocas — a única estimativa disponível, já que nem \textit{checkpoint} nem \textit{log}
+desse treino sobreviveram. Células ``—'' de QAT valem só para
 \texttt{MobileNetV2}/\texttt{ResNet18}
 pré-treinados (nunca passaram por QAT — \textit{residual adds} sem operador de soma dedicado à
 quantização) e
@@ -1580,7 +1668,7 @@ atribuídos ao PCAD (RTX 4090), mas quatro deles (três híbridas do Eixo 2 e
 \texttt{AlexNetFinalFireResidual}) têm resumos de execução sem esse mesmo bloco de metadados, o
 que não confirma nem descarta a origem. Tempos entre os dois ambientes, e frente à latência do Eixo 3
 (Seção~\ref{sec:profiling}), não são comparáveis. O \texttt{AlexNetFireBypass} treinou por mais
-épocas que os demais (152 vs. $\sim$40--77), daí seu tempo desproporcional. Os modelos do Eixo 7
+épocas que os demais (152 vs. $\sim$32--71 nas híbridas), daí seu tempo desproporcional. Os modelos do Eixo 7
 compartilham uma única taxa de aprendizado/\textit{weight decay} ($5\times10^{-4}$/0,05,
 \cite{touvron2021distillation}) e, exceto \texttt{vit\_tiny}/\texttt{deit\_tiny} (via
 \textit{notebook} dedicado, confirmados por seus \textit{logs}), encerraram por \textit{early
@@ -1603,7 +1691,7 @@ ver ressalva no texto anterior. $^*$ estimado, ver texto.}
 \textbf{Família} & \textbf{Modelo} & \textbf{LR} & \textbf{Ép. FP32} & \textbf{Ép. QAT} & \textbf{T. FP32 (min)} & \textbf{T. QAT (min)} & \textbf{Tam. FP32 (MB)} & \textbf{Tam. INT8 (MB)} & \textbf{Top-1/Top-5 FP32 (\%)} & \textbf{Top-1/Top-5 INT8 (\%)} \\
 \midrule
 \multirow{4}{*}{Baselines irrestritos}
- & AlexNetTV$^\dagger$ (pré-trein.) & 3$\times10^{-4}$ & 79 & 2 & 63,2 & 6,9 & 220,58 & 55,33 & 32,88 / 58,22 & 31,90 / 57,24 \\
+ & AlexNetTV$^\dagger$ (pré-trein.) & 3$\times10^{-4}$ & 79 & 2 & 63,2 & 6,9 & 220,58 & 55,33 & 32,89 / 58,22 & 31,90 / 57,24 \\
  & MobileNetV2$^\dagger$ (pré-trein.) & 1$\times10^{-4}$ & 27 & — & 14,8 & — & 9,69 & — & 58,00 / 81,51 & — \\
  & ResNet18$^\dagger$ (pré-trein.) & 1$\times10^{-4}$ & 15 & — & 7,1 & — & 43,07 & — & 53,91 / 77,80 & — \\
  & VGG-Style$^\dagger$ & 1$\times10^{-3}$ & 62 & 6 & 30,5 & 8,5 & 9,21 & 2,38 & 51,81 / 75,88 & 51,19 / 75,52 \\
@@ -1625,12 +1713,12 @@ ver ressalva no texto anterior. $^*$ estimado, ver texto.}
  & AlexNetGroupConv$^\dagger$ & 1$\times10^{-3}$ & 91 & 4 & 68,6 & 9,6 & 213,34 & 53,54 & 29,18 / 57,07 & 27,71 / 55,10 \\
  & AlexNetResidual$^\dagger$ & 3$\times10^{-4}$ & 62 & 12 & 64,0 & 28,9 & 231,49 & 58,10 & 48,01 / 73,11 & 47,27 / 72,50 \\
  & AlexNetSE$^\dagger$ & 3$\times10^{-4}$ & 6* & — & 4,9* & — & 219,91 & — & 0,50 / 2,50 & — \\
- & Bottleneck + Fire & 1$\times10^{-3}$ & 40 & 13 & 13,9 & 9,4 & 1,97 & 0,55 & 42,29 / 68,54 & 44,00 / 70,15 \\
- & Bottleneck + Residual & 1$\times10^{-3}$ & 38 & 9 & 15,6 & 9,4 & 2,24 & 0,64 & 45,10 / 71,15 & 45,98 / 72,33 \\
- & Depthwise + Fire & 1$\times10^{-3}$ & 76 & 3 & 27,3 & 3,3 & 1,85 & 0,51 & 43,46 / 69,02 & 42,79 / 68,95 \\
+ & Bottleneck + Fire & 1$\times10^{-3}$ & 34 & 13 & 13,9 & 9,4 & 1,97 & 0,55 & 42,29 / 68,54 & 44,00 / 70,15 \\
+ & Bottleneck + Residual & 1$\times10^{-3}$ & 32 & 9 & 15,6 & 9,4 & 2,24 & 0,64 & 45,10 / 71,15 & 45,98 / 72,33 \\
+ & Depthwise + Fire & 1$\times10^{-3}$ & 70 & 3 & 27,3 & 3,3 & 1,85 & 0,51 & 43,46 / 69,02 & 42,79 / 68,95 \\
 \midrule
 \multirow{2}{*}{Arquitetura híbrida final}
- & Fire + Residual & 1$\times10^{-3}$ & 77 & 3 & 28,8 & 3,7 & 2,71 & 0,75 & 49,79 / 74,80 & 49,20 / 74,39 \\
+ & Fire + Residual & 1$\times10^{-3}$ & 71 & 3 & 28,8 & 3,7 & 2,71 & 0,75 & 49,79 / 74,80 & 49,20 / 74,39 \\
  & AlexNetFireBypass & 1$\times10^{-3}$ & 152 & 50 & 86,2 & 27,8 & 2,01 & 0,55 & 50,57 / 74,90 & 49,86 / 74,56 \\
 \midrule
 \multirow{9}{*}{Atenção local (Eixo 7)}
@@ -1660,12 +1748,27 @@ tempo de treino FP32 e a métrica nos três estágios FP32/QAT/INT8 (mAP ou mIoU
 50) após a correção do \textit{bug} de recall de âncora,
 daí tempos da ordem de dias, bem maiores que os de classificação ou segmentação. O tempo tabulado é
 só do estágio FP32 (QAT tem orçamento próprio mais curto; INT8 não é treinado; ambos omitidos por
-brevidade — ver Seção~\ref{sec:contrib6}). Partir de \textit{backbone} pré-treinado reduz o tempo de
-detecção para \texttt{AlexNetBottleneck} (56,1h vs. 29,7h do zero) e \texttt{AlexNetTV} (125,1h vs.
-115,0h), mas não para \texttt{AlexNetFire} (88,4h vs. 68,6h).
+brevidade — ver Seção~\ref{sec:contrib6}). A coluna de tempo é tempo de parede de execuções em um \textit{cluster}
+compartilhado e \textbf{não deve ser lida como custo de treino de cada variante}. O tempo por época
+muda em degraus dentro de uma \emph{mesma} execução --- \texttt{AlexNetTV} do zero roda a
+$\sim$305~s/época nos 60\% iniciais do treino, $\sim$520~s/época nos 20\% seguintes e $\sim$865~s/época
+nos 5\% finais; o \texttt{AlexNetBottleneck} pré-treinado sai de $\sim$160~s/época para
+$\sim$525~s/época nos últimos
+30\% --- com modelo, configuração e dados idênticos, o que só pode vir de disputa por recurso no nó.
+Descontado esse efeito, o custo por época no patamar não disputado é essencialmente o mesmo com e
+sem pré-treino em dois dos três \textit{backbones}
+(p10 do tempo de época, do zero vs.\ pré-treinado: 156 vs.\ 142~s para \texttt{AlexNetBottleneck} e
+296 vs.\ 293~s para \texttt{AlexNetTV}) --- como esperado, já que
+o pré-treino muda os pesos iniciais, não o custo de uma passagem. O \texttt{AlexNetFire}
+pré-treinado é a exceção: sua execução sobe monotonicamente do início ao fim (médias por quinto de
+376 a 544~s/época) e não tem um patamar não disputado a isolar, de modo que seu p10 (329~s) fica
+acima do da execução do zero (281~s) sem que isso diga nada sobre a arquitetura. O que o pré-treino de fato altera
+é o número de épocas até o \textit{early stopping}, e mesmo isso sem direção única: 760 vs.\ 600
+épocas (\texttt{AlexNetBottleneck}), 647 vs.\ 823 (\texttt{AlexNetFire}) e 839 vs.\ 978
+(\texttt{AlexNetTV}).
 
 \begin{table*}[!t]
-\caption{Eixo 6 — Detecção e segmentação, do zero vs.\ pré-treinado: melhor época e tempo de treino FP32, com métrica nos três estágios FP32/QAT/INT8 (mAP para detecção, mIoU para segmentação, ambas em \%) por backbone}
+\caption{Eixo 6 — Detecção e segmentação, do zero vs.\ pré-treinado: melhor época e tempo de treino FP32, com métrica nos três estágios FP32/QAT/INT8 (mAP para detecção, mIoU para segmentação, ambas em \%) por backbone. O tempo é de parede em nó compartilhado e não é comparável entre execuções (ver texto anterior).}
 \label{tab:phase7_training}
 \centering
 \begin{tabular}{@{}llcccccc@{}}
@@ -1677,7 +1780,7 @@ AlexNetFire & Detecção & do zero & 772 & 68,6 & 8,94\% & 6,38\% & 6,40\% \\
 AlexNetTV & Detecção & do zero & 927 & 115,0 & 16,94\% & 14,73\% & 14,50\% \\
 AlexNetBottleneck & Detecção & pré-treinado & 709 & 56,1 & 20,83\% & 20,15\% & 19,79\% \\
 AlexNetFire & Detecção & pré-treinado & 596 & 88,4 & 8,93\% & 7,79\% & 7,54\% \\
-AlexNetTV & Detecção & pré-treinado & 791 & 125,1 & 18,10\% & 17,24\% & 16,96\% \\
+AlexNetTV & Detecção & pré-treinado & 788 & 125,1 & 18,10\% & 17,24\% & 16,96\% \\
 AlexNetBottleneck & Segmentação & do zero & 84 & 0,5 & 17,84\% & 17,90\% & 17,91\% \\
 AlexNetFire & Segmentação & do zero & 154 & 1,1 & 17,03\% & 17,12\% & 17,05\% \\
 AlexNetTV & Segmentação & do zero & 99 & 0,6 & 16,34\% & 16,33\% & 16,21\% \\
