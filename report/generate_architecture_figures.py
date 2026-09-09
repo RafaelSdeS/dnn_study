@@ -263,7 +263,7 @@ def draw_architecture(ax, stages, title, metrics, head, input_hw=INPUT_HW):
                 label += f"\n→ {h}×{w}"
             ax.plot([x_left, x_right], [BOX_H / 2, BOX_H / 2], ":", color="#999", lw=1.4, zorder=1)
             ax.text((x_left + x_right) / 2, BOX_H / 2 - 0.55, label, ha="center", va="center",
-                    fontsize=6, color="#888", linespacing=1.25)
+                    fontsize=8, color="#888", linespacing=1.25)
             continue
 
         border_color, type_tag = BLOCK_TYPE_STYLE.get(stage["type"], ("#333333", ""))

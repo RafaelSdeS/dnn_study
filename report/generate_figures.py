@@ -69,19 +69,20 @@ def _style_axes(ax):
 # exploratory compensation attempts not detailed individually in the report text, so they
 # share one color.
 models_fig1 = [
-    "mobilenetv2", "vgg_style", "resnet18_tv",
+    "mobilenetv2", "vgg_style", "resnet18_tv", "alexnet_tv",
     "alexnet_3x3_fc", "alexnet_2x2_fc",
     "alexnet_mixed", "alexnet_small_kernel", "alexnet_residual",
     "alexnet_final_fire_residual",
 ]
 labels_fig1 = [
     "MobileNetV2 (irrestrita)", "VGG-Style (irrestrita)", "ResNet18 (irrestrita)",
+    "AlexNet (irrestrita)",
     "Apenas 3×3 (ingênua)", "Apenas 2×2 (ingênua)",
     "Mista (3×3+2×2)", "SmallKernel (exploratória)", "Residual (exploratória)",
     "Fire-Residual (híbrida final)",
 ]
 group_fig1 = [
-    "Baselines irrestritos", "Baselines irrestritos", "Baselines irrestritos",
+    "Baselines irrestritos", "Baselines irrestritos", "Baselines irrestritos", "Baselines irrestritos",
     "Restrição ingênua", "Restrição ingênua",
     "Tentativas de compensação", "Tentativas de compensação", "Tentativas de compensação",
     "Arquitetura híbrida final",
@@ -155,7 +156,8 @@ WINOGRAD_ELIGIBLE = {
     "vit_tiny_convstem", "swin_pico_convstem",
 }
 
-rows = df[df["base_model"].isin(models_fig1)]
+rows = df[df["base_model"].isin(models_fig1)
+          & ~((df["base_model"] == "alexnet_tv") & (df["phase"] != "Phase 1 — Baselines"))]
 model_to_acc = dict(zip(rows["base_model"], rows["top1_%_FP32"]))
 model_to_size = dict(zip(rows["base_model"], rows["size_MB_FP32"]))
 accuracies = [model_to_acc[m] for m in models_fig1]

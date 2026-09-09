@@ -21,6 +21,7 @@ venv/
 # PyTorch / ML checkpoints
 # =========================
 *.pth
+*.pth.done
 *.pt
 *.ckpt
 

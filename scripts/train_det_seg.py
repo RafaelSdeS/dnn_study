@@ -37,7 +37,7 @@ from ml.det_seg_models import (
 )
 from ml.quantization import make_qat_callback
 from ml.reporting import compute_detection_summary, compute_segmentation_summary
-from ml.runtime import expand_path
+from ml.runtime import expand_path, set_global_seed
 
 
 def load_yaml(path: str) -> dict:
@@ -63,6 +63,8 @@ def run_detection(args):
             exp_cfg = exp_cfg[args.model]
         data_cfg = replace(data_cfg, **exp_cfg.get("data", {}))
         trainer_cfg = replace(trainer_cfg, **exp_cfg.get("trainer", {}))
+
+    set_global_seed(data_cfg.seed)
 
     # Adjust trainer config for QAT (shorter epochs, lower lr, no AMP).
     # Disabling AMP roughly doubles activation memory at the same batch size, which
@@ -283,6 +285,8 @@ def run_segmentation(args):
             exp_cfg = exp_cfg[args.model]
         data_cfg = replace(data_cfg, **exp_cfg.get("data", {}))
         trainer_cfg = replace(trainer_cfg, **exp_cfg.get("trainer", {}))
+
+    set_global_seed(data_cfg.seed)
 
     # Adjust trainer config for QAT (shorter epochs, lower lr, no AMP). Disabling AMP
     # roughly doubles activation memory at the same batch size — halve it to compensate
