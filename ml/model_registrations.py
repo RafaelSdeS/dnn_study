@@ -29,6 +29,7 @@ from models import (
     AlexNetFireBypass,
     AlexNetSE,
     AlexNetSmallKernel,
+    AlexNetSmallKernelWithBN,
     AlexNetFinalBottleneckResidual,
     AlexNetFinalFireResidual,
     AlexNetFinalBottleneckFire,
@@ -86,6 +87,16 @@ register_model(
     AlexNetSmallKernel,
     fuse_map=FUSE_MAP_ALEXNET_SMALLKERNEL,
     fuse_root_attr="features",
+    lr=3e-4,
+)
+# models/compensation.py — exists since the Phase 2 QAT-drop investigation, never
+# trained (Winograd-FPGA plano_avaliacao_redes_winograd.md Fase 1). No `features`
+# Sequential (named conv/bn/relu attrs instead), so find_fuse_groups like the
+# compensation.py models below rather than an explicit index-based fuse_map.
+register_model(
+    "alexnet_small_kernel_with_bn",
+    AlexNetSmallKernelWithBN,
+    fuse_map=find_fuse_groups(AlexNetSmallKernelWithBN()),
     lr=3e-4,
 )
 

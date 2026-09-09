@@ -1,0 +1,10 @@
+# QATWinoConfig — reuses ml/config.py's QATConfig dataclass (same fields as
+# qat.yaml). freeze_bn_epoch/disable_observer_epoch are fbgemm-observer concepts
+# that don't apply to the qat_wino stage (Winograd-FPGA's scripts/avaliacao_redes/
+# qat_wino.py has its own act_absmax/post_shift trackers, no fbgemm observer to
+# freeze) -- set past any realistic epoch budget so they're inert.
+epochs: 15
+lr: 5.0e-5
+weight_decay: 5.0e-4
+freeze_bn_epoch: 999
+disable_observer_epoch: 999

@@ -1,0 +1,43 @@
+# Fase 2 do plano (Winograd-FPGA repo, docs/plano_avaliacao_redes_winograd.md,
+# secao "Fase 2 -- Treinar no PCAD (FP32 -> QAT -> INT8)"): TODOS os modelos do
+# zero, MESMO budget -- nao o melhor resultado por rede. Os checkpoints legados
+# de BEST_MODELS.md (32-152 epocas, spread 4.75x) NAO entram nesta tabela.
+#
+# `uniform_hparams: true` bypassa o lr/weight_decay por-modelo de
+# ml/model_registrations.py (register_model(lr=...)) -- sem isso o "mesmo lr
+# para todos" do plano seria silenciosamente furado pelo default do
+# scripts/train.py, que aplica o override por-modelo incondicionalmente.
+#
+# Tier A/B do plano (Fase 2, docs/plano_avaliacao_redes_winograd.md §2.3/2.4)
+# que já estão registrados em ml/model_registrations.py. Os 3 modelos do
+# torchvision (googlenet/resnet50/squeezenet1_1) ficam de fora até a Fase 1
+# terminar de registrá-los lá -- ver a investigação de 2026-09-09, "o que dá
+# para avançar agora".
+name: budget_unico
+uniform_hparams: true
+seed: 42
+models:
+  - vgg_style                          # Tier A #3
+  - alexnet_smallkernel                # Tier A #8
+  - alexnet_small_kernel_with_bn       # Tier A, nunca treinado antes desta run
+  - alexnet_stacked                    # Tier A #11
+  - alexnet_fire                       # Tier B #13
+  - alexnet_fire_bypass                # Tier B #4 (mesma geometria de conv que alexnet_fire)
+  - alexnet_bottleneck                 # Tier B #10
+  - alexnet_final_fire_residual        # Tier B #5
+  - alexnet_final_bottleneck_residual  # Tier B #9
+stages:
+  - fp32
+  - qat_wino
+training:
+  epochs: 100
+  lr: 3.0e-4
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  grad_clip_norm: null
+  use_amp: true
+  early_stopping_patience: 10
+qat_wino:
+  epochs: 15
+  lr: 5.0e-5
+  weight_decay: 5.0e-4

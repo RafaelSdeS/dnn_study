@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import logging
+import os
 import signal
+import sys
 from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any
@@ -112,6 +115,66 @@ def _build_qat_config(base_cfg: dict[str, Any], experiment_cfg: dict[str, Any]) 
     return replace(qat_cfg, **overrides)
 
 
+def _build_qat_wino_config(base_cfg: dict[str, Any], experiment_cfg: dict[str, Any]) -> QATConfig:
+    qat_wino_cfg = QATConfig(**base_cfg)
+    overrides = experiment_cfg.get("qat_wino", {}) or {}
+    return replace(qat_wino_cfg, **overrides)
+
+
+def _import_qat_wino():
+    """Bridge to the Winograd-FPGA sibling repo's accelerator-numeric QAT
+    (scripts/avaliacao_redes/qat_wino.py). Not vendored here on purpose --
+    that repo's README explains why the two projects don't cross-import model
+    *definitions* (this repo would silently change FPGA-side numbers), but
+    qat_wino.convert() is a generic nn.Conv2d->WinoQuantConv2d swap, not a
+    model definition, so importing the module itself is fine.
+    """
+    default_root = Path.home() / "Documents" / "Winograd-FPGA" / "scripts" / "avaliacao_redes"
+    root = Path(os.environ.get("WINOGRAD_FPGA_ROOT", default_root)).expanduser()
+    if not (root / "qat_wino.py").exists():
+        raise FileNotFoundError(
+            f"qat_wino.py not found at {root} -- set WINOGRAD_FPGA_ROOT to the "
+            "Winograd-FPGA repo's scripts/avaliacao_redes directory"
+        )
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
+    return importlib.import_module("qat_wino")
+
+
+def _load_qat_wino_model(model_name: str, spec: dict[str, Any], checkpoints_dir: Path, device):
+    """FP32 best checkpoint -> qat_wino.convert() in place.
+
+    A fresh instance built this way every time (rather than caching) so its
+    state_dict keys always match a qat_wino checkpoint saved from a model
+    built the same way -- convert() adds buffers (act_absmax, post_shift,
+    sat_frac, BT/AT/G) that a plain ctor() instance doesn't have.
+    """
+    qat_wino = _import_qat_wino()
+    model = load_best_model(model_name, spec["ctor"], checkpoints_dir, device, eval_mode=False)
+    trocadas = qat_wino.convert(model)
+    if not trocadas:
+        raise RuntimeError(f"{model_name}: qat_wino.convert() found no eligible 3x3 conv to replace")
+    logging.getLogger(f"pcad_runner.{model_name}").info(
+        "qat_wino converted %d conv layer(s): %s", len(trocadas), trocadas)
+    return model.to(device)
+
+
+def _dump_wino_calibration(model) -> dict[str, Any]:
+    """Per-layer act_absmax/post_shift/sat_frac -- the §5.1 calibration fields
+    the plan calls irrecoverable without a re-eval. Duck-typed (not isinstance)
+    because qat_wino.make_wino_conv() builds its conv class inside a closure.
+    """
+    calib: dict[str, Any] = {}
+    for name, m in model.named_modules():
+        if hasattr(m, "act_absmax") and hasattr(m, "post_shift") and hasattr(m, "sat_frac"):
+            calib[name or "root"] = {
+                "act_absmax": float(m.act_absmax.item()),
+                "post_shift": int(round(float(m.post_shift.item()))),
+                "sat_frac": float(m.sat_frac.item()),
+            }
+    return calib
+
+
 def _load_runtime_config(runtime_name: str) -> dict[str, Any]:
     return _load_profile(runtime_name, "runtime")
 
@@ -158,6 +221,8 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
     data_cfg = _build_data_config(load_config("data.yaml"), experiment_cfg)
     trainer_cfg = _build_trainer_config(load_config("training.yaml"), experiment_cfg)
     qat_cfg = _build_qat_config(load_config("qat.yaml"), experiment_cfg)
+    qat_wino_cfg = _build_qat_wino_config(load_config("qat_wino.yaml"), experiment_cfg)
+    uniform_hparams = bool(experiment_cfg.get("uniform_hparams", False))
 
     seed = int(experiment_cfg.get("seed", data_cfg.seed))
     data_cfg.seed = seed
@@ -183,7 +248,11 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
         model_run_name = f"{experiment_name}_{model_name}"
         run_root, checkpoints_dir, logs_dir, tb_dir, results_dir = _make_model_runs(runtime_paths.root, experiment_name, model_name)
 
-        model_cfg = replace(
+        # uniform_hparams (Fase 2 do plano): o registry tem lr/weight_decay
+        # por-modelo (register_model(lr=...), tunado para o melhor resultado de
+        # cada rede) -- o protocolo de budget unico exige o MESMO valor para
+        # todas, senao "mesmo lr entre redes" seria furado em silencio aqui.
+        model_cfg = trainer_cfg if uniform_hparams else replace(
             trainer_cfg,
             lr=spec.get("lr", trainer_cfg.lr),
             weight_decay=spec.get("weight_decay", trainer_cfg.weight_decay),
@@ -194,6 +263,7 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
             "data": asdict(data_cfg),
             "training": asdict(model_cfg),
             "qat": asdict(qat_cfg),
+            "qat_wino": asdict(qat_wino_cfg),
             "selected_model": model_name,
             "stage_list": stage_list,
         }
@@ -307,6 +377,54 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
                 )
                 qat_fit = trainer.fit(resume_from=resume_from)
                 trainer.logger.info("QAT training complete for %s", model_name)
+
+        if "qat_wino" in stage_list:
+            # Fase 2 do plano de avaliacao Winograd (accelerator-numeric QAT,
+            # not fbgemm's per-channel one): fine-tune with the FPGA's own
+            # per-tensor pow2 requant + F(4,3) transform in the forward, via
+            # scripts/avaliacao_redes/qat_wino.py in the sibling Winograd-FPGA
+            # repo. No int8-convert step here -- unlike the fbgemm path,
+            # WinoQuantConv2d.forward() already simulates the quantized
+            # pipeline in eval mode, so evaluating this checkpoint directly
+            # *is* the accelerator-numeric accuracy (top1_int8_accel proxy).
+            qat_wino_model = _load_qat_wino_model(model_name, spec, checkpoints_dir, device)
+            qat_wino_cfg_run = replace(
+                model_cfg, epochs=qat_wino_cfg.epochs, lr=qat_wino_cfg.lr,
+                weight_decay=qat_wino_cfg.weight_decay, use_amp=False,
+            )
+            wino_best_path = checkpoints_dir / f"qat_wino_{model_name}_best.pth"
+            resume_from = auto_resume_path(checkpoints_dir, f"qat_wino_{model_name}")
+            qat_wino_fit: dict[str, Any] = {}
+            trainer = Trainer(
+                qat_wino_model,
+                train_loader,
+                val_loader,
+                qat_wino_cfg_run,
+                device,
+                checkpoints_dir,
+                f"qat_wino_{model_name}",
+                num_classes=data_cfg.num_classes,
+                wandb_run=wandb_run,
+                metrics_callback=metrics_callback,
+                log_file=logs_dir / f"qat_wino_{model_name}.log",
+            )
+            if wino_best_path.exists() and resume_from is None:
+                logger.info("Skipping qat_wino fit for %s; best checkpoint exists.", model_name)
+                wino_ckpt = torch.load(wino_best_path, map_location=str(device), weights_only=False)
+                qat_wino_model.load_state_dict(wino_ckpt.get("model_state_dict", wino_ckpt))
+            else:
+                qat_wino_fit = trainer.fit(resume_from=resume_from)
+                trainer.logger.info("qat_wino training complete for %s", model_name)
+            qat_wino_eval = trainer.evaluate(topk=(1, 5))
+            wino_summary = {
+                "name": model_name,
+                "stage": "qat_wino",
+                "fit": qat_wino_fit,
+                "eval": qat_wino_eval,
+                "calibration": _dump_wino_calibration(qat_wino_model),
+                "checkpoint": str(wino_best_path),
+            }
+            create_results_summary(wino_summary, resolved_config, results_dir / f"{model_name}_qat_wino_summary.json")
 
         if "int8" in stage_list:
             int8_model = None
