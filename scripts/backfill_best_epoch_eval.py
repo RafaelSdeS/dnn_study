@@ -71,11 +71,11 @@ SCRATCH_DIR = REPO_ROOT / "outputs" / "local" / "_backfill_scratch"
 
 # (model_name, run_dir relative to REPO_ROOT)
 MODELS = [
-    ("swin_pico_w2", "outputs/pcad/phase8/swin_pico_w2"),
-    ("swin_pico_w4", "outputs/pcad/phase8/swin_pico_w4"),
-    ("swin_pico_w8", "outputs/pcad/phase8/swin_pico_w8"),
-    ("swin_pico_poolmixer", "outputs/pcad/phase8/swin_pico_poolmixer"),
-    ("hybrid_bottleneck_swin", "outputs/pcad/phase8/hybrid_bottleneck_swin"),
+    ("swin_pico_w2", "outputs/pcad/phase_8_efficient_vit_hybrid_attention/swin_pico_w2"),
+    ("swin_pico_w4", "outputs/pcad/phase_8_efficient_vit_hybrid_attention/swin_pico_w4"),
+    ("swin_pico_w8", "outputs/pcad/phase_8_efficient_vit_hybrid_attention/swin_pico_w8"),
+    ("swin_pico_poolmixer", "outputs/pcad/phase_8_efficient_vit_hybrid_attention/swin_pico_poolmixer"),
+    ("hybrid_bottleneck_swin", "outputs/pcad/phase_8_efficient_vit_hybrid_attention/hybrid_bottleneck_swin"),
     ("alexnet_fire_bypass",
      "outputs/pcad/phase_9_bypass_ablation/fire_bypass_large_scale/alexnet_fire_bypass"),
 ]

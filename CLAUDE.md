@@ -16,6 +16,12 @@ Questions: how kernel size affects accuracy/efficiency/quantization robustness; 
 
 ## Layout
 
+`checkpoints/`, `outputs/`, and `results/` are three stages of one pipeline, not overlapping
+copies: `checkpoints/` is notebook-era exploratory output (Phases 1–4/8, JSON sidecars only,
+`.pth` gitignored), `outputs/{local,pcad}/` is CLI/cluster run output (split by execution
+environment on purpose — large checkpoints move between machines by hand via scp/rsync, not
+git), and `results/` is the curated tracked summaries/figures that feed `report/`/`presentation/`.
+
 ```
 ml/                       # Core package — notebooks and scripts import everything from here
   config.py               # DataConfig, TrainerConfig, QATConfig dataclasses (defaults explicit)
@@ -109,6 +115,7 @@ outputs/                  # Training artifacts & logs
     phase7/
   pcad/
     phase_6_hardware_profiling/ # GPU profiling data (runs/ — flat, host-named files; backfill/)
+    phase_8_efficient_vit_hybrid_attention/ # Phase 8 CLI-driven runs (swin_pico_*, hybrid_bottleneck_swin)
     phase_9_bypass_ablation/    # Phase 9 runs (fire_bypass/, fire_bypass_large_scale/)
     archive_legacy_phases/      # Phase 2, 4, 5 runs (phase_2_kernel_restriction/, phase_4_5_large_scale/); only *_best.pth kept, no *_resume.pth
     logs/<experiment>/          # SLURM job stdout/stderr, one dir per experiment name (matches scripts/cluster.py's log_dir)
