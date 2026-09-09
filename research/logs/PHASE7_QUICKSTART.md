@@ -1,11 +1,11 @@
 # Phase 7 — Detection/Segmentation Implementation ✓
 
 **Status:** Infrastructure complete. Early FP32/QAT/INT8 runs trained against a broken anchor
-config (mAP 0.4–7.1%, invalid — not just low) — root-caused and fixed in `docs/PHASE7_LOG.md`
+config (mAP 0.4–7.1%, invalid — not just low) — root-caused and fixed in `research/logs/PHASE7_LOG.md`
 Stage 9 (recall now 0.991/0.991/0.932 for bottleneck/fire/alexnet_tv at 512px). Post-fix retraining
 (A4) is in progress on PCAD: `alexnet_bottleneck` FP32/QAT are done and valid; `fire`/`tv` are
 still in-flight and INT8 detection still crashes on uncalibrated observers (unfixed). See
-`ideas/BEST_MODELS.md`'s Phase 7 section and `docs/PHASE7_LOG.md`'s Implementation Status for the
+`research/plans/BEST_MODELS.md`'s Phase 7 section and `research/logs/PHASE7_LOG.md`'s Implementation Status for the
 current, disk-sourced state before trusting any mAP number.
 
 ## What's Been Built (8 Stages)
@@ -103,8 +103,8 @@ Results saved to `outputs/detection_segmentation/phase7/ssd_<model>_<stage>_<exp
 
 ## Reference
 
-- **Blueprint:** `ideas/PHASE7_PLAN.md` (detailed research hypotheses H1-H4)
-- **Log:** `docs/PHASE7_LOG.md` (per-stage decisions)
+- **Blueprint:** `research/plans/PHASE7_PLAN.md` (detailed research hypotheses H1-H4)
+- **Log:** `research/logs/PHASE7_LOG.md` (per-stage decisions)
 - **CLAUDE.md:** project conventions (reproducibility, trainer patterns)
 
 ---

@@ -193,7 +193,7 @@ Phase 7.
 - H4 defaults to the recorded per-run `latency_ms_per_image` (already measured during training) and
   only builds/profiles a live model if `RUN_PROFILING=True` is set by hand — never runs on the PCAD
   front-end.
-- Phase 8 notebook intentionally **not** created: `ideas/PHASE8_PLAN.md` Tasks 1-6 (models,
+- Phase 8 notebook intentionally **not** created: `research/plans/PHASE8_PLAN.md` Tasks 1-6 (models,
   registry, `configs/experiments/phase8.yaml`) don't exist yet, so a notebook now would be an empty
   shell. Build it once at least FP32 results exist for the seven Phase 8 models.
 
@@ -216,7 +216,7 @@ now have valid metrics on disk (`outputs/detection_segmentation/phase7/ssd_*_pha
 The INT8 observer-calibration crash (job 811101) is resolved — `scripts/train_det_seg.py`'s `int8`
 branch now saves a checkpoint and computes a size/params summary (backfilled onto older runs via
 `scripts/phase7_tools/backfill_int8_size.py`), and the Fire backbone's INT8 concat-quantization mismatch is
-fixed (`models/compensation.py`, commit `565fef4`). Real numbers and a first read: `ideas/BEST_MODELS.md`
+fixed (`models/compensation.py`, commit `565fef4`). Real numbers and a first read: `research/plans/BEST_MODELS.md`
 Phase 7 section.
 
 **A5 — done.** `notebooks/phase_7_detection_segmentation_analysis/phase7_results_analysis.ipynb`

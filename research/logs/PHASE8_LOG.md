@@ -4,7 +4,7 @@ Decision continuity across `/compact` boundaries. Append per stage.
 
 Note: "Stage N" below numbers Phase 8's own internal build-out steps — unrelated
 to the project's Phase 1-9 numbering in `CLAUDE.md`. Every stage here belongs to
-Phase 8. Maps to `ideas/PHASE8_PLAN.md`'s Task numbering where noted.
+Phase 8. Maps to `research/plans/PHASE8_PLAN.md`'s Task numbering where noted.
 
 ---
 
@@ -122,7 +122,7 @@ containing model survives `prepare_qat_model()` (new regression test in `ml/quan
 80/80 params receiving gradients). `swap_quantizable_mha` is kept in `ml/quantization.py`
 (independently correct, useful if FX-mode QAT is ever pursued) but is off the QAT call path.
 
-Amended `ideas/PHASE8_PLAN.md`'s D6 section in place to document this outcome.
+Amended `research/plans/PHASE8_PLAN.md`'s D6 section in place to document this outcome.
 
 ## Stage 8 — FLOPs Verification (Task 5, D7) ✓
 
@@ -148,7 +148,7 @@ notebook execution or training run this session (per `CLAUDE.md`'s workflow rule
 
 ## Stage 10 — Docs + PCAD Submission
 
-`CLAUDE.md` and `ideas/PHASE8_PLAN.md` updated to reflect the above; this log added.
+`CLAUDE.md` and `research/plans/PHASE8_PLAN.md` updated to reflect the above; this log added.
 5 CLI-drivable models (`swin_pico_w2/w4/w8`, `swin_pico_poolmixer`,
 `hybrid_bottleneck_swin`) submitted to PCAD via
 `scripts.cluster submit-sweep --experiment phase8 --runtime pcad` (`tupi_4090`, one
@@ -183,7 +183,7 @@ Phase 8 models it didn't (only the already-converted last-epoch INT8 model was k
 their INT8 numbers are left as previously measured — see the script's docstring for the
 `alexnet_fire_bypass` case, which has its own separate reason INT8 couldn't be rebuilt
 either. Corrected numbers are in Table `tab:phase8_models` (Eixo 7) of `report/ic_report.tex`
-and `ideas/BEST_MODELS.md`'s Phase 8 section.
+and `research/plans/BEST_MODELS.md`'s Phase 8 section.
 
 ## Stage 12 — Model-Size Measurement Bug Found; FP32 Sizes Backfilled (2026-09-02)
 

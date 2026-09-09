@@ -1,7 +1,7 @@
 """Phase 8 — Efficient Vision Transformers & Hybrid Attention Architectures.
 
 Thin wrappers around torchvision's VisionTransformer/SwinTransformer, custom-sized for
-64x64 Tiny ImageNet-200 (~100K images) per ideas/PHASE8_PLAN.md D2/D3 — torchvision's
+64x64 Tiny ImageNet-200 (~100K images) per research/plans/PHASE8_PLAN.md D2/D3 — torchvision's
 stock presets target 224x224 ImageNet-1k and would dwarf every Phase 1-4 model.
 See ml/quantization.py's exclude_attention_from_qat/swap_quantizable_mha (D6) for how
 these get QAT-prepared; LayerNorm and attention math can't go through this codebase's

@@ -4,7 +4,7 @@
     python -m scripts.phase9.prune_channels --model alexnet_bottleneck --ratio 0.4 --runtime local --evaluate
     python -m scripts.phase9.prune_channels --model alexnet_bottleneck --ratio 0.4 --runtime local --finetune-epochs 200
 
-Mechanics pass (ideas/PHASE9_PLAN.md Task 2): prunes each `_AlexBottleneck` block's
+Mechanics pass (research/plans/PHASE9_PLAN.md Task 2): prunes each `_AlexBottleneck` block's
 internal squeeze width, then checks the result still forward-passes and (with
 --evaluate) still runs through Trainer.evaluate() without shape errors — no
 fine-tuning, accuracy after pruning is expected to be poor.
@@ -158,7 +158,7 @@ def _finetune_and_quantize(
     device: torch.device,
 ) -> None:
     """Fine-tune a pruned model (FP32), then run it through the project's standard QAT->INT8
-    flow — closes the gap ideas/PHASE9_PLAN.md leaves open (H2's fine-tuning loop, future work).
+    flow — closes the gap research/plans/PHASE9_PLAN.md leaves open (H2's fine-tuning loop, future work).
     Mirrors scripts/train.py's per-model FP32->QAT->INT8 body, but starting from an
     already-pruned model instead of a fresh MODEL_REGISTRY ctor.
     """

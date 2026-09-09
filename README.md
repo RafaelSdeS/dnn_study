@@ -27,7 +27,7 @@ jupyter lab
 6. `notebooks/phase_4_compression_and_final_architecture_training/final_architecture_qat.ipynb` — Phase 4: Combines Phase 3's best mechanisms into final hybrid architectures
 7. `notebooks/phase_5_cross_phase_results_analysis/final_analysis_phase5.ipynb` — Phase 5: Cross-phase results analysis and figure generation
 8. `notebooks/phase_6_hardware_profiling_analysis/hardware_profiling_phase6.ipynb` — Phase 6: Hardware profiling & Winograd efficiency validation (RTX 4090)
-9. `notebooks/phase_7_detection_segmentation_analysis/phase7_results_analysis.ipynb` — Phase 7: Detection/segmentation results analysis (training itself is CLI-only via `scripts/train_det_seg.py`; see `docs/PHASE7_QUICKSTART.md`)
+9. `notebooks/phase_7_detection_segmentation_analysis/phase7_results_analysis.ipynb` — Phase 7: Detection/segmentation results analysis (training itself is CLI-only via `scripts/train_det_seg.py`; see `research/logs/PHASE7_QUICKSTART.md`)
 10. `notebooks/phase_8_efficient_vit/vit_qat_phase8.ipynb` — Phase 8: vit_tiny/deit_tiny FP32→distill/QAT→INT8 (the 2 of 7 Phase 8 models `scripts/train.py` can't drive)
 11. `notebooks/phase_8_efficient_vit/phase8_results_analysis.ipynb` — Phase 8: cross-phase results analysis
 12. `notebooks/phase_9_pcad_bypass_ablation_analysis/phase9_ablation_analysis.ipynb` — Phase 9: Cross-phase PCAD results (bypass ablation, large-scale runs)
@@ -39,7 +39,7 @@ Full model/phase inventory: `CLAUDE.md`.
 
 ## Results & Recommendations
 
-**See `ideas/BEST_MODELS.md`** for:
+**See `research/plans/BEST_MODELS.md`** for:
 - Overall accuracy rankings (FP32 + INT8)
 - Analysis by dimension (accuracy-first, efficiency-first, quantization stability, kernel impact, compensation mechanisms)
 - Tiered model recommendations (Tier 1 production-ready, Tier 2 high-accuracy, Tier 3 exploratory)
@@ -105,7 +105,7 @@ YAML-based configuration loading via `configs/loader.py`. Full list in `CLAUDE.m
 
 ## Key Findings (Phases 1–3)
 
-**See `ideas/BEST_MODELS.md` for comprehensive ranking, Pareto analysis, and deployment recommendations.**
+**See `research/plans/BEST_MODELS.md` for comprehensive ranking, Pareto analysis, and deployment recommendations.**
 
 ### Phase 1 — Reference Baselines (FP32, ~80 epochs):
 
@@ -145,7 +145,7 @@ YAML-based configuration loading via `configs/loader.py`. Full list in `CLAUDE.m
 - **Model efficiency summary:** Results in `results/results_aggregate/results_cross_phase.csv` and per-model details in `results/results_aggregate/model_details_cross_phase.csv`
 - **Visualizations:** Cross-phase figures in `results/figures_generated/phase_1_2_3_baseline_and_kernels/` and `phase_5_cross_phase_analysis/`
 
-Phases 4–9 have since completed — see `CLAUDE.md`'s Model Inventory and `ideas/BEST_MODELS.md` (currently scoped to Phases 1–3; not yet updated with later-phase rankings).
+Phases 4–9 have since completed — see `CLAUDE.md`'s Model Inventory and `research/plans/BEST_MODELS.md` (currently scoped to Phases 1–3; not yet updated with later-phase rankings).
 
 ---
 
@@ -192,7 +192,7 @@ python -m scripts.cluster resume outputs/pcad/default/<model_name>
 - `outputs/<runtime>/<experiment>/<model>/results/` for per-run JSON summaries
 - `outputs/<runtime>/results_aggregate/` for aggregated comparison CSVs (via `scripts/aggregate_results.py`)
 
-Detection/segmentation (Phase 7) uses a separate layout: `outputs/detection_segmentation/phase7/<run>/` — see `docs/PHASE7_QUICKSTART.md`.
+Detection/segmentation (Phase 7) uses a separate layout: `outputs/detection_segmentation/phase7/<run>/` — see `research/logs/PHASE7_QUICKSTART.md`.
 
 **PCAD-specific settings:**
 - Edit [configs/runtime/pcad.yaml](configs/runtime/pcad.yaml) for dataset root, conda env, and runtime toggles

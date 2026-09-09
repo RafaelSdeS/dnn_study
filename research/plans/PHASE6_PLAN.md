@@ -86,7 +86,7 @@ The following hypotheses drive Phase 6 experiments. Each is testable via measure
 Computed the actual Pareto frontier (FP32 top-1 accuracy vs. size-MB, from `results/results_aggregate/model_details_cross_phase.csv`
 + Phase 4's `final_architecture_phase4/final_comparison.csv` — a model is on the frontier if no other
 model has both higher accuracy *and* smaller-or-equal size) instead of eyeballing it from
-`ideas/BEST_MODELS.md`. Every frontier model is included, plus two off-frontier models kept for a
+`research/plans/BEST_MODELS.md`. Every frontier model is included, plus two off-frontier models kept for a
 reason stated next to them. Full retraining of every Phase 1–4 model is not needed — profiling is
 inference-only (see top of file) and this set already brackets the interesting cases.
 
@@ -395,11 +395,11 @@ Then re-profile latency on calibrated models and compare to uncalibrated results
 
 ## BLOCKING ISSUES & REQUIRED FIXES
 
-The following must be addressed before executing profiling runs. See `ideas/PHASE6_HYPOTHESES.md` and implementation checklist (TBD) for details.
+The following must be addressed before executing profiling runs. See `research/plans/PHASE6_HYPOTHESES.md` and implementation checklist (TBD) for details.
 
 ### 1. Explicit Research Hypotheses (BLOCKING)
 **Issue:** Plan lists experiments but no testable hypotheses or expected outcomes.
-**Fix:** Create `ideas/PHASE6_HYPOTHESES.md` with three hypotheses:
+**Fix:** Create `research/plans/PHASE6_HYPOTHESES.md` with three hypotheses:
 - H1: Dense 3×3 models (bottleneck, fire, vgg_style) trigger Winograd on RTX 4090; expect 1.5–2.5× speedup vs. direct GEMM.
 - H2: Depthwise convs (alexnet_depthwisesep, mobilenetv2) do NOT trigger Winograd; expect <10% Winograd kernel use vs. >60% for dense 3×3.
 - H3: Pareto frontier models beat alexnet_tv baseline on accuracy/latency efficiency.
@@ -468,7 +468,7 @@ Append to existing `{model_name}_layer_breakdown.csv` for analysis.
 ### 8. INT8 Calibration Strategy Documentation
 **Motivation:** Plan says "uncalibrated observers are fine," but this introduces ~5–10% latency bias due to arbitrary quantization ranges.
 
-**Change:** Document the choice explicitly in `ml/profiling.py` docstring or new `ideas/PHASE6_CALIBRATION.md`:
+**Change:** Document the choice explicitly in `ml/profiling.py` docstring or new `research/plans/PHASE6_CALIBRATION.md`:
 - **Current:** Uncalibrated observers, random init.
   - ✅ Pros: Fast, no checkpoint dependency.
   - ❌ Cons: Quantization ranges are arbitrary; layer schedules may not match deployed models.
@@ -483,7 +483,7 @@ Append to existing `{model_name}_layer_breakdown.csv` for analysis.
 
 Before submitting profiling runs:
 
-- [ ] `ideas/PHASE6_HYPOTHESES.md` created with H1, H2, H3 and acceptance criteria.
+- [ ] `research/plans/PHASE6_HYPOTHESES.md` created with H1, H2, H3 and acceptance criteria.
 - [ ] `scripts/profile_hardware.py` captures metadata (PyTorch, cuDNN, CUDA, seed, timestamp, config path).
 - [ ] All models explicitly set to `.eval()` in profiling functions.
 - [ ] Winograd detection includes dual signals (trace + empirical speedup); output includes `winograd_inferred` flag.

@@ -1,4 +1,4 @@
-# ideas/PHASE8_PLAN.md Task 6. deit_tiny is deliberately excluded from this list --
+# research/plans/PHASE8_PLAN.md Task 6. deit_tiny is deliberately excluded from this list --
 # its distillation training needs DistillationTrainer + a frozen mobilenetv2 teacher
 # checkpoint, so it's driven from the Phase 8 notebook, not this generic CLI loop
 # (same reasoning as every other model here needing no new script at all).
@@ -39,7 +39,7 @@ training:
   early_stopping_patience: 50
   warmup_epochs: 5
   reset_scheduler_on_resume: true  # these 5 models' checkpoints were trained through a
-    # complete epochs=100/qat.epochs=20 cosine schedule already (see docs/PHASE8_LOG.md);
+    # complete epochs=100/qat.epochs=20 cosine schedule already (see research/logs/PHASE8_LOG.md);
     # resuming with the budget below needs a fresh schedule, not the exhausted one on disk
     # -- see ml/config.py's TrainerConfig.reset_scheduler_on_resume docstring
 qat:

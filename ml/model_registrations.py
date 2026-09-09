@@ -158,7 +158,7 @@ register_model(
     lr=1e-3,
 )
 
-# ideas/PHASE8_PLAN.md Task 2. patch-embedding Conv2d in ViT/Swin has no adjacent BN
+# research/plans/PHASE8_PLAN.md Task 2. patch-embedding Conv2d in ViT/Swin has no adjacent BN
 # (uses LayerNorm), so fuse_map=[] for the pure-attention models -- only
 # hybrid_bottleneck_swin's _AlexBottleneck stem has fusable Conv-BN-ReLU triples.
 # lr/weight_decay follow DeiT's recipe (Touvron et al. 2021), not this project's

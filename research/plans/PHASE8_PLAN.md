@@ -1,10 +1,10 @@
 # Phase 8 — Efficient Vision Transformers & Hybrid Attention Architectures (Implementation Plan)
 
 **STATUS (2026-08-29):** Tasks 1–7 complete — all 7 models trained on PCAD, results in
-(`ideas/BEST_MODELS.md`'s Phase 8 section, `results/phase_8_efficient_vit_hybrid_attention_analysis/`).
+(`research/plans/BEST_MODELS.md`'s Phase 8 section, `results/phase_8_efficient_vit_hybrid_attention_analysis/`).
 FP32 accuracy for the 5 CLI-trained models was corrected after a `Trainer.fit()` checkpoint-restore
-bug found 2026-08-29 (`vit_tiny`/`deit_tiny` unaffected — see `docs/PHASE8_LOG.md`'s newest stage).
-See `docs/PHASE8_LOG.md` for the
+bug found 2026-08-29 (`vit_tiny`/`deit_tiny` unaffected — see `research/logs/PHASE8_LOG.md`'s newest stage).
+See `research/logs/PHASE8_LOG.md` for the
 build history. One material deviation from this plan: **D6's QAT strategy for
 `vit_tiny`/`deit_tiny` changed** — `swap_quantizable_mha()` cannot drive this codebase's
 eager-mode `tq.prepare_qat()` (verified; PyTorch's custom-module conversion path crashes
@@ -1063,7 +1063,7 @@ models per H5) to test H1–H5.
 - H1: FP32 top-1 vs. `window_size` line plot (the direct kernel-size-sweep analogue of Phase 2's
   results table).
 - H2: hybrid vs. `alexnet_bottleneck`/`alexnet_fire`/pure-Swin, accuracy-vs-size scatter, same
-  Pareto-frontier framing `ideas/BEST_MODELS.md` already uses.
+  Pareto-frontier framing `research/plans/BEST_MODELS.md` already uses.
 - H3: **weights-only** INT8/FP32 ratio and quantized-parameter-fraction bar chart, all Phase 8
   models vs. Phase 3's Bottleneck/Fire for contrast. Do not plot the CSV's `compression_ratio`
   column against Phase 8 without the optimizer-state caveat from H2 — it is not a like-for-like
@@ -1075,13 +1075,13 @@ models per H5) to test H1–H5.
   (stem vs. attention-stage) latency breakdown via `torch.profiler(record_shapes=True)`.
 - Produce `results/phase_8_efficient_vit_hybrid_attention_analysis/phase8_comparison.csv` (one
   path, matching the Outputs list below and every prior phase's convention) and update
-  `ideas/BEST_MODELS.md`/`TODO.md`.
+  `research/plans/BEST_MODELS.md`/`TODO.md`.
 
 **Inputs:** `results/results_aggregate/model_details_cross_phase.csv`, Phase 6's profiling JSON, Phase 8's own comparison CSV.
 
 **Outputs:** Figures (`results/figures_generated/phase_8_efficient_vit_hybrid_attention/phase8_*`),
 `results/phase_8_efficient_vit_hybrid_attention_analysis/phase8_comparison.csv`, updated
-`TODO.md`/`ideas/BEST_MODELS.md`.
+`TODO.md`/`research/plans/BEST_MODELS.md`.
 
 **Dependencies:** Tasks 1–6 complete with at least FP32+INT8 results for all seven models.
 
@@ -1218,7 +1218,7 @@ Before submitting any full training run:
       training or PCAD submission.
 - [ ] `configs/experiments/phase8.yaml` `--dry-run` succeeds (Task 6 Validation).
 - [ ] `phase8_comparison.csv` populated and cross-referenced against Phase 2/3/6 CSVs before any
-      headline claim is written into `TODO.md`/`ideas/BEST_MODELS.md` (Task 7).
+      headline claim is written into `TODO.md`/`research/plans/BEST_MODELS.md` (Task 7).
 - [ ] Any size or compression claim uses params / weights-only MB, with the
       optimizer-state caveat stated wherever the legacy CSV columns appear (H2/H3).
 

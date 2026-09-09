@@ -70,7 +70,7 @@ def exclude_attention_from_qat(model: nn.Module) -> nn.Module:
     or MultiheadAttention), so this is safe to run unconditionally inside
     prepare_qat_model() below rather than needing a per-model call site.
 
-    KNOWN UNVERIFIED RISK (found while wiring this up, not in ideas/PHASE8_PLAN.md's
+    KNOWN UNVERIFIED RISK (found while wiring this up, not in research/plans/PHASE8_PLAN.md's
     own D6 analysis): SwinTransformerBlock.forward() does
     `x = x + self.attn(self.norm1(x))` / `x = x + self.mlp(self.norm2(x))` with a bare
     Python `+`, not nn.quantized.FloatFunctional().add() (this project's own
@@ -132,7 +132,7 @@ def swap_quantizable_mha(model: nn.Module) -> nn.Module:
 
     Call this BEFORE build_qat_from_model() on ViT/DeiT models, then verify with
     torch.allclose() on a pre/post-swap forward pass before spending any QAT training
-    time (ideas/PHASE8_PLAN.md Task 3 Blocking Issue #1) -- a naive
+    time (research/plans/PHASE8_PLAN.md Task 3 Blocking Issue #1) -- a naive
     load_state_dict(strict=False) transfer verified to silently succeed while leaving
     linear_Q/K/V at random init, so this hand-split is the actual fix, not that.
     """

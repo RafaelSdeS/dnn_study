@@ -1,4 +1,4 @@
-# Winograd-eligible 3x3 conv-stem attention models (H5 follow-up to ideas/PHASE8_PLAN.md).
+# Winograd-eligible 3x3 conv-stem attention models (H5 follow-up to research/plans/PHASE8_PLAN.md).
 # Separate from configs/experiments/phase8.yaml on purpose: that file's other 5 models are
 # already fully trained, and re-running --experiment phase8 to add these two would touch
 # their checkpoints/scheduler state too. vit_tiny_convstem/swin_pico_convstem needs neither, so both
