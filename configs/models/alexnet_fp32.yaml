@@ -1,2 +1,0 @@
-# Per-model lr override for alexnet_fp32 (pretrained backbone, lower lr)
-lr: 1.0e-4
