@@ -74,7 +74,6 @@ configs/                  # YAML hyperparameters, loaded via configs/loader.py �
   runtime/                # local.yaml, pcad.yaml — dataset root, conda env, per-runtime toggles
   slurm/                  # single_gpu.yaml, tupi_4090.yaml, beagle.yaml — partition/GPU/CPU/wall-time
   experiments/            # default.yaml + per-run overrides (alexnet_3x3_gap, phase_7_detection, phase_7_smoke, large_scale, phase8, ...)
-  models/alexnet_fp32.yaml   # per-model lr overrides (only this one remains)
 scripts/                  # CLI entry points (used instead of notebooks for PCAD/cluster runs)
   train.py                # `python -m scripts.train --experiment ... --runtime local|pcad` — classification FP32→QAT→INT8
   cluster.py               # `python -m scripts.cluster submit|status|cancel|resume` — submits slurm/train.sbatch or profile.sbatch
