@@ -8,24 +8,31 @@
 # para todos" do plano seria silenciosamente furado pelo default do
 # scripts/train.py, que aplica o override por-modelo incondicionalmente.
 #
-# Tier A/B do plano (Fase 2, docs/plano_avaliacao_redes_winograd.md §2.3/2.4)
-# que já estão registrados em ml/model_registrations.py. Os 3 modelos do
-# torchvision (googlenet/resnet50/squeezenet1_1) ficam de fora até a Fase 1
-# terminar de registrá-los lá -- ver a investigação de 2026-09-09, "o que dá
-# para avançar agora".
+# Os 4 modelos abaixo com sufixo _fpga (registrados em
+# ml/model_registrations.py via models/wino_adapted.py) sao variantes SEPARADAS
+# das arquiteturas nativas -- a nativa (ex. alexnet_stacked) tem 1 conv 3x3/s2
+# que o qat_wino.convert() simplesmente IGNORA (nao lanca erro, so' deixa aquela
+# camada sem a numerica do acelerador); a _fpga aplica a conversao do §4
+# (3x3/s2 -> 3x3/s1+maxpool2x2) ANTES do treino FP32, entao a rede inteira
+# ja' nasce elegivel. Por isso NAO estao as duas nesta lista -- treinar as duas
+# dobraria o custo sem servir a este estudo (a nativa nao roda no acelerador).
 name: budget_unico
 uniform_hparams: true
 seed: 42
 models:
-  - vgg_style                          # Tier A #3
-  - alexnet_smallkernel                # Tier A #8
-  - alexnet_small_kernel_with_bn       # Tier A, nunca treinado antes desta run
-  - alexnet_stacked                    # Tier A #11
-  - alexnet_fire                       # Tier B #13
-  - alexnet_fire_bypass                # Tier B #4 (mesma geometria de conv que alexnet_fire)
-  - alexnet_bottleneck                 # Tier B #10
-  - alexnet_final_fire_residual        # Tier B #5
-  - alexnet_final_bottleneck_residual  # Tier B #9
+  - vgg_style                              # Tier A #3
+  - alexnet_smallkernel                    # Tier A #8
+  - alexnet_small_kernel_with_bn           # Tier A, nunca treinado antes desta run
+  - alexnet_3x3_fc_fpga                    # "AlexNet original", kernel 3x3 + cabeca FC classica, conv1 convertida (stride2->stride1+pool)
+  - alexnet_stacked_fpga                   # Tier A #11, convertida
+  - alexnet_fire                           # Tier B #13 (sem stride-2, nao precisa de variante _fpga)
+  - alexnet_fire_bypass                    # Tier B #4 (mesma geometria de conv que alexnet_fire)
+  - alexnet_bottleneck_fpga                # Tier B #10, convertida
+  - alexnet_final_fire_residual_fpga       # Tier B #5, convertida
+  - alexnet_final_bottleneck_residual_fpga # Tier B #9, convertida
+  - googlenet_fpga                         # literatura: Inception, stem 7x7->3x tres 3x3 + convs 3x3/s2 convertidas
+  - resnet50_fpga                          # literatura: ResNet (bottleneck residual), idem
+  - squeezenet1_1_fpga                     # literatura: Fire modules, idem
 stages:
   - fp32
   - qat_wino

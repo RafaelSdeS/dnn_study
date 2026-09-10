@@ -47,6 +47,14 @@ from models import (
     swin_pico_poolmixer,
     swin_pico_convstem,
     hybrid_bottleneck_swin,
+    googlenet_fpga,
+    resnet50_fpga,
+    squeezenet1_1_fpga,
+    alexnet_stacked_fpga,
+    alexnet_bottleneck_fpga,
+    alexnet_final_fire_residual_fpga,
+    alexnet_final_bottleneck_residual_fpga,
+    alexnet_3x3_fc_fpga,
 )
 
 # notebooks/phase_1_baseline_training/baselines_qat.ipynb
@@ -208,3 +216,20 @@ register_model(
     lr=5e-4,
     weight_decay=0.05,
 )
+
+# models/wino_adapted.py -- Winograd-FPGA plan, "AlexNet original adaptado" +
+# torchvision literature architectures (Fase 1). fuse_map=[] like resnet18tv/
+# mobilenetv2 above: these train under configs/experiments/budget_unico.yaml's
+# [fp32, qat_wino] stages, never the fbgemm-based "qat"/"int8" stages that
+# fuse_map serves -- no fbgemm fusion groups to derive.
+# NOTE: ctor() does real work here (imports+converts a sibling repo's model
+# builder, WINOGRAD_FPGA_ROOT must resolve) -- unlike every ctor above it can
+# raise at model-construction time, not just at registration time.
+register_model("googlenet_fpga", googlenet_fpga, fuse_map=[], lr=3e-4)
+register_model("resnet50_fpga", resnet50_fpga, fuse_map=[], lr=3e-4)
+register_model("squeezenet1_1_fpga", squeezenet1_1_fpga, fuse_map=[], lr=3e-4)
+register_model("alexnet_stacked_fpga", alexnet_stacked_fpga, fuse_map=[], lr=1e-3)
+register_model("alexnet_bottleneck_fpga", alexnet_bottleneck_fpga, fuse_map=[], lr=1e-3)
+register_model("alexnet_final_fire_residual_fpga", alexnet_final_fire_residual_fpga, fuse_map=[], lr=1e-3)
+register_model("alexnet_final_bottleneck_residual_fpga", alexnet_final_bottleneck_residual_fpga, fuse_map=[], lr=1e-3)
+register_model("alexnet_3x3_fc_fpga", alexnet_3x3_fc_fpga, fuse_map=[], lr=3e-4)

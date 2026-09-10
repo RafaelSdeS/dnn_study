@@ -154,6 +154,21 @@ def _load_qat_wino_model(model_name: str, spec: dict[str, Any], checkpoints_dir:
     trocadas = qat_wino.convert(model)
     if not trocadas:
         raise RuntimeError(f"{model_name}: qat_wino.convert() found no eligible 3x3 conv to replace")
+    # Safety net for the class of bug this stage almost shipped with: convert()
+    # silently SKIPS any 3x3 conv with stride/groups/dilation != 1 (see its own
+    # "nao elegivel: converta antes (SS4)" comment) rather than erroring. A model
+    # registered without first applying the SS4 stride-2->stride-1+maxpool
+    # conversion (models/wino_adapted.py) would train qat_wino fine with that
+    # one layer silently left un-Winograd'd -- no exception, just a wrong number.
+    ineligible = [n for n, m in model.named_modules()
+                  if isinstance(m, torch.nn.Conv2d) and m.kernel_size[0] == 3
+                  and (m.stride[0] != 1 or m.groups != 1 or m.dilation[0] != 1)]
+    if ineligible:
+        logging.getLogger(f"pcad_runner.{model_name}").warning(
+            "%s: %d 3x3 conv(s) left un-Winograd'd by qat_wino.convert() "
+            "(stride/groups/dilation not eligible): %s -- register a "
+            "models/wino_adapted.py wrapper that converts stride-2 first",
+            model_name, len(ineligible), ineligible)
     logging.getLogger(f"pcad_runner.{model_name}").info(
         "qat_wino converted %d conv layer(s): %s", len(trocadas), trocadas)
     return model.to(device)
