@@ -73,6 +73,29 @@ def test_large_scale_experiment_has_the_expected_budgets():
     assert len(experiment_cfg["models"]) == 12
 
 
+def test_extends_merges_parent_and_child_fields():
+    """configs/loader.py's `extends:` resolution: parent loads first, child's dict-valued
+    keys merge field-by-field on top (not a wholesale block replace) and win on conflicts.
+    """
+    child = load_config("experiments/phase_8_efficient_vit.yaml")
+    parent = load_config("experiments/_protocols/phase_8_vit.yaml")
+
+    # fields only in the parent protocol survive into the child
+    assert child["training"]["lr"] == parent["training"]["lr"]
+    assert child["qat"]["epochs"] == parent["qat"]["epochs"]
+    # a field the child adds on top of the parent block is present, not overwritten away
+    assert child["training"]["reset_scheduler_on_resume"] is True
+    # "extends" itself never leaks into the resolved config
+    assert "extends" not in child
+
+
+def test_protocol_fragments_are_not_treated_as_experiments():
+    """configs/experiments/_protocols/*.yaml are merge fragments, not runnable experiments --
+    _experiment_names()'s non-recursive glob must not pick them up.
+    """
+    assert not any(name.startswith("_protocols") for name in _experiment_names())
+
+
 def test_every_runtime_config_is_a_dict_with_a_root():
     for name in _runtime_names():
         runtime_cfg = yaml.safe_load((CONFIGS_DIR / "runtime" / f"{name}.yaml").read_text())

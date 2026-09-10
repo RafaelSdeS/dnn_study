@@ -1,0 +1,11 @@
+# Shared "large_scale" protocol: 1000ep FP32, patience 50, 100ep QAT. Used via
+# `extends:` by large_scale.yaml, alexnet_dilated_gap.yaml,
+# phase_9_bypass_ablation_large_scale.yaml and large_scale_fire_residual_resume.yaml
+# -- change here, not per-file. (alexnet_dilated_gap.yaml was fixed once, commit
+# aac628a, to match this protocol so its number is comparable on the Pareto
+# frontier with everything else trained under it.)
+training:
+  epochs: 1000
+  early_stopping_patience: 50
+qat:
+  epochs: 100

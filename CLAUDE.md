@@ -74,6 +74,14 @@ configs/                  # YAML hyperparameters, loaded via configs/loader.py �
   runtime/                # local.yaml, pcad.yaml — dataset root, conda env, per-runtime toggles
   slurm/                  # single_gpu.yaml, tupi_4090.yaml, beagle.yaml — partition/GPU/CPU/wall-time
   experiments/            # default.yaml + per-run overrides (alexnet_3x3_gap, phase_7_detection, phase_7_smoke, large_scale, phase8, ...)
+                          #   `extends: _protocols/<name>` (load_config, one level, dict-valued keys
+                          #   merge field-by-field) lets a file inherit a shared protocol instead of
+                          #   repeating it — e.g. large_scale.yaml/alexnet_dilated_gap.yaml/
+                          #   phase_9_bypass_ablation_large_scale.yaml/large_scale_fire_residual_resume.yaml
+                          #   all extend _protocols/large_scale.yaml (1000ep/patience 50/QAT 100ep);
+                          #   phase_8_efficient_vit(_convstem).yaml extend _protocols/phase_8_vit.yaml
+    _protocols/            # extends-only fragments (no models:/name: — not runnable, excluded from
+                          #   _experiment_names()'s non-recursive glob): large_scale.yaml, phase_8_vit.yaml
 scripts/                  # CLI entry points (used instead of notebooks for PCAD/cluster runs)
   train.py                # `python -m scripts.train --experiment ... --runtime local|pcad` — classification FP32→QAT→INT8
   cluster.py               # `python -m scripts.cluster submit|status|cancel|resume` — submits slurm/train.sbatch or profile.sbatch

@@ -3,10 +3,7 @@
 # already fully trained, and re-running --experiment phase_8_efficient_vit to add these two would touch
 # their checkpoints/scheduler state too. vit_tiny_convstem/swin_pico_convstem needs neither, so both
 # go through this generic CLI loop, no notebook.
-#
-# Protocolo compartilhado "Phase 8 ViT" (1000ep, lr 5e-4, weight_decay 0.05,
-# grad_clip_norm 1.0, patience 50, warmup 5, QAT 100ep) — mantido idêntico entre
-# este arquivo e phase_8_efficient_vit.yaml de propósito.
+extends: _protocols/phase_8_vit
 name: phase_8_efficient_vit_convstem
 models:
   - vit_tiny_convstem
@@ -16,12 +13,3 @@ stages:
   - fp32
   - qat
   - int8
-training:
-  epochs: 1000
-  lr: 5.0e-4
-  weight_decay: 0.05
-  grad_clip_norm: 1.0
-  early_stopping_patience: 50
-  warmup_epochs: 5
-qat:
-  epochs: 100

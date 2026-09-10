@@ -12,12 +12,7 @@
 # alongside deit_tiny in that notebook for a clean, identically-configured baseline,
 # and splitting its qat/int8 stages into this CLI loop would mean two SAVE_DIR
 # layouts for one model.
-# Protocolo compartilhado "Phase 8 ViT" (1000ep, lr 5e-4, weight_decay 0.05,
-# grad_clip_norm 1.0, patience 50, warmup 5, QAT 100ep) — mantido idêntico entre
-# este arquivo e phase_8_efficient_vit_convstem.yaml de propósito.
-# reset_scheduler_on_resume abaixo é específico DESTE arquivo (resume de
-# checkpoints já treinados) — não faz parte do protocolo compartilhado, não vai
-# para o outro arquivo.
+extends: _protocols/phase_8_vit
 name: phase_8_efficient_vit
 models:
   - swin_pico_w2
@@ -30,16 +25,10 @@ stages:
   - fp32
   - qat
   - int8
+# Only this file's addition on top of _protocols/phase_8_vit.yaml -- resume-specific,
+# doesn't belong in the shared protocol or in phase_8_efficient_vit_convstem.yaml.
 training:
-  epochs: 1000
-  lr: 5.0e-4
-  weight_decay: 0.05
-  grad_clip_norm: 1.0
-  early_stopping_patience: 50
-  warmup_epochs: 5
   reset_scheduler_on_resume: true  # these 5 models' checkpoints were trained through a
     # complete epochs=100/qat.epochs=20 cosine schedule already (see research/logs/PHASE8_LOG.md);
     # resuming with the budget below needs a fresh schedule, not the exhausted one on disk
     # -- see ml/config.py's TrainerConfig.reset_scheduler_on_resume docstring
-qat:
-  epochs: 100

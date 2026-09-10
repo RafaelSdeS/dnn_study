@@ -1,0 +1,13 @@
+# Shared Phase 8 ViT/Swin protocol (higher lr/weight_decay, warmup, grad
+# clipping -- the standard transformer-training recipe, vs. the CNN base in
+# ../../training.yaml). Used via `extends:` by phase_8_efficient_vit.yaml and
+# phase_8_efficient_vit_convstem.yaml -- change here, not per-file.
+training:
+  epochs: 1000
+  lr: 5.0e-4
+  weight_decay: 0.05
+  grad_clip_norm: 1.0
+  early_stopping_patience: 50
+  warmup_epochs: 5
+qat:
+  epochs: 100
