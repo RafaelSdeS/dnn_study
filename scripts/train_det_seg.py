@@ -37,7 +37,7 @@ from ml.det_seg_models import (
 )
 from ml.quantization import make_qat_callback
 from ml.reporting import compute_detection_summary, compute_segmentation_summary
-from ml.runtime import expand_path, set_global_seed
+from ml.runtime import expand_path, load_runtime_root, set_global_seed
 
 
 def load_yaml(path: str) -> dict:
@@ -479,7 +479,7 @@ def main():
     parser.add_argument("--stage", choices=["fp32", "qat", "int8"], default="fp32", help="Training stage")
     parser.add_argument("--experiment", help="Experiment config name (optional)")
     parser.add_argument("--runtime", choices=["local", "pcad"], default="local", help="Where to run")
-    parser.add_argument("--save-dir", default="outputs/pcad/phase_7_detection_segmentation", help="Output directory")
+    parser.add_argument("--save-dir", default=None, help="Output directory (default: <runtime root>/phase_7_detection_segmentation)")
     parser.add_argument("--dry-run", action="store_true", help="Don't train, just show config")
     parser.add_argument("--skip-anchor-check", action="store_true", help="Skip the anchor-recall pre-flight gate")
     parser.add_argument(
@@ -488,6 +488,8 @@ def main():
     )
 
     args = parser.parse_args()
+    if args.save_dir is None:
+        args.save_dir = str(load_runtime_root(args.runtime) / "phase_7_detection_segmentation")
 
     if args.runtime == "pcad":
         print("\n[CLUSTER MODE] Would submit to PCAD. Use: sbatch scripts/slurm/det_seg.sbatch")

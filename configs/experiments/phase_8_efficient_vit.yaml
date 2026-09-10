@@ -12,7 +12,7 @@
 # alongside deit_tiny in that notebook for a clean, identically-configured baseline,
 # and splitting its qat/int8 stages into this CLI loop would mean two SAVE_DIR
 # layouts for one model.
-name: phase8
+name: phase_8_efficient_vit
 models:
   - swin_pico_w2
   - swin_pico_w4

@@ -2,11 +2,17 @@ from __future__ import annotations
 
 import os
 import random
+import socket
+import subprocess
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import torch
+
+from configs.loader import load_config
 
 
 @dataclass(frozen=True)
@@ -46,6 +52,31 @@ def build_runtime_paths(root: str | Path) -> RuntimePaths:
     for path in paths.__dict__.values():
         path.mkdir(parents=True, exist_ok=True)
     return paths
+
+
+def load_runtime_root(runtime_name: str) -> Path:
+    """Resolve a runtime profile's output root (configs/runtime/<name>.yaml's `root` field)."""
+    cfg = load_config(f"runtime/{runtime_name}.yaml")
+    return expand_path(cfg.get("root"), default=f"outputs/{runtime_name}")
+
+
+def capture_provenance() -> dict[str, Any]:
+    """Git hash, dirty flag, hostname, UTC timestamp, torch version — for run provenance records."""
+    try:
+        git_hash = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
+    except Exception:
+        git_hash = "unknown"
+    try:
+        git_dirty = bool(subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True, check=True).stdout.strip())
+    except Exception:
+        git_dirty = False
+    return {
+        "git_hash": git_hash,
+        "git_dirty": git_dirty,
+        "hostname": socket.gethostname(),
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+        "torch_version": torch.__version__,
+    }
 
 
 def resolve_dataset_train_path(dataset_root: str | Path | None) -> Path | None:

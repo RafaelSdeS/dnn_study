@@ -19,7 +19,7 @@ from .quantization import (
     swap_quantizable_mha,
 )
 from .reporting import disk_mb, gzip_mb, build_comparison_table, create_results_summary, compute_flops, make_run_summary
-from .runtime import set_global_seed, build_runtime_paths, resolve_dataset_train_path, expand_path, RuntimePaths
+from .runtime import set_global_seed, build_runtime_paths, resolve_dataset_train_path, expand_path, capture_provenance, load_runtime_root, RuntimePaths
 from .quantization_advanced import (
     make_qconfig,
     prepare_sim,

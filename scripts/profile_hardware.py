@@ -34,7 +34,7 @@ from ml.profiling import (
 from ml.quantization import build_qat_from_model, convert_to_int8
 from ml.reporting import compute_flops
 from ml.registry import MODEL_REGISTRY
-from ml.runtime import set_global_seed
+from ml.runtime import load_runtime_root, set_global_seed
 import ml.model_registrations  # noqa: F401 — populates MODEL_REGISTRY for the model sweep
 
 
@@ -580,7 +580,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger_name = f"phase6_{args.runtime}"
 
-    output_dir = Path("outputs") / args.runtime / args.experiment
+    output_dir = load_runtime_root(args.runtime) / args.experiment
     output_dir.mkdir(parents=True, exist_ok=True)
 
     device_tag = get_device_tag(device)

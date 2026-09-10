@@ -44,6 +44,27 @@ def test_every_experiment_config_resolves_into_dataclasses():
         assert experiment_cfg.get("stages"), f"{name} has no stages"
 
 
+def test_experiment_name_matches_filename_stem():
+    """scripts/train.py:251 uses experiment_cfg["name"] (not the --experiment filename) to build
+    outputs/<runtime>/<name>/ -- a config whose declared name drifts from its own filename silently
+    forks the run tree (e.g. name: phase8 inside phase_8_efficient_vit.yaml wrote to outputs/*/phase8/).
+    """
+    stems = set(_experiment_names())
+    for name in stems:
+        experiment_cfg = load_config(f"experiments/{name}.yaml")
+        if "models" not in experiment_cfg:
+            continue  # Phase 7 configs use a per-model schema with no top-level `name`
+        declared = experiment_cfg.get("name")
+        # None falls back to "experiment" in scripts/train.py; a match to this file's own
+        # stem or another real experiment's stem (a resume config sharing its parent's
+        # output dir, e.g. large_scale_fire_residual_resume.yaml -> name: large_scale) is fine.
+        assert declared is None or declared == name or declared in stems, (
+            f"{name}.yaml declares name={declared!r}, which is neither its own filename "
+            f"nor an existing experiment -- this becomes outputs/<runtime>/{declared}/, "
+            f"silently diverging from the config file name"
+        )
+
+
 def test_large_scale_experiment_has_the_expected_budgets():
     experiment_cfg = load_config("experiments/large_scale.yaml")
     assert experiment_cfg["training"]["epochs"] == 1000

@@ -26,6 +26,7 @@ from ml import (
     auto_resume_path,
     build_qat,
     build_runtime_paths,
+    capture_provenance,
     compress_checkpoint,
     compute_flops,
     convert_to_int8,
@@ -257,6 +258,7 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
     results_rows: list[dict[str, Any]] = []
     torch.backends.quantized.engine = runtime_cfg.get("quantized_engine", "fbgemm")
     device = torch.device(runtime_cfg.get("device", "cuda" if torch.cuda.is_available() else "cpu"))
+    provenance = capture_provenance()
 
     for model_name in selected_models:
         spec = MODEL_REGISTRY[model_name]
@@ -281,6 +283,7 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
             "qat_wino": asdict(qat_wino_cfg),
             "selected_model": model_name,
             "stage_list": stage_list,
+            "provenance": provenance,
         }
         _save_resolved_config(run_root, resolved_config)
 

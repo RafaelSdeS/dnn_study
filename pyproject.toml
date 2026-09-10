@@ -13,3 +13,6 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 include = ["ml*", "models*", "scripts*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
