@@ -68,7 +68,7 @@ def test_experiment_name_matches_filename_stem():
 def test_large_scale_experiment_has_the_expected_budgets():
     experiment_cfg = load_config("experiments/large_scale.yaml")
     assert experiment_cfg["training"]["epochs"] == 1000
-    assert experiment_cfg["training"]["early_stopping_patience"] == 20
+    assert experiment_cfg["training"]["early_stopping_patience"] == 50
     assert experiment_cfg["qat"]["epochs"] == 100
     assert len(experiment_cfg["models"]) == 12
 

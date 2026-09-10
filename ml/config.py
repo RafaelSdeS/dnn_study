@@ -4,7 +4,7 @@ from typing import Optional
 DEFAULT_EPOCHS = 100
 DEFAULT_QAT_EPOCHS = 20
 DEFAULT_LEARNING_RATE = 3e-4
-DEFAULT_WEIGHT_DECAY = 4e-4
+DEFAULT_WEIGHT_DECAY = 5e-4  # must match configs/training.yaml, which always overrides this
 DEFAULT_EARLY_STOPPING_PATIENCE = 5
 
 

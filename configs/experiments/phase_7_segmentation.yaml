@@ -1,26 +1,6 @@
-# Phase 7 segmentation experiments — per-backbone configs
-# Matches phase_7_detection.yaml's epochs/lr/early_stopping_patience.
-
-alexnet_bottleneck:
-  data:
-    batch_size: 16
-  trainer:
-    epochs: 1000
-    lr: 1.0e-4
-    early_stopping_patience: 50
-
-alexnet_fire:
-  data:
-    batch_size: 16
-  trainer:
-    epochs: 1000
-    lr: 1.0e-4
-    early_stopping_patience: 50
-
-alexnet_tv:
-  data:
-    batch_size: 16
-  trainer:
-    epochs: 1000
-    lr: 1.0e-4
-    early_stopping_patience: 50
+# Phase 7 segmentation experiments
+# Matches phase_7_detection.yaml's epochs/early_stopping_patience, identically
+# across all 3 backbones — flat config, not per-model.
+trainer:
+  epochs: 1000
+  early_stopping_patience: 50

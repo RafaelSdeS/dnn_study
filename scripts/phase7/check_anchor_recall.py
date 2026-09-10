@@ -11,10 +11,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-import yaml
-
 from ml import DetSegDataConfig, build_ssd_detector, compute_anchor_recall, create_voc_detection_loaders
 from ml.runtime import expand_path
+from configs.loader import load_config
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--model", nargs="+", default=["alexnet_bottleneck"])
@@ -23,8 +22,7 @@ parser.add_argument("--max-samples", type=int, default=200)
 parser.add_argument("--num-workers", type=int, default=None, help="Override configs/detection.yaml num_workers (e.g. 0 on memory-constrained hosts)")
 args = parser.parse_args()
 
-with open("configs/detection.yaml") as f:
-    base_data_cfg = DetSegDataConfig(**yaml.safe_load(f).get("data", {}))
+base_data_cfg = DetSegDataConfig(**load_config("detection.yaml").get("data", {}))
 if args.num_workers is not None:
     base_data_cfg = replace(base_data_cfg, num_workers=args.num_workers)
 

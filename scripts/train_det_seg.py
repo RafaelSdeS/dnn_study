@@ -38,12 +38,7 @@ from ml.det_seg_models import (
 from ml.quantization import make_qat_callback
 from ml.reporting import compute_detection_summary, compute_segmentation_summary
 from ml.runtime import expand_path, load_runtime_root, set_global_seed
-
-
-def load_yaml(path: str) -> dict:
-    """Load YAML config file."""
-    with open(expand_path(path)) as f:
-        return yaml.safe_load(f)
+from configs.loader import load_config
 
 
 def run_detection(args):
@@ -53,12 +48,13 @@ def run_detection(args):
     print(f"{'='*60}\n")
 
     # Load configs
-    data_cfg = DetSegDataConfig(**load_yaml("configs/detection.yaml").get("data", {}))
-    trainer_cfg = TrainerConfig(**load_yaml("configs/detection.yaml").get("trainer", {}))
+    base_cfg = load_config("detection.yaml")
+    data_cfg = DetSegDataConfig(**base_cfg.get("data", {}))
+    trainer_cfg = TrainerConfig(**base_cfg.get("trainer", {}))
 
     # Override from experiment config if provided
     if args.experiment:
-        exp_cfg = load_yaml(f"configs/experiments/{args.experiment}.yaml")
+        exp_cfg = load_config(f"experiments/{args.experiment}.yaml")
         if args.model in exp_cfg:  # per-model-keyed format (e.g. phase_7_detection.yaml)
             exp_cfg = exp_cfg[args.model]
         data_cfg = replace(data_cfg, **exp_cfg.get("data", {}))
@@ -278,12 +274,13 @@ def run_segmentation(args):
     print(f"{'='*60}\n")
 
     # Load configs
-    data_cfg = DetSegDataConfig(**load_yaml("configs/segmentation.yaml").get("data", {}))
-    trainer_cfg = TrainerConfig(**load_yaml("configs/segmentation.yaml").get("trainer", {}))
+    base_cfg = load_config("segmentation.yaml")
+    data_cfg = DetSegDataConfig(**base_cfg.get("data", {}))
+    trainer_cfg = TrainerConfig(**base_cfg.get("trainer", {}))
 
     # Override from experiment config if provided
     if args.experiment:
-        exp_cfg = load_yaml(f"configs/experiments/{args.experiment}.yaml")
+        exp_cfg = load_config(f"experiments/{args.experiment}.yaml")
         if args.model in exp_cfg:  # per-model-keyed format (e.g. phase_7_segmentation.yaml)
             exp_cfg = exp_cfg[args.model]
         data_cfg = replace(data_cfg, **exp_cfg.get("data", {}))

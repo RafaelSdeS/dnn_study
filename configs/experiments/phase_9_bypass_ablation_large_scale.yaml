@@ -6,22 +6,13 @@ stages:
   - fp32
   - qat
   - int8
-data:
-  batch_size: 64
-  num_workers: 4
-  pin_memory: true
-  train_val_split: 0.9
+# Protocolo compartilhado "large_scale" (1000ep/patience 50, QAT 100ep) — mantido
+# idêntico entre large_scale.yaml / alexnet_dilated_gap.yaml /
+# phase_9_bypass_ablation_large_scale.yaml / large_scale_fire_residual_resume.yaml
+# de propósito. Não existe include entre arquivos de config — mudou aqui, muda
+# nos outros três.
 training:
   epochs: 1000
-  lr: 3.0e-4
-  weight_decay: 5.0e-4
-  label_smoothing: 0.1
-  grad_clip_norm: null
-  use_amp: true
-  early_stopping_patience: 20
+  early_stopping_patience: 50
 qat:
   epochs: 100
-  lr: 1.0e-5
-  weight_decay: 5.0e-4
-  freeze_bn_epoch: 3
-  disable_observer_epoch: 5

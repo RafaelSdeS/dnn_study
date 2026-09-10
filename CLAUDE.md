@@ -70,7 +70,7 @@ ml/                       # Core package — notebooks and scripts import everyt
 models/                   # Architectures by phase (see Model Inventory)
   baselines.py alexnet_variants.py compensation.py tinyhybridnet.py final_architecture.py vit_variants.py
 configs/                  # YAML hyperparameters, loaded via configs/loader.py → load_config(name)
-  data.yaml training.yaml qat.yaml profiling.yaml compression.yaml detection.yaml
+  data.yaml training.yaml qat.yaml qat_wino.yaml profiling.yaml compression.yaml detection.yaml segmentation.yaml
   runtime/                # local.yaml, pcad.yaml — dataset root, conda env, per-runtime toggles
   slurm/                  # single_gpu.yaml, tupi_4090.yaml, beagle.yaml — partition/GPU/CPU/wall-time
   experiments/            # default.yaml + per-run overrides (alexnet_3x3_gap, phase_7_detection, phase_7_smoke, large_scale, phase8, ...)
@@ -82,7 +82,10 @@ scripts/                  # CLI entry points (used instead of notebooks for PCAD
   profile_hardware.py      # Phase 6 hardware profiling CLI
   aggregate_results.py     # Aggregates per-model summary JSONs from a cluster submit-sweep into one CSV,
                            #   written to the curated results/<experiment>/ tree
-  # --- everything below is grouped, so `ls scripts/` shows the 5 entry points above ---
+  build_runs_index.py      # `python -m scripts.build_runs_index` — scans every run layout under outputs/
+                           #   (train.py, train_det_seg.py, notebooks, profile_hardware.py) into one row-per-run
+                           #   results/runs_index.csv, without unifying the four writer layouts themselves
+  # --- everything below is grouped, so `ls scripts/` shows the 6 entry points above ---
   phase6/                  # `python -m scripts.phase6.<name>`
     winograd_quant_error.py    # Phase 6 extension: INT8 quantization error from Winograd F(2x2,3x3) transforms
     phase6_eixo3_stats.py      # Eixo 3 statistics over the profiling runs
@@ -100,6 +103,9 @@ scripts/                  # CLI entry points (used instead of notebooks for PCAD
     migrate_pcad_gitignored.sh  # merges gitignored artifacts (*.pth, *.log) left in pre-reorg folder names after a pull
     submit_phase_7_simple.sh / submit_phase_7_multinode.sh  # PCAD Phase 7 detection submission (simple vs FP32→QAT→INT8 chaining) — see research/logs/PHASE7_MULTINODE.md
     submit_phase_7_segmentation.sh / submit_phase_7_segmentation_multinode.sh  # same, for segmentation (no --pretrained-ckpt support)
+    preflight_budget_unico.py   # `python -m scripts.pcad.preflight_budget_unico` — laptop-side sanity check for
+                                #   configs/experiments/budget_unico.yaml's qat_wino stage before burning a PCAD
+                                #   allocation on it (checks the sibling Winograd-FPGA repo is reachable, etc.)
   slurm/*.sbatch           # sbatch templates — train.sbatch/profile.sbatch submitted by cluster.py, det_seg.sbatch by the pcad/submit_phase_7_*.sh scripts, others called directly
 tests/                    # pytest: test_registry, test_checkpoint, test_config, test_trainer_smoke,
                           #   test_quantization, test_profiling, test_train_cli

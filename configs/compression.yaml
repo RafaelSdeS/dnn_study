@@ -6,8 +6,10 @@ int4_ptq:
   calibration_samples: 512
   per_channel: true
 
-# INT4 quantization-aware training (retrained under 4-bit fake-quant)
-int4_qat:
+# INT4 quantization-aware training (retrained under 4-bit fake-quant) — same recipe as
+# configs/qat.yaml, anchored here (not cross-file: YAML anchors don't span files) and
+# reused by mixed_precision/int2_qat below so it's written once.
+int4_qat: &qat_recipe
   epochs: 20
   lr: 1.0e-5
   weight_decay: 5.0e-4
@@ -17,32 +19,20 @@ int4_qat:
 
 # Mixed precision: top-K sensitive layers INT8, rest INT4
 mixed_precision:
+  <<: *qat_recipe
   int8_ratio: 0.3          # fraction of quantizable layers kept at INT8
   calibration_samples: 512
-  epochs: 20
-  lr: 1.0e-5
-  weight_decay: 5.0e-4
-  freeze_bn_epoch: 3
-  disable_observer_epoch: 5
-  per_channel: true
 
 # INT2 quantization-aware training (fake-quant, same recipe as int4_qat)
 int2_qat:
-  epochs: 20
-  lr: 1.0e-5
-  weight_decay: 5.0e-4
-  freeze_bn_epoch: 3
-  disable_observer_epoch: 5
-  per_channel: true
+  <<: *qat_recipe
 
 # Ternary (TWN) weight-only QAT via straight-through estimator — no observers/fusion
-ternary_qat:
+ternary_qat: &weight_only_qat_recipe
   epochs: 20
   lr: 1.0e-5
   weight_decay: 5.0e-4
 
 # Binary (BWN) weight-only QAT via straight-through estimator — no observers/fusion
 binary_qat:
-  epochs: 20
-  lr: 1.0e-5
-  weight_decay: 5.0e-4
+  <<: *weight_only_qat_recipe
