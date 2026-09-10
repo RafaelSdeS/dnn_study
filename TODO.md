@@ -118,7 +118,7 @@ Models:
 
 For each model:
 
-- ✅ FP32 training — results in `results/phase_1_baseline_training/final_comparison.csv`
+- ✅ FP32 training — results in `results/phase_1_baseline/final_comparison.csv`
 - ✅ QAT fine-tuning (partial — MobileNetV2, ResNet18 skipped; VGGStyle, AlexNetTV completed)
 - ✅ INT8 conversion
 - ✅ FP32 vs INT8 evaluation
@@ -148,7 +148,7 @@ For each variant:
 - ✅ FP32 vs INT8 comparison
 - ✅ Compare against the original AlexNet
 
-Results in `results/phase_2_kernel_restriction_training/` (57 epochs, full QAT + INT8).
+Results in `results/phase_2_kernel_restriction/` (57 epochs, full QAT + INT8).
 
 ---
 
@@ -215,8 +215,8 @@ Produce:
 never collected — flagged as an open limitation in the Phase 6 notebook itself, not silently
 dropped. Results test hypotheses H1–H4 (Winograd signal on dense 3×3, absence on depthwise,
 Pareto-frontier accuracy-vs-latency, FP32→INT8 latency-ranking stability). See
-`notebooks/phase_6_hardware_profiling_analysis/hardware_profiling_phase6.ipynb`,
-`results/phase_6_hardware_profiling_analysis/`, `research/plans/PHASE6_PLAN.md`.
+`notebooks/phase_6_hardware_profiling/hardware_profiling_phase6.ipynb`,
+`results/phase_6_hardware_profiling/`, `research/plans/PHASE6_PLAN.md`.
 
 Measure actual latency, memory bandwidth, and power consumption on **RTX 4060 (laptop, bandwidth-limited)** and **RTX 4090 (PCAD tupi nodes, compute-rich)** to empirically validate Winograd acceleration claims across contrasting hardware. Compare theoretical vs real-world efficiency gains across kernel sizes, and identify whether small-kernel gains hold on both GPU classes or only on the bandwidth-limited one.
 
@@ -247,8 +247,8 @@ Outputs:
 an SSD head over 3 backbones. Segmentation has data-loading + trainer scaffolding built
 (`create_voc_segmentation_loaders`, `research/logs/PHASE7_LOG.md` Stage 6) but no actual segmentation
 training run yet — "Full segmentation if detection is stable" is still an open follow-on per that
-log. CLI: `scripts/train_det_seg.py`. Results: `outputs/detection_segmentation/phase7/`. Analysis
-joining detection to Phase 3 classification: `notebooks/phase_7_detection_segmentation_analysis/`, `research/plans/PHASE7_PLAN.md`,
+log. CLI: `scripts/train_det_seg.py`. Results: `outputs/pcad/phase_7_detection_segmentation/`. Analysis
+joining detection to Phase 3 classification: `notebooks/phase_7_detection_segmentation/`, `research/plans/PHASE7_PLAN.md`,
 `research/logs/PHASE7_LOG.md`, `research/logs/PHASE7_QUICKSTART.md`, `research/logs/PHASE7_MULTINODE.md`.
 
 Extend the kernel-restriction findings (Phases 2–3) to object detection and semantic segmentation, testing whether the accuracy/efficiency trade-off observed in classification holds for denser prediction tasks. Directly addresses the research objective's detection/segmentation scope, which Phases 1–6 (classification only) do not cover.
@@ -261,7 +261,7 @@ Models: reuse Phase 3's Pareto-optimal backbones (Bottleneck, Fire) as feature e
 - ✅ INT8 conversion — detection
 - ✅ FP32 vs INT8 evaluation (mAP for detection) — segmentation mIoU not yet run
 - ✅ Compare small-kernel vs large-kernel backbones on mAP, latency, and model size
-- ✅ Quantization robustness comparison (does the QAT-stability ranking from Phase 3 transfer to detection heads?) — H1–H4 in `notebooks/phase_7_detection_segmentation_analysis/phase7_results_analysis.ipynb`
+- ✅ Quantization robustness comparison (does the QAT-stability ranking from Phase 3 transfer to detection heads?) — H1–H4 in `notebooks/phase_7_detection_segmentation/phase7_results_analysis.ipynb`
 - ✅ Determine whether the classification kernel-size trade-off transfers to dense prediction tasks — detection only; segmentation still open
 
 ---
@@ -270,7 +270,7 @@ Models: reuse Phase 3's Pareto-optimal backbones (Bottleneck, Fire) as feature e
 
 Explore whether attention-based models can match or exceed CNN efficiency within Winograd constraints. Investigate local-attention Vision Transformers as an alternative paradigm to small-kernel CNNs.
 
-**Status:** All 7 models trained, results in (see `research/plans/BEST_MODELS.md`'s Phase 8 section). FP32 accuracy for the 5 CLI-trained models was corrected 2026-08-29 after a `Trainer.fit()` checkpoint-restore bug (see `ml/trainer.py`, `scripts/backfill_best_epoch_eval.py`); `vit_tiny`/`deit_tiny` were unaffected. Hypotheses H1–H5 and the D6 QAT-for-attention revision are tracked in `research/plans/PHASE8_PLAN.md` / `research/logs/PHASE8_LOG.md`, not here.
+**Status:** All 7 models trained, results in (see `research/plans/BEST_MODELS.md`'s Phase 8 section). FP32 accuracy for the 5 CLI-trained models was corrected 2026-08-29 after a `Trainer.fit()` checkpoint-restore bug (see `ml/trainer.py`, `scripts/oneoff/backfill_best_epoch_eval.py`); `vit_tiny`/`deit_tiny` were unaffected. Hypotheses H1–H5 and the D6 QAT-for-attention revision are tracked in `research/plans/PHASE8_PLAN.md` / `research/logs/PHASE8_LOG.md`, not here.
 
 Models:
 
@@ -302,8 +302,10 @@ plan: `research/plans/PHASE9_PLAN.md`.
 - ✅ **Task 1 — Bypass ablation:** `AlexNetFireBypass` (Fire + identity shortcut only, no stem
   change) trained and compared against `AlexNetFire` and `AlexNetFinalFireResidual`. **Result:
   bypass alone accounts for ~55% of Phase 4's full gain.** Runs:
-  `outputs/pcad/phase_9_bypass_ablation/`, results CSVs:
-  `outputs/pcad/results_aggregate/results_phase_9_fire_bypass*.csv`.
+  `outputs/pcad/phase_9_bypass_ablation/`, results: the run's own
+  per-model summary JSON, `outputs/pcad/phase_9_bypass_ablation/fire_bypass_large_scale/alexnet_fire_bypass/results/alexnet_fire_bypass_summary.json`
+  (the `results_phase_9_fire_bypass*.csv` aggregates were git-ignored and removed by a later
+  repo cleanup; the JSON carries the same numbers and is tracked).
 - ✅ **Task 2 — Structured channel pruning** (`scripts/phase9/prune_channels.py`): prunes
   `_AlexBottleneck`'s internal squeeze width. Verified against the real PCAD-trained checkpoint at
   ratio 0.4: params 385,000 → 207,399 (53.9% reduction), forward pass OK, every remaining conv

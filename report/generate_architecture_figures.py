@@ -1,6 +1,6 @@
 """Architecture diagrams for the report appendix (Eixos 1/2/4).
 
-Ported verbatim from notebooks/phase_5_cross_phase_results_analysis/
+Ported verbatim from notebooks/phase_5_cross_phase_analysis/
 architecture_internals_phase5.ipynb (cells 2/6/8/10 + the four save calls), which is what
 actually produced the committed figures. The previous contents of this file were a diverged,
 cruder implementation that did NOT reproduce them (hardcoded figsize=(42,16) instead of sizing
@@ -73,7 +73,7 @@ METRICS = {
     "alexnet_bottleneck": {"top1_fp32": 44.62, "size_mb": 1.51},
     # results/results_aggregate/results_cross_phase.csv -- Phase 3, "alexnet_fire" row
     "alexnet_fire": {"top1_fp32": 43.98, "size_mb": 2.01},
-    # results/phase_4_compression_and_final_architecture_training/final_comparison.csv -- FP32 row
+    # results/phase_4_compression_and_final_architecture/final_comparison.csv -- FP32 row
     "alexnet_final_fire_residual": {"top1_fp32": 49.79, "size_mb": 2.71},
     # outputs/pcad/phase_9_bypass_ablation/.../alexnet_fire_bypass_summary.json
     # (top-1 also corrected: 49.03 predated the Trainer.fit() best-checkpoint fix)

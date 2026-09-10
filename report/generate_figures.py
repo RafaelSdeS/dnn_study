@@ -11,14 +11,14 @@ A fourth figure (accuracy_vs_latency_pareto) is a from-scratch reproduction of t
 notebook's cell 24 plot, minus the "H3:" hypothesis-numbering title -- the report shouldn't carry
 that internal label, but rerunning the whole notebook (recomputes Wilcoxon tests etc.) just to
 retitle one chart isn't worth it. It reads the notebook's own pre-computed
-results/phase_6_hardware_profiling_analysis/h3_latency_pareto.csv, so the numbers are identical.
+results/phase_6_hardware_profiling/h3_latency_pareto.csv, so the numbers are identical.
 
 A fifth figure (phase6_latency_vs_kernel_size) is the same approach applied to the notebook's
 cell 15 plot: reproduced here (with the report's own color palette, instead of running the whole
-notebook) from its pre-computed results/phase_6_hardware_profiling_analysis/h1_winograd_per_kernel_size.csv.
+notebook) from its pre-computed results/phase_6_hardware_profiling/h1_winograd_per_kernel_size.csv.
 
 Data source: results/results_aggregate/results_cross_phase.csv +
-results/phase_4_compression_and_final_architecture_training/final_comparison.csv
+results/phase_4_compression_and_final_architecture/final_comparison.csv
 """
 
 import json
@@ -42,7 +42,7 @@ from palette import BLUE, RED, GREEN, PURPLE, AMBER, TEXT_PRIMARY, TEXT_SECONDAR
 LEGEND_FONTSIZE = 11
 
 df = pd.read_csv("results/results_aggregate/results_cross_phase.csv")
-_p4 = pd.read_csv("results/phase_4_compression_and_final_architecture_training/final_comparison.csv")
+_p4 = pd.read_csv("results/phase_4_compression_and_final_architecture/final_comparison.csv")
 _fire_residual_row = pd.DataFrame([{
     "base_model": "alexnet_final_fire_residual",
     "top1_%_FP32": _p4.loc[_p4["model"] == "alexnet_final_fire_residual", "top1_%"].iloc[0],
@@ -240,7 +240,7 @@ plt.close()
 # figure used hand-typed placeholder numbers (a `scenarios` list of guessed values) that didn't
 # match the real notebook results and only covered 5 of the 7 methods named in the report caption
 # -- replaced with the actual results/.../compression_by_method.csv aggregates.
-comp_df = pd.read_csv("results/phase_4_compression_and_final_architecture_training/compression_by_method.csv")
+comp_df = pd.read_csv("results/phase_4_compression_and_final_architecture/compression_by_method.csv")
 COMP_METHOD_ORDER = ["int8", "int4_ptq", "int4_qat", "mixed", "ternary_qat", "int2_qat", "binary_qat"]
 COMP_LABELS = {
     "int8": "INT8 (âncora)", "int4_ptq": "INT4 PTQ (sem retreino)",
@@ -300,7 +300,7 @@ plt.close()
 # ====== Figure: Accuracy vs. Latency — Pareto Frontier ======
 # Reproduction of the Phase 6 notebook's pareto plot (cell 24), from its own precomputed CSV,
 # with the "H3:" hypothesis-numbering title dropped and the sober palette applied.
-pareto_df = pd.read_csv("results/phase_6_hardware_profiling_analysis/h3_latency_pareto.csv")
+pareto_df = pd.read_csv("results/phase_6_hardware_profiling/h3_latency_pareto.csv")
 pareto_df = pareto_df.dropna(subset=["accuracy"])
 PRECISION_MARKERS = {"fp32": "o", "int8": "s"}
 # Human-readable name for this CSV's "model" values -- point labels/annotations should read the
@@ -408,7 +408,7 @@ plt.close()
 # ====== Figure: Latency per FLOP vs. Kernel Size (3 panels) ======
 # Reproduction of the Phase 6 notebook's cell 15 plot, from its own precomputed CSV, with this
 # report's color palette instead of the notebook's.
-kernel_df = pd.read_csv("results/phase_6_hardware_profiling_analysis/h1_winograd_per_kernel_size.csv")
+kernel_df = pd.read_csv("results/phase_6_hardware_profiling/h1_winograd_per_kernel_size.csv")
 kernel_df = kernel_df[(kernel_df["groups_mode"] == "dense") & (kernel_df["input_resolution"] == 64)]
 KSIZES = [2, 3, 5, 7, 9, 11]
 IN_CH_COLORS = {16: BLUE, 32: RED, 64: GREEN, 128: PURPLE}
@@ -488,7 +488,7 @@ for base in ["alexnet_final_fire_residual", "alexnet_final_bottleneck_fire",
     _p4_pairs.append({"model": base, "fp32_top1": fp32_row["top1_%"], "fp32_size_mb": fp32_row["size_MB"],
                        "int8_top1": int8_row["top1_%"], "int8_size_mb": int8_row["size_MB"]})
 
-# The aggregate CSV this used to read (outputs/pcad/results_aggregate/results_phase_9_fire_bypass_
+# The aggregate CSV this used to read (results/results_phase_9_fire_bypass_
 # large_scale.csv) was a git-ignored artifact removed by a later repo cleanup; the run's own
 # per-model summary JSON has the same numbers and is still tracked.
 _p9 = json.load(open(
@@ -503,16 +503,16 @@ _p4_pairs.append({"model": "alexnet_fire_bypass", "fp32_top1": _p9["fp32_top1"],
 # accuracy/size columns are complete there; only vit_tiny/deit_tiny lack MACs, filled in below from
 # the notebook-driven run's own CSV -- same main-source-plus-fill-in pattern as the Phase 4/9 rows.
 _p8 = pd.read_csv(
-    "results/phase_8_efficient_vit_hybrid_attention_analysis/phase8_comparison.csv"
+    "results/phase_8_efficient_vit/phase8_comparison.csv"
 ).rename(columns={"model_name": "model"})
 _p8_rows = _p8[["model", "fp32_top1", "fp32_size_mb", "int8_top1", "int8_size_mb", "macs"]].copy()
 
 # H5 follow-up (Winograd-eligible conv-stem counterfactual, ic_report.tex Eixo 7): two more
-# attention models, trained separately (configs/experiments/phase8_convstem.yaml) and never
+# attention models, trained separately (configs/experiments/phase_8_efficient_vit_convstem.yaml) and never
 # folded into phase8_comparison.csv -- read straight from their own summary JSONs, same
 # own-summary-JSON splice pattern as the alexnet_fire_bypass row above.
 _p8_convstem = pd.DataFrame([
-    json.load(open(f"outputs/local/phase8_convstem/{name}/results/{name}_summary.json"))
+    json.load(open(f"outputs/local/phase_8_efficient_vit_convstem/{name}/results/{name}_summary.json"))
     for name in ["vit_tiny_convstem", "swin_pico_convstem"]
 ]).rename(columns={"model_name": "model"})[
     ["model", "fp32_top1", "fp32_size_mb", "int8_top1", "int8_size_mb", "macs"]
@@ -532,12 +532,12 @@ _macs_by_model = pd.read_csv("results/results_aggregate/model_details_cross_phas
 for _base in ["alexnet_final_fire_residual", "alexnet_final_bottleneck_fire",
               "alexnet_final_bottleneck_residual", "alexnet_final_depthwise_fire"]:
     _macs_by_model[_base] = json.load(open(
-        f"results/phase_4_compression_and_final_architecture_training/{_base}_summary.json"))["macs"]
+        f"results/phase_4_compression_and_final_architecture/{_base}_summary.json"))["macs"]
 _macs_by_model["alexnet_fire_bypass"] = _p9["macs"]
 _macs_by_model.update(_p8_rows.dropna(subset=["macs"]).set_index("model")["macs"].to_dict())
 _macs_by_model.update(_p8_convstem.set_index("model")["macs"].to_dict())
 _macs_by_model.update(
-    pd.read_csv("results/phase_8_efficient_vit_hybrid_attention_training/"
+    pd.read_csv("results/phase_8_efficient_vit/"
                 "phase8_vit_deit_comparison.csv")
     .query("precision == 'FP32'").set_index("model")["macs"].to_dict()
 )
@@ -660,14 +660,14 @@ def _load_summary_jsons(root: Path, group_label: str) -> pd.DataFrame:
 
 
 GROUP_DIRS = {
-    "Baselines externos": Path("results/phase_1_baseline_training"),
-    "Variantes AlexNet (kernel restrito)": Path("results/phase_2_kernel_restriction_training"),
-    "Compensação estrutural": Path("results/phase_3_compensation_and_hybrids_training"),
-    "Arquitetura final": Path("results/phase_4_compression_and_final_architecture_training"),
+    "Baselines externos": Path("results/phase_1_baseline"),
+    "Variantes AlexNet (kernel restrito)": Path("results/phase_2_kernel_restriction"),
+    "Compensação estrutural": Path("results/phase_3_compensation_and_hybrids"),
+    "Arquitetura final": Path("results/phase_4_compression_and_final_architecture"),
     "Ablação do atalho (bypass)": Path("outputs/pcad/phase_9_bypass_ablation"),
-    "Atenção local": Path("outputs/local/phase8_convstem"),
+    "Atenção local": Path("outputs/local/phase_8_efficient_vit_convstem"),
 }
-_group8_csv = Path("results/phase_8_efficient_vit_hybrid_attention_analysis/phase8_comparison.csv")
+_group8_csv = Path("results/phase_8_efficient_vit/phase8_comparison.csv")
 
 _frames = [_load_summary_jsons(d, label) for label, d in GROUP_DIRS.items()]
 if _group8_csv.exists():
@@ -841,11 +841,11 @@ plt.close()
 
 
 # ====== Figure: Eixo 6 detection accuracy vs. true model size (bigger legend) ======
-# Reproduced from notebooks/phase_7_detection_segmentation_analysis/phase7_results_analysis.ipynb,
+# Reproduced from notebooks/phase_7_detection_segmentation/phase7_results_analysis.ipynb,
 # cell 19 -- same 9 post-anchor-fix, non-pretrained SSD detection runs (3 backbones x FP32/QAT/INT8),
 # same true_size_mb-with-model_size_mb-fallback logic, same MODEL_COLORS (PALETTE[2]/[1]/[0] for
 # bottleneck/fire/tv) and FP32/QAT/INT8 marker shapes.
-_p7_dir = Path("outputs/detection_segmentation/phase7")
+_p7_dir = Path("outputs/pcad/phase_7_detection_segmentation")
 _p7_models = ["alexnet_bottleneck", "alexnet_fire", "alexnet_tv"]
 # ml/plotting.py's PALETTE[2]/[1]/[0] -- same colors the source notebook used.
 _p7_colors = {"alexnet_bottleneck": "#1baf7a", "alexnet_fire": "#eb6834", "alexnet_tv": "#2a78d6"}
@@ -856,7 +856,7 @@ _p7_markers = {"fp32": "o", "qat": "s", "int8": "^"}
 _p7_rows = []
 for _model in _p7_models:
     for _stage in ("fp32", "qat", "int8"):
-        _run = _p7_dir / f"ssd_{_model}_{_stage}_phase7_detection" / "metrics.json"
+        _run = _p7_dir / f"ssd_{_model}_{_stage}_phase_7_detection" / "metrics.json"
         _d = json.loads(_run.read_text())
         _mAP = _d["best_val_mAP"] if "best_val_mAP" in _d else _d["val_mAP"][0]
         _summary = _d["summary"]

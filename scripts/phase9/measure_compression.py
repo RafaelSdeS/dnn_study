@@ -186,7 +186,7 @@ def _evaluate_clustered_accuracy(args: argparse.Namespace, model: nn.Module, clu
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     trainer_cfg = TrainerConfig(**load_config("training.yaml"))
-    eval_dir = runtime_paths.root / "phase9_compression"
+    eval_dir = runtime_paths.root / "phase_9_compression"
 
     def _eval(m: nn.Module, name: str) -> dict:
         trainer = Trainer(m.to(device), val_loader, val_loader, trainer_cfg, device, eval_dir, name, num_classes=data_cfg.num_classes)
@@ -207,7 +207,7 @@ def _evaluate_clustered_accuracy(args: argparse.Namespace, model: nn.Module, clu
         rows.append({"cluster_k": k, "bits_per_weight": bits, "size_mb": codebook_mb + index_mb,
                       "top1": metrics["top1"], "top5": metrics["top5"], "top1_drop_pp": drop})
 
-    out_csv = runtime_paths.results / f"{args.model}_compression_accuracy.csv"
+    out_csv = runtime_paths.aggregates / f"{args.model}_compression_accuracy.csv"
     pd.DataFrame(rows).to_csv(out_csv, index=False)
     print(f"\nSaved {out_csv}")
 

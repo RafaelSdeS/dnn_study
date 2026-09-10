@@ -39,7 +39,7 @@ dnn_study é o projeto de pesquisa em Winograd que motivou o pedido. Duas conex�
 - **Código morto a limpar aqui.** `ml/quantization_advanced.py:279 winograd_f23_conv` não contém
   transform nenhum (o próprio comentário em `:300-304` admite), e `:319 compute_winograd_quant_error`
   aplica ops idênticas aos mesmos tensores nos dois ramos (`:367-369` vs `:372`) — reporta
-  `ratio = 1.0` por construção. `scripts/winograd_quant_error.py:105` está quebrado desde `94ca2ae`
+  `ratio = 1.0` por construção. `scripts/phase6/winograd_quant_error.py:105` está quebrado desde `94ca2ae`
   (desempacota 2 de uma tupla de 4 vinda de `ml/data.py:12`). Proposta de remoção separada,
   não executada.
 

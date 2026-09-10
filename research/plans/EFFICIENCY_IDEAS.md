@@ -141,7 +141,7 @@ recovering accuracy specifically for the Winograd-friendly small kernels this pr
   axes; this would let a model be trained to be good at both simultaneously, rather than accepting
   whatever error the transform happens to introduce.
 - **Would touch:** a new regularization term in the FP32 or QAT fine-tuning loop, informed by
-  `scripts/winograd_quant_error.py` (Phase 6 extension) which already measures INT8 quantization
+  `scripts/phase6/winograd_quant_error.py` (Phase 6 extension) which already measures INT8 quantization
   error from Winograd F(2×2,3×3) transforms — the loss term would penalize weight patterns that
   script flags as high-error.
 - **Tradeoff:** the most novel and most implementation-heavy item on this list; requires

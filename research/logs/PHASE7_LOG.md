@@ -85,7 +85,7 @@ Phase 7.
 **Commit:** `4f013d4` feat: det/seg CLI + cluster integration (Stage 7)
 
 - `scripts/train_det_seg.py`: mirrors `train.py`, supports `--model`, `--experiment`, `--dry-run`, `--runtime {local|pcad}`
-- `configs/detection.yaml` + `configs/experiments/phase7_detection.yaml`
+- `configs/detection.yaml` + `configs/experiments/phase_7_detection.yaml`
 - `scripts/slurm/det_seg.sbatch`: SLURM template for PCAD cluster
 - Tested dry-run; CLI ready for user to run training
 
@@ -98,9 +98,9 @@ Phase 7.
 - `scripts/phase7_analysis.py`: joins Phase 7 detection/segmentation to Phase 3 classification
 - Tests hypotheses H1-H4 (small-kernel transfer, quantization robustness, RF sensitivity, head latency)
 - Ready to run once Phase 7 FP32 results available
-- **Superseded:** replaced by `notebooks/phase_7_detection_segmentation_analysis/phase7_results_analysis.ipynb`
+- **Superseded:** replaced by `notebooks/phase_7_detection_segmentation/phase7_results_analysis.ipynb`
   (see A5 below) — the script's H2-H4 were unimplemented stubs and its run-dir parser had drifted
-  from the current `ssd_<model>_<stage>[_pretrained]_phase7_detection` naming; deleted.
+  from the current `ssd_<model>_<stage>[_pretrained]_phase_7_detection` naming; deleted.
 
 ---
 
@@ -108,7 +108,7 @@ Phase 7.
 
 **Commit:** (uncommitted this session)
 
-- **A1 (diagnose):** Ran `scripts/phase7_tools/check_anchor_recall.py` to completion for all 3 backbones at both
+- **A1 (diagnose):** Ran `scripts/phase7/check_anchor_recall.py` to completion for all 3 backbones at both
   256px and 512px (previously never finished — earlier attempts were killed by SIGKILL/OOM on the
   dev laptop, unrelated to the anchor logic itself). Confirmed recall well below the 95% bar at
   every combination (0.76–0.80) and resolution-independent — ruling out "just use bigger images"
@@ -139,23 +139,23 @@ Phase 7.
   gate now runs end-to-end in ~56s and correctly aborts for `alexnet_tv` (recall 0.925 < 0.95)
   before training starts. `alexnet_tv` needs `--skip-anchor-check` passed explicitly for A4 given
   the accepted tradeoff above.
-- **Budget bump:** `configs/experiments/phase7_detection.yaml` epochs 30→1000,
+- **Budget bump:** `configs/experiments/phase_7_detection.yaml` epochs 30→1000,
   `early_stopping_patience` 10→50 (all 3 models); `scripts/train_det_seg.py`'s QAT stage epochs
   15→100 — matching the actual PCAD budget planned for A4.
 - **Environment note:** this diagnostic work ran on the local laptop (not PCAD) as a workaround
   while PCAD's frontend node had CPU problems. `.venv` had drifted from `requirements.txt` (missing
   `sympy` + several other pinned packages) — resynced via `pip install -r requirements.txt`.
-  `scripts/phase7_tools/check_anchor_recall.py` gained a `--num-workers` override (yaml default is 4, but the
+  `scripts/phase7/check_anchor_recall.py` gained a `--num-workers` override (yaml default is 4, but the
   laptop needed 0 to avoid OOM at 512px — a milder version of the same `num_workers`-at-512px
-  fragility already noted in `configs/experiments/phase7_diag_512.yaml`'s comment about job
-  805529's segfault).
+  fragility that segfaulted job 805529 — noted at the time in a local-only `phase7_diag_512.yaml`
+  scratch config that was never committed, so this log entry is the surviving record of it).
 - **A4 attempt 1 (failed, PCAD, jobs 809066-809074):** First post-fix retrain submission
-  (`bash scripts/pcad/submit_phase7_multinode.sh qat int8`) crashed all 3 FP32 jobs immediately after
+  (`bash scripts/pcad/submit_phase_7_multinode.sh qat int8`) crashed all 3 FP32 jobs immediately after
   the anchor-recall check (which passed) — `RuntimeError` on `load_state_dict` inside
   `trainer.fit(resume_from=...)`. Root cause: `ml/det_seg_trainer.py`'s `fit()` unconditionally
   auto-resumes from `<run_dir>/<run_id>_resume.pth` if the path exists (`ml/checkpoint.py`'s
   `auto_resume_path` pattern), and the 3 target run dirs
-  (`ssd_alexnet_{bottleneck,fire,tv}_fp32_phase7_detection/`) still held `_resume.pth`/`_best.pth`
+  (`ssd_alexnet_{bottleneck,fire,tv}_fp32_phase_7_detection/`) still held `_resume.pth`/`_best.pth`
   from **pre-Stage-9** runs — old anchor config, so old checkpoints had 126/24 anchors per location
   vs. the new 210/40, a head-shape mismatch. Downstream QAT/INT8 jobs sat `PENDING` with SLURM
   reason `DependencyNeverSatisfied` (permanently stuck, not queue congestion — distinct from the
@@ -166,7 +166,7 @@ Phase 7.
 - **A4 attempt 2 (in progress, PCAD, jobs 809701-809709):** FP32 809701-703 → QAT 809704-706 → INT8
   809707-709, queued cleanly (no `DependencyNeverSatisfied`). Not yet confirmed past first epoch as
   of this log entry — cluster (`tupi` partition) had other users' jobs ahead in queue.
-- **A4 progress since:** `alexnet_bottleneck` FP32/QAT (`_phase7_detection`) completed post-fix
+- **A4 progress since:** `alexnet_bottleneck` FP32/QAT (`_phase_7_detection`) completed post-fix
   with valid mAP (~0.21 both stages); `alexnet_tv` QAT also completed post-fix (mAP 0.147). A
   second submission with backbone pretraining (`_pretrained` suffix, from Phase 3 Tiny-ImageNet
   checkpoints) is in flight: `bottleneck` FP32/QAT complete, `fire` FP32 running (job 812165), `tv`
@@ -182,7 +182,7 @@ Phase 7.
 
 - Replaced `scripts/phase7_analysis.py` (H2-H4 unimplemented stubs; run-dir parser broken for the
   current `_pretrained` naming) with
-  `notebooks/phase_7_detection_segmentation_analysis/phase7_results_analysis.ipynb`, matching the
+  `notebooks/phase_7_detection_segmentation/phase7_results_analysis.ipynb`, matching the
   notebook-based analysis convention every other executed phase (5/6/9) already uses.
 - Parses every run directory directly off disk (regex on `ssd_<model>_<stage>[_pretrained]_<exp>`),
   computes per-run provenance via `git merge-base --is-ancestor 686b419 <hash>`, and only allows
@@ -194,7 +194,7 @@ Phase 7.
   only builds/profiles a live model if `RUN_PROFILING=True` is set by hand — never runs on the PCAD
   front-end.
 - Phase 8 notebook intentionally **not** created: `research/plans/PHASE8_PLAN.md` Tasks 1-6 (models,
-  registry, `configs/experiments/phase8.yaml`) don't exist yet, so a notebook now would be an empty
+  registry, `configs/experiments/phase_8_efficient_vit.yaml`) don't exist yet, so a notebook now would be an empty
   shell. Build it once at least FP32 results exist for the seven Phase 8 models.
 
 ---
@@ -204,7 +204,7 @@ Phase 7.
 **Infrastructure:** All 9 training-side stages complete and smoke-tested; Stage 10 (analysis
 notebook) also complete.
 
-**Superseded:** The FP32/QAT/INT8 runs below (`phase7_detection`'s original fire/tv FP32 runs,
+**Superseded:** The FP32/QAT/INT8 runs below (`phase_7_detection`'s original fire/tv FP32 runs,
 `_minratio02` anchor-config retry, `_diag_256`, `_diag_512`, `_early_30ep`) all trained against the
 broken anchor config fixed in Stage 9. Validation mAP was 0.4–7.1% across every one of them — far
 below a working SSD's expected 40–70%+ on VOC, consistent with the anchor-recall check never having
@@ -212,14 +212,14 @@ been run to completion before those runs (see Stage 9 for the root cause). **Do 
 numbers; they are invalid, not just low.**
 
 **A4 — complete.** All 3 backbones (bottleneck/fire/tv) × FP32/QAT/INT8 × scratch/pretrained-backbone
-now have valid metrics on disk (`outputs/detection_segmentation/phase7/ssd_*_phase7_detection*`).
+now have valid metrics on disk (`outputs/pcad/phase_7_detection_segmentation/ssd_*_phase_7_detection*`).
 The INT8 observer-calibration crash (job 811101) is resolved — `scripts/train_det_seg.py`'s `int8`
 branch now saves a checkpoint and computes a size/params summary (backfilled onto older runs via
-`scripts/phase7_tools/backfill_int8_size.py`), and the Fire backbone's INT8 concat-quantization mismatch is
+`scripts/phase7/backfill_int8_size.py`), and the Fire backbone's INT8 concat-quantization mismatch is
 fixed (`models/compensation.py`, commit `565fef4`). Real numbers and a first read: `research/plans/BEST_MODELS.md`
 Phase 7 section.
 
-**A5 — done.** `notebooks/phase_7_detection_segmentation_analysis/phase7_results_analysis.ipynb`
+**A5 — done.** `notebooks/phase_7_detection_segmentation/phase7_results_analysis.ipynb`
 has been re-run with H1/H4 plots and real INT8 model sizes against the full A4 result set. H2
 (quantization robustness) is now testable since INT8 metrics exist for all backbones.
 
@@ -227,12 +227,12 @@ has been re-run with H1/H4 plots and real INT8 model sizes against the full A4 r
 1. Segmentation (Part B) — code is complete: `build_deeplabv3_segmenter()`, `SegmentationTrainer`,
    and the CLI's `run_segmentation()` are fully implemented (no longer placeholders/stubs), and
    PCAD runs are now complete for all 3 backbones × FP32/QAT/INT8
-   (`outputs/detection_segmentation/phase7/seg_*`). What's left: extending the H1–H4 analysis
+   (`outputs/pcad/phase_7_detection_segmentation/seg_*`). What's left: extending the H1–H4 analysis
    notebook to segmentation now that results are on disk.
 
 **Ground Rules Applied:**
 - ✓ Context hygiene: all decisions logged here for `/compact` recovery
-- ✓ Reproducibility: `outputs/detection_segmentation/phase7/<exp>/config.yaml` + `git_hash.txt` per run
+- ✓ Reproducibility: `outputs/pcad/phase_7_detection_segmentation/<exp>/config.yaml` + `git_hash.txt` per run
 - ✓ Failure triage framework in place (distinguish bugs, limitations, real findings)
 - ✓ Budgeting: FP32 max 1000 epochs, patience 50; QAT 100 epochs (Stage 9 bump)
 - ✓ No abstraction creep: reused existing trainer/data patterns

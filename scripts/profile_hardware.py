@@ -2,8 +2,8 @@
 Phase 6 Hardware Profiling CLI.
 
 Usage:
-    python -m scripts.profile_hardware --experiment phase6 --runtime local [--resume] [--dry-run]
-    python -m scripts.profile_hardware --experiment phase6 --runtime pcad [--resume] [--dry-run]
+    python -m scripts.profile_hardware --experiment phase_6_hardware_profiling --runtime local [--resume] [--dry-run]
+    python -m scripts.profile_hardware --experiment phase_6_hardware_profiling --runtime pcad [--resume] [--dry-run]
 
 Outputs JSON to: outputs/{runtime}/phase6/{device_tag}_profile.json
 Logs to: outputs/{runtime}/phase6/{device_tag}.log
@@ -567,7 +567,7 @@ def profile_model_sweep(
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(description="Phase 6 Hardware Profiling")
-    parser.add_argument("--experiment", default="phase6", help="Experiment name")
+    parser.add_argument("--experiment", default="phase_6_hardware_profiling", help="Experiment name")
     parser.add_argument("--runtime", choices=["local", "pcad"], required=True, help="Runtime profile")
     parser.add_argument("--resume", action="store_true", help="Resume from last completed config")
     parser.add_argument("--dry-run", action="store_true", help="Dry run (don't write output)")

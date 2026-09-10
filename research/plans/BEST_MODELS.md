@@ -1,13 +1,13 @@
 # Summary
 
-Results after implementing phases 1–4, 6, 8, and 9. **Most baselines (MobileNetV2, ResNet18, VGGStyle) show superior accuracy to pure AlexNet models, but Phase 2–4 AlexNet variants achieve competitive accuracy at 100–1000× smaller model sizes.** Phase 4's final hybrid architectures push AlexNet-family accuracy past 49% for the first time — within 3pp of VGGStyle — while Phase 9 shows a single residual bypass, with zero added parameters, now *exceeds* that hybrid's own FP32 gain outright (see Phase 9 below; corrected 2026-08-29 after a `Trainer.fit()` checkpoint-restore bug, `ml/trainer.py`). Phase 7 detection has completed a valid retrain (anchor-recall bug fixed) across all 3 backbones — see the Phase 7 section below; segmentation has also completed PCAD runs for all 3 backbones, not yet analyzed. Phase 8 (does local self-attention match small-kernel CNNs?) has results in for all 7 models — see the Phase 8 section below. Phase 5 is this document plus `results/phase_5_cross_phase_results_analysis/`.
+Results after implementing phases 1–4, 6, 8, and 9. **Most baselines (MobileNetV2, ResNet18, VGGStyle) show superior accuracy to pure AlexNet models, but Phase 2–4 AlexNet variants achieve competitive accuracy at 100–1000× smaller model sizes.** Phase 4's final hybrid architectures push AlexNet-family accuracy past 49% for the first time — within 3pp of VGGStyle — while Phase 9 shows a single residual bypass, with zero added parameters, now *exceeds* that hybrid's own FP32 gain outright (see Phase 9 below; corrected 2026-08-29 after a `Trainer.fit()` checkpoint-restore bug, `ml/trainer.py`). Phase 7 detection has completed a valid retrain (anchor-recall bug fixed) across all 3 backbones — see the Phase 7 section below; segmentation has also completed PCAD runs for all 3 backbones, not yet analyzed. Phase 8 (does local self-attention match small-kernel CNNs?) has results in for all 7 models — see the Phase 8 section below. Phase 5 is this document plus `results/phase_5_cross_phase_analysis/`.
 
 >**Size convention (corrected 2026-09-02).** All `Size (MB)` figures are **weights only**
 >(the serialized `model_state_dict`). They previously reported the raw `{model}_best.pth`
 >training checkpoint, which also carries AdamW's two momentum buffers — ~3x the model — while
 >the INT8 column was already weights-only, so every FP32-vs-INT8 size claim was inflated ~3x
 >(recorded ~11.9x compression where the true FP32->INT8 ratio is ~4x). Fixed in
->`ml/reporting.py`; data backfilled by `scripts/backfill_model_size.py`. Accuracies, params
+>`ml/reporting.py`; data backfilled by `scripts/oneoff/backfill_model_size.py`. Accuracies, params
 >and MACs are unaffected, and no ranking changed.
 
 ---
@@ -177,7 +177,7 @@ further down instead.
    comparison), so fbgemm's per-tensor activation observer likely has no bounded range to
    calibrate against. `AlexNetSmallKernelWithBN` (`models/compensation.py`) already exists to
    test this and is now registered as `alexnet_small_kernel_with_bn` in
-   `notebooks/phase_3_compensation_and_hybrids_training/compensation_qat.ipynb` (Section 11) —
+   `notebooks/phase_3_compensation_and_hybrids/compensation_qat.ipynb` (Section 11) —
    not yet trained.
 2. **Debug AlexNetSE** — Diagnosed: collapse is immediate and total from epoch 1 (loss pinned at
    exactly `ln(200)`, never moves) — not init (identical default init to every sibling), not LR
@@ -198,7 +198,7 @@ further down instead.
 
 Measured on a real RTX 4090 (PCAD `tupi5`), batch=1, 64×64 input — the first phase to check hardware
 behavior directly instead of relying on FLOPs/params as a proxy. Full methodology, statistical tests, and
-data-quality corrections in `notebooks/phase_6_hardware_profiling_analysis/hardware_profiling_phase6.ipynb`;
+data-quality corrections in `notebooks/phase_6_hardware_profiling/hardware_profiling_phase6.ipynb`;
 hypotheses/acceptance-criteria source in `research/plans/PHASE6_PLAN.md`.
 
 | Model | Winograd-eligible | FP32 Latency (ms) | INT8 Latency (ms) | FP32 GFLOP/s | FP32 Top-1 | Efficiency (Acc/ms) |
@@ -252,8 +252,8 @@ Limitations section.
 
 Combines Phase 3's best mechanisms (Bottleneck, Fire, Residual, Depthwise-Separable) into four
 hybrid architectures, then separately tests how far each can be compressed below plain INT8. Full
-data: `results/phase_4_compression_and_final_architecture_training/`; notebooks:
-`notebooks/phase_4_compression_and_final_architecture_training/`.
+data: `results/phase_4_compression_and_final_architecture/`; notebooks:
+`notebooks/phase_4_compression_and_final_architecture/`.
 
 ### Final hybrid architectures — FP32 vs INT8
 
@@ -332,11 +332,11 @@ QAT hit (–2.6pp scratch) that backbone pretraining partly recovers; tv (the la
 far, ~223MB vs. ~6MB) doesn't convert its size advantage into a proportional mAP lead over
 bottleneck. Backbone pretraining helps tv and fire's QAT/INT8 stages but has ~no effect on
 bottleneck. This is a first read of the raw numbers, not yet the H1–H4 hypothesis analysis — see
-`notebooks/phase_7_detection_segmentation_analysis/phase7_results_analysis.ipynb` for that.
+`notebooks/phase_7_detection_segmentation/phase7_results_analysis.ipynb` for that.
 
 Segmentation (Part B) has a fully implemented model/trainer/CLI (`build_deeplabv3_segmenter`,
 `SegmentationTrainer`, `run_segmentation` — no longer placeholders) and PCAD runs are now complete
-for all 3 backbones × FP32/QAT/INT8 (`outputs/detection_segmentation/phase7/seg_*`); results are
+for all 3 backbones × FP32/QAT/INT8 (`outputs/pcad/phase_7_detection_segmentation/seg_*`); results are
 on disk but not yet folded into the H1–H4 analysis notebook.
 
 ---
@@ -358,7 +358,7 @@ work. Full plan: `research/plans/PHASE9_PLAN.md`.
 `Trainer.fit()` returned the last epoch's weights instead of reloading the best checkpoint, so
 FP32 (measured post-fit) and INT8 (measured from a QAT run that correctly started from the best
 checkpoint) were scored on different weights. `ml/trainer.py` is fixed and this run's FP32 was
-re-evaluated from the surviving best checkpoint (`scripts/backfill_best_epoch_eval.py`); INT8 is
+re-evaluated from the surviving best checkpoint (`scripts/oneoff/backfill_best_epoch_eval.py`); INT8 is
 unchanged (the QAT stage already started from the correct checkpoint). See `research/logs/PHASE8_LOG.md`
 Stage 11 and `report/ic_report.tex` Eixo 4.
 
@@ -399,7 +399,7 @@ of INT8. H3's acceptance criterion is met; per D6 no changes were made to `ml/ch
 is a measurement-only signal that a real weight-sharing pipeline would be worth building.
 
 Full tables and methodology: `research/plans/PHASE9_PLAN.md` (Tasks 1–3). Reproducible analysis notebook:
-`notebooks/phase_9_pcad_bypass_ablation_analysis/phase9_ablation_analysis.ipynb`.
+`notebooks/phase_9_bypass_ablation/phase9_ablation_analysis.ipynb`.
 
 ---
 
@@ -413,7 +413,7 @@ history: `research/plans/PHASE8_PLAN.md`, `research/logs/PHASE8_LOG.md`.
 **Note on corrected data:** FP32 accuracy for 5 of these 7 models (all but `vit_tiny`/`deit_tiny`,
 which used the notebook's `load_best_model()` path and were unaffected) was corrected 2026-08-29
 after finding `Trainer.fit()` returned the last epoch's weights instead of reloading the best
-checkpoint — see the Phase 9 section above and `scripts/backfill_best_epoch_eval.py`. INT8 numbers
+checkpoint — see the Phase 9 section above and `scripts/oneoff/backfill_best_epoch_eval.py`. INT8 numbers
 for these 5 could not be rebuilt (no full-precision QAT-best checkpoint survived) and are left as
 previously measured.
 
@@ -469,4 +469,4 @@ accuracy. `deit_tiny`'s headline number should be read against that size, not as
 
 Full methodology, hypothesis acceptance criteria, and build history: `research/plans/PHASE8_PLAN.md`,
 `research/logs/PHASE8_LOG.md`. Cross-phase comparison data:
-`results/phase_8_efficient_vit_hybrid_attention_analysis/phase8_comparison.csv`.
+`results/phase_8_efficient_vit/phase8_comparison.csv`.

@@ -59,7 +59,7 @@ def run_detection(args):
     # Override from experiment config if provided
     if args.experiment:
         exp_cfg = load_yaml(f"configs/experiments/{args.experiment}.yaml")
-        if args.model in exp_cfg:  # per-model-keyed format (e.g. phase7_detection.yaml)
+        if args.model in exp_cfg:  # per-model-keyed format (e.g. phase_7_detection.yaml)
             exp_cfg = exp_cfg[args.model]
         data_cfg = replace(data_cfg, **exp_cfg.get("data", {}))
         trainer_cfg = replace(trainer_cfg, **exp_cfg.get("trainer", {}))
@@ -83,6 +83,13 @@ def run_detection(args):
     if args.experiment:
         run_id += f"_{args.experiment}"
     run_dir = Path(args.save_dir) / run_id
+
+    # ponytail: dry-run stays read-only — writing config.yaml first would clobber the
+    # provenance record of an existing run that shares this run_id.
+    if args.dry_run:
+        print(f"\n[DRY-RUN] Would run {args.stage.upper()} detection in {run_dir}. Exiting.")
+        return
+
     run_dir.mkdir(parents=True, exist_ok=True)
 
     # Save config
@@ -90,10 +97,6 @@ def run_detection(args):
     with open(config_out, "w") as f:
         yaml.dump({"data": asdict(data_cfg), "trainer": asdict(trainer_cfg), "stage": args.stage}, f)
     print(f"Config saved to {config_out}")
-
-    if args.dry_run:
-        print(f"\n[DRY-RUN] Would run {args.stage.upper()} detection. Exiting.")
-        return
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -249,7 +252,7 @@ def run_detection(args):
 
         # Save the converted checkpoint and its real size (fp32/qat both do this; int8 didn't
         # until now, so past runs' metrics.json has accuracy but no summary — see
-        # scripts/phase7_tools/backfill_int8_size.py for backfilling those).
+        # scripts/phase7/backfill_int8_size.py for backfilling those).
         int8_ckpt_path = run_dir / f"{run_id}_best.pth"
         torch.save(model_int8.state_dict(), int8_ckpt_path)
         history["summary"] = compute_detection_summary(
@@ -281,7 +284,7 @@ def run_segmentation(args):
     # Override from experiment config if provided
     if args.experiment:
         exp_cfg = load_yaml(f"configs/experiments/{args.experiment}.yaml")
-        if args.model in exp_cfg:  # per-model-keyed format (e.g. phase7_segmentation.yaml)
+        if args.model in exp_cfg:  # per-model-keyed format (e.g. phase_7_segmentation.yaml)
             exp_cfg = exp_cfg[args.model]
         data_cfg = replace(data_cfg, **exp_cfg.get("data", {}))
         trainer_cfg = replace(trainer_cfg, **exp_cfg.get("trainer", {}))
@@ -305,6 +308,13 @@ def run_segmentation(args):
     if args.experiment:
         run_id += f"_{args.experiment}"
     run_dir = Path(args.save_dir) / run_id
+
+    # ponytail: dry-run stays read-only — writing config.yaml first would clobber the
+    # provenance record of an existing run that shares this run_id.
+    if args.dry_run:
+        print(f"\n[DRY-RUN] Would run {args.stage.upper()} segmentation in {run_dir}. Exiting.")
+        return
+
     run_dir.mkdir(parents=True, exist_ok=True)
 
     # Save config
@@ -312,10 +322,6 @@ def run_segmentation(args):
     with open(config_out, "w") as f:
         yaml.dump({"data": asdict(data_cfg), "trainer": asdict(trainer_cfg), "stage": args.stage}, f)
     print(f"Config saved to {config_out}")
-
-    if args.dry_run:
-        print(f"\n[DRY-RUN] Would run {args.stage.upper()} segmentation. Exiting.")
-        return
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -473,7 +479,7 @@ def main():
     parser.add_argument("--stage", choices=["fp32", "qat", "int8"], default="fp32", help="Training stage")
     parser.add_argument("--experiment", help="Experiment config name (optional)")
     parser.add_argument("--runtime", choices=["local", "pcad"], default="local", help="Where to run")
-    parser.add_argument("--save-dir", default="outputs/detection_segmentation", help="Output directory")
+    parser.add_argument("--save-dir", default="outputs/pcad/phase_7_detection_segmentation", help="Output directory")
     parser.add_argument("--dry-run", action="store_true", help="Don't train, just show config")
     parser.add_argument("--skip-anchor-check", action="store_true", help="Skip the anchor-recall pre-flight gate")
     parser.add_argument(

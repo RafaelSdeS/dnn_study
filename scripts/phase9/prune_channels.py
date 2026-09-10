@@ -133,7 +133,7 @@ def main() -> int:
         trainer_cfg = TrainerConfig(**load_config("training.yaml"))
         trainer = Trainer(
             model, val_loader, val_loader, trainer_cfg, device,
-            runtime_paths.root / "phase9_pruning", f"{args.model}_pruned",
+            runtime_paths.root / "phase_9_pruning", f"{args.model}_pruned",
             num_classes=data_cfg.num_classes,
         )
         metrics = trainer.evaluate(topk=(1, 5))
@@ -165,7 +165,7 @@ def _finetune_and_quantize(
     run_name = f"{args.model}_pruned_r{args.ratio}"
     runtime_paths = build_runtime_paths(runtime_cfg.get("root", "outputs/local"))
     run_root, checkpoints_dir, logs_dir, _tb_dir, results_dir = _make_model_runs(
-        runtime_paths.root, "phase9_pruning_finetune", run_name
+        runtime_paths.root, "phase_9_pruning_finetune", run_name
     )
     _save_resolved_config(run_root, {
         "model": args.model, "ratio": args.ratio, "finetune_epochs": args.finetune_epochs,

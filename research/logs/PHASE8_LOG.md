@@ -42,9 +42,9 @@ Phase 8. Maps to `research/plans/PHASE8_PLAN.md`'s Task numbering where noted.
 
 ## Stage 4 — Config/CLI Integration (Task 6) ✓
 
-**Commit:** `6b5a745` feat(phase8): add configs/experiments/phase8.yaml
+**Commit:** `6b5a745` feat(phase8): add configs/experiments/phase_8_efficient_vit.yaml
 
-- `configs/experiments/phase8.yaml` covers the 5 models whose full FP32/QAT/INT8
+- `configs/experiments/phase_8_efficient_vit.yaml` covers the 5 models whose full FP32/QAT/INT8
   pipeline works through `scripts/train.py`'s generic loop unmodified
   (`swin_pico_w2/w4/w8`, `swin_pico_poolmixer`, `hybrid_bottleneck_swin`)
 - `vit_tiny`/`deit_tiny` excluded here, documented as needing a notebook instead
@@ -151,14 +151,14 @@ notebook execution or training run this session (per `CLAUDE.md`'s workflow rule
 `CLAUDE.md` and `research/plans/PHASE8_PLAN.md` updated to reflect the above; this log added.
 5 CLI-drivable models (`swin_pico_w2/w4/w8`, `swin_pico_poolmixer`,
 `hybrid_bottleneck_swin`) submitted to PCAD via
-`scripts.cluster submit-sweep --experiment phase8 --runtime pcad` (`tupi_4090`, one
+`scripts.cluster submit-sweep --experiment phase_8_efficient_vit --runtime pcad` (`tupi_4090`, one
 job per model). `vit_tiny`/`deit_tiny` still need the notebook run manually (not a
 `sbatch`-submittable job in this project's current tooling).
 
 ## Stage 11 — Checkpoint-Restore Bug Found; FP32 Backfilled (2026-08-29)
 
 All 7 models finished training and Task 7's cross-phase comparison notebook ran
-(`results/phase_8_efficient_vit_hybrid_attention_analysis/phase8_comparison.csv`). While
+(`results/phase_8_efficient_vit/phase8_comparison.csv`). While
 writing up results, the swin/hybrid models' apparent INT8 "gains" turned out to be an
 artifact: `ml/trainer.py`'s `Trainer.fit()` returned with `self.model` still holding the
 **last** epoch's weights instead of reloading `{run_name}_best.pth` before returning.
@@ -174,7 +174,7 @@ test: `tests/test_trainer_smoke.py::test_fit_restores_best_checkpoint_not_last_e
 (scripts a decaying val accuracy, asserts the live model matches the saved best
 checkpoint, not the resume checkpoint, after `fit()` returns).
 
-`scripts/backfill_best_epoch_eval.py` re-evaluates FP32 from the surviving
+`scripts/oneoff/backfill_best_epoch_eval.py` re-evaluates FP32 from the surviving
 `{model}_best.pth` for the 5 CLI-trained Phase 8 models (`vit_tiny`/`deit_tiny` used the
 notebook's `load_best_model()` path directly and were never affected) plus Phase 9's
 `alexnet_fire_bypass` — no retraining, just re-scoring already-saved checkpoints. INT8
@@ -197,7 +197,7 @@ FP32-vs-INT8 size comparison was therefore apples-to-oranges: `compression_ratio
 and MACs were unaffected — this only touched the size/compression columns.
 
 Fixed in `ml/reporting.py` (`disk_mb()`/`gzip_mb()` now unwrap `model_state_dict` before
-measuring, via a new `_model_bytes()` helper shared by both). `scripts/backfill_model_size.py`
+measuring, via a new `_model_bytes()` helper shared by both). `scripts/oneoff/backfill_model_size.py`
 re-measures `fp32_size_mb`/`fp32_gzip_mb` in every summary JSON: from the surviving
 checkpoint where one exists, else by rebuilding the architecture from `MODEL_REGISTRY` (exact,
 since state_dict size depends only on the architecture) or falling back to `/3.0` when neither

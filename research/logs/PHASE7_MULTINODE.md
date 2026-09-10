@@ -6,32 +6,32 @@ Automatically distribute Phase 7 detection training across multiple PCAD nodes (
 
 ### Option 1: Simple (recommended for most cases)
 ```bash
-bash scripts/pcad/submit_phase7_simple.sh
+bash scripts/pcad/submit_phase_7_simple.sh
 ```
 Submits 3 jobs immediately, one per backbone, all in parallel.
 
 ### Option 2: Advanced (with QAT/INT8 chaining)
 ```bash
-bash scripts/pcad/submit_phase7_multinode.sh          # FP32 only
-bash scripts/pcad/submit_phase7_multinode.sh qat      # FP32 → QAT (chained)
-bash scripts/pcad/submit_phase7_multinode.sh qat int8 # FP32 → QAT → INT8 (chained)
-bash scripts/pcad/submit_phase7_multinode.sh --dry-run # Preview without submitting
+bash scripts/pcad/submit_phase_7_multinode.sh          # FP32 only
+bash scripts/pcad/submit_phase_7_multinode.sh qat      # FP32 → QAT (chained)
+bash scripts/pcad/submit_phase_7_multinode.sh qat int8 # FP32 → QAT → INT8 (chained)
+bash scripts/pcad/submit_phase_7_multinode.sh --dry-run # Preview without submitting
 ```
 
 ## What Each Does
 
-### Simple Script (`submit_phase7_simple.sh`)
+### Simple Script (`submit_phase_7_simple.sh`)
 - **Submits:** 3 parallel FP32 detection jobs (one per backbone)
 - **Nodes:** Each job gets its own GPU node (no sharing)
 - **Walltime:** 12 hours per job
-- **Output:** Logs to `outputs/detection_segmentation/phase7/logs/p7_<model>_<jobid>.log`
+- **Output:** Logs to `outputs/pcad/phase_7_detection_segmentation/logs/p7_<model>_<jobid>.log`
 
 ```bash
 # Example: submit only bottleneck and fire
-bash scripts/pcad/submit_phase7_simple.sh alexnet_bottleneck alexnet_fire
+bash scripts/pcad/submit_phase_7_simple.sh alexnet_bottleneck alexnet_fire
 ```
 
-### Advanced Script (`submit_phase7_multinode.sh`)
+### Advanced Script (`submit_phase_7_multinode.sh`)
 - **FP32:** 3 parallel jobs (like simple)
 - **QAT:** Chains 3 QAT jobs (depends on FP32 completion)
 - **INT8:** Optional chains 3 INT8 conversion jobs (depends on QAT completion)
@@ -39,7 +39,7 @@ bash scripts/pcad/submit_phase7_simple.sh alexnet_bottleneck alexnet_fire
 
 ```bash
 # Submit with automatic FP32→QAT→INT8 chaining
-bash scripts/pcad/submit_phase7_multinode.sh qat int8
+bash scripts/pcad/submit_phase_7_multinode.sh qat int8
 ```
 
 ## Monitoring
@@ -52,8 +52,8 @@ squeue -u $USER -j 12345           # Specific job
 
 ### View logs
 ```bash
-tail -f outputs/detection_segmentation/phase7/logs/p7_bottleneck_*.log   # Real-time log for bottleneck
-cat outputs/detection_segmentation/phase7/logs/p7_*.log                   # All logs
+tail -f outputs/pcad/phase_7_detection_segmentation/logs/p7_bottleneck_*.log   # Real-time log for bottleneck
+cat outputs/pcad/phase_7_detection_segmentation/logs/p7_*.log                   # All logs
 ```
 
 ### Cancel jobs
@@ -82,15 +82,15 @@ GPUS=1
 
 Results appear in:
 ```
-outputs/detection_segmentation/phase7/
-├── ssd_alexnet_bottleneck_fp32_phase7_detection/
+outputs/pcad/phase_7_detection_segmentation/
+├── ssd_alexnet_bottleneck_fp32_phase_7_detection/
 │   ├── config.yaml
 │   ├── git_hash.txt
 │   ├── metrics.json
-│   └── ssd_alexnet_bottleneck_fp32_phase7_detection_best.pth
-├── ssd_alexnet_fire_fp32_phase7_detection/
+│   └── ssd_alexnet_bottleneck_fp32_phase_7_detection_best.pth
+├── ssd_alexnet_fire_fp32_phase_7_detection/
 │   └── ...
-├── ssd_alexnet_tv_fp32_phase7_detection/
+├── ssd_alexnet_tv_fp32_phase_7_detection/
 │   └── ...
 └── logs/
     ├── p7_bottleneck_12345.log
@@ -106,26 +106,26 @@ outputs/detection_segmentation/phase7/
 python scripts/train_det_seg.py detection --model alexnet_bottleneck --dry-run
 
 # Then submit all 3 to PCAD in parallel
-bash scripts/pcad/submit_phase7_simple.sh
+bash scripts/pcad/submit_phase_7_simple.sh
 ```
 
 ### Scenario 2: Only train bottleneck and fire (skip TV)
 ```bash
-bash scripts/pcad/submit_phase7_simple.sh alexnet_bottleneck alexnet_fire
+bash scripts/pcad/submit_phase_7_simple.sh alexnet_bottleneck alexnet_fire
 ```
 
 ### Scenario 3: Run full pipeline (FP32 + QAT + INT8) with automatic chaining
 ```bash
-bash scripts/pcad/submit_phase7_multinode.sh qat int8
+bash scripts/pcad/submit_phase_7_multinode.sh qat int8
 
 # Dry-run first to see what would happen:
-bash scripts/pcad/submit_phase7_multinode.sh qat int8 --dry-run
+bash scripts/pcad/submit_phase_7_multinode.sh qat int8 --dry-run
 ```
 
 ### Scenario 4: Submit with longer walltime (if needed)
 Edit script, change `TIME="12:00:00"` to `TIME="24:00:00"`, then submit:
 ```bash
-bash scripts/pcad/submit_phase7_multinode.sh
+bash scripts/pcad/submit_phase_7_multinode.sh
 ```
 
 ## Job Dependencies (Advanced)

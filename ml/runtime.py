@@ -12,10 +12,8 @@ import torch
 @dataclass(frozen=True)
 class RuntimePaths:
     root: Path
-    checkpoints: Path
     logs: Path
-    results: Path
-    tensorboard: Path
+    aggregates: Path
 
 
 def set_global_seed(seed: int) -> None:
@@ -38,12 +36,12 @@ def expand_path(value: str | None, default: str | Path | None = None) -> Path | 
 
 def build_runtime_paths(root: str | Path) -> RuntimePaths:
     base = Path(root).resolve()
+    # ponytail: only these two are read; per-model checkpoints/tensorboard dirs
+    # live under <root>/<experiment>/<model>/ and are made by scripts.train._make_model_runs
     paths = RuntimePaths(
         root=base,
-        checkpoints=base / "checkpoints",
         logs=base / "logs",
-        results=base / "results",
-        tensorboard=base / "runs",
+        aggregates=base / "aggregates",
     )
     for path in paths.__dict__.values():
         path.mkdir(parents=True, exist_ok=True)

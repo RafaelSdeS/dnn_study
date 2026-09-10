@@ -156,7 +156,7 @@ models:                          # full-model sweep, built from MODEL_REGISTRY, 
   - vgg_style
   - mobilenetv2
   - alexnet_fire
-precisions: [fp32, int8]         # int8 = build_qat_from_model(spec["ctor"]().to(device), arch_name, device) + convert_to_int8 — NOT build_qat(), which calls load_best_model() and hard-requires an existing {arch_name}_best.pth checkpoint (none exist locally; see top of file). build_qat_from_model takes an already-constructed model and does zero disk I/O. Uncalibrated observers are fine here — structure determines latency, not calibration accuracy (see PHASE6_CALIBRATION.md for rationale and limitations).
+precisions: [fp32, int8]         # int8 = build_qat_from_model(spec["ctor"]().to(device), arch_name, device) + convert_to_int8 — NOT build_qat(), which calls load_best_model() and hard-requires an existing {arch_name}_best.pth checkpoint (none exist locally; see top of file). build_qat_from_model takes an already-constructed model and does zero disk I/O. Uncalibrated observers are fine here — structure determines latency, not calibration accuracy (see "8. INT8 Calibration Strategy Documentation" below for rationale and limitations).
 warmup: 50
 iters: 200
 ```
@@ -188,7 +188,7 @@ Output JSON shape (flat, one record per run — matches what a `pandas.read_json
 - Memory: `gpu_memory_peak_mb` (peak allocated during forward pass; FFT and Winograd use scratch buffers).
 - Compute efficiency: `compute_efficiency_gflops_s` (theoretical FLOPs / latency; indicates hardware utilization vs. peak).
 
-`kind: model` rows carry latency only — accuracy is **not** re-measured here (these are untrained/random-init forward passes; see top of file). Kernel-size-vs-accuracy was already answered in Phases 2–4 and lives in `results/results_aggregate/model_details_cross_phase.csv` (`fp32_top1`, `int8_top1`) and `results/phase_4_compression_and_final_architecture_training/final_comparison.csv`. The analysis notebook joins Phase 6's `model` rows to those existing accuracy columns on `model_name` — no retraining, just a merge — so the final plot is accuracy vs. latency-per-accuracy-point and **energy-per-accuracy-point** (latency × power) per model, not latency alone.
+`kind: model` rows carry latency only — accuracy is **not** re-measured here (these are untrained/random-init forward passes; see top of file). Kernel-size-vs-accuracy was already answered in Phases 2–4 and lives in `results/results_aggregate/model_details_cross_phase.csv` (`fp32_top1`, `int8_top1`) and `results/phase_4_compression_and_final_architecture/final_comparison.csv`. The analysis notebook joins Phase 6's `model` rows to those existing accuracy columns on `model_name` — no retraining, just a merge — so the final plot is accuracy vs. latency-per-accuracy-point and **energy-per-accuracy-point** (latency × power) per model, not latency alone.
 
 **`configs/slurm/tupi_4090.yaml`** — `partition: tupi`, `gres: gpu:1`, to pin PCAD submissions to an RTX 4090 node instead of whatever `single_gpu.yaml` lands on.
 
@@ -196,7 +196,7 @@ Output JSON shape (flat, one record per run — matches what a `pandas.read_json
 
 **`scripts/cluster.py`** — add a `profile-submit` subcommand reusing `_build_sbatch_command`, parameterized with the new sbatch script path instead of the hardcoded `train.sbatch`.
 
-**`notebooks/phase_6_hardware_profiling_analysis/hardware_profiling_phase6.ipynb`** — loads the RTX 4060 (local) and RTX 4090 (PCAD tupi) JSON outputs side by side; joins `kind: model` rows to `results/results_aggregate/model_details_cross_phase.csv` accuracy columns on model name; builds the TODO.md outputs: latency heatmap (kernel size × layer depth), speedup ratio (5×5 / 3×3 time) per GPU, Winograd feasibility threshold, CPU INT8 latency ranking, cross-GPU comparison, **plus an accuracy-vs-latency scatter (the actual efficiency/quality trade-off this whole project is measuring)**.
+**`notebooks/phase_6_hardware_profiling/hardware_profiling_phase6.ipynb`** — loads the RTX 4060 (local) and RTX 4090 (PCAD tupi) JSON outputs side by side; joins `kind: model` rows to `results/results_aggregate/model_details_cross_phase.csv` accuracy columns on model name; builds the TODO.md outputs: latency heatmap (kernel size × layer depth), speedup ratio (5×5 / 3×3 time) per GPU, Winograd feasibility threshold, CPU INT8 latency ranking, cross-GPU comparison, **plus an accuracy-vs-latency scatter (the actual efficiency/quality trade-off this whole project is measuring)**.
 
 **Reused as-is:** `configs/runtime/local.yaml`, `configs/runtime/pcad.yaml`, `ml/runtime.py` (`set_global_seed`, `expand_path`), `ml/reporting.py` (`disk_mb`, `compute_flops`), `MODEL_REGISTRY`, `ml/quantization.py` (`build_qat_from_model`, `convert_to_int8` — specifically **not** `build_qat`, see checkpoint note above).
 
@@ -395,11 +395,17 @@ Then re-profile latency on calibrated models and compare to uncalibrated results
 
 ## BLOCKING ISSUES & REQUIRED FIXES
 
-The following must be addressed before executing profiling runs. See `research/plans/PHASE6_HYPOTHESES.md` and implementation checklist (TBD) for details.
+The following must be addressed before executing profiling runs. Hypotheses live in the
+"Hypotheses" section at the top of this file (H1-H4); the checklist is at the end.
+
+> **Status:** Phase 6 has since been executed — every blocking item below was resolved during
+> implementation, and the two spin-off documents proposed here were folded into this file
+> instead of being created separately. Kept for the reasoning, not as an open to-do list.
 
 ### 1. Explicit Research Hypotheses (BLOCKING)
 **Issue:** Plan lists experiments but no testable hypotheses or expected outcomes.
-**Fix:** Create `research/plans/PHASE6_HYPOTHESES.md` with three hypotheses:
+**Fix (done):** hypotheses were written into this file's H1-H4 sections rather than a separate
+document. Summarised:
 - H1: Dense 3×3 models (bottleneck, fire, vgg_style) trigger Winograd on RTX 4090; expect 1.5–2.5× speedup vs. direct GEMM.
 - H2: Depthwise convs (alexnet_depthwisesep, mobilenetv2) do NOT trigger Winograd; expect <10% Winograd kernel use vs. >60% for dense 3×3.
 - H3: Pareto frontier models beat alexnet_tv baseline on accuracy/latency efficiency.
@@ -468,7 +474,8 @@ Append to existing `{model_name}_layer_breakdown.csv` for analysis.
 ### 8. INT8 Calibration Strategy Documentation
 **Motivation:** Plan says "uncalibrated observers are fine," but this introduces ~5–10% latency bias due to arbitrary quantization ranges.
 
-**Change:** Document the choice explicitly in `ml/profiling.py` docstring or new `research/plans/PHASE6_CALIBRATION.md`:
+**Change (done):** the choice is documented right here — this section *is* the calibration
+rationale, and the **Decision** line below is what Phase 6 ran with:
 - **Current:** Uncalibrated observers, random init.
   - ✅ Pros: Fast, no checkpoint dependency.
   - ❌ Cons: Quantization ranges are arbitrary; layer schedules may not match deployed models.
@@ -483,7 +490,12 @@ Append to existing `{model_name}_layer_breakdown.csv` for analysis.
 
 Before submitting profiling runs:
 
-- [ ] `research/plans/PHASE6_HYPOTHESES.md` created with H1, H2, H3 and acceptance criteria.
+- [x] Hypotheses H1-H4 + acceptance criteria documented (in this file, not a separate
+      `PHASE6_HYPOTHESES.md` — see the Hypotheses section above).
+
+The remaining boxes below were written before Phase 6 ran and were never ticked off one by one;
+treat them as the original acceptance criteria, not as current open work.
+
 - [ ] `scripts/profile_hardware.py` captures metadata (PyTorch, cuDNN, CUDA, seed, timestamp, config path).
 - [ ] All models explicitly set to `.eval()` in profiling functions.
 - [ ] Winograd detection includes dual signals (trace + empirical speedup); output includes `winograd_inferred` flag.

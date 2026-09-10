@@ -57,7 +57,7 @@ from models import (
     alexnet_3x3_fc_fpga,
 )
 
-# notebooks/phase_1_baseline_training/baselines_qat.ipynb
+# notebooks/phase_1_baseline/baselines_qat.ipynb
 FUSE_MAP_ALEXNET_TV = [["0", "1"], ["3", "4"], ["6", "7"], ["8", "9"], ["10", "11"]]
 FUSE_MAP_VGG = [
     ["0", "1", "2"], ["3", "4", "5"],
@@ -71,7 +71,7 @@ register_model("vgg_style", VGGStyleCNN, fuse_map=FUSE_MAP_VGG, fuse_root_attr="
 register_model("mobilenetv2", MobileNetV2TV, fuse_map=[], lr=1e-4)
 register_model("resnet18tv", ResNet18TV, fuse_map=[], lr=1e-4)
 
-# notebooks/phase_2_kernel_restriction_training/alexnet_qat.ipynb
+# notebooks/phase_2_kernel_restriction/alexnet_qat.ipynb
 # FUSE_MAP_ALEXNET_TV is the same Conv-ReLU (no BN) pattern the notebook calls FUSE_CONV_RELU,
 # shared by AlexNetTV, 3x3FC/GAP, 2x2GAP/FC, and Mixed.
 FUSE_MAP_STACKED = [
@@ -108,7 +108,7 @@ register_model(
     lr=3e-4,
 )
 
-# notebooks/phase_3_compensation_and_hybrids_training/compensation_qat.ipynb
+# notebooks/phase_3_compensation_and_hybrids/compensation_qat.ipynb
 FUSE_DEPTHWISESEP = [
     ["0", "1", "2"], ["3", "4", "5"],
     ["7", "8", "9"], ["10", "11", "12"],
@@ -147,11 +147,11 @@ register_model("alexnet_se", AlexNetSE, fuse_map=[], lr=3e-4)
 register_model("alexnet_dilated_fc", AlexNetDilatedFC, fuse_map=FUSE_MAP_DILATED, fuse_root_attr="features", lr=1e-3)
 register_model("alexnet_dilated_gap", AlexNetDilatedGAP, fuse_map=FUSE_MAP_DILATED, fuse_root_attr="features", lr=1e-3)
 
-# notebooks/phase_3_compensation_and_hybrids_training/efficient_hybrids_qat.ipynb
+# notebooks/phase_3_compensation_and_hybrids/efficient_hybrids_qat.ipynb
 register_model("tinyhybridnet", TinyHybridNet, fuse_map=find_fuse_groups(TinyHybridNet()), lr=3e-4)
 register_model("tinymobilenetv2", TinyMobileNetV2, fuse_map=find_fuse_groups(TinyMobileNetV2()), lr=3e-4)
 
-# notebooks/phase_4_compression_and_final_architecture_training/final_architecture_qat.ipynb
+# notebooks/phase_4_compression_and_final_architecture/final_architecture_qat.ipynb
 register_model(
     "alexnet_final_bottleneck_residual",
     AlexNetFinalBottleneckResidual,
@@ -182,7 +182,7 @@ register_model(
 # hybrid_bottleneck_swin's _AlexBottleneck stem has fusable Conv-BN-ReLU triples.
 # lr/weight_decay follow DeiT's recipe (Touvron et al. 2021), not this project's
 # CNN-tuned defaults (Task 4 Pitfalls / Blocking Issue #5); warmup_epochs is set at
-# the experiment-config level (configs/experiments/phase8.yaml) since it isn't a
+# the experiment-config level (configs/experiments/phase_8_efficient_vit.yaml) since it isn't a
 # per-model registry field.
 register_model("vit_tiny", vit_tiny, fuse_map=[], lr=5e-4, weight_decay=0.05)
 register_model("deit_tiny", deit_tiny, fuse_map=[], lr=5e-4, weight_decay=0.05)

@@ -1,7 +1,7 @@
 # Phase 8 — Efficient Vision Transformers & Hybrid Attention Architectures (Implementation Plan)
 
 **STATUS (2026-08-29):** Tasks 1–7 complete — all 7 models trained on PCAD, results in
-(`research/plans/BEST_MODELS.md`'s Phase 8 section, `results/phase_8_efficient_vit_hybrid_attention_analysis/`).
+(`research/plans/BEST_MODELS.md`'s Phase 8 section, `results/phase_8_efficient_vit/`).
 FP32 accuracy for the 5 CLI-trained models was corrected after a `Trainer.fit()` checkpoint-restore
 bug found 2026-08-29 (`vit_tiny`/`deit_tiny` unaffected — see `research/logs/PHASE8_LOG.md`'s newest stage).
 See `research/logs/PHASE8_LOG.md` for the
@@ -110,7 +110,7 @@ buffers, ≈11.5 bytes/param instead of 4) while `int8_size_mb` was the converte
 ≈1 byte/param — two different conventions, making any FP32-vs-INT8 or model-vs-model MB claim
 off by ~3×. That diagnosis was correct and the bug is now fixed in `ml/reporting.py`
 (`_model_bytes()` unwraps `model_state_dict`), with every summary JSON and CSV backfilled by
-`scripts/backfill_model_size.py`. Both columns are now weights-only, so MB figures are directly
+`scripts/oneoff/backfill_model_size.py`. Both columns are now weights-only, so MB figures are directly
 comparable and the recorded compression ratio dropped from ~11.9× to the expected ~4×.
 Corrected reference points: `alexnet_fire` 0.516M params / 2.01 MB, `alexnet_bottleneck`
 0.385M / 1.51 MB, `vgg_style` 2.41M / 9.21 MB.
@@ -204,8 +204,8 @@ identical hyperparameters, distillation loss added) — the only variable is the
 this is a clean ablation, not a confound-prone architecture comparison like H1–H3.
 
 **⚠ The teacher checkpoint does not exist (measured).** There is no `mobilenetv2_best.pth`
-anywhere in the repo — `checkpoints/` contains only `phase_2_kernel_restriction_training/`,
-`phase_3_compensation_and_hybrids_training/`, `phase_4_compression_and_final_architecture_training/`
+anywhere in the repo — `checkpoints/` contains only `phase_2_kernel_restriction/`,
+`phase_3_compensation_and_hybrids/`, `phase_4_compression_and_final_architecture/`
 and `final_architecture_phase4/`, and nothing matching under `outputs/`. `mobilenetv2`'s
 `int8_top1` is `NaN` in the cross-phase CSV as well, consistent with the artifact never having
 been retained. H4 therefore carries an **unbudgeted Phase 1 retrain** (`mobilenetv2`, ~58% top-1)
@@ -684,7 +684,7 @@ what `scripts/train.py` reads, so Task 6's CLI path does not work without it.
 `replace(trainer_cfg, lr=spec.get("lr", trainer_cfg.lr))`. A `register_model(weight_decay=...)`
 override is accepted silently and then **ignored** — which matters because Task 4's optimizer
 mitigation depends on it. Either extend that line to pull `weight_decay` (and any warmup key) too,
-or set the transformer hyperparameters in `configs/experiments/phase8.yaml` instead.
+or set the transformer hyperparameters in `configs/experiments/phase_8_efficient_vit.yaml` instead.
 
 **Why:** Every downstream tool (`Trainer`, `build_qat`, `convert_to_int8`, `make_run_summary`,
 `compute_flops`) is keyed off `MODEL_REGISTRY`, exactly as in every prior phase.
@@ -1011,7 +1011,7 @@ FLOP-counting methodologies; document whichever convention is used, consistent w
 
 ## Task 6 — Config, CLI, and Notebook Integration
 
-**What:** `configs/experiments/phase8.yaml` (model list: the seven registry entries, `stages:
+**What:** `configs/experiments/phase_8_efficient_vit.yaml` (model list: the seven registry entries, `stages:
 [fp32, qat, int8]`, same shape as every prior phase's experiment config), reuse `scripts/train.py`
 **unmodified** (no new CLI driver needed, unlike Phase 7 — Phase 8's models fit the existing
 `run_experiment()`'s assumption of `create_imagenet_loaders` + base `Trainer`, except for
@@ -1019,7 +1019,7 @@ FLOP-counting methodologies; document whichever convention is used, consistent w
 the only model using `DistillationTrainer`).
 
 **Why:** Six of seven models need zero CLI/pipeline changes — this is where Phase 8's "Phase
-3-scale, not Phase 7-scale" framing pays off concretely: `scripts/train.py --experiment phase8
+3-scale, not Phase 7-scale" framing pays off concretely: `scripts/train.py --experiment phase_8_efficient_vit
 --runtime local` should work today, once Task 2's registrations exist, with no new script.
 
 **How:** `deit_tiny`'s distillation training is driven directly from the Phase 8 notebook (not
@@ -1032,7 +1032,7 @@ one-off logic into the notebook.
 
 **Dependencies:** Tasks 1–5.
 
-**Deliverables:** `configs/experiments/phase8.yaml`,
+**Deliverables:** `configs/experiments/phase_8_efficient_vit.yaml`,
 `notebooks/phase_8_efficient_vit/vit_qat_phase8.ipynb` (registration
 cells, `DistillationTrainer` training cell for `deit_tiny`, standard FP32/QAT/INT8 loop for the
 other six via `scripts/train.py`-equivalent notebook cells, matching every prior phase's notebook
@@ -1044,7 +1044,7 @@ seven-name list rather than `all`.
 notebook, so the CLI path depends on Task 2's mirrored registrations existing. Otherwise nothing
 beyond what Tasks 1–5 surfaced.
 
-**Validation:** `python -m scripts.train --experiment phase8 --runtime local --dry-run` resolves
+**Validation:** `python -m scripts.train --experiment phase_8_efficient_vit --runtime local --dry-run` resolves
 without error for the six non-distillation models (`--dry-run` confirmed present,
 `scripts/train.py:375`); one short local run (2–3 epochs, `stages: [fp32]`) completes end-to-end
 before a full PCAD submission.
@@ -1073,14 +1073,14 @@ models per H5) to test H1–H5.
   `profile_model_latency()` on all seven models, on whichever GPU is locally available (same
   "RTX 4090/PCAD full sweep is a stretch goal" reasoning Phase 7's Task 9 used) — per-module
   (stem vs. attention-stage) latency breakdown via `torch.profiler(record_shapes=True)`.
-- Produce `results/phase_8_efficient_vit_hybrid_attention_analysis/phase8_comparison.csv` (one
+- Produce `results/phase_8_efficient_vit/phase8_comparison.csv` (one
   path, matching the Outputs list below and every prior phase's convention) and update
   `research/plans/BEST_MODELS.md`/`TODO.md`.
 
 **Inputs:** `results/results_aggregate/model_details_cross_phase.csv`, Phase 6's profiling JSON, Phase 8's own comparison CSV.
 
-**Outputs:** Figures (`results/figures_generated/phase_8_efficient_vit_hybrid_attention/phase8_*`),
-`results/phase_8_efficient_vit_hybrid_attention_analysis/phase8_comparison.csv`, updated
+**Outputs:** Figures (`results/figures_generated/phase_8_efficient_vit/phase8_*`),
+`results/phase_8_efficient_vit/phase8_comparison.csv`, updated
 `TODO.md`/`research/plans/BEST_MODELS.md`.
 
 **Dependencies:** Tasks 1–6 complete with at least FP32+INT8 results for all seven models.
@@ -1143,7 +1143,7 @@ reconcile the `weight_decay` disagreement between `ml/config.py` (4e-4) and
 ### 6. Registry Metadata Beyond `lr` Is Silently Ignored (BLOCKING for the optimizer fix)
 `scripts/train.py:186` reads only `spec.get("lr", ...)`; a `register_model(weight_decay=...)`
 override is accepted and discarded (measured). Blocking #5's mitigation depends on it. **Fix:**
-extend that line, or set the transformer hyperparameters in `configs/experiments/phase8.yaml`.
+extend that line, or set the transformer hyperparameters in `configs/experiments/phase_8_efficient_vit.yaml`.
 
 ### 7. Window-Size / Grid-Divisibility Assertion (BLOCKING for future edits)
 All three sweep values `{2,4,8}` build and forward correctly today (measured), so this is a
@@ -1216,7 +1216,7 @@ Before submitting any full training run:
       still pass.
 - [ ] 2–3 epoch smoke run passed for all seven models (Task 4 Validation) before full-budget
       training or PCAD submission.
-- [ ] `configs/experiments/phase8.yaml` `--dry-run` succeeds (Task 6 Validation).
+- [ ] `configs/experiments/phase_8_efficient_vit.yaml` `--dry-run` succeeds (Task 6 Validation).
 - [ ] `phase8_comparison.csv` populated and cross-referenced against Phase 2/3/6 CSVs before any
       headline claim is written into `TODO.md`/`research/plans/BEST_MODELS.md` (Task 7).
 - [ ] Any size or compression claim uses params / weights-only MB, with the

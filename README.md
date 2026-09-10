@@ -19,21 +19,48 @@ jupyter lab
 ```
 
 **Notebooks (in order of execution):**
-1. `notebooks/phase_1_baseline_training/baselines_qat.ipynb` — Phase 1: Reference pretrained models (ResNet18, MobileNetV2, AlexNet, VGG-style)
-2. `notebooks/phase_2_kernel_restriction_training/alexnet_qat.ipynb` — Phase 2: AlexNet kernel-restriction variants (3×3, 2×2, stacked, mixed, small-kernel)
-3. `notebooks/phase_3_compensation_and_hybrids_training/compensation_qat.ipynb` — Phase 3a: Compensation mechanisms (bottleneck, residual, factorized, etc.)
-4. `notebooks/phase_3_compensation_and_hybrids_training/efficient_hybrids_qat.ipynb` — Phase 3b: Efficient hybrids (TinyHybridNet, TinyMobileNetV2)
-5. `notebooks/phase_4_compression_and_final_architecture_training/compression_phase4_1.ipynb` — Phase 4.1: Aggressive compression (INT4/INT2/ternary/binary) of the best Phase 1–3 models
-6. `notebooks/phase_4_compression_and_final_architecture_training/final_architecture_qat.ipynb` — Phase 4: Combines Phase 3's best mechanisms into final hybrid architectures
-7. `notebooks/phase_5_cross_phase_results_analysis/final_analysis_phase5.ipynb` — Phase 5: Cross-phase results analysis and figure generation
-8. `notebooks/phase_6_hardware_profiling_analysis/hardware_profiling_phase6.ipynb` — Phase 6: Hardware profiling & Winograd efficiency validation (RTX 4090)
-9. `notebooks/phase_7_detection_segmentation_analysis/phase7_results_analysis.ipynb` — Phase 7: Detection/segmentation results analysis (training itself is CLI-only via `scripts/train_det_seg.py`; see `research/logs/PHASE7_QUICKSTART.md`)
+1. `notebooks/phase_1_baseline/baselines_qat.ipynb` — Phase 1: Reference pretrained models (ResNet18, MobileNetV2, AlexNet, VGG-style)
+2. `notebooks/phase_2_kernel_restriction/alexnet_qat.ipynb` — Phase 2: AlexNet kernel-restriction variants (3×3, 2×2, stacked, mixed, small-kernel)
+3. `notebooks/phase_3_compensation_and_hybrids/compensation_qat.ipynb` — Phase 3a: Compensation mechanisms (bottleneck, residual, factorized, etc.)
+4. `notebooks/phase_3_compensation_and_hybrids/efficient_hybrids_qat.ipynb` — Phase 3b: Efficient hybrids (TinyHybridNet, TinyMobileNetV2)
+5. `notebooks/phase_4_compression_and_final_architecture/compression_phase4_1.ipynb` — Phase 4.1: Aggressive compression (INT4/INT2/ternary/binary) of the best Phase 1–3 models
+6. `notebooks/phase_4_compression_and_final_architecture/final_architecture_qat.ipynb` — Phase 4: Combines Phase 3's best mechanisms into final hybrid architectures
+7. `notebooks/phase_5_cross_phase_analysis/final_analysis_phase5.ipynb` — Phase 5: Cross-phase results analysis and figure generation
+8. `notebooks/phase_6_hardware_profiling/hardware_profiling_phase6.ipynb` — Phase 6: Hardware profiling & Winograd efficiency validation (RTX 4090)
+9. `notebooks/phase_7_detection_segmentation/phase7_results_analysis.ipynb` — Phase 7: Detection/segmentation results analysis (training itself is CLI-only via `scripts/train_det_seg.py`; see `research/logs/PHASE7_QUICKSTART.md`)
 10. `notebooks/phase_8_efficient_vit/vit_qat_phase8.ipynb` — Phase 8: vit_tiny/deit_tiny FP32→distill/QAT→INT8 (the 2 of 7 Phase 8 models `scripts/train.py` can't drive)
 11. `notebooks/phase_8_efficient_vit/phase8_results_analysis.ipynb` — Phase 8: cross-phase results analysis
-12. `notebooks/phase_9_pcad_bypass_ablation_analysis/phase9_ablation_analysis.ipynb` — Phase 9: Cross-phase PCAD results (bypass ablation, large-scale runs)
+12. `notebooks/phase_9_bypass_ablation/phase9_ablation_analysis.ipynb` — Phase 9: Cross-phase PCAD results (bypass ablation, large-scale runs)
 13. `notebooks/phase_10_final_summary/` — Phase 10: final cross-project rollup (classification + detection + segmentation) across Phases 1–4/8/9
 
 Full model/phase inventory: `CLAUDE.md`.
+
+---
+
+## Repository Layout
+
+```
+ml/          core package (data, trainer, quantization, profiling, reporting)
+models/      architectures, one file per phase
+configs/     YAML: data/training/qat + runtime/ + slurm/ + experiments/
+scripts/     5 CLI entry points; per-phase tooling in phase6/ phase7/ phase9/ oneoff/
+notebooks/   one dir per phase slug
+outputs/     RAW per-run artifacts — local/ pcad/ notebooks/ (by where the run happened)
+results/     CURATED tracked CSVs/JSON + figures_generated/, feeds report/ and presentation/
+research/    plans/ (research notes) + logs/ (execution history)
+report/      LaTeX writeup      presentation/  slides
+```
+
+Two conventions hold this together:
+
+1. **`outputs/` is raw, `results/` is curated.** Nothing else at the top level holds artifacts.
+2. **One slug per phase** — `phase_N_description` — identical in `notebooks/`, `results/`,
+   `results/figures_generated/`, `outputs/*/` and `configs/experiments/`. Because the experiment
+   name *is* the output directory name, renaming a phase means renaming its experiment config,
+   not the folder it produced.
+
+Pulled on a machine with artifacts under older folder names? Run
+`scripts/pcad/migrate_pcad_gitignored.sh` (idempotent).
 
 ---
 
@@ -190,9 +217,10 @@ python -m scripts.cluster resume outputs/pcad/default/<model_name>
 - `outputs/<runtime>/<experiment>/<model>/logs/` for per-run logs
 - `outputs/<runtime>/<experiment>/<model>/tensorboard/` for TensorBoard event files
 - `outputs/<runtime>/<experiment>/<model>/results/` for per-run JSON summaries
-- `outputs/<runtime>/results_aggregate/` for aggregated comparison CSVs (via `scripts/aggregate_results.py`)
+- `outputs/<runtime>/aggregates/` for the per-experiment comparison CSV written by `scripts/train.py`
+- `results/<experiment>/` for the curated cross-model roll-up (via `scripts/aggregate_results.py`)
 
-Detection/segmentation (Phase 7) uses a separate layout: `outputs/detection_segmentation/phase7/<run>/` — see `research/logs/PHASE7_QUICKSTART.md`.
+Detection/segmentation (Phase 7) uses a separate layout: `outputs/pcad/phase_7_detection_segmentation/<run>/` — see `research/logs/PHASE7_QUICKSTART.md`.
 
 **PCAD-specific settings:**
 - Edit [configs/runtime/pcad.yaml](configs/runtime/pcad.yaml) for dataset root, conda env, and runtime toggles

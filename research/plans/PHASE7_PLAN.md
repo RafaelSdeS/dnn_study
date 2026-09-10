@@ -697,8 +697,8 @@ before trusting the full comparison table).
 ## Task 8 — Config, CLI, and Cluster Integration
 
 **What:** `configs/detection.yaml`, `configs/segmentation.yaml` (mirroring `configs/data.yaml`'s
-shape but for `DetSegDataConfig`), `configs/experiments/phase7_detection.yaml` /
-`phase7_segmentation.yaml` (model list: the 3 `ssd_*`/`deeplab_*` registry entries from Task 6,
+shape but for `DetSegDataConfig`), `configs/experiments/phase_7_detection.yaml` /
+`phase_7_segmentation.yaml` (model list: the 3 `ssd_*`/`deeplab_*` registry entries from Task 6,
 `stages: [fp32, qat, int8]`), and a new `scripts/train_det_seg.py` CLI driver.
 
 **Why:** Every prior phase runs through `scripts/train.py --experiment <name> --runtime <local|pcad>`
@@ -731,14 +731,14 @@ selection — no new SLURM config needed.
 **Dependencies:** Tasks 1, 5, 6, 7.
 
 **Deliverables:** `configs/detection.yaml`, `configs/segmentation.yaml`,
-`configs/experiments/phase7_detection.yaml`, `configs/experiments/phase7_segmentation.yaml`,
+`configs/experiments/phase_7_detection.yaml`, `configs/experiments/phase_7_segmentation.yaml`,
 `scripts/train_det_seg.py`, `scripts/slurm/det_seg.sbatch`, `det-seg-submit` subcommand in
 `scripts/cluster.py`.
 
 **Pitfalls / Alternatives:** None beyond what Tasks 1–7 already surfaced — this task is
 integration plumbing, low technical risk, mechanical given the Phase 6 precedent to copy from.
 
-**Validation:** `python -m scripts.train_det_seg --experiment phase7_detection --runtime local
+**Validation:** `python -m scripts.train_det_seg --experiment phase_7_detection --runtime local
 --dry-run` prints a resolved config without error (same smoke check `scripts/train.py --dry-run`
 already supports); one short local run (2–3 epochs, `stages: [fp32]` only) completes end-to-end
 before submitting the full PCAD job.
@@ -748,7 +748,7 @@ before submitting the full PCAD job.
 ## Task 9 — Cross-Backbone, Cross-Phase, and Winograd-Latency Analysis
 
 **Status: implemented as planned**, as a notebook —
-`notebooks/phase_7_detection_segmentation_analysis/phase7_results_analysis.ipynb` — matching the
+`notebooks/phase_7_detection_segmentation/phase7_results_analysis.ipynb` — matching the
 current repo convention every other executed phase (5/6/9) uses. Supersedes and replaces the
 earlier `scripts/phase7_analysis.py` stub (deleted: its H2–H4 were unimplemented `print("TODO")`,
 and its run-dir parser had drifted from the current `ssd_<model>_<stage>[_pretrained]_<exp>`
@@ -760,7 +760,7 @@ non-pretrained FP32 run and H2 (INT8) is fully blocked (no INT8 detection metric
 `research/logs/PHASE7_LOG.md` Stage 10 / A4-A5 for current data status; re-run the notebook as more PCAD
 results land.
 
-**What (original plan):** `notebooks/phase_7_detection_segmentation_analysis/phase7_results_analysis.ipynb` — joins Phase 7's mAP/mIoU results to
+**What (original plan):** `notebooks/phase_7_detection_segmentation/phase7_results_analysis.ipynb` — joins Phase 7's mAP/mIoU results to
 Phase 3's classification accuracy and Phase 6's latency/Winograd-eligibility data (`model_details.csv`,
 `final_comparison.csv`, Phase 6's `{device_tag}_profile.json`) on backbone name, to directly test
 H1–H4.
@@ -788,18 +788,18 @@ finding transfer" is a comparison question, not something a single phase's numbe
   convention) and update `research/plans/BEST_MODELS.md`/`TODO.md` with Phase 7's checked-off items and
   headline findings, following the exact pattern Phases 1–6 already use in `TODO.md`.
 
-**Inputs:** `results/results_aggregate/model_details_cross_phase.csv`, `results/phase_4_compression_and_final_architecture_training/final_comparison.csv`,
-Phase 6's profiling JSON outputs, Phase 7's own `phase7_detection_comparison.csv`/
-`phase7_segmentation_comparison.csv` (Task 8 output).
+**Inputs:** `results/results_aggregate/model_details_cross_phase.csv`, `results/phase_4_compression_and_final_architecture/final_comparison.csv`,
+Phase 6's profiling JSON outputs, Phase 7's own `phase_7_detection_comparison.csv`/
+`phase_7_segmentation_comparison.csv` (Task 8 output).
 
 **Outputs:** Figures (`results/figures_generated/phase_7_detection_segmentation/phase7_*`),
-`results/phase_7_detection_segmentation_analysis/phase7_comparison.csv` — both now produced by the
+`results/phase_7_detection_segmentation/phase7_comparison.csv` — both now produced by the
 notebook. `TODO.md`/`research/plans/BEST_MODELS.md` updates still pending a full A4 re-run (see
 `research/logs/PHASE7_LOG.md` Stage 10).
 
 **Dependencies:** Tasks 1–8 complete with at least FP32+INT8 results for all 3 backbones × 2 tasks.
 
-**Deliverables (as planned):** `notebooks/phase_7_detection_segmentation_analysis/phase7_results_analysis.ipynb`.
+**Deliverables (as planned):** `notebooks/phase_7_detection_segmentation/phase7_results_analysis.ipynb`.
 
 **Pitfalls / Alternatives:** With only 3 backbones, any correlation/ranking statistic (Spearman ρ,
 etc.) has very limited statistical power — report raw numbers prominently alongside any summary
@@ -889,7 +889,7 @@ Before submitting any full training run:
 - [ ] QAT → INT8 conversion succeeds without error and produces non-degenerate output on a smoke
       test, before the full QAT training run is trusted (Task 6 Validation).
 - [ ] `pycocotools`/`torchmetrics` versions pinned in `environment.yml` (Blocking #5).
-- [ ] `phase7_detection.yaml`/`phase7_segmentation.yaml` `--dry-run` succeeds (Task 8 Validation).
+- [ ] `phase_7_detection.yaml`/`phase_7_segmentation.yaml` `--dry-run` succeeds (Task 8 Validation).
 - [ ] `phase7_comparison.csv` populated and cross-referenced against Phase 3/6 CSVs by backbone
       name before any headline claim is written into `TODO.md`/`research/plans/BEST_MODELS.md` (Task 9).
 

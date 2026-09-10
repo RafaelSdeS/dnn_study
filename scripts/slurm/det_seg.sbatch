@@ -21,7 +21,7 @@ export PYTHONUNBUFFERED=1
 TASK=${1:-detection}
 STAGE=${2:-fp32}
 MODEL=${3:-alexnet_bottleneck}
-EXPERIMENT=${4:-phase7_detection}
+EXPERIMENT=${4:-phase_7_detection}
 EXTRA_ARGS=${5:-}
 
 echo "===================================================="
@@ -40,12 +40,12 @@ python scripts/train_det_seg.py ${TASK} \
     --stage ${STAGE} \
     --experiment ${EXPERIMENT} \
     --runtime local \
-    --save-dir outputs/detection_segmentation/phase7 \
+    --save-dir outputs/pcad/phase_7_detection_segmentation \
     ${EXTRA_ARGS} &
 child=$!
 trap 'scontrol requeue "$SLURM_JOB_ID"; sleep 600' USR1
 wait "$child"
 
 echo "===================================================="
-echo "Training complete. Results in outputs/detection_segmentation/phase7/"
+echo "Training complete. Results in outputs/pcad/phase_7_detection_segmentation/"
 echo "===================================================="

@@ -35,6 +35,7 @@ wandb_artifacts/
 # VS Code
 # =========================
 .vscode/
+.pytest_cache/
 
 # =========================
 # Dataset / caches

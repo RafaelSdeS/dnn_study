@@ -92,7 +92,7 @@ def build_parser() -> argparse.ArgumentParser:
     submit_sweep.add_argument("--device", default=None)
 
     profile_submit = sub.add_parser("profile-submit", help="Submit a Phase 6 profiling job")
-    profile_submit.add_argument("--experiment", default="phase6")
+    profile_submit.add_argument("--experiment", default="phase_6_hardware_profiling")
     profile_submit.add_argument("--runtime", default="pcad")
     profile_submit.add_argument("--slurm", default="tupi_4090", help="SLURM config (default: tupi_4090 for RTX 4090)")
     profile_submit.add_argument("--resume", action="store_true", help="Resume from last completed config")

@@ -19,7 +19,7 @@ current, disk-sourced state before trusting any mAP number.
 | 5 | QAT/INT8 support | ✓ | `build_qat_ssd_detector()` ready |
 | 6 | Segmentation stubs | ✓ | Loaders + trainer placeholders |
 | 7 | CLI + SLURM | ✓ | `scripts/train_det_seg.py` + YAML configs |
-| 8 | Cross-phase analysis | ✓ | `notebooks/phase_7_detection_segmentation_analysis/phase7_results_analysis.ipynb` |
+| 8 | Cross-phase analysis | ✓ | `notebooks/phase_7_detection_segmentation/phase7_results_analysis.ipynb` |
 
 ## Quick Start — Run FP32 Detection Training
 
@@ -34,7 +34,7 @@ python scripts/train_det_seg.py detection --model alexnet_bottleneck
 ```bash
 python scripts/train_det_seg.py detection --model alexnet_bottleneck --runtime pcad
 # Or manually:
-sbatch scripts/slurm/det_seg.sbatch detection alexnet_bottleneck phase7_detection
+sbatch scripts/slurm/det_seg.sbatch detection alexnet_bottleneck phase_7_detection
 ```
 
 ## Configuration
@@ -45,13 +45,13 @@ sbatch scripts/slurm/det_seg.sbatch detection alexnet_bottleneck phase7_detectio
 - Epochs: 30 (early stop patience 10)
 - VOC 07+12 trainval (train), 07 test (eval)
 
-**Per-backbone overrides** → `configs/experiments/phase7_detection.yaml`:
+**Per-backbone overrides** → `configs/experiments/phase_7_detection.yaml`:
 - (Currently identical across all 3; customize as needed)
 
 ## Output Structure
 
-Results saved to `outputs/detection_segmentation/phase7/ssd_<model>_<stage>_<experiment>/` (e.g.
-`ssd_alexnet_bottleneck_fp32_phase7_detection/`):
+Results saved to `outputs/pcad/phase_7_detection_segmentation/ssd_<model>_<stage>_<experiment>/` (e.g.
+`ssd_alexnet_bottleneck_fp32_phase_7_detection/`):
 ```
 ├── config.yaml         # Full config (reproducible)
 ├── git_hash.txt        # Commit hash at run start

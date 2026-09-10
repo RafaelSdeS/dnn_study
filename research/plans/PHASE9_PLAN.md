@@ -1,7 +1,7 @@
 # Phase 9 — SqueezeNet-Style Bypass Ablation + Structured Compression (Implementation Plan)
 
 Phase 4's `alexnet_final_fire_residual` (FP32 49.79%/INT8 49.20%, 8.09→0.75 MB,
-`results/phase_4_compression_and_final_architecture_training/alexnet_final_fire_residual_summary.json`) beats Phase 3's
+`results/phase_4_compression_and_final_architecture/alexnet_final_fire_residual_summary.json`) beats Phase 3's
 `alexnet_fire` (FP32 43.98%/INT8 44.30%, 5.99→0.55 MB, `results/results_aggregate/model_details_cross_phase.csv:19`) by
 +5.81pp FP32 / +4.90pp INT8. But `AlexNetFinalFireResidual` changes two things at once versus
 `AlexNetFire`: it adds a 3×3 stride-2 stem *and* wraps every Fire stage in a residual shortcut
@@ -46,7 +46,7 @@ statistically meaningful margin (single run, so "meaningful" = larger than the ~
 noise visible between `best_val_top1` and `final_val_top1` in existing summary JSONs), and INT8
 drop stays within the ±1pp band every other Fire/Bottleneck-family model has shown.
 
-**Result — met.** PCAD job 806654 (`configs/experiments/phase9_fire_bypass.yaml`, 66 epochs to
+**Result — met.** PCAD job 806654 (`configs/experiments/phase_9_bypass_ablation.yaml`, 66 epochs to
 early-stopping), `outputs/pcad/phase_9_bypass_ablation/fire_bypass/alexnet_fire_bypass/results/alexnet_fire_bypass_summary.json`:
 
 | model | FP32 top-1 | FP32 top-5 | INT8 top-1 | INT8 top-5 | quant Δtop-1 | size FP32→INT8 |
@@ -72,7 +72,7 @@ isn't coming from the bypass mechanism itself.
 early-stopped budgets that turned out to be unfair: `alexnet_fire_bypass` stopped at 66 epochs and
 `alexnet_final_fire_residual` at 82, well short of convergence (`alexnet_fire` itself needed 174
 epochs at the same patience). Re-run at the project's standard large-scale budget
-(`configs/experiments/phase9_fire_bypass_large_scale.yaml`, `configs/experiments/large_scale_fire_residual_resume.yaml`,
+(`configs/experiments/phase_9_bypass_ablation_large_scale.yaml`, `configs/experiments/large_scale_fire_residual_resume.yaml`,
 patience 20 / 50 respectively) closes almost the entire gap:
 
 | model | FP32 top-1 | QAT top-1 | INT8 top-1 | quant Δtop-1 (QAT→INT8) |
@@ -246,7 +246,7 @@ Reuses `_FireModule` (`models/compensation.py:367-386`) and `_float_functional()
 **Registration** (two places, mirroring the existing `alexnet_fire` entries exactly):
 - `ml/model_registrations.py:68` area:
   `register_model("alexnet_fire_bypass", AlexNetFireBypass, fuse_map=find_fuse_groups(AlexNetFireBypass()), lr=1e-3)`
-- `notebooks/phase_3_compensation_and_hybrids_training/compensation_qat.ipynb` registration cell: add
+- `notebooks/phase_3_compensation_and_hybrids/compensation_qat.ipynb` registration cell: add
   `FUSE_FIRE_BYPASS = find_fuse_groups(AlexNetFireBypass())` next to `FUSE_FIRE`, add
   `register_model("alexnet_fire_bypass", AlexNetFireBypass, fuse_map=FUSE_FIRE_BYPASS, lr=1e-3)`
   to the `MODEL_REGISTRY.clear()` block, and add the same entry to the notebook's `CTORS` dict
@@ -417,7 +417,7 @@ correction note.
 - [x] `AlexNetFireBypass` param count == `AlexNetFire` param count (Blocking Issue 1) — 516,152 ==
       516,152, verified
 - [x] `alexnet_fire_bypass` registered identically in `ml/model_registrations.py` and
-      `notebooks/phase_3_compensation_and_hybrids_training/compensation_qat.ipynb`
+      `notebooks/phase_3_compensation_and_hybrids/compensation_qat.ipynb`
 - [x] FP32→QAT→INT8 run produces a `alexnet_fire_bypass_summary.json` with the same fields as
       existing Phase 3 summaries (`evaluate(topk=(1,5))` numbers present) — PCAD job 806654,
       `outputs/pcad/phase_9_bypass_ablation/fire_bypass/alexnet_fire_bypass/results/alexnet_fire_bypass_summary.json`

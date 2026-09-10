@@ -499,7 +499,7 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
         if wandb_run is not None:
             wandb_run.finish()
 
-    _append_csv(results_rows, runtime_paths.results / f"{experiment_name}_comparison.csv")
+    _append_csv(results_rows, runtime_paths.aggregates / f"{experiment_name}_comparison.csv")
     return results_rows
 
 

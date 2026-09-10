@@ -18,7 +18,7 @@ export MKL_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
 
 # Executes a notebook headlessly for the models scripts/train.py's generic loop
 # can't drive (Phase 8's vit_tiny/deit_tiny -- DistillationTrainer, see
-# notebooks/phase_8_efficient_vit_hybrid_attention_training/vit_qat_phase8.ipynb).
+# notebooks/phase_8_efficient_vit/vit_qat_phase8.ipynb).
 # --inplace only rewrites cell outputs, not source, so a requeued re-run still
 # re-executes the same cells; each training cell's own auto_resume_path() check
 # (same pattern as scripts/train.py) picks up mid-run instead of restarting.

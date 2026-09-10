@@ -802,14 +802,14 @@ vez sobre o mesmo conjunto de validação. A diferença QAT$\to$INT8 isola, port
 da conversão real frente à simulação — pequena quando a calibração dos observadores é fiel, e o
 motivo de o valor INT8 poder ficar tanto ligeiramente abaixo quanto ligeiramente acima do QAT. Já a
 diferença FP32$\to$INT8 é a medida de robustez à quantização usada no restante do relatório. A
-mesma convenção vale para as Tabelas~\ref{tab:phase7_detection}, \ref{tab:phase7_segmentation}
+mesma convenção vale para as Tabelas~\ref{tab:phase_7_detection}, \ref{tab:phase_7_segmentation}
 e~\ref{tab:phase7_training}.
 
-A Tabela~\ref{tab:phase7_detection} resume os resultados de detecção (variante treinada do zero;
+A Tabela~\ref{tab:phase_7_detection} resume os resultados de detecção (variante treinada do zero;
 variantes com \textit{backbone} pré-treinado em Tiny ImageNet-200 seguem padrão semelhante —
 praticamente não mudam para \texttt{AlexNetBottleneck} (ligeiramente pior nos três estágios), mas
 recuperam parte da queda de QAT/INT8 para \texttt{AlexNetFire} e \texttt{AlexNetTV};
-Tabela~\ref{tab:phase7_training}). A Tabela~\ref{tab:phase7_segmentation} resume
+Tabela~\ref{tab:phase7_training}). A Tabela~\ref{tab:phase_7_segmentation} resume
 segmentação.
 
 \begin{table}[!t]
@@ -818,7 +818,7 @@ tamanho é o do modelo real implantado (tamanho real medido). Os valores de
 \texttt{AlexNetFire} marcados com $\sim$ usam o tamanho de checkpoint bruto, não medido dessa
 forma naquelas execuções. O mAP@0,5 destes mesmos modelos, na convenção da
 literatura, está na Tabela~\ref{tab:lit_comparison_detection}.}
-\label{tab:phase7_detection}
+\label{tab:phase_7_detection}
 \centering
 \small
 \begin{tabular}{@{}llcc@{}}
@@ -842,9 +842,9 @@ literatura, está na Tabela~\ref{tab:lit_comparison_detection}.}
 
 \begin{table}[!t]
 \caption{Eixo 6 — Segmentação (DeepLabV3, VOC 2012). Mesma convenção da
-Tabela~\ref{tab:phase7_detection}: tamanho é o do modelo real implantado
+Tabela~\ref{tab:phase_7_detection}: tamanho é o do modelo real implantado
 (tamanho real medido).}
-\label{tab:phase7_segmentation}
+\label{tab:phase_7_segmentation}
 \centering
 \small
 \begin{tabular}{@{}llcc@{}}
@@ -911,7 +911,7 @@ utilizada. Seu tamanho real, porém, é de apenas 4,10 MB, menor que os 5,76 MB 
 duas tarefas — um resultado que o tamanho bruto do \textit{checkpoint} escondia por completo.
 
 \textbf{Comparação com a literatura.} Uma ressalva de métrica precede qualquer comparação: o mAP da
-Tabela~\ref{tab:phase7_detection} é a média sobre 10 limiares de IoU (0,50--0,95, convenção COCO),
+Tabela~\ref{tab:phase_7_detection} é a média sobre 10 limiares de IoU (0,50--0,95, convenção COCO),
 enquanto toda a literatura de detecção citada aqui reporta mAP@IoU=0,5 de limiar único (convenção
 PASCAL VOC). O mesmo treino já calcula esse valor de limiar único; é ele que a
 Tabela~\ref{tab:lit_comparison_detection} usa. Em segmentação não há discrepância: o mIoU
@@ -951,7 +951,7 @@ motivação de eficiência deste projeto.
 \begin{minipage}[t][1.5cm][t]{0.49\textwidth}
 \centering
 \caption{Detecção: eficiência acurácia/tamanho vs. literatura (VOC, mAP@IoU=0,5 por MB de modelo
-real; convenção da literatura citada, diferente do mAP da Tabela~\ref{tab:phase7_detection})}
+real; convenção da literatura citada, diferente do mAP da Tabela~\ref{tab:phase_7_detection})}
 \label{tab:lit_comparison_detection}
 \end{minipage}\hfill
 \begin{minipage}[t][1.5cm][t]{0.49\textwidth}
@@ -1047,7 +1047,7 @@ não o tamanho real medido, que não foi calculado naquela execução. O estági
 duas tabelas: é um \textit{checkpoint} FP32 com quantização simulada, de tamanho praticamente igual
 ao do FP32 e que não é o artefato implantado, então uma razão acurácia/MB para ele não teria
 referente prático — as métricas de QAT estão nas
-Tabelas~\ref{tab:phase7_detection}--\ref{tab:phase7_segmentation}. O mIoU de 85,7\% do
+Tabelas~\ref{tab:phase_7_detection}--\ref{tab:phase_7_segmentation}. O mIoU de 85,7\% do
 DeepLabv3/ResNet-101 vem do \textit{test set} oficial (via servidor de submissão), contra o
 \textit{split} \textit{val} usado aqui e por DeepLabv3+MobileNetV2 — são \textit{splits} distintos,
 não diretamente comparáveis. E nenhuma referência mobile-first citada reporta variante INT8 no
