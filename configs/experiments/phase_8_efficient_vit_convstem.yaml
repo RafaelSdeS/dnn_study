@@ -8,8 +8,3 @@ name: phase_8_efficient_vit_convstem
 models:
   - vit_tiny_convstem
   - swin_pico_convstem
-seed: 42
-stages:
-  - fp32
-  - qat
-  - int8

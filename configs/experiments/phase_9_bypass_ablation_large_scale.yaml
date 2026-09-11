@@ -2,8 +2,3 @@ extends: _protocols/large_scale
 name: phase_9_bypass_ablation_large_scale
 models:
   - alexnet_fire_bypass
-seed: 42
-stages:
-  - fp32
-  - qat
-  - int8

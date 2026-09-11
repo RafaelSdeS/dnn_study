@@ -1,0 +1,8 @@
+# Shared defaults for experiments that don't need a special training protocol
+# (large_scale/phase_8_vit have their own). Used via `extends:` by every flat,
+# single-model experiment -- change here, not per-file.
+seed: 42
+stages:
+  - fp32
+  - qat
+  - int8

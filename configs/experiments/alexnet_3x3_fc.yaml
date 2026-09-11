@@ -1,8 +1,4 @@
+extends: _protocols/standard
 name: alexnet_3x3_fc
 models:
   - alexnet_3x3_fc
-seed: 42
-stages:
-  - fp32
-  - qat
-  - int8

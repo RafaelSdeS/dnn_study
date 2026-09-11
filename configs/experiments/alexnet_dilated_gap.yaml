@@ -2,8 +2,3 @@ extends: _protocols/large_scale
 name: alexnet_dilated_gap
 models:
   - alexnet_dilated_gap
-seed: 42
-stages:
-  - fp32
-  - qat
-  - int8

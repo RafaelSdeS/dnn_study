@@ -13,8 +13,3 @@ models:
   - alexnet_final_fire_residual
   - alexnet_final_bottleneck_fire
   - alexnet_final_depthwise_fire
-seed: 42
-stages:
-  - fp32
-  - qat
-  - int8

@@ -1,8 +1,4 @@
+extends: _protocols/standard
 name: phase_9_bypass_ablation
 models:
   - alexnet_fire_bypass
-seed: 42
-stages:
-  - fp32
-  - qat
-  - int8

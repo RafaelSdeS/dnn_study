@@ -20,11 +20,6 @@ models:
   - swin_pico_w8
   - swin_pico_poolmixer
   - hybrid_bottleneck_swin
-seed: 42
-stages:
-  - fp32
-  - qat
-  - int8
 # Only this file's addition on top of _protocols/phase_8_vit.yaml -- resume-specific,
 # doesn't belong in the shared protocol or in phase_8_efficient_vit_convstem.yaml.
 training:

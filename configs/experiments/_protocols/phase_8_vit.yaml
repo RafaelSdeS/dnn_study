@@ -2,6 +2,11 @@
 # clipping -- the standard transformer-training recipe, vs. the CNN base in
 # ../../training.yaml). Used via `extends:` by phase_8_efficient_vit.yaml and
 # phase_8_efficient_vit_convstem.yaml -- change here, not per-file.
+seed: 42
+stages:
+  - fp32
+  - qat
+  - int8
 training:
   epochs: 1000
   lr: 5.0e-4

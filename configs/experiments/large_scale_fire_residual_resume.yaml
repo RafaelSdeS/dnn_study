@@ -2,8 +2,3 @@ extends: _protocols/large_scale
 name: large_scale
 models:
   - alexnet_final_fire_residual
-seed: 42
-stages:
-  - fp32
-  - qat
-  - int8

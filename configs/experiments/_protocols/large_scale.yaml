@@ -4,6 +4,11 @@
 # -- change here, not per-file. (alexnet_dilated_gap.yaml was fixed once, commit
 # aac628a, to match this protocol so its number is comparable on the Pareto
 # frontier with everything else trained under it.)
+seed: 42
+stages:
+  - fp32
+  - qat
+  - int8
 training:
   epochs: 1000
   early_stopping_patience: 50

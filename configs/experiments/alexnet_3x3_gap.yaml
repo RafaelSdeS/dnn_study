@@ -1,8 +1,4 @@
+extends: _protocols/standard
 name: alexnet_3x3_gap
 models:
   - alexnet_3x3_gap
-seed: 42
-stages:
-  - fp32
-  - qat
-  - int8
