@@ -35,6 +35,7 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # Palette shared with generate_architecture_figures.py -- see report/palette.py.
 from palette import BLUE, RED, GREEN, PURPLE, AMBER, TEXT_PRIMARY, TEXT_SECONDARY, GRID
+from pareto import pareto_frontier, pareto_front_mask
 
 # One legend fontsize for every figure in this script -- previously each legend picked its own
 # size ad hoc (8 to 12), so the same "elegível a Winograd" / group-color legend looked a different
@@ -364,17 +365,8 @@ _label_points(ax, pareto_df["latency_ms"].to_numpy(), pareto_df["accuracy"].to_n
               pareto_df["model"].map(P6_DISPLAY_NAME).to_numpy())
 
 # Pareto frontier: points where no other point is both faster and more accurate.
-pareto_mask = np.ones(len(pareto_df), dtype=bool)
 rows = pareto_df.reset_index(drop=True)
-for i in range(len(rows)):
-    for j in range(len(rows)):
-        if i != j:
-            if (rows.iloc[j]["latency_ms"] <= rows.iloc[i]["latency_ms"] and
-                rows.iloc[j]["accuracy"] >= rows.iloc[i]["accuracy"] and
-                (rows.iloc[j]["latency_ms"] < rows.iloc[i]["latency_ms"] or
-                 rows.iloc[j]["accuracy"] > rows.iloc[i]["accuracy"])):
-                pareto_mask[i] = False
-                break
+pareto_mask = pareto_front_mask(rows["latency_ms"], rows["accuracy"])
 pareto_points = rows[pareto_mask].sort_values("latency_ms")
 if len(pareto_points) > 1:
     ax.plot(pareto_points["latency_ms"], pareto_points["accuracy"], linestyle="--", color="0.35",
@@ -578,19 +570,8 @@ ax.scatter(size_acc_df["int8_size_mb"], size_acc_df["int8_top1"], marker="s", c=
            s=100, alpha=0.9, zorder=3, edgecolors="white", linewidths=0.7)
 
 
-def _pareto_frontier(xs, ys):
-    """Skyline: sorted by x ascending, keep points whose y beats every prior kept point."""
-    pts = sorted(zip(xs, ys), key=lambda p: p[0])
-    frontier, best_y = [], -1.0
-    for x, y in pts:
-        if y > best_y:
-            frontier.append((x, y))
-            best_y = y
-    return frontier
-
-
-fp32_frontier = _pareto_frontier(size_acc_df["fp32_size_mb"], size_acc_df["fp32_top1"])
-int8_frontier = _pareto_frontier(size_acc_df["int8_size_mb"], size_acc_df["int8_top1"])
+fp32_frontier = pareto_frontier(size_acc_df["fp32_size_mb"], size_acc_df["fp32_top1"])
+int8_frontier = pareto_frontier(size_acc_df["int8_size_mb"], size_acc_df["int8_top1"])
 ax.plot([p[0] for p in fp32_frontier], [p[1] for p in fp32_frontier], linestyle="--",
         color="0.3", linewidth=1.8, zorder=2)
 ax.plot([p[0] for p in int8_frontier], [p[1] for p in int8_frontier], linestyle=":",
@@ -690,17 +671,6 @@ df_all_classification = df_all_classification.drop_duplicates(subset="model_name
 df_all_classification = df_all_classification[df_all_classification["model_name"] != "alexnet_se"]
 
 
-def _pareto_front_mask(xs, ys):
-    xs, ys = np.asarray(xs, float), np.asarray(ys, float)
-    dominated = np.zeros(len(xs), dtype=bool)
-    for i in range(len(xs)):
-        for j in range(len(xs)):
-            if i != j and xs[j] <= xs[i] and ys[j] >= ys[i] and (xs[j] < xs[i] or ys[j] > ys[i]):
-                dominated[i] = True
-                break
-    return ~dominated
-
-
 # ponytail: top-5 panels dropped -- the report's prose only ever discusses the top-1 frontiers,
 # so a 2x2 (top-1+top-5 x FP32+INT8) grid was paying clutter for a metric nobody reads. Re-add a
 # top-5 row here if the discussion in ic_report.tex grows to actually use it.
@@ -718,7 +688,7 @@ with plt.style.context("seaborn-v0_8-whitegrid"):
         df_size = df_all_classification[
             df_all_classification[acc_col].notna() & df_all_classification[size_col].notna()
         ].copy()
-        mask = _pareto_front_mask(df_size[size_col].values, df_size[acc_col].values)
+        mask = pareto_front_mask(df_size[size_col].values, df_size[acc_col].values)
         pf = df_size[mask].sort_values(size_col)
         point_colors = df_size["model_name"].map(MODEL_GROUP).map(GROUP_COLORS)
         elig_mask = df_size["model_name"].isin(WINOGRAD_ELIGIBLE).to_numpy()
@@ -796,8 +766,8 @@ ax.scatter(size_acc_df["macs_m"][_elig], size_acc_df["int8_top1"][_elig], marker
            c=np.array(point_colors)[_elig], s=100, hatch="////", alpha=0.9, zorder=3,
            edgecolors="black", linewidths=0.7)
 
-fp32_frontier = _pareto_frontier(size_acc_df["macs_m"], size_acc_df["fp32_top1"])
-int8_frontier = _pareto_frontier(size_acc_df["macs_m"], size_acc_df["int8_top1"])
+fp32_frontier = pareto_frontier(size_acc_df["macs_m"], size_acc_df["fp32_top1"])
+int8_frontier = pareto_frontier(size_acc_df["macs_m"], size_acc_df["int8_top1"])
 ax.plot([p[0] for p in fp32_frontier], [p[1] for p in fp32_frontier], linestyle="--",
         color="0.3", linewidth=1.8, zorder=2)
 ax.plot([p[0] for p in int8_frontier], [p[1] for p in int8_frontier], linestyle=":",

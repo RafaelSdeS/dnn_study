@@ -5,10 +5,14 @@ Data source: results/results_aggregate/results_cross_phase.csv + results/phase_5
 """
 
 import json
+import sys
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "report"))
+from pareto import pareto_frontier  # noqa: E402 -- shared with report/generate_figures.py
 
 # Setup
 OUTPUT_DIR = Path("presentation/figures")
@@ -431,11 +435,12 @@ for summary_path in COMPRESSION_DIR.glob("*_compression_summary.json"):
         points.append((f"{m['model']} ({m['method']})", m["compressed_size_mb"], m["compressed_top1_acc"], label))
 
 points.sort(key=lambda p: p[1])
-pareto, best_acc = [], -1.0
-for point in points:
-    if point[2] > best_acc:
-        pareto.append(point)
-        best_acc = point[2]
+frontier_xy = pareto_frontier([p[1] for p in points], [p[2] for p in points])
+pareto, fi = [], 0
+for p in points:
+    if fi < len(frontier_xy) and (p[1], p[2]) == frontier_xy[fi]:
+        pareto.append(p)
+        fi += 1
 pareto_names = {p[0] for p in pareto}
 non_pareto = [p for p in points if p[0] not in pareto_names]
 
