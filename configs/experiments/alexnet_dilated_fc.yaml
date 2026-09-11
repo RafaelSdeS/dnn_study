@@ -1,8 +1,0 @@
-name: alexnet_dilated_fc
-models:
-  - alexnet_dilated_fc
-seed: 42
-stages:
-  - fp32
-  - qat
-  - int8
