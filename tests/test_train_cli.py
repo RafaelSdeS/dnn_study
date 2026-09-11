@@ -1,4 +1,6 @@
 """scripts/train.py CLI: --model filtering and model-name resolution."""
+import pytest
+
 import ml.model_registrations  # noqa: F401 — populates MODEL_REGISTRY
 from scripts.train import _apply_smoke_override, _resolve_model_names, build_parser
 
@@ -13,10 +15,14 @@ def test_model_flag_defaults_to_none():
     assert args.model is None
 
 
-def test_resolve_model_names_filters_to_registered_models():
+def test_resolve_model_names_rejects_unknown_models():
     assert _resolve_model_names(["alexnet_fire"]) == ["alexnet_fire"]
-    assert _resolve_model_names(["not_a_real_model"]) == []
-    assert _resolve_model_names(["alexnet_fire", "not_a_real_model"]) == ["alexnet_fire"]
+    with pytest.raises(ValueError, match="not_a_real_model"):
+        _resolve_model_names(["alexnet_fire", "not_a_real_model"])
+
+
+def test_resolve_model_names_accepts_a_bare_string():
+    assert _resolve_model_names("alexnet_fire") == ["alexnet_fire"]
 
 
 def test_resolve_model_names_all_returns_full_registry():

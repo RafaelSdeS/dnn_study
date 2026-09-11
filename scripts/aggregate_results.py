@@ -1,7 +1,7 @@
 """Aggregate per-model summary JSONs from a `scripts.cluster submit-sweep` run into one CSV.
 
 Each sweep job runs a single model and writes its own results/{model}_summary.json under
-{runtime.root}/{experiment}/{model}/results/ (see scripts/train.py's _make_model_runs). Reading those
+{runtime.root}/{experiment}/{model}/results/ (see ml/runtime.py's make_model_runs). Reading those
 back — rather than relying on scripts/train.py's own {experiment}_comparison.csv, which each concurrent
 job overwrites — avoids the write race between sibling jobs sharing one experiment name.
 """
@@ -13,20 +13,11 @@ from pathlib import Path
 
 import pandas as pd
 
-from configs.loader import load_config
-from ml import expand_path
-
-
-def _load_runtime_config(runtime: str) -> dict:
-    candidate = Path(runtime)
-    if candidate.exists():
-        import yaml
-        return yaml.safe_load(candidate.read_text()) or {}
-    return load_config(f"runtime/{runtime}.yaml")
+from ml import expand_path, load_profile
 
 
 def aggregate(experiment: str, runtime: str) -> Path:
-    runtime_cfg = _load_runtime_config(runtime)
+    runtime_cfg = load_profile(runtime, "runtime")
     root = expand_path(runtime_cfg.get("root"), default="outputs/pcad") or Path("outputs/pcad")
     summary_paths = sorted((root / experiment).glob("*/results/*_summary.json"))
     if not summary_paths:

@@ -65,7 +65,12 @@ ml/                       # Core package — notebooks and scripts import everyt
                           #   compute_layer_sensitivity, assign_mixed_precision, apply_weight_ptq, theoretical_size_mb
   profiling.py            # Phase 6: GpuSampler (nvidia-smi power/util/temp/mem sampling), latency/throughput profiling
   pruning.py              # Phase 9: prune_model_channels — structured (whole-channel) pruning, stays Winograd-dense
-  runtime.py              # RuntimePaths, set_global_seed — shared by scripts/train.py and scripts/train_det_seg.py
+  runtime.py              # Shared CLI plumbing: set_global_seed, capture_provenance, load_profile (experiment/runtime
+                          #   yaml by name or path), ensure_dataset_path, make_model_runs (<root>/<exp>/<model>/...),
+                          #   save_resolved_config — scripts import these from `ml`, not from scripts/train.py's privates
+  winograd_bridge.py      # The ONLY import path into the sibling Winograd-FPGA repo ($WINOGRAD_FPGA_ROOT): study-model
+                          #   ctors (custom_model/torchvision_model — geometry owned there, so checkpoints load 1:1 in
+                          #   its Fase 2.5), the qat_wino stage (load_qat_wino_model), bridge_provenance (its commit)
   reporting.py            # build_comparison_table, create_results_summary, disk_mb, compute_flops, make_run_summary
 models/                   # Architectures by phase (see Model Inventory)
   baselines.py alexnet_variants.py compensation.py tinyhybridnet.py final_architecture.py vit_variants.py
@@ -74,6 +79,9 @@ configs/                  # YAML hyperparameters, loaded via configs/loader.py �
   runtime/                # local.yaml, pcad.yaml — dataset root, conda env, per-runtime toggles
   slurm/                  # single_gpu.yaml, tupi_4090.yaml, beagle.yaml — partition/GPU/CPU/wall-time
   experiments/            # default.yaml + per-run overrides (alexnet_3x3_gap, phase_7_detection, large_scale, phase8, ...);
+                          #   budget_unico.yaml = Winograd-FPGA study Fase 2 (14 *_fpga models, stages fp32+qat_wino,
+                          #   uniform_hparams); an unknown name in any `models:` list now fails scripts/train.py
+                          #   (and tests/test_registry.py) instead of being silently dropped
                           #   `--smoke` on scripts/train.py and scripts/train_det_seg.py caps any experiment to 1
                           #   epoch for a fast local pipeline check, superseding the old per-phase smoke config files.
                           #   Smoke output (checkpoints/logs/tensorboard/resolved_config.json/aggregates CSV) is
@@ -92,7 +100,8 @@ configs/                  # YAML hyperparameters, loaded via configs/loader.py �
 scripts/                  # CLI entry points (used instead of notebooks for PCAD/cluster runs)
   train.py                # `python -m scripts.train --experiment ... --runtime local|pcad` — classification FP32→QAT→INT8
   cluster.py               # `python -m scripts.cluster submit|status|cancel|resume` — submits slurm/train.sbatch or profile.sbatch
-  train_det_seg.py         # Phase 7 detection/segmentation CLI, mirrors train.py
+  train_det_seg.py         # Phase 7 detection/segmentation CLI, mirrors train.py; one run() for both tasks,
+                           #   task-specific pieces (builders, loaders, trainer, int8 metrics) in its TASKS table
   profile_hardware.py      # Phase 6 hardware profiling CLI
   aggregate_results.py     # Aggregates per-model summary JSONs from a cluster submit-sweep into one CSV,
                            #   written to the curated results/<experiment>/ tree
@@ -118,12 +127,16 @@ scripts/                  # CLI entry points (used instead of notebooks for PCAD
     submit_phase_7_simple.sh / submit_phase_7_multinode.sh  # PCAD Phase 7 detection + segmentation submission
                                 #   (simple vs FP32→QAT→INT8 chaining; TASK=segmentation env var / positional
                                 #   arg selects the task; --pretrained-ckpt is detection-only) — see docs/logs/PHASE7_MULTINODE.md
-    preflight_budget_unico.py   # `python -m scripts.pcad.preflight_budget_unico` — laptop-side sanity check for
-                                #   configs/experiments/budget_unico.yaml's qat_wino stage before burning a PCAD
-                                #   allocation on it (checks the sibling Winograd-FPGA repo is reachable, etc.)
+    preflight_budget_unico.py   # `python -m scripts.pcad.preflight_budget_unico` — sanity check for
+                                #   configs/experiments/budget_unico.yaml before burning a PCAD allocation (run it on
+                                #   PCAD too): bridge importable, every model builds, bridge commit recorded + clean.
+                                #   On PCAD the bridge is the tarball from Winograd-FPGA's
+                                #   scripts/package_avaliacao_bridge_for_pcad.sh (writes BRIDGE_COMMIT.json)
   slurm/*.sbatch           # sbatch templates — train.sbatch/profile.sbatch submitted by cluster.py, det_seg.sbatch by the pcad/submit_phase_7_*.sh scripts, others called directly
 tests/                    # pytest: test_registry, test_checkpoint, test_config, test_trainer_smoke,
-                          #   test_quantization, test_profiling, test_train_cli
+                          #   test_quantization, test_profiling, test_train_cli, test_train_det_seg_cli,
+                          #   test_train_pipeline (run_experiment end to end; a stop signal ends the run
+                          #   instead of rolling into the next stage on a truncated model)
 notebooks/                # Organized by phase + purpose
   phase_1_baseline/                          # baselines_qat
   phase_2_kernel_restriction/                # alexnet_qat
@@ -254,6 +267,7 @@ QAT cfg is typically `replace(fp32_cfg, epochs=20, lr=1e-5, use_amp=False)`.
 | 6 — Hardware profiling | (reuses Phase 1–4 models) | `ml/profiling.py` + `scripts/profile_hardware.py`; dilated variants added to test whether dilated 3×3 retains Winograd acceleration |
 | 7 — Detection/segmentation | `ml/det_seg_models.py` | Bottleneck/Fire/AlexNetTV backbones + SSD head on PASCAL VOC, via `scripts/train_det_seg.py` |
 | 8 — Efficient ViT / hybrid-attention | `models/vit_variants.py` | vit_tiny, deit_tiny (H4 distillation), swin_pico_{w2,w4,w8} (H1 window sweep), swin_pico_poolmixer (H5 cross-check), hybrid_bottleneck_swin (H2) — 5 of 7 train via `scripts/train.py --experiment phase_8_efficient_vit`; vit_tiny/deit_tiny need `notebooks/phase_8_efficient_vit/vit_qat_phase8.ipynb` (deit_tiny's `DistillationTrainer` stage; see D6 for why their QAT stage no longer needs anything special) |
+| Winograd-FPGA study (`budget_unico`) | none here — `ml/winograd_bridge.py` builds them from the sibling repo | 15 `*_fpga` models registered in `ml/model_registrations.py`: vgg_style, alexnet_{3x3_fc, stacked, fire, fire_bypass, bottleneck, final_fire_residual, final_bottleneck_residual}, repvgg_a0 (trained raw), wrn_{16_4, 28_2}, googlenet, resnet18, vgg13 — plus squeezenet1_1, registered but out of budget_unico (qat_wino breaks on its 15×15 maps). Add a study model in the sibling repo, then one `register_model(..., custom_model/torchvision_model(...))` line here |
 
 **Results & rankings:** see `docs/plans/BEST_MODELS.md` (Pareto tiers, recommendations, now covering Phases 1–4/6/7/8/9) and `results/results_aggregate/results_cross_phase.csv` / `results/results_aggregate/model_details_cross_phase.csv`. Headlines: MobileNetV2 best overall (~58% top-1) among Phase 1–3 models, though Phase 4's AlexNetFinalFireResidual (49.79%) and Phase 9's AlexNetFireBypass (50.57%) close most of the gap — the latter now *exceeds* the full hybrid's FP32 gain outright (+6.59pp vs. +5.81pp over AlexNetFire) — at a fraction of the size; AlexNetBottleneck/AlexNetFire remain Pareto-optimal on efficiency (43–44%, 1.5–2 MB, quantization-stable). A size-reporting bug (fixed 2026-09-02, `ml/reporting.py`) had `disk_mb()`/`gzip_mb()` measuring the raw `{model}_best.pth`, which carries AdamW optimizer state (~3× the weights), while the INT8 artifact was already weights-only — so every FP32 size and FP32-vs-INT8 compression ratio was inflated ~3× (~11.9× recorded vs. the true ~4×). Both sides now measure `model_state_dict`; summaries and CSVs backfilled via `scripts/oneoff/backfill_model_size.py`. Accuracies, params, MACs and all rankings are unaffected; notebook *output* cells still show pre-fix sizes until re-run. Known issues: AlexNetSmallKernel severe QAT drop (~–10pp), AlexNetSE training failure. A `Trainer.fit()` bug (fixed 2026-08-29, `ml/trainer.py`) returned the last epoch's model instead of reloading the best checkpoint, so FP32 was evaluated on different weights than INT8 — spurious INT8 "gains" of up to +6.5pp for runs with a long post-peak tail; backfilled via `scripts/oneoff/backfill_best_epoch_eval.py` for the 5 CLI-trained Phase 8 models plus AlexNetFireBypass (FP32 corrected for all 6; INT8 only rebuilt where a full-precision QAT-best checkpoint survived — FireBypass and `vit_tiny`/`deit_tiny` were otherwise unaffected). See `report/ic_report.tex` Eixo 4/7 for the corrected findings. Phase 7 detection: anchor-recall root cause fixed and A4 retrain complete on PCAD — all 3 backbones (bottleneck/fire/tv) × FP32/QAT/INT8 × plain/pretrained now have valid mAP (see `docs/plans/BEST_MODELS.md`). Phase 7 segmentation: PCAD runs now complete for all 3 backbones × FP32/QAT/INT8 (`outputs/pcad/phase_7_detection_segmentation/seg_*`); not yet folded into the H1–H4 analysis notebook. Phase 7 hypotheses (H1–H4, does compensation transfer to dense prediction) and progress: `docs/plans/PHASE7_PLAN.md`, `docs/logs/PHASE7_LOG.md`. Phase 8: all 7 models trained on PCAD, results in — H1 (window-size sweep) and H4 (DeiT distillation) confirmed, H3 (quantization robustness) inverted (5 of 7 models gain accuracy under INT8), H5 (Winograd-eligibility) confirmed but not attention-specific (no model has a stride-1 3×3 conv). D6's QAT-for-attention revision (swap_quantizable_mha can't drive this codebase's eager-mode `prepare_qat()`, so attention stays FP32-excluded like Swin's fallback) and full H1–H5 detail are in `docs/plans/PHASE8_PLAN.md` and `docs/logs/PHASE8_LOG.md`.
 

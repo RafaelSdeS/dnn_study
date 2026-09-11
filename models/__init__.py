@@ -20,9 +20,3 @@ from .vit_variants import (
     vit_tiny, deit_tiny, vit_tiny_convstem, swin_pico_w2, swin_pico_w4, swin_pico_w8,
     swin_pico_poolmixer, swin_pico_convstem, hybrid_bottleneck_swin,
 )
-from .wino_adapted import (
-    googlenet_fpga, resnet50_fpga, squeezenet1_1_fpga,
-    alexnet_stacked_fpga, alexnet_bottleneck_fpga,
-    alexnet_final_fire_residual_fpga, alexnet_final_bottleneck_residual_fpga,
-    alexnet_3x3_fc_fpga,
-)

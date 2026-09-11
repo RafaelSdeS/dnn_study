@@ -46,11 +46,13 @@ from ml import (
     build_runtime_paths,
     create_imagenet_loaders,
     disk_mb,
+    ensure_dataset_path,
     gzip_mb,
     load_best_model,
+    load_profile,
+    make_model_runs,
 )
 from configs.loader import load_config
-from scripts.train import _ensure_dataset_path, _load_profile, _make_model_runs
 
 
 def _weight_tensors(model: nn.Module) -> list[torch.Tensor]:
@@ -130,9 +132,9 @@ def main() -> int:
         state = torch.load(fp32_path, map_location="cpu", weights_only=False)
         model.load_state_dict(state.get("model_state_dict", state))
     else:
-        runtime_cfg = _load_profile(args.runtime, "runtime")
+        runtime_cfg = load_profile(args.runtime, "runtime")
         runtime_paths = build_runtime_paths(runtime_cfg.get("root", "outputs/local"))
-        _, checkpoints_dir, _, _, _ = _make_model_runs(runtime_paths.root, args.experiment, args.model)
+        _, checkpoints_dir, _, _, _ = make_model_runs(runtime_paths.root, args.experiment, args.model)
         fp32_path = checkpoints_dir / f"{args.model}_best.pth"
         model = load_best_model(args.model, spec["ctor"], checkpoints_dir, torch.device("cpu"))
 
@@ -178,10 +180,10 @@ def main() -> int:
 def _evaluate_clustered_accuracy(args: argparse.Namespace, model: nn.Module, cluster_sizes: dict[int, float]) -> None:
     """Real Top-1/Top-5 after clustering, vs. the unclustered FP32 baseline — the accuracy half
     of H3's "does this preserve accuracy" question the size-only numbers above can't answer."""
-    runtime_cfg = _load_profile(args.runtime, "runtime")
+    runtime_cfg = load_profile(args.runtime, "runtime")
     runtime_paths = build_runtime_paths(runtime_cfg.get("root", "outputs/local"))
     data_cfg = DataConfig(**load_config("data.yaml"))
-    data_cfg.dataset_path = str(_ensure_dataset_path(runtime_cfg))
+    data_cfg.dataset_path = str(ensure_dataset_path(runtime_cfg))
     _, _, _, val_loader = create_imagenet_loaders(data_cfg)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

@@ -9,8 +9,6 @@ Usage:
 """
 import argparse
 import json
-import logging
-import os
 import signal
 import sys
 import tempfile
@@ -39,18 +37,52 @@ from ml.det_seg_models import (
 )
 from ml.quantization import make_qat_callback
 from ml.reporting import compute_detection_summary, compute_segmentation_summary
-from ml.runtime import expand_path, load_runtime_root, set_global_seed
+from ml.runtime import capture_provenance, expand_path, load_runtime_root, set_global_seed
 from configs.loader import load_config
 
 
-def run_detection(args):
-    """Run detection training (FP32, QAT, or INT8 stage)."""
+# Everything detection and segmentation don't share. The stage pipeline itself (fp32 ->
+# qat -> int8, run_id naming, checkpoint hand-off between stages) is identical, and one
+# copy of it means a fix lands once instead of twice.
+TASKS = {
+    "detection": dict(
+        prefix="ssd", config="detection.yaml", label="SSD detector",
+        loaders=create_voc_detection_loaders, build=build_ssd_detector,
+        build_qat=build_qat_ssd_detector, to_int8=convert_ssd_to_int8,
+        trainer=DetectionTrainer, summary=compute_detection_summary,
+        int8_metrics=(("val_mAP", "mAP@[.5:.95]"), ("val_mAP50", "mAP@.5")),
+    ),
+    "segmentation": dict(
+        prefix="seg", config="segmentation.yaml", label="DeepLabV3 segmenter",
+        loaders=create_voc_segmentation_loaders, build=build_deeplabv3_segmenter,
+        build_qat=build_qat_deeplabv3_segmenter, to_int8=convert_deeplabv3_to_int8,
+        trainer=SegmentationTrainer, summary=compute_segmentation_summary,
+        int8_metrics=(("val_loss", "val loss"), ("val_mIoU", "mIoU")),
+    ),
+}
+
+
+def run_id_for(args, stage: str) -> str:
+    """<ssd|seg>_<model>_<stage>[_pretrained][_<experiment>] -- also how the qat/int8 stages
+    find the previous stage's checkpoint. _pretrained keeps a pretrained-init sweep from
+    clobbering the from-scratch one's checkpoints/logs."""
+    run_id = f"{TASKS[args.task]['prefix']}_{args.model}_{stage}"
+    if args.pretrained_ckpt:
+        run_id += "_pretrained"
+    if args.experiment:
+        run_id += f"_{args.experiment}"
+    return run_id
+
+
+def run(args):
+    """Run one detection/segmentation stage (FP32, QAT, or INT8)."""
+    task = TASKS[args.task]
     print(f"\n{'='*60}")
-    print(f"DETECTION EXPERIMENT: {args.model} [{args.stage.upper()}]")
+    print(f"{args.task.upper()} EXPERIMENT: {args.model} [{args.stage.upper()}]")
     print(f"{'='*60}\n")
 
     # Load configs
-    base_cfg = load_config("detection.yaml")
+    base_cfg = load_config(task["config"])
     data_cfg = DetSegDataConfig(**base_cfg.get("data", {}))
     trainer_cfg = TrainerConfig(**base_cfg.get("trainer", {}))
 
@@ -85,20 +117,13 @@ def run_detection(args):
     if args.smoke:
         trainer_cfg = replace(trainer_cfg, epochs=1)
 
-    # Setup paths
-    # init_suffix distinguishes a pretrained-init sweep from the from-scratch one so
-    # they get separate output dirs and never clobber each other's checkpoints/logs.
-    init_suffix = "_pretrained" if args.pretrained_ckpt else ""
-    stage_suffix = {"fp32": "fp32", "qat": "qat", "int8": "int8"}[args.stage]
-    run_id = f"ssd_{args.model}_{stage_suffix}{init_suffix}"
-    if args.experiment:
-        run_id += f"_{args.experiment}"
+    run_id = run_id_for(args, args.stage)
     run_dir = Path(args.save_dir) / run_id
 
     # ponytail: dry-run stays read-only — writing config.yaml first would clobber the
     # provenance record of an existing run that shares this run_id.
     if args.dry_run:
-        print(f"\n[DRY-RUN] Would run {args.stage.upper()} detection in {run_dir}. Exiting.")
+        print(f"\n[DRY-RUN] Would run {args.stage.upper()} {args.task} in {run_dir}. Exiting.")
         return
 
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -111,140 +136,106 @@ def run_detection(args):
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    if args.stage == "fp32":
-        # ========== FP32 Training ==========
-        # Load data
-        print(f"\nLoading VOC detection data...")
+    def _load_data():
+        print(f"\nLoading VOC {args.task} data...")
         data_cfg.voc_root = expand_path(data_cfg.voc_root)
-        train_ds, val_ds, train_loader, val_loader = create_voc_detection_loaders(data_cfg)
+        train_ds, val_ds, train_loader, val_loader = task["loaders"](data_cfg)
         print(f"  Train: {len(train_ds)} | Val: {len(val_ds)}")
+        return train_loader, val_loader
 
-        # Build model
-        print(f"\nBuilding SSD detector ({args.model})...")
-        if args.pretrained_ckpt:
-            print(f"  Initializing backbone from: {args.pretrained_ckpt}")
-        model = build_ssd_detector(
-            args.model, num_classes=21, image_size=data_cfg.img_size,
-            pretrained_ckpt=args.pretrained_ckpt,
-        )
-        print(f"  Model ready. Parameter count: {sum(p.numel() for p in model.parameters()):,}")
-
-        # Anchor-recall pre-flight gate: mAP is capped regardless of training quality
-        # if ground-truth boxes aren't covered by any default box. max_samples=1000
-        # (compute_anchor_recall's default) keeps this to a few seconds even on the
-        # full VOC07-test val set — the earlier "too slow" complaint was actually an
-        # unbounded max_samples check, since fixed.
-        if not args.skip_anchor_check:
-            recall = compute_anchor_recall(model, val_loader, iou_threshold=0.5)
-            print(f"  Anchor recall @IoU 0.5: {recall:.3f}")
-            if recall < 0.95:
-                print(f"ABORT: anchor recall {recall:.3f} < 0.95 — fix anchor config first "
-                      f"(or pass --skip-anchor-check to override).")
-                sys.exit(1)
-
-        # Train
-        print(f"\nStarting FP32 training...")
-        trainer = DetectionTrainer(
-            model, train_loader, val_loader, trainer_cfg, device,
-            save_dir=run_dir, run_name=run_id,
-            num_classes=21,
-            log_file=run_dir / f"{run_id}.log"
-        )
-
-        history = trainer.fit(resume_from=run_dir / f"{run_id}_resume.pth")
-        history["summary"] = compute_detection_summary(
-            model, data_cfg.img_size, val_loader, device,
-            checkpoint_path=run_dir / f"{run_id}_best.pth",
-        )
-
-    elif args.stage == "qat":
-        # ========== QAT Fine-tuning ==========
-        # Load FP32 checkpoint
-        print(f"\nLoading FP32 checkpoint...")
-        fp32_run_id = f"ssd_{args.model}_fp32{init_suffix}"
-        if args.experiment:
-            fp32_run_id += f"_{args.experiment}"
-        fp32_ckpt = Path(args.save_dir) / fp32_run_id / f"{fp32_run_id}_best.pth"
-        if not fp32_ckpt.exists():
-            print(f"ERROR: FP32 checkpoint not found at {fp32_ckpt}")
-            print(f"Make sure you run FP32 training first: python {__file__} detection --model {args.model} --stage fp32")
+    def _previous_stage_ckpt(stage: str) -> Path:
+        prev_id = run_id_for(args, stage)
+        ckpt = Path(args.save_dir) / prev_id / f"{prev_id}_best.pth"
+        if not ckpt.exists():
+            print(f"ERROR: {stage.upper()} checkpoint not found at {ckpt}")
+            print(f"Make sure you run {stage.upper()} training first: "
+                  f"python {__file__} {args.task} --model {args.model} --stage {stage}")
             sys.exit(1)
+        return ckpt
 
-        model = build_ssd_detector(args.model, num_classes=21, image_size=data_cfg.img_size)
-        ckpt_state = torch.load(fp32_ckpt, map_location=device, weights_only=False)
+    def _load_into(model, ckpt: Path):
+        ckpt_state = torch.load(ckpt, map_location=device, weights_only=False)
         model.load_state_dict(ckpt_state.get("model_state_dict", ckpt_state))
         model.to(device)
-        print(f"  ✓ Loaded FP32 checkpoint: {fp32_ckpt}")
+        print(f"  ✓ Loaded {ckpt}")
 
-        # Prepare for QAT
-        print(f"Preparing model for QAT...")
-        model_qat = build_qat_ssd_detector(model, device)
-        print(f"  ✓ Model prepared with fused Conv-BN and fake-quant observers")
+    # Data is loaded at a different point in each stage on purpose (fp32 before the model
+    # is built, qat/int8 after) -- kept as-is so model init and data RNG draws stay in the
+    # same order as every run already on disk.
+    if args.stage in ("fp32", "qat"):
+        if args.stage == "fp32":
+            train_loader, val_loader = _load_data()
+            print(f"\nBuilding {task['label']} ({args.model})...")
+            if args.pretrained_ckpt:
+                print(f"  Initializing backbone from: {args.pretrained_ckpt}")
+            model = task["build"](
+                args.model, num_classes=21, image_size=data_cfg.img_size,
+                pretrained_ckpt=args.pretrained_ckpt,
+            )
+            print(f"  Model ready. Parameter count: {sum(p.numel() for p in model.parameters()):,}")
 
-        # Load data
-        print(f"\nLoading VOC detection data...")
-        data_cfg.voc_root = expand_path(data_cfg.voc_root)
-        train_ds, val_ds, train_loader, val_loader = create_voc_detection_loaders(data_cfg)
-        print(f"  Train: {len(train_ds)} | Val: {len(val_ds)}")
+            # Anchor-recall pre-flight gate: mAP is capped regardless of training quality
+            # if ground-truth boxes aren't covered by any default box. max_samples=1000
+            # (compute_anchor_recall's default) keeps this to a few seconds even on the
+            # full VOC07-test val set — the earlier "too slow" complaint was actually an
+            # unbounded max_samples check, since fixed.
+            if args.task == "detection" and not args.skip_anchor_check:
+                recall = compute_anchor_recall(model, val_loader, iou_threshold=0.5)
+                print(f"  Anchor recall @IoU 0.5: {recall:.3f}")
+                if recall < 0.95:
+                    print(f"ABORT: anchor recall {recall:.3f} < 0.95 — fix anchor config first "
+                          f"(or pass --skip-anchor-check to override).")
+                    sys.exit(1)
+            epoch_callback = None
+            print(f"\nStarting FP32 training...")
+        else:
+            print(f"\nLoading FP32 checkpoint...")
+            ckpt = _previous_stage_ckpt("fp32")
+            model = task["build"](args.model, num_classes=21, image_size=data_cfg.img_size)
+            _load_into(model, ckpt)
+            print(f"Preparing model for QAT...")
+            model = task["build_qat"](model, device)
+            print(f"  ✓ Model prepared with fused Conv-BN and fake-quant observers")
+            train_loader, val_loader = _load_data()
+            # QAT training with epoch callback for observer scheduling
+            epoch_callback = make_qat_callback(freeze_bn_epoch=3, disable_observer_epoch=8)
+            print(f"\nStarting QAT fine-tuning...")
 
-        # QAT training with epoch callback for observer scheduling
-        print(f"\nStarting QAT fine-tuning...")
-        epoch_callback = make_qat_callback(freeze_bn_epoch=3, disable_observer_epoch=8)
-        trainer = DetectionTrainer(
-            model_qat, train_loader, val_loader, trainer_cfg, device,
+        trainer = task["trainer"](
+            model, train_loader, val_loader, trainer_cfg, device,
             save_dir=run_dir, run_name=run_id,
             num_classes=21,
             epoch_callback=epoch_callback,
             log_file=run_dir / f"{run_id}.log"
         )
-
         history = trainer.fit(resume_from=run_dir / f"{run_id}_resume.pth")
-        history["summary"] = compute_detection_summary(
-            model_qat, data_cfg.img_size, val_loader, device,
+        history["summary"] = task["summary"](
+            model, data_cfg.img_size, val_loader, device,
             checkpoint_path=run_dir / f"{run_id}_best.pth",
         )
 
     elif args.stage == "int8":
-        # ========== INT8 Conversion & Evaluation ==========
-        # Load QAT checkpoint
         print(f"\nLoading QAT checkpoint...")
-        qat_run_id = f"ssd_{args.model}_qat{init_suffix}"
-        if args.experiment:
-            qat_run_id += f"_{args.experiment}"
-        qat_ckpt = Path(args.save_dir) / qat_run_id / f"{qat_run_id}_best.pth"
-        if not qat_ckpt.exists():
-            print(f"ERROR: QAT checkpoint not found at {qat_ckpt}")
-            print(f"Make sure you run QAT training first: python {__file__} detection --model {args.model} --stage qat")
-            sys.exit(1)
-
-        model_qat = build_ssd_detector(args.model, num_classes=21, image_size=data_cfg.img_size)
+        ckpt = _previous_stage_ckpt("qat")
+        model_qat = task["build"](args.model, num_classes=21, image_size=data_cfg.img_size)
         # True architecture param count, from the untouched FP32 skeleton -- quantized modules
         # pack weights as torch.qint8 buffers, not nn.Parameter, so counting on the converted
         # INT8 model itself (below) silently undercounts.
         true_params_m = sum(p.numel() for p in model_qat.parameters()) / 1e6
-        model_qat = build_qat_ssd_detector(model_qat, device)
-        ckpt_state = torch.load(qat_ckpt, map_location=device, weights_only=False)
-        model_qat.load_state_dict(ckpt_state.get("model_state_dict", ckpt_state))
-        model_qat.to(device)
-        print(f"  ✓ Loaded QAT checkpoint: {qat_ckpt}")
+        model_qat = task["build_qat"](model_qat, device)
+        _load_into(model_qat, ckpt)
 
-        # Convert to INT8
         print(f"Converting to INT8...")
-        model_int8 = convert_ssd_to_int8(model_qat)
+        model_int8 = task["to_int8"](model_qat)
         print(f"  ✓ INT8 conversion complete (backbone on CPU)")
 
-        # Load data
-        print(f"\nLoading VOC detection data...")
-        data_cfg.voc_root = expand_path(data_cfg.voc_root)
-        train_ds, val_ds, train_loader, val_loader = create_voc_detection_loaders(data_cfg)
-        print(f"  Train: {len(train_ds)} | Val: {len(val_ds)}")
+        train_loader, val_loader = _load_data()
 
-        # Evaluate INT8 model
         # INT8 convert/inference is CPU-only (project convention) — model_int8 already lives on
-        # CPU post-conversion, so the eval trainer must target CPU too, not the module-level
-        # `device` (which is CUDA when available and would send images to the wrong device).
+        # CPU post-conversion, so the eval trainer must target CPU too, not `device` (which is
+        # CUDA when available and would send images to the wrong device).
         print(f"\nEvaluating INT8 model...")
-        trainer = DetectionTrainer(
+        trainer = task["trainer"](
             model_int8, train_loader, val_loader, trainer_cfg, torch.device("cpu"),
             save_dir=run_dir, run_name=run_id,
             num_classes=21,
@@ -253,21 +244,17 @@ def run_detection(args):
 
         # Run validation only (no training)
         val_metrics = trainer._validate(model_int8, criterion=None)
-        val_mAP, val_mAP50 = val_metrics["val_mAP"], val_metrics["val_mAP50"]
-        history = {
-            "val_mAP": [val_mAP],
-            "val_mAP50": [val_mAP50],
-            "note": "INT8 evaluation only (no training)"
-        }
-        print(f"  INT8 mAP@[.5:.95]: {val_mAP:.4f}")
-        print(f"  INT8 mAP@.5: {val_mAP50:.4f}")
+        history = {key: [val_metrics[key]] for key, _ in task["int8_metrics"]}
+        history["note"] = "INT8 evaluation only (no training)"
+        for key, label in task["int8_metrics"]:
+            print(f"  INT8 {label}: {val_metrics[key]:.4f}")
 
-        # Save the converted checkpoint and its real size (fp32/qat both do this; int8 didn't
-        # until now, so past runs' metrics.json has accuracy but no summary — see
-        # scripts/phase7/backfill_int8_size.py for backfilling those).
+        # Save the converted checkpoint and its real size -- fp32/qat get one from fit(); int8
+        # has no fit() call, so past runs' metrics.json has accuracy but no summary (see
+        # scripts/phase7/backfill_int8_size*.py for backfilling those).
         int8_ckpt_path = run_dir / f"{run_id}_best.pth"
         torch.save(model_int8.state_dict(), int8_ckpt_path)
-        history["summary"] = compute_detection_summary(
+        history["summary"] = task["summary"](
             model_int8, data_cfg.img_size, val_loader, torch.device("cpu"),
             checkpoint_path=int8_ckpt_path,
         )
@@ -280,228 +267,12 @@ def run_detection(args):
     print(f"\nResults saved to {results_path}")
 
     # Save git hash for reproducibility
-    os.system(f"git rev-parse HEAD > {run_dir / 'git_hash.txt'}")
-
-
-def run_segmentation(args):
-    """Run segmentation training (FP32, QAT, or INT8 stage)."""
-    print(f"\n{'='*60}")
-    print(f"SEGMENTATION EXPERIMENT: {args.model} [{args.stage.upper()}]")
-    print(f"{'='*60}\n")
-
-    # Load configs
-    base_cfg = load_config("segmentation.yaml")
-    data_cfg = DetSegDataConfig(**base_cfg.get("data", {}))
-    trainer_cfg = TrainerConfig(**base_cfg.get("trainer", {}))
-
-    # Override from experiment config if provided
-    if args.experiment:
-        exp_cfg = load_config(f"experiments/{args.experiment}.yaml")
-        if args.model in exp_cfg:  # per-model-keyed format (e.g. phase_7_segmentation.yaml)
-            exp_cfg = exp_cfg[args.model]
-        data_cfg = replace(data_cfg, **exp_cfg.get("data", {}))
-        trainer_cfg = replace(trainer_cfg, **exp_cfg.get("trainer", {}))
-
-    set_global_seed(data_cfg.seed)
-
-    trainer = None
-
-    def _request_stop(_signum, _frame):
-        if trainer is not None:
-            trainer.request_stop()
-
-    signal.signal(signal.SIGTERM, _request_stop)
-    signal.signal(signal.SIGINT, _request_stop)
-    signal.signal(signal.SIGUSR1, _request_stop)  # Slurm pre-timeout warning (see train.sbatch)
-
-    # Adjust trainer config for QAT (shorter epochs, lower lr, no AMP). Disabling AMP
-    # roughly doubles activation memory at the same batch size — halve it to compensate
-    # (see the matching fix in run_detection).
-    if args.stage == "qat":
-        trainer_cfg = replace(trainer_cfg, epochs=100, lr=1e-5, use_amp=False)
-        data_cfg = replace(data_cfg, batch_size=max(1, data_cfg.batch_size // 2))
-
-    if args.smoke:
-        trainer_cfg = replace(trainer_cfg, epochs=1)
-
-    # Setup paths
-    # init_suffix distinguishes a pretrained-init sweep from the from-scratch one so
-    # they get separate output dirs and never clobber each other's checkpoints/logs
-    # (mirrors run_detection).
-    init_suffix = "_pretrained" if args.pretrained_ckpt else ""
-    stage_suffix = {"fp32": "fp32", "qat": "qat", "int8": "int8"}[args.stage]
-    run_id = f"seg_{args.model}_{stage_suffix}{init_suffix}"
-    if args.experiment:
-        run_id += f"_{args.experiment}"
-    run_dir = Path(args.save_dir) / run_id
-
-    # ponytail: dry-run stays read-only — writing config.yaml first would clobber the
-    # provenance record of an existing run that shares this run_id.
-    if args.dry_run:
-        print(f"\n[DRY-RUN] Would run {args.stage.upper()} segmentation in {run_dir}. Exiting.")
-        return
-
-    run_dir.mkdir(parents=True, exist_ok=True)
-
-    # Save config
-    config_out = run_dir / "config.yaml"
-    with open(config_out, "w") as f:
-        yaml.dump({"data": asdict(data_cfg), "trainer": asdict(trainer_cfg), "stage": args.stage}, f)
-    print(f"Config saved to {config_out}")
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    if args.stage == "fp32":
-        # ========== FP32 Training ==========
-        print(f"\nLoading VOC segmentation data...")
-        data_cfg.voc_root = expand_path(data_cfg.voc_root)
-        train_ds, val_ds, train_loader, val_loader = create_voc_segmentation_loaders(data_cfg)
-        print(f"  Train: {len(train_ds)} | Val: {len(val_ds)}")
-
-        print(f"\nBuilding DeepLabV3 segmenter ({args.model})...")
-        if args.pretrained_ckpt:
-            print(f"  Initializing backbone from: {args.pretrained_ckpt}")
-        model = build_deeplabv3_segmenter(
-            args.model, num_classes=21, image_size=data_cfg.img_size,
-            pretrained_ckpt=args.pretrained_ckpt,
-        )
-        print(f"  Model ready. Parameter count: {sum(p.numel() for p in model.parameters()):,}")
-
-        print(f"\nStarting FP32 training...")
-        trainer = SegmentationTrainer(
-            model, train_loader, val_loader, trainer_cfg, device,
-            save_dir=run_dir, run_name=run_id,
-            num_classes=21,
-            log_file=run_dir / f"{run_id}.log"
-        )
-
-        history = trainer.fit(resume_from=run_dir / f"{run_id}_resume.pth")
-        history["summary"] = compute_segmentation_summary(
-            model, data_cfg.img_size, val_loader, device,
-            checkpoint_path=run_dir / f"{run_id}_best.pth",
-        )
-
-    elif args.stage == "qat":
-        # ========== QAT Fine-tuning ==========
-        print(f"\nLoading FP32 checkpoint...")
-        fp32_run_id = f"seg_{args.model}_fp32{init_suffix}"
-        if args.experiment:
-            fp32_run_id += f"_{args.experiment}"
-        fp32_ckpt = Path(args.save_dir) / fp32_run_id / f"{fp32_run_id}_best.pth"
-        if not fp32_ckpt.exists():
-            print(f"ERROR: FP32 checkpoint not found at {fp32_ckpt}")
-            print(f"Make sure you run FP32 training first: python {__file__} segmentation --model {args.model} --stage fp32")
-            sys.exit(1)
-
-        model = build_deeplabv3_segmenter(args.model, num_classes=21, image_size=data_cfg.img_size)
-        ckpt_state = torch.load(fp32_ckpt, map_location=device, weights_only=False)
-        model.load_state_dict(ckpt_state.get("model_state_dict", ckpt_state))
-        model.to(device)
-        print(f"  ✓ Loaded FP32 checkpoint: {fp32_ckpt}")
-
-        print(f"Preparing model for QAT...")
-        model_qat = build_qat_deeplabv3_segmenter(model, device)
-        print(f"  ✓ Model prepared with fused Conv-BN and fake-quant observers")
-
-        print(f"\nLoading VOC segmentation data...")
-        data_cfg.voc_root = expand_path(data_cfg.voc_root)
-        train_ds, val_ds, train_loader, val_loader = create_voc_segmentation_loaders(data_cfg)
-        print(f"  Train: {len(train_ds)} | Val: {len(val_ds)}")
-
-        print(f"\nStarting QAT fine-tuning...")
-        epoch_callback = make_qat_callback(freeze_bn_epoch=3, disable_observer_epoch=8)
-        trainer = SegmentationTrainer(
-            model_qat, train_loader, val_loader, trainer_cfg, device,
-            save_dir=run_dir, run_name=run_id,
-            num_classes=21,
-            epoch_callback=epoch_callback,
-            log_file=run_dir / f"{run_id}.log"
-        )
-
-        history = trainer.fit(resume_from=run_dir / f"{run_id}_resume.pth")
-        history["summary"] = compute_segmentation_summary(
-            model_qat, data_cfg.img_size, val_loader, device,
-            checkpoint_path=run_dir / f"{run_id}_best.pth",
-        )
-
-    elif args.stage == "int8":
-        # ========== INT8 Conversion & Evaluation ==========
-        print(f"\nLoading QAT checkpoint...")
-        qat_run_id = f"seg_{args.model}_qat{init_suffix}"
-        if args.experiment:
-            qat_run_id += f"_{args.experiment}"
-        qat_ckpt = Path(args.save_dir) / qat_run_id / f"{qat_run_id}_best.pth"
-        if not qat_ckpt.exists():
-            print(f"ERROR: QAT checkpoint not found at {qat_ckpt}")
-            print(f"Make sure you run QAT training first: python {__file__} segmentation --model {args.model} --stage qat")
-            sys.exit(1)
-
-        model_qat = build_deeplabv3_segmenter(args.model, num_classes=21, image_size=data_cfg.img_size)
-        # True architecture param count, from the untouched FP32 skeleton -- quantized modules
-        # pack weights as torch.qint8 buffers, not nn.Parameter, so counting on the converted
-        # INT8 model itself (below) silently undercounts (mirrors run_detection's int8 branch).
-        true_params_m = sum(p.numel() for p in model_qat.parameters()) / 1e6
-        model_qat = build_qat_deeplabv3_segmenter(model_qat, device)
-        ckpt_state = torch.load(qat_ckpt, map_location=device, weights_only=False)
-        model_qat.load_state_dict(ckpt_state.get("model_state_dict", ckpt_state))
-        model_qat.to(device)
-        print(f"  ✓ Loaded QAT checkpoint: {qat_ckpt}")
-
-        print(f"Converting to INT8...")
-        model_int8 = convert_deeplabv3_to_int8(model_qat)
-        print(f"  ✓ INT8 conversion complete (backbone on CPU)")
-
-        print(f"\nLoading VOC segmentation data...")
-        data_cfg.voc_root = expand_path(data_cfg.voc_root)
-        train_ds, val_ds, train_loader, val_loader = create_voc_segmentation_loaders(data_cfg)
-        print(f"  Train: {len(train_ds)} | Val: {len(val_ds)}")
-
-        # INT8 convert/inference is CPU-only (project convention) — model_int8 already lives on
-        # CPU post-conversion, so the eval trainer must target CPU too, not the module-level
-        # `device` (which is CUDA when available and would send images to the wrong device).
-        print(f"\nEvaluating INT8 model...")
-        trainer = SegmentationTrainer(
-            model_int8, train_loader, val_loader, trainer_cfg, torch.device("cpu"),
-            save_dir=run_dir, run_name=run_id,
-            num_classes=21,
-            log_file=run_dir / f"{run_id}.log"
-        )
-
-        # Run validation only (no training)
-        val_metrics = trainer._validate(model_int8, criterion=None)
-        val_loss, val_mIoU = val_metrics["val_loss"], val_metrics["val_mIoU"]
-        history = {
-            "val_loss": [val_loss],
-            "val_mIoU": [val_mIoU],
-            "note": "INT8 evaluation only (no training)"
-        }
-        print(f"  INT8 val loss: {val_loss:.4f}")
-        print(f"  INT8 mIoU: {val_mIoU:.4f}")
-
-        # Save the converted checkpoint and its real size (fp32/qat both do this via
-        # SegmentationTrainer.fit(); int8 has no fit() call so it never got a checkpoint
-        # saved at all -- mirrors run_detection's int8 branch, which had the same gap once).
-        int8_ckpt_path = run_dir / f"{run_id}_best.pth"
-        torch.save(model_int8.state_dict(), int8_ckpt_path)
-        history["summary"] = compute_segmentation_summary(
-            model_int8, data_cfg.img_size, val_loader, torch.device("cpu"),
-            checkpoint_path=int8_ckpt_path,
-        )
-        history["summary"]["params_m"] = true_params_m
-
-    # Save final results
-    results_path = run_dir / "metrics.json"
-    with open(results_path, "w") as f:
-        json.dump(history, f, indent=2)
-    print(f"\nResults saved to {results_path}")
-
-    # Save git hash for reproducibility
-    os.system(f"git rev-parse HEAD > {run_dir / 'git_hash.txt'}")
+    (run_dir / "git_hash.txt").write_text(capture_provenance()["git_hash"] + "\n")
 
 
 def main():
     parser = argparse.ArgumentParser(description="Phase 7 detection/segmentation training")
-    parser.add_argument("task", choices=["detection", "segmentation"], help="Task to run")
+    parser.add_argument("task", choices=list(TASKS), help="Task to run")
     parser.add_argument("--model", default="alexnet_bottleneck", help="Model architecture")
     parser.add_argument("--stage", choices=["fp32", "qat", "int8"], default="fp32", help="Training stage")
     parser.add_argument("--experiment", help="Experiment config name (optional)")
@@ -530,16 +301,10 @@ def main():
         # trace it leaves, which is the point.
         with tempfile.TemporaryDirectory(prefix="smoke_") as tmp_dir:
             args.save_dir = tmp_dir
-            if args.task == "detection":
-                run_detection(args)
-            else:
-                run_segmentation(args)
+            run(args)
         return
 
-    if args.task == "detection":
-        run_detection(args)
-    else:
-        run_segmentation(args)
+    run(args)
 
 
 if __name__ == "__main__":

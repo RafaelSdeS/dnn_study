@@ -19,6 +19,17 @@ def test_model_registrations_populates_the_full_sweep_set():
     assert EXPECTED_MODELS <= MODEL_REGISTRY.keys()
 
 
+def test_every_experiment_only_names_registered_models():
+    """scripts/train.py now raises on an unknown name -- catch the typo here, not on PCAD."""
+    from pathlib import Path
+    from configs.loader import load_config
+
+    for path in sorted((Path(__file__).parents[1] / "configs" / "experiments").glob("*.yaml")):
+        models = load_config(f"experiments/{path.name}").get("models")
+        if isinstance(models, list):  # phase_7_*.yaml key per-model instead
+            assert set(models) <= MODEL_REGISTRY.keys(), f"{path.name}: {set(models) - MODEL_REGISTRY.keys()}"
+
+
 def test_every_registration_has_a_constructor_and_fuse_map():
     for name, spec in MODEL_REGISTRY.items():
         assert callable(spec["ctor"]), f"{name} has no callable ctor"

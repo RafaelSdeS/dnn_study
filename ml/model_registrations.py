@@ -9,6 +9,7 @@ them in sync if a notebook's fuse_map or lr changes.
 
 from ml.quantization import find_fuse_groups
 from ml.registry import register_model
+from ml.winograd_bridge import custom_model, torchvision_model
 from models import (
     AlexNetTV,
     VGGStyleCNN,
@@ -47,14 +48,6 @@ from models import (
     swin_pico_poolmixer,
     swin_pico_convstem,
     hybrid_bottleneck_swin,
-    googlenet_fpga,
-    resnet50_fpga,
-    squeezenet1_1_fpga,
-    alexnet_stacked_fpga,
-    alexnet_bottleneck_fpga,
-    alexnet_final_fire_residual_fpga,
-    alexnet_final_bottleneck_residual_fpga,
-    alexnet_3x3_fc_fpga,
 )
 
 # notebooks/phase_1_baseline/baselines_qat.ipynb
@@ -217,19 +210,26 @@ register_model(
     weight_decay=0.05,
 )
 
-# models/wino_adapted.py -- Winograd-FPGA plan, "AlexNet original adaptado" +
-# torchvision literature architectures (Fase 1). fuse_map=[] like resnet18tv/
-# mobilenetv2 above: these train under configs/experiments/budget_unico.yaml's
-# [fp32, qat_wino] stages, never the fbgemm-based "qat"/"int8" stages that
-# fuse_map serves -- no fbgemm fusion groups to derive.
-# NOTE: ctor() does real work here (imports+converts a sibling repo's model
-# builder, WINOGRAD_FPGA_ROOT must resolve) -- unlike every ctor above it can
-# raise at model-construction time, not just at registration time.
-register_model("googlenet_fpga", googlenet_fpga, fuse_map=[], lr=3e-4)
-register_model("resnet50_fpga", resnet50_fpga, fuse_map=[], lr=3e-4)
-register_model("squeezenet1_1_fpga", squeezenet1_1_fpga, fuse_map=[], lr=3e-4)
-register_model("alexnet_stacked_fpga", alexnet_stacked_fpga, fuse_map=[], lr=1e-3)
-register_model("alexnet_bottleneck_fpga", alexnet_bottleneck_fpga, fuse_map=[], lr=1e-3)
-register_model("alexnet_final_fire_residual_fpga", alexnet_final_fire_residual_fpga, fuse_map=[], lr=1e-3)
-register_model("alexnet_final_bottleneck_residual_fpga", alexnet_final_bottleneck_residual_fpga, fuse_map=[], lr=1e-3)
-register_model("alexnet_3x3_fc_fpga", alexnet_3x3_fc_fpga, fuse_map=[], lr=3e-4)
+# Winograd-FPGA study (configs/experiments/budget_unico.yaml). Geometry comes from the
+# sibling repo's own builders via ml/winograd_bridge.py -- see its docstring for why the
+# native classes above can't be reused (same shapes, different state_dict keys). Network
+# set follows that repo's docs/plano_avaliacao_redes_winograd.md §2.3/§2.4 as of 2026-09-10.
+# No fuse_map (no fbgemm qat/int8 stage) and no lr: budget_unico's uniform_hparams gives
+# every model the same one.
+# NOTE: ctor() needs WINOGRAD_FPGA_ROOT to resolve -- unlike every ctor above it can raise
+# at model-construction time; scripts/pcad/preflight_budget_unico.py builds each one first.
+register_model("vgg_style_fpga", custom_model("vgg_style"))
+register_model("alexnet_3x3_fc_fpga", custom_model("alexnet_3x3_fc"))
+register_model("alexnet_stacked_fpga", custom_model("alexnet_stacked"))
+register_model("alexnet_fire_fpga", custom_model("alexnet_fire"))
+register_model("alexnet_fire_bypass_fpga", custom_model("alexnet_fire_bypass"))
+register_model("alexnet_bottleneck_fpga", custom_model("alexnet_bottleneck"))
+register_model("alexnet_final_fire_residual_fpga", custom_model("alexnet_final_fire_residual"))
+register_model("alexnet_final_bottleneck_residual_fpga", custom_model("alexnet_final_bottleneck_residual"))
+register_model("repvgg_a0_fpga", custom_model("repvgg_a0", convert=False))  # trains raw -- see custom_model's caveat
+register_model("wrn_16_4_fpga", custom_model("wrn_16_4"))
+register_model("wrn_28_2_fpga", custom_model("wrn_28_2"))
+register_model("googlenet_fpga", torchvision_model("googlenet"))
+register_model("resnet18_fpga", torchvision_model("resnet18"))
+register_model("vgg13_fpga", torchvision_model("vgg13"))
+register_model("squeezenet1_1_fpga", torchvision_model("squeezenet1_1"))  # out of budget_unico: qat_wino breaks on it

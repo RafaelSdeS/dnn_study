@@ -11,7 +11,8 @@ is what produces the number comparable to the other large_scale models.
 Usage:
     python -m scripts.oneoff.dilated_gap_local
 """
-from scripts.train import run_experiment, _load_runtime_config
+from ml import load_profile
+from scripts.train import run_experiment
 
 EXPERIMENT_CFG = {
     "name": "alexnet_dilated_gap_local_oneoff",
@@ -43,4 +44,4 @@ EXPERIMENT_CFG = {
 }
 
 if __name__ == "__main__":
-    run_experiment(EXPERIMENT_CFG, _load_runtime_config("local"))
+    run_experiment(EXPERIMENT_CFG, load_profile("local", "runtime"))

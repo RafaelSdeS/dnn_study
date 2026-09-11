@@ -5,15 +5,15 @@ PCAD SLURM allocation on it.
 PCAD is ready -- run it there too, inside the same conda env train.sbatch
 activates (`conda activate alexnet_rafael`), before `scripts.cluster
 submit-sweep`. The one thing this repo's own environment.yml/requirements.txt
-never had to account for is scripts/train.py's new "qat_wino" stage, which
-needs the SIBLING Winograd-FPGA repo's scripts/avaliacao_redes/{qat_wino.py,
-models_wino.py} + scripts/{gen_f43_system_vectors.py,validate_transforms_f43.py}
-+ scripts/avaliacao_redes/{net_manifest.py,eligibility_wino.py} (6 pure
-numpy/torch files, no Vivado/RTL) reachable at $WINOGRAD_FPGA_ROOT/.. or at
-~/Documents/Winograd-FPGA (the default). If PCAD's home directory doesn't
-have that tree, every *_fpga model's FP32 stage AND every model's qat_wino
-stage fail at construction time -- this check catches that here, not after
-a job has sat in the SLURM queue for hours.
+never had to account for is ml/winograd_bridge.py: every *_fpga model AND the
+qat_wino stage need the SIBLING Winograd-FPGA repo's
+scripts/avaliacao_redes/{qat_wino,models_custom_wino,models_torchvision_wino,
+net_manifest,eligibility_wino}.py + scripts/{gen_f43_system_vectors,
+validate_transforms_f43}.py (7 pure numpy/torch files, no Vivado/RTL) reachable
+at $WINOGRAD_FPGA_ROOT or ~/Documents/Winograd-FPGA/scripts/avaliacao_redes
+(the default). If PCAD's home directory doesn't have that tree, every model
+here fails at construction time -- this check catches that here, not after a
+job has sat in the SLURM queue for hours.
 
 Usage:
     python -m scripts.pcad.preflight_budget_unico
@@ -22,8 +22,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import sys
-from pathlib import Path
 
 _RESULTS: list[tuple[str, bool, str]] = []
 
@@ -44,10 +42,6 @@ def main() -> int:
     ap.add_argument("--runtime", default="pcad")
     args = ap.parse_args()
 
-    scripts_dir = str(Path(__file__).resolve().parents[1])
-    if scripts_dir not in sys.path:
-        sys.path.insert(0, scripts_dir)
-
     print("[1] core Python dependencies (environment.yml / requirements.txt)")
     for mod in ("torch", "torchvision", "yaml", "pandas", "tensorboard",
                 "wandb", "kagglehub", "torchmetrics"):
@@ -61,11 +55,12 @@ def main() -> int:
         return torch.cuda.get_device_name(0)
     _check("torch.cuda.is_available()", _cuda)
 
-    print("\n[3] Winograd-FPGA bridge (qat_wino stage -- see WINOGRAD_FPGA_ROOT above)")
-    def _bridge():
-        from train import _import_qat_wino
-        return _import_qat_wino().__file__
-    _check("qat_wino.py importable", _bridge)
+    print("\n[3] Winograd-FPGA bridge (ml/winograd_bridge.py -- see WINOGRAD_FPGA_ROOT above)")
+    for module in ("qat_wino", "models_custom_wino", "models_torchvision_wino"):
+        def _bridge(module=module):
+            from ml.winograd_bridge import import_bridge_module
+            return import_bridge_module(module).__file__
+        _check(f"{module}.py importable", _bridge)
 
     print(f"\n[4] experiment config: {args.experiment!r} / runtime: {args.runtime!r}")
     exp_cfg, rt_cfg = {}, {}
@@ -78,7 +73,7 @@ def main() -> int:
     _check("load yaml", _cfg)
 
     print(f"\n[5] every model in {args.experiment!r} constructs (this is what would fail on PCAD if "
-          f"Winograd-FPGA isn't synced there -- 8 of these models import it at construction time)")
+          f"Winograd-FPGA isn't synced there -- every *_fpga model imports it at construction time)")
     if exp_cfg.get("models"):
         import ml.model_registrations  # noqa: F401 -- populates MODEL_REGISTRY
         from ml import MODEL_REGISTRY
@@ -103,6 +98,18 @@ def main() -> int:
                 return f"dataset_root={root} not found -- kagglehub fallback ENABLED, will download on first run"
             raise FileNotFoundError(f"dataset_root={root} not found and kagglehub fallback disabled")
         _check("dataset_root / kagglehub fallback", _dataset)
+
+    print("\n[7] Winograd-FPGA bridge is committed (the plan's gate: every run from the same commit)")
+    def _bridge_commit():
+        from ml.winograd_bridge import bridge_provenance
+        prov = bridge_provenance()
+        if prov["git_hash"] is None:
+            raise RuntimeError(f"no git repo or BRIDGE_COMMIT.json at {prov['root']} -- re-package the bridge")
+        if prov["git_dirty"]:
+            raise RuntimeError(f"{prov['git_hash'][:10]} has uncommitted changes under scripts/ -- "
+                               "commit Winograd-FPGA (and re-package for PCAD) first, or the run isn't reproducible")
+        return prov["git_hash"][:10]
+    _check("bridge commit recorded and clean", _bridge_commit)
 
     n_fail = sum(1 for _, ok, _ in _RESULTS if not ok)
     print(f"\n{'ALL CHECKS PASSED' if n_fail == 0 else f'{n_fail} CHECK(S) FAILED'} "

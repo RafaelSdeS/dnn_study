@@ -1,0 +1,52 @@
+# Fase 2 do plano (Winograd-FPGA repo, docs/plano_avaliacao_redes_winograd.md,
+# secao "Fase 2 -- Treinar no PCAD"): TODOS os modelos do zero, MESMO budget --
+# nao o melhor resultado por rede. Os checkpoints legados de BEST_MODELS.md
+# (32-152 epocas, spread 4.75x) NAO entram nesta tabela.
+#
+# `uniform_hparams: true` bypassa o lr/weight_decay por-modelo de
+# ml/model_registrations.py -- sem isso o "mesmo lr para todos" do plano seria
+# furado em silencio pelo override por-modelo do scripts/train.py.
+#
+# Todo modelo aqui e' *_fpga: a geometria vem dos builders do proprio
+# Winograd-FPGA (ml/winograd_bridge.py), ja' convertida pro contrato do
+# acelerador ANTES do treino FP32, entao o checkpoint carrega 1:1 na definicao
+# que a Fase 2.5 avalia la'. Lista = plano §2.3/§2.4 em 2026-09-10 (cabeca FC
+# onde o par GAP/FC existe; resnet50 -> resnet18; + repvgg_a0, vgg13, wrn_*).
+#
+# Antes de submeter: python -m scripts.pcad.preflight_budget_unico
+# (no PCAD tambem, dentro do conda env que o train.sbatch ativa). Submeter com
+#   python -m scripts.cluster submit-sweep --experiment budget_unico --runtime pcad
+# -> um job por modelo no perfil configs/slurm/tupi_4090.yaml (24 h, 32 G, requeue).
+# Wall time medido em 2026-09-11 (RTX 4060 laptop, batch 64, dado sintetico): o pior
+# job e' wrn_16_4 -- FP32 67 ms/passo, qat_wino 597 ms/passo -> ~6,3 h nessa GPU para
+# 100 + 15 epocas, ~3 h num 4090. Pico de GPU 3,4 GB. O FP32 do resto fica preso no
+# carregamento de dados (~40 s/epoca medido no PCAD). Sobra folga de 4x no limite.
+name: budget_unico
+uniform_hparams: true
+seed: 42
+models:
+  # Tier A -- mapeamento integral
+  - vgg_style_fpga
+  - alexnet_stacked_fpga
+  - repvgg_a0_fpga                          # treina SEM conversao: as 4 convs s2 ficam fora do acelerador
+                                            #   (ver ml/winograd_bridge.py::custom_model antes de submeter)
+  - vgg13_fpga
+  # Tier B -- 3x3 no acelerador, 1x1 modelado fora
+  - alexnet_3x3_fc_fpga                     # conv1 (3x3/s2 seguida de pool) fica no host
+  - alexnet_fire_fpga
+  - alexnet_fire_bypass_fpga
+  - alexnet_bottleneck_fpga
+  - alexnet_final_fire_residual_fpga
+  - alexnet_final_bottleneck_residual_fpga
+  - googlenet_fpga
+  - resnet18_fpga
+  - wrn_16_4_fpga                           # a mais cara do conjunto (1,55 GMACs)
+  - wrn_28_2_fpga
+  # squeezenet1_1_fpga FORA (decidido 2026-09-11, plano §2.4): F(4,3) reprova 4/9 convs
+  # a 64x64 e o qat_wino quebra nela (mapa 15x15 -> 12x12, torch.cat do Fire falha).
+stages:
+  - fp32
+  - qat_wino
+# So' o que difere de configs/training.yaml / configs/qat_wino.yaml.
+training:
+  early_stopping_patience: 10

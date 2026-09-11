@@ -40,15 +40,18 @@ from ml import (
     create_imagenet_loaders,
     create_results_summary,
     disk_mb,
+    ensure_dataset_path,
     gzip_mb,
     load_best_model,
+    load_profile,
+    make_model_runs,
     make_qat_callback,
     make_run_summary,
+    save_resolved_config,
     set_global_seed,
 )
 from ml.pruning import bottleneck_prune_plan, prune_model_channels
 from configs.loader import load_config
-from scripts.train import _ensure_dataset_path, _load_profile, _make_model_runs, _save_resolved_config
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -96,9 +99,9 @@ def main() -> int:
         model.load_state_dict(state.get("model_state_dict", state))
         model = model.to(device)
     else:
-        runtime_cfg = _load_profile(args.runtime, "runtime")
+        runtime_cfg = load_profile(args.runtime, "runtime")
         runtime_paths = build_runtime_paths(runtime_cfg.get("root", "outputs/local"))
-        _, checkpoints_dir, _, _, _ = _make_model_runs(runtime_paths.root, args.experiment, args.model)
+        _, checkpoints_dir, _, _, _ = make_model_runs(runtime_paths.root, args.experiment, args.model)
         checkpoint_path = checkpoints_dir / f"{args.model}_best.pth"
         if not checkpoint_path.exists():
             if args.finetune_epochs > 0:
@@ -123,10 +126,10 @@ def main() -> int:
     print("Forward pass OK, every remaining Conv2d still dense (groups=1).")
 
     if args.evaluate:
-        runtime_cfg = _load_profile(args.runtime, "runtime")
+        runtime_cfg = load_profile(args.runtime, "runtime")
         runtime_paths = build_runtime_paths(runtime_cfg.get("root", "outputs/local"))
         data_cfg = DataConfig(**load_config("data.yaml"))
-        dataset_path = _ensure_dataset_path(runtime_cfg)
+        dataset_path = ensure_dataset_path(runtime_cfg)
         data_cfg.dataset_path = str(dataset_path)
         _, _, _, val_loader = create_imagenet_loaders(data_cfg)
 
@@ -140,9 +143,9 @@ def main() -> int:
         print(f"Pruned (no fine-tune) | top1={metrics['top1']:.2f}% | top5={metrics['top5']:.2f}% | loss={metrics['loss']:.4f}")
 
     if args.finetune_epochs > 0:
-        runtime_cfg = _load_profile(args.runtime, "runtime")
+        runtime_cfg = load_profile(args.runtime, "runtime")
         data_cfg = DataConfig(**load_config("data.yaml"))
-        dataset_path = _ensure_dataset_path(runtime_cfg)
+        dataset_path = ensure_dataset_path(runtime_cfg)
         data_cfg.dataset_path = str(dataset_path)
         _finetune_and_quantize(args, spec, model, data_cfg, runtime_cfg, device)
 
@@ -164,10 +167,10 @@ def _finetune_and_quantize(
     """
     run_name = f"{args.model}_pruned_r{args.ratio}"
     runtime_paths = build_runtime_paths(runtime_cfg.get("root", "outputs/local"))
-    run_root, checkpoints_dir, logs_dir, _tb_dir, results_dir = _make_model_runs(
+    run_root, checkpoints_dir, logs_dir, _tb_dir, results_dir = make_model_runs(
         runtime_paths.root, "phase_9_pruning_finetune", run_name
     )
-    _save_resolved_config(run_root, {
+    save_resolved_config(run_root, {
         "model": args.model, "ratio": args.ratio, "finetune_epochs": args.finetune_epochs,
         "finetune_lr": args.finetune_lr, "finetune_patience": args.finetune_patience,
         "runtime": runtime_cfg,

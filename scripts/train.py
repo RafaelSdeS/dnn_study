@@ -1,19 +1,15 @@
 from __future__ import annotations
 
 import argparse
-import importlib
 import json
 import logging
-import os
 import signal
-import sys
 import tempfile
 from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any
 
 import torch
-import yaml
 from torch.utils.tensorboard import SummaryWriter
 
 import ml.model_registrations  # noqa: F401 — populates MODEL_REGISTRY
@@ -35,34 +31,30 @@ from ml import (
     create_results_summary,
     disk_mb,
     gzip_mb,
+    ensure_dataset_path,
     expand_path,
+    load_profile,
+    make_model_runs,
     make_qat_callback,
     make_run_summary,
     load_best_model,
-    resolve_dataset_train_path,
+    save_resolved_config,
     set_global_seed,
 )
-
-
-def _load_yaml(path_or_name: str) -> dict[str, Any]:
-    candidate = Path(path_or_name)
-    if candidate.exists():
-        with candidate.open("r", encoding="utf-8") as handle:
-            return yaml.safe_load(handle) or {}
-    return load_config(path_or_name)
-
-
-def _load_profile(name_or_path: str, subdir: str) -> dict[str, Any]:
-    candidate = Path(name_or_path)
-    if candidate.exists():
-        return _load_yaml(name_or_path)
-    return load_config(f"{subdir}/{name_or_path}.yaml")
+from ml.winograd_bridge import bridge_provenance, dump_wino_calibration, load_qat_wino_model
 
 
 def _resolve_model_names(model_names: list[str] | str | None) -> list[str]:
     if not model_names or model_names == "all":
         return list(MODEL_REGISTRY.keys())
-    return [name for name in model_names if name in MODEL_REGISTRY]
+    if isinstance(model_names, str):  # `models: alexnet_fire` in YAML, not a one-item list
+        model_names = [model_names]
+    # Fail loudly: a typo in an experiment's models: list used to silently drop that
+    # model, which on PCAD only shows up hours later as a missing summary.
+    unknown = [name for name in model_names if name not in MODEL_REGISTRY]
+    if unknown:
+        raise ValueError(f"Unknown model(s) {unknown}; registered: {sorted(MODEL_REGISTRY)}")
+    return list(model_names)
 
 
 def _append_csv(rows: list[dict[str, Any]], output_path: Path) -> None:
@@ -131,112 +123,22 @@ def _apply_smoke_override(experiment_cfg: dict[str, Any]) -> dict[str, Any]:
     return experiment_cfg
 
 
-def _import_qat_wino():
-    """Bridge to the Winograd-FPGA sibling repo's accelerator-numeric QAT
-    (scripts/avaliacao_redes/qat_wino.py). Not vendored here on purpose --
-    that repo's README explains why the two projects don't cross-import model
-    *definitions* (this repo would silently change FPGA-side numbers), but
-    qat_wino.convert() is a generic nn.Conv2d->WinoQuantConv2d swap, not a
-    model definition, so importing the module itself is fine.
-    """
-    default_root = Path.home() / "Documents" / "Winograd-FPGA" / "scripts" / "avaliacao_redes"
-    root = Path(os.environ.get("WINOGRAD_FPGA_ROOT", default_root)).expanduser()
-    if not (root / "qat_wino.py").exists():
-        raise FileNotFoundError(
-            f"qat_wino.py not found at {root} -- set WINOGRAD_FPGA_ROOT to the "
-            "Winograd-FPGA repo's scripts/avaliacao_redes directory"
-        )
-    if str(root) not in sys.path:
-        sys.path.insert(0, str(root))
-    return importlib.import_module("qat_wino")
-
-
-def _load_qat_wino_model(model_name: str, spec: dict[str, Any], checkpoints_dir: Path, device):
-    """FP32 best checkpoint -> qat_wino.convert() in place.
-
-    A fresh instance built this way every time (rather than caching) so its
-    state_dict keys always match a qat_wino checkpoint saved from a model
-    built the same way -- convert() adds buffers (act_absmax, post_shift,
-    sat_frac, BT/AT/G) that a plain ctor() instance doesn't have.
-    """
-    qat_wino = _import_qat_wino()
-    model = load_best_model(model_name, spec["ctor"], checkpoints_dir, device, eval_mode=False)
-    trocadas = qat_wino.convert(model)
-    if not trocadas:
-        raise RuntimeError(f"{model_name}: qat_wino.convert() found no eligible 3x3 conv to replace")
-    # Safety net for the class of bug this stage almost shipped with: convert()
-    # silently SKIPS any 3x3 conv with stride/groups/dilation != 1 (see its own
-    # "nao elegivel: converta antes (SS4)" comment) rather than erroring. A model
-    # registered without first applying the SS4 stride-2->stride-1+maxpool
-    # conversion (models/wino_adapted.py) would train qat_wino fine with that
-    # one layer silently left un-Winograd'd -- no exception, just a wrong number.
-    ineligible = [n for n, m in model.named_modules()
-                  if isinstance(m, torch.nn.Conv2d) and m.kernel_size[0] == 3
-                  and (m.stride[0] != 1 or m.groups != 1 or m.dilation[0] != 1)]
-    if ineligible:
-        logging.getLogger(f"pcad_runner.{model_name}").warning(
-            "%s: %d 3x3 conv(s) left un-Winograd'd by qat_wino.convert() "
-            "(stride/groups/dilation not eligible): %s -- register a "
-            "models/wino_adapted.py wrapper that converts stride-2 first",
-            model_name, len(ineligible), ineligible)
-    logging.getLogger(f"pcad_runner.{model_name}").info(
-        "qat_wino converted %d conv layer(s): %s", len(trocadas), trocadas)
-    return model.to(device)
-
-
-def _dump_wino_calibration(model) -> dict[str, Any]:
-    """Per-layer act_absmax/post_shift/sat_frac -- the §5.1 calibration fields
-    the plan calls irrecoverable without a re-eval. Duck-typed (not isinstance)
-    because qat_wino.make_wino_conv() builds its conv class inside a closure.
-    """
-    calib: dict[str, Any] = {}
-    for name, m in model.named_modules():
-        if hasattr(m, "act_absmax") and hasattr(m, "post_shift") and hasattr(m, "sat_frac"):
-            calib[name or "root"] = {
-                "act_absmax": float(m.act_absmax.item()),
-                "post_shift": int(round(float(m.post_shift.item()))),
-                "sat_frac": float(m.sat_frac.item()),
-            }
-    return calib
-
-
-def _load_runtime_config(runtime_name: str) -> dict[str, Any]:
-    return _load_profile(runtime_name, "runtime")
-
-
-def _load_experiment_config(experiment_name: str) -> dict[str, Any]:
-    return _load_profile(experiment_name, "experiments")
-
-
-def _ensure_dataset_path(runtime_cfg: dict[str, Any]) -> Path:
-    dataset_root = expand_path(runtime_cfg.get("dataset_root"))
-    dataset_train = resolve_dataset_train_path(dataset_root) if dataset_root else None
-    if dataset_train is not None:
-        return dataset_train
-
-    if not runtime_cfg.get("use_kagglehub_fallback", True):
-        raise FileNotFoundError("dataset_root is unset and KaggleHub fallback is disabled")
-
-    import kagglehub
-
-    dataset_path = kagglehub.dataset_download(runtime_cfg.get("kaggle_dataset", "akash2sharma/tiny-imagenet"))
-    return Path(dataset_path) / "tiny-imagenet-200" / "train"
-
-
-def _make_model_runs(root: Path, experiment_name: str, model_name: str) -> tuple[Path, Path, Path, Path, Path]:
-    run_root = root / experiment_name / model_name
-    checkpoints = run_root / "checkpoints"
-    logs = run_root / "logs"
-    tensorboard = run_root / "tensorboard"
-    results = run_root / "results"
-    for path in (checkpoints, logs, tensorboard, results):
-        path.mkdir(parents=True, exist_ok=True)
-    return run_root, checkpoints, logs, tensorboard, results
-
-
-def _save_resolved_config(run_root: Path, config: dict[str, Any]) -> None:
-    run_root.mkdir(parents=True, exist_ok=True)
-    (run_root / "resolved_config.json").write_text(json.dumps(config, indent=2, default=str))
+def _stop_requested(trainer: Trainer, stage: str, model_name: str, writer, wandb_run) -> bool:
+    """True if a stop signal cut this stage's fit() short -- SIGUSR1 is Slurm's pre-timeout
+    warning (train.sbatch), SIGTERM/SIGINT the rest. Going on to the next stage would build
+    it on the truncated model and keep the process alive past the wall clock, so
+    train.sbatch's requeue would never run. The caller ends the whole run instead (models
+    already finished keep their summaries); the requeued job resumes this stage from its
+    _resume.pth."""
+    if not trainer.stop_requested:
+        return False
+    logging.getLogger(f"pcad_runner.{model_name}").warning(
+        "Stop requested during %s of %s -- exiting before later stages and the summary.", stage, model_name)
+    if writer is not None:
+        writer.close()
+    if wandb_run is not None:
+        wandb_run.finish()
+    return True
 
 
 def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) -> list[dict[str, Any]]:
@@ -248,31 +150,32 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
     qat_cfg = _build_qat_config(load_config("qat.yaml"), experiment_cfg)
     qat_wino_cfg = _build_qat_wino_config(load_config("qat_wino.yaml"), experiment_cfg)
     uniform_hparams = bool(experiment_cfg.get("uniform_hparams", False))
+    experiment_name = experiment_cfg.get("name") or "experiment"
+    stage_list = experiment_cfg.get("stages", ["fp32", "qat", "int8"])
+    selected_models = _resolve_model_names(experiment_cfg.get("models"))  # before the dataset: fail fast
 
     seed = int(experiment_cfg.get("seed", data_cfg.seed))
     data_cfg.seed = seed
     set_global_seed(seed)
 
-    dataset_path = _ensure_dataset_path(runtime_cfg)
+    dataset_path = ensure_dataset_path(runtime_cfg)
     data_cfg.dataset_path = str(dataset_path)
 
     train_ds, val_ds, train_loader, val_loader = create_imagenet_loaders(data_cfg, persistent_workers=runtime_cfg.get("persistent_workers", False))
-
-    experiment_name = experiment_cfg.get("name") or "experiment"
-    stage_list = experiment_cfg.get("stages", ["fp32", "qat", "int8"])
-    selected_models = _resolve_model_names(experiment_cfg.get("models"))
-    if not selected_models:
-        raise ValueError("No valid model names were selected")
 
     results_rows: list[dict[str, Any]] = []
     torch.backends.quantized.engine = runtime_cfg.get("quantized_engine", "fbgemm")
     device = torch.device(runtime_cfg.get("device", "cuda" if torch.cuda.is_available() else "cpu"))
     provenance = capture_provenance()
+    # *_fpga models and the qat_wino stage run Winograd-FPGA code (ml/winograd_bridge.py),
+    # so this repo's git hash alone doesn't pin what trained them.
+    if "qat_wino" in stage_list or any(name.endswith("_fpga") for name in selected_models):
+        provenance["winograd_fpga"] = bridge_provenance()
 
     for model_name in selected_models:
         spec = MODEL_REGISTRY[model_name]
         model_run_name = f"{experiment_name}_{model_name}"
-        run_root, checkpoints_dir, logs_dir, tb_dir, results_dir = _make_model_runs(runtime_paths.root, experiment_name, model_name)
+        run_root, checkpoints_dir, logs_dir, tb_dir, results_dir = make_model_runs(runtime_paths.root, experiment_name, model_name)
 
         # uniform_hparams (Fase 2 do plano): o registry tem lr/weight_decay
         # por-modelo (register_model(lr=...), tunado para o melhor resultado de
@@ -294,7 +197,7 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
             "stage_list": stage_list,
             "provenance": provenance,
         }
-        _save_resolved_config(run_root, resolved_config)
+        save_resolved_config(run_root, resolved_config)
 
         log_file = logs_dir / f"{model_name}.log"
         writer = SummaryWriter(log_dir=str(tb_dir / model_name)) if runtime_cfg.get("tensorboard", True) else None
@@ -376,6 +279,8 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
                     log_file=log_file,
                 )
                 fp32_fit = trainer.fit(resume_from=resume_from)
+                if _stop_requested(trainer, "fp32", model_name, writer, wandb_run):
+                    break
                 fp32_eval = trainer.evaluate(topk=(1, 5))
                 fp32_benchmark = trainer.benchmark(warmup=int(runtime_cfg.get("benchmark_warmup", 100)))
 
@@ -403,6 +308,8 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
                     log_file=logs_dir / f"qat_{model_name}.log",
                 )
                 qat_fit = trainer.fit(resume_from=resume_from)
+                if _stop_requested(trainer, "qat", model_name, writer, wandb_run):
+                    break
                 trainer.logger.info("QAT training complete for %s", model_name)
 
         if "qat_wino" in stage_list:
@@ -410,11 +317,11 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
             # not fbgemm's per-channel one): fine-tune with the FPGA's own
             # per-tensor pow2 requant + F(4,3) transform in the forward, via
             # scripts/avaliacao_redes/qat_wino.py in the sibling Winograd-FPGA
-            # repo. No int8-convert step here -- unlike the fbgemm path,
-            # WinoQuantConv2d.forward() already simulates the quantized
-            # pipeline in eval mode, so evaluating this checkpoint directly
+            # repo (via ml/winograd_bridge.py). No int8-convert step here -- unlike
+            # the fbgemm path, WinoQuantConv2d.forward() already simulates the
+            # quantized pipeline in eval mode, so evaluating this checkpoint directly
             # *is* the accelerator-numeric accuracy (top1_int8_accel proxy).
-            qat_wino_model = _load_qat_wino_model(model_name, spec, checkpoints_dir, device)
+            qat_wino_model = load_qat_wino_model(model_name, spec, checkpoints_dir, device)
             qat_wino_cfg_run = replace(
                 model_cfg, epochs=qat_wino_cfg.epochs, lr=qat_wino_cfg.lr,
                 weight_decay=qat_wino_cfg.weight_decay, use_amp=False,
@@ -441,6 +348,8 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
                 qat_wino_model.load_state_dict(wino_ckpt.get("model_state_dict", wino_ckpt))
             else:
                 qat_wino_fit = trainer.fit(resume_from=resume_from)
+                if _stop_requested(trainer, "qat_wino", model_name, writer, wandb_run):
+                    break
                 trainer.logger.info("qat_wino training complete for %s", model_name)
             qat_wino_eval = trainer.evaluate(topk=(1, 5))
             wino_summary = {
@@ -448,7 +357,7 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
                 "stage": "qat_wino",
                 "fit": qat_wino_fit,
                 "eval": qat_wino_eval,
-                "calibration": _dump_wino_calibration(qat_wino_model),
+                "calibration": dump_wino_calibration(qat_wino_model),
                 "checkpoint": str(wino_best_path),
             }
             create_results_summary(wino_summary, resolved_config, results_dir / f"{model_name}_qat_wino_summary.json")
@@ -528,8 +437,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = build_parser().parse_args()
-    experiment_cfg = _load_experiment_config(args.experiment)
-    runtime_cfg = _load_runtime_config(args.runtime)
+    experiment_cfg = load_profile(args.experiment, "experiments")
+    runtime_cfg = load_profile(args.runtime, "runtime")
     if args.device:
         runtime_cfg["device"] = args.device
     if args.model:
