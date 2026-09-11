@@ -199,7 +199,7 @@ further down instead.
 Measured on a real RTX 4090 (PCAD `tupi5`), batch=1, 64×64 input — the first phase to check hardware
 behavior directly instead of relying on FLOPs/params as a proxy. Full methodology, statistical tests, and
 data-quality corrections in `notebooks/phase_6_hardware_profiling/hardware_profiling_phase6.ipynb`;
-hypotheses/acceptance-criteria source in `research/plans/PHASE6_PLAN.md`.
+hypotheses/acceptance-criteria source in `docs/plans/PHASE6_PLAN.md`.
 
 | Model | Winograd-eligible | FP32 Latency (ms) | INT8 Latency (ms) | FP32 GFLOP/s | FP32 Top-1 | Efficiency (Acc/ms) |
 |---|---|---|---|---|---|---|
@@ -308,7 +308,7 @@ further work. Full per-model breakdown: `.../pareto_frontier.csv`.
 
 ## Phase 7 — Detection: A4 retrain complete (valid numbers); Segmentation: PCAD runs complete, not yet analyzed
 
-**Root cause found and fixed** (`research/logs/PHASE7_LOG.md` Stage 9): anchor recall was originally
+**Root cause found and fixed** (`docs/logs/PHASE7_LOG.md` Stage 9): anchor recall was originally
 0.76–0.80 for all 3 backbones (well under the 95% acceptance bar), caused by a tap-index bug
 producing duplicate/degenerate pyramid levels plus `DefaultBoxGenerator`'s `min_ratio`/`max_ratio`
 linear scale interpolation badly mismatched to VOC's actual box-size distribution. Fixed via
@@ -347,7 +347,7 @@ Phase 4's `AlexNetFinalFireResidual` (49.79% FP32) beats Phase 3's `AlexNetFire`
 +5.81pp — but it changes two things at once versus Fire: it adds a 3×3 stride-2 stem *and* wraps
 every Fire stage in a residual shortcut. `AlexNetFireBypass` isolates the shortcut alone (Fire's
 exact stem, one identity bypass added, zero extra parameters) to find out which change is doing the
-work. Full plan: `research/plans/PHASE9_PLAN.md`.
+work. Full plan: `docs/plans/PHASE9_PLAN.md`.
 
 | Run | Epochs | FP32 Top-1 | INT8 Top-1 | Quant. Δ |
 |---|---|---|---|---|
@@ -359,7 +359,7 @@ work. Full plan: `research/plans/PHASE9_PLAN.md`.
 FP32 (measured post-fit) and INT8 (measured from a QAT run that correctly started from the best
 checkpoint) were scored on different weights. `ml/trainer.py` is fixed and this run's FP32 was
 re-evaluated from the surviving best checkpoint (`scripts/oneoff/backfill_best_epoch_eval.py`); INT8 is
-unchanged (the QAT stage already started from the correct checkpoint). See `research/logs/PHASE8_LOG.md`
+unchanged (the QAT stage already started from the correct checkpoint). See `docs/logs/PHASE8_LOG.md`
 Stage 11 and `report/ic_report.tex` Eixo 4.
 
 **The bypass-alone fraction of Phase 4's total gain grew substantially with more training — and
@@ -398,7 +398,7 @@ weights use 7.19 bits/weight (vs. 8.00 nominal); k-means weight-sharing at 16/32
 of INT8. H3's acceptance criterion is met; per D6 no changes were made to `ml/checkpoint.py`, this
 is a measurement-only signal that a real weight-sharing pipeline would be worth building.
 
-Full tables and methodology: `research/plans/PHASE9_PLAN.md` (Tasks 1–3). Reproducible analysis notebook:
+Full tables and methodology: `docs/plans/PHASE9_PLAN.md` (Tasks 1–3). Reproducible analysis notebook:
 `notebooks/phase_9_bypass_ablation/phase9_ablation_analysis.ipynb`.
 
 ---
@@ -408,7 +408,7 @@ Full tables and methodology: `research/plans/PHASE9_PLAN.md` (Tasks 1–3). Repr
 Tests whether local self-attention (windowed Swin / ViT) reproduces small-kernel CNNs'
 accuracy/efficiency/quantization profile, and whether it's structurally Winograd-incompatible
 regardless of window size. 7 models (`models/vit_variants.py`); hypotheses H1–H5 and build
-history: `research/plans/PHASE8_PLAN.md`, `research/logs/PHASE8_LOG.md`.
+history: `docs/plans/PHASE8_PLAN.md`, `docs/logs/PHASE8_LOG.md`.
 
 **Note on corrected data:** FP32 accuracy for 5 of these 7 models (all but `vit_tiny`/`deit_tiny`,
 which used the notebook's `load_best_model()` path and were unaffected) was corrected 2026-08-29
@@ -427,7 +427,7 @@ previously measured.
 | swin\_pico\_w2 | 0.32 | 30.9 | 32.95% | 33.25% | +0.31pp | 1.25 | 26.36 |
 | swin\_pico\_poolmixer | 0.23 | 21.2 | 30.98% | 30.76% | –0.22pp | 0.89 | 34.97 |
 
-**Hypothesis results** (full detail in `research/plans/PHASE8_PLAN.md`):
+**Hypothesis results** (full detail in `docs/plans/PHASE8_PLAN.md`):
 
 - **H1 (window size is attention's kernel-size analogue): CONFIRMED.** Accuracy grows
   monotonically with window ∈ {2,4,8} in both FP32 (32.95→33.53→36.75%) and INT8
@@ -467,6 +467,6 @@ every other `swin_pico` variant, including the most window-restricted one.
 (`AlexNetBottleneck` 0.39M, `AlexNetFire`/`AlexNetFireBypass` 0.52M) they compete with on
 accuracy. `deit_tiny`'s headline number should be read against that size, not as a free win.
 
-Full methodology, hypothesis acceptance criteria, and build history: `research/plans/PHASE8_PLAN.md`,
-`research/logs/PHASE8_LOG.md`. Cross-phase comparison data:
+Full methodology, hypothesis acceptance criteria, and build history: `docs/plans/PHASE8_PLAN.md`,
+`docs/logs/PHASE8_LOG.md`. Cross-phase comparison data:
 `results/phase_8_efficient_vit/phase8_comparison.csv`.

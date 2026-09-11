@@ -1,7 +1,7 @@
 # Phase 7 detection experiments
 # num_workers: 1 — jobs 811106/811127/811128 hit the same DataLoader worker
 # segfault at num_workers=4/512px that first hit job 805529;
-# sharing_strategy="file_system" didn't fully fix it. See research/logs/PHASE7_LOG.md
+# sharing_strategy="file_system" didn't fully fix it. See docs/logs/PHASE7_LOG.md
 # (A3) — the phase7_diag_512.yaml that originally carried this note was a local-only
 # scratch config and was never committed.
 # Applies identically to all 3 backbones (alexnet_bottleneck, alexnet_fire,

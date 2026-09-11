@@ -13,7 +13,7 @@ scoped to keep any pruning **structured** (channel-level, dense output) rather t
 — unstructured/masked sparsity produces ragged kernels that defeat the Winograd-friendliness this
 whole project is arguing for.
 
-This plan follows the same structure as `research/plans/PHASE6_PLAN.md` / `research/plans/PHASE7_PLAN.md`:
+This plan follows the same structure as `docs/plans/PHASE6_PLAN.md` / `docs/plans/PHASE7_PLAN.md`:
 hypotheses first, then decision records for every choice not forced by the codebase, then
 task-by-task detail, then scope/effort and blocking issues.
 
@@ -96,7 +96,7 @@ achievable gain for zero added parameters over `alexnet_fire`.
 **Claim:** Removing whole output channels (not individual weights) from `alexnet_bottleneck` /
 `alexnet_fire_bypass` convolutions reduces parameter count and theoretical size while keeping
 every remaining conv a normal dense `groups=1` kernel — i.e. still eligible for the same Winograd
-path Phase 6 measured (`research/plans/PHASE6_PLAN.md` H1/H2), unlike unstructured pruning which produces
+path Phase 6 measured (`docs/plans/PHASE6_PLAN.md` H1/H2), unlike unstructured pruning which produces
 sparse-but-still-dense-shaped tensors that gain nothing on Winograd hardware.
 
 **Expected Outcome:**
@@ -208,7 +208,7 @@ class AlexNetFireBypass(nn.Module):
     Architecture: identical to AlexNetFire (3->64->192->384->256->256, same 5 Fire stages),
     except fire4 and fire5 (the one channel-matched, no-pool-between pair: 256->256) are
     connected by a FloatFunctional identity add — SqueezeNet's "simple bypass," no 1x1
-    projection needed since channels already match. See research/plans/PHASE9_PLAN.md D1/D2.
+    projection needed since channels already match. See docs/plans/PHASE9_PLAN.md D1/D2.
     """
 
     def __init__(self, num_classes: int = 200):

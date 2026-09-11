@@ -164,5 +164,5 @@ All QAT jobs run in parallel (but after their respective FP32).
 ## See Also
 
 - `PHASE7_QUICKSTART.md` — Configuration & interpretation
-- `research/plans/PHASE7_PLAN.md` — Research design & hypotheses
+- `docs/plans/PHASE7_PLAN.md` — Research design & hypotheses
 - `scripts/train_det_seg.py` — CLI documentation (--help)

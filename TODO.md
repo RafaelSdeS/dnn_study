@@ -174,7 +174,7 @@ For each variant:
 - ✅ INT8 conversion
 - ✅ FP32 vs INT8 comparison
 
-**Results:** See `research/plans/BEST_MODELS.md` for comprehensive analysis. Bottleneck & Fire are Pareto-optimal (tiny, competitive accuracy, quantization-stable).
+**Results:** See `docs/plans/BEST_MODELS.md` for comprehensive analysis. Bottleneck & Fire are Pareto-optimal (tiny, competitive accuracy, quantization-stable).
 
 ---
 
@@ -216,7 +216,7 @@ never collected — flagged as an open limitation in the Phase 6 notebook itself
 dropped. Results test hypotheses H1–H4 (Winograd signal on dense 3×3, absence on depthwise,
 Pareto-frontier accuracy-vs-latency, FP32→INT8 latency-ranking stability). See
 `notebooks/phase_6_hardware_profiling/hardware_profiling_phase6.ipynb`,
-`results/phase_6_hardware_profiling/`, `research/plans/PHASE6_PLAN.md`.
+`results/phase_6_hardware_profiling/`, `docs/plans/PHASE6_PLAN.md`.
 
 Measure actual latency, memory bandwidth, and power consumption on **RTX 4060 (laptop, bandwidth-limited)** and **RTX 4090 (PCAD tupi nodes, compute-rich)** to empirically validate Winograd acceleration claims across contrasting hardware. Compare theoretical vs real-world efficiency gains across kernel sizes, and identify whether small-kernel gains hold on both GPU classes or only on the bandwidth-limited one.
 
@@ -245,11 +245,11 @@ Outputs:
 
 **Status:** Detection is trained and evaluated end-to-end (FP32 → QAT → INT8) on PASCAL VOC with
 an SSD head over 3 backbones. Segmentation has data-loading + trainer scaffolding built
-(`create_voc_segmentation_loaders`, `research/logs/PHASE7_LOG.md` Stage 6) but no actual segmentation
+(`create_voc_segmentation_loaders`, `docs/logs/PHASE7_LOG.md` Stage 6) but no actual segmentation
 training run yet — "Full segmentation if detection is stable" is still an open follow-on per that
 log. CLI: `scripts/train_det_seg.py`. Results: `outputs/pcad/phase_7_detection_segmentation/`. Analysis
-joining detection to Phase 3 classification: `notebooks/phase_7_detection_segmentation/`, `research/plans/PHASE7_PLAN.md`,
-`research/logs/PHASE7_LOG.md`, `research/logs/PHASE7_QUICKSTART.md`, `research/logs/PHASE7_MULTINODE.md`.
+joining detection to Phase 3 classification: `notebooks/phase_7_detection_segmentation/`, `docs/plans/PHASE7_PLAN.md`,
+`docs/logs/PHASE7_LOG.md`, `docs/logs/PHASE7_QUICKSTART.md`, `docs/logs/PHASE7_MULTINODE.md`.
 
 Extend the kernel-restriction findings (Phases 2–3) to object detection and semantic segmentation, testing whether the accuracy/efficiency trade-off observed in classification holds for denser prediction tasks. Directly addresses the research objective's detection/segmentation scope, which Phases 1–6 (classification only) do not cover.
 
@@ -270,7 +270,7 @@ Models: reuse Phase 3's Pareto-optimal backbones (Bottleneck, Fire) as feature e
 
 Explore whether attention-based models can match or exceed CNN efficiency within Winograd constraints. Investigate local-attention Vision Transformers as an alternative paradigm to small-kernel CNNs.
 
-**Status:** All 7 models trained, results in (see `research/plans/BEST_MODELS.md`'s Phase 8 section). FP32 accuracy for the 5 CLI-trained models was corrected 2026-08-29 after a `Trainer.fit()` checkpoint-restore bug (see `ml/trainer.py`, `scripts/oneoff/backfill_best_epoch_eval.py`); `vit_tiny`/`deit_tiny` were unaffected. Hypotheses H1–H5 and the D6 QAT-for-attention revision are tracked in `research/plans/PHASE8_PLAN.md` / `research/logs/PHASE8_LOG.md`, not here.
+**Status:** All 7 models trained, results in (see `docs/plans/BEST_MODELS.md`'s Phase 8 section). FP32 accuracy for the 5 CLI-trained models was corrected 2026-08-29 after a `Trainer.fit()` checkpoint-restore bug (see `ml/trainer.py`, `scripts/oneoff/backfill_best_epoch_eval.py`); `vit_tiny`/`deit_tiny` were unaffected. Hypotheses H1–H5 and the D6 QAT-for-attention revision are tracked in `docs/plans/PHASE8_PLAN.md` / `docs/logs/PHASE8_LOG.md`, not here.
 
 Models:
 
@@ -297,7 +297,7 @@ Isolates whether Phase 4's `AlexNetFinalFireResidual` accuracy gain over Phase 3
 comes from the residual bypass alone, or requires its stem change too — the two were previously
 changed simultaneously, so the gain couldn't be attributed. Separately measures structured
 (channel-level, Winograd-safe) pruning and weight-compression headroom beyond plain gzip. Full
-plan: `research/plans/PHASE9_PLAN.md`.
+plan: `docs/plans/PHASE9_PLAN.md`.
 
 - ✅ **Task 1 — Bypass ablation:** `AlexNetFireBypass` (Fire + identity shortcut only, no stem
   change) trained and compared against `AlexNetFire` and `AlexNetFinalFireResidual`. **Result:
@@ -320,13 +320,13 @@ plan: `research/plans/PHASE9_PLAN.md`.
 
 ## Phase 10 — Extended Architecture Search (Future)
 
-Note: Phase 9 is already executed — see `research/plans/PHASE9_PLAN.md` (bypass ablation, structured pruning, compression measurement). This section was originally numbered "Phase 9" before that work existed; renumbered to avoid collision.
+Note: Phase 9 is already executed — see `docs/plans/PHASE9_PLAN.md` (bypass ablation, structured pruning, compression measurement). This section was originally numbered "Phase 9" before that work existed; renumbered to avoid collision.
 
 Note: this is unrelated to `notebooks/phase_10_final_summary/` / `results/phase_10_final_summary/`, which is a completed cross-project rollup (classification + detection + segmentation summary across Phases 1–4/8/9), not this NAS work. Same number, two different things — the rollup got there first.
 
 If Phase 8 yields promising hybrid results, consider automated architecture search (NAS or evolutionary search) to discover optimal kernel-size, depth, width, and attention-ratio combinations under Winograd constraints.
 
-- [ ] Evaluate candidate efficiency techniques catalogued in `research/plans/EFFICIENCY_IDEAS.md` (ghost
+- [ ] Evaluate candidate efficiency techniques catalogued in `docs/plans/EFFICIENCY_IDEAS.md` (ghost
   modules, channel shuffle, Tucker decomposition, distillation, Mixup/CutMix, QAT
   self-distillation, N:M sparsity/ternary weights, soft weight-sharing, Winograd-aware training,
   per-layer kernel-size search). Unscoped — start with distillation and Winograd-aware training

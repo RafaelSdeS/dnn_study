@@ -3,7 +3,7 @@
 Removes whole output channels, never individual weights: every surviving `nn.Conv2d`
 stays dense (`groups == 1`), just narrower — unlike unstructured/masked sparsity, which
 keeps the tensor's shape but zeros entries irregularly and gains nothing on Winograd
-hardware. See `research/plans/PHASE9_PLAN.md` H2/D3.
+hardware. See `docs/plans/PHASE9_PLAN.md` H2/D3.
 
 Scoped to `_AlexBottleneck`'s internal squeeze width (the `mid_ch` between its 1x1 and
 3x3 convs): that width is private to the block (never consumed outside it), so pruning

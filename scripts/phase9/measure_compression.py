@@ -1,4 +1,4 @@
-"""Compression measurement — Phase 9 Task 3 (research/plans/PHASE9_PLAN.md D5/D6).
+"""Compression measurement — Phase 9 Task 3 (docs/plans/PHASE9_PLAN.md D5/D6).
 
 Measurement only: no changes to ml/checkpoint.py. Answers whether there's headroom
 above `compress_checkpoint`'s plain gzip by comparing, on the same population of

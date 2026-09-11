@@ -442,7 +442,7 @@ class AlexNetFireBypass(nn.Module):
     Architecture: identical to AlexNetFire (3->64->192->384->256->256, same 5 Fire stages),
     except fire4 and fire5 (the one channel-matched, no-pool-between pair: 256->256) are
     connected by a FloatFunctional identity add — SqueezeNet's "simple bypass," no 1x1
-    projection needed since channels already match. See research/plans/PHASE9_PLAN.md D1/D2.
+    projection needed since channels already match. See docs/plans/PHASE9_PLAN.md D1/D2.
     """
 
     def __init__(self, num_classes: int = 200):

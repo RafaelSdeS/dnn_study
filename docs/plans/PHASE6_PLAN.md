@@ -86,7 +86,7 @@ The following hypotheses drive Phase 6 experiments. Each is testable via measure
 Computed the actual Pareto frontier (FP32 top-1 accuracy vs. size-MB, from `results/results_aggregate/model_details_cross_phase.csv`
 + Phase 4's `final_architecture_phase4/final_comparison.csv` — a model is on the frontier if no other
 model has both higher accuracy *and* smaller-or-equal size) instead of eyeballing it from
-`research/plans/BEST_MODELS.md`. Every frontier model is included, plus two off-frontier models kept for a
+`docs/plans/BEST_MODELS.md`. Every frontier model is included, plus two off-frontier models kept for a
 reason stated next to them. Full retraining of every Phase 1–4 model is not needed — profiling is
 inference-only (see top of file) and this set already brackets the interesting cases.
 

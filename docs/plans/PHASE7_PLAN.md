@@ -9,7 +9,7 @@ the loss is spatial (per-box or per-pixel) rather than a single softmax. This is
 project's stated scope ("Detection/segmentation are future work").
 
 This plan is a blueprint only — no code is written here. It follows the same structure as
-`research/plans/PHASE6_PLAN.md`: hypotheses first, then a decision record for every design choice that
+`docs/plans/PHASE6_PLAN.md`: hypotheses first, then a decision record for every design choice that
 isn't forced by the codebase, then task-by-task implementation detail, then a self-critical
 blocking-issues pass.
 
@@ -168,7 +168,7 @@ deliberate resolution change, not an oversight.
 Directly what `TODO.md` asks for ("reuse Phase 3's Pareto-optimal backbones... paired with... a
 large-kernel baseline backbone (AlexNetTV or VGGStyle)"). `alexnet_tv` is chosen over `vgg_style`
 for the large-kernel role because it is the literal large-kernel control already used as the
-Phase 6 baseline (`research/plans/PHASE6_PLAN.md`'s selected-models table) — reusing the same control
+Phase 6 baseline (`docs/plans/PHASE6_PLAN.md`'s selected-models table) — reusing the same control
 across phases lets Phase 7's findings be read directly against Phase 6's latency/Winograd numbers
 for the *same* model (H4 above depends on this). `vgg_style` (all-3×3, Winograd-eligible
 throughout, Pareto-optimal in Phase 3) is a natural 4th backbone if time allows — flagged as a
@@ -754,10 +754,10 @@ earlier `scripts/phase7_analysis.py` stub (deleted: its H2–H4 were unimplement
 and its run-dir parser had drifted from the current `ssd_<model>_<stage>[_pretrained]_<exp>`
 naming). The notebook loads runs directly off disk, computes per-run anchor-fix provenance
 (`git merge-base --is-ancestor 686b419 <hash>`), and only lets H1/H3 use post-fix, complete runs —
-so the anchor-recall issue documented in `research/plans/BEST_MODELS.md`'s Phase 7 section can't silently
+so the anchor-recall issue documented in `docs/plans/BEST_MODELS.md`'s Phase 7 section can't silently
 corrupt a conclusion. As of this writing only `alexnet_bottleneck` has a complete, valid,
 non-pretrained FP32 run and H2 (INT8) is fully blocked (no INT8 detection metrics exist yet) — see
-`research/logs/PHASE7_LOG.md` Stage 10 / A4-A5 for current data status; re-run the notebook as more PCAD
+`docs/logs/PHASE7_LOG.md` Stage 10 / A4-A5 for current data status; re-run the notebook as more PCAD
 results land.
 
 **What (original plan):** `notebooks/phase_7_detection_segmentation/phase7_results_analysis.ipynb` — joins Phase 7's mAP/mIoU results to
@@ -785,7 +785,7 @@ finding transfer" is a comparison question, not something a single phase's numbe
   differ (Phase 6 already established the 4060/4090 comparison methodology; re-running it fully for
   6 new models is additional wall-clock time better spent validating H1–H3 first).
 - Produce one consolidated `phase7_comparison.csv` (mirrors every prior phase's `final_comparison.csv`
-  convention) and update `research/plans/BEST_MODELS.md`/`TODO.md` with Phase 7's checked-off items and
+  convention) and update `docs/plans/BEST_MODELS.md`/`TODO.md` with Phase 7's checked-off items and
   headline findings, following the exact pattern Phases 1–6 already use in `TODO.md`.
 
 **Inputs:** `results/results_aggregate/model_details_cross_phase.csv`, `results/phase_4_compression_and_final_architecture/final_comparison.csv`,
@@ -794,8 +794,8 @@ Phase 6's profiling JSON outputs, Phase 7's own `phase_7_detection_comparison.cs
 
 **Outputs:** Figures (`results/figures_generated/phase_7_detection_segmentation/phase7_*`),
 `results/phase_7_detection_segmentation/phase7_comparison.csv` — both now produced by the
-notebook. `TODO.md`/`research/plans/BEST_MODELS.md` updates still pending a full A4 re-run (see
-`research/logs/PHASE7_LOG.md` Stage 10).
+notebook. `TODO.md`/`docs/plans/BEST_MODELS.md` updates still pending a full A4 re-run (see
+`docs/logs/PHASE7_LOG.md` Stage 10).
 
 **Dependencies:** Tasks 1–8 complete with at least FP32+INT8 results for all 3 backbones × 2 tasks.
 
@@ -891,7 +891,7 @@ Before submitting any full training run:
 - [ ] `pycocotools`/`torchmetrics` versions pinned in `environment.yml` (Blocking #5).
 - [ ] `phase_7_detection.yaml`/`phase_7_segmentation.yaml` `--dry-run` succeeds (Task 8 Validation).
 - [ ] `phase7_comparison.csv` populated and cross-referenced against Phase 3/6 CSVs by backbone
-      name before any headline claim is written into `TODO.md`/`research/plans/BEST_MODELS.md` (Task 9).
+      name before any headline claim is written into `TODO.md`/`docs/plans/BEST_MODELS.md` (Task 9).
 
 ---
 
