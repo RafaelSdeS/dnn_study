@@ -6,8 +6,9 @@ results or crashed. Fixed by switching to torchvision's quantizable resnet18. Th
 converts to INT8 for every residual-bearing model in the sweep and asserts the forward pass still works.
 """
 import torch
+import torch.nn as nn
 
-from ml.quantization import convert_to_int8, find_fuse_groups, prepare_qat_model
+from ml.quantization import convert_to_int8, find_fuse_groups, make_qat_callback, prepare_qat_model
 from models.baselines import ResNet18TV
 from models.final_architecture import AlexNetFinalBottleneckResidual, AlexNetFinalFireResidual
 
@@ -53,3 +54,12 @@ def test_prepare_qat_attaches_weight_and_activation_fake_quant():
 
     assert has_weight_fake_quant, "no weight fake-quantizer found after prepare_qat"
     assert has_activation_fake_quant, "no activation fake-quantizer found after prepare_qat"
+
+
+def test_qat_callback_still_applies_on_the_first_epoch_after_a_resume_past_it():
+    qat = prepare_qat_model(nn.Sequential(nn.Conv2d(3, 4, 3), nn.BatchNorm2d(4), nn.ReLU(inplace=False)),
+                            [["0", "1", "2"]])
+    make_qat_callback(freeze_bn_epoch=3, disable_observer_epoch=5)(7, qat)  # resumed at epoch 7
+    assert qat[0].freeze_bn  # a module attribute, not state_dict -- lost on resume unless re-applied
+    fake_quants = [m for m in qat.modules() if isinstance(m, torch.ao.quantization.FakeQuantizeBase)]
+    assert fake_quants and all(int(m.observer_enabled[0]) == 0 for m in fake_quants)

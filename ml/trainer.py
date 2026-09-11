@@ -157,7 +157,9 @@ class BaseTrainer:
         train_start = time.monotonic()
 
         epoch = start_epoch - 1  # ponytail: keeps epoch bound if resume already reached cfg.epochs
-        for epoch in range(start_epoch, cfg.epochs):
+        # a run that already early-stopped resumes to a no-op, not one more epoch per requeue/re-run
+        early_stopped = bool(cfg.early_stopping_patience) and patience_counter >= cfg.early_stopping_patience
+        for epoch in range(start_epoch, start_epoch if early_stopped else cfg.epochs):
             epoch_start = time.monotonic()
 
             if self.epoch_callback is not None:
@@ -200,7 +202,22 @@ class BaseTrainer:
             if self.metrics_callback is not None:
                 self.metrics_callback({"epoch": epoch + 1, **epoch_metrics})
 
-            # Save resume checkpoint every epoch (full training state for recovery)
+            current_primary = epoch_metrics[primary_key]
+            if current_primary > best_primary:
+                best_primary = current_primary
+                best_epoch = epoch
+                patience_counter = 0
+                save_checkpoint(best_path, model, optimizer, scheduler, epoch, val_metrics)
+                self.logger.info("  ✓ Best %s so far! Saved to %s", primary_key, best_path)
+                if self.wandb_run is not None:
+                    self.wandb_run.log({f"best_{primary_key}": best_primary})
+                    self.wandb_run.save(str(best_path))
+            else:
+                patience_counter += 1
+
+            # Resume checkpoint every epoch, AFTER the best/patience update above: written before
+            # it, a resumed run restarted with a stale best and could overwrite _best.pth with a
+            # worse epoch.
             save_checkpoint(
                 resume_path, model, optimizer, scheduler, epoch, val_metrics,
                 scaler=scaler,
@@ -214,19 +231,6 @@ class BaseTrainer:
             meta_path.write_text(json.dumps({
                 "epoch": epoch, f"best_{primary_key}": best_primary, "wandb_run_id": wandb_run_id,
             }))
-
-            current_primary = epoch_metrics[primary_key]
-            if current_primary > best_primary:
-                best_primary = current_primary
-                best_epoch = epoch
-                patience_counter = 0
-                save_checkpoint(best_path, model, optimizer, scheduler, epoch, val_metrics)
-                self.logger.info("  ✓ Best %s so far! Saved to %s", primary_key, best_path)
-                if self.wandb_run is not None:
-                    self.wandb_run.log({f"best_{primary_key}": best_primary})
-                    self.wandb_run.save(str(best_path))
-            else:
-                patience_counter += 1
 
             self._log_epoch(epoch, epoch_metrics)
 

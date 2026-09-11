@@ -103,15 +103,18 @@ def _detection_collate_fn(batch):
     return images, targets
 
 
-def _needs_download(voc_root: str, year: str) -> bool:
-    """True if VOCdevkit/VOC<year> isn't extracted yet.
+def _needs_download(voc_root: str, year: str, image_set: str = "trainval") -> bool:
+    """True if VOC<year>'s <image_set> split isn't extracted yet.
+
+    Checks the split file, not just VOCdevkit/VOC<year>: VOC2007 trainval and test are separate
+    tars extracting into the same dir, so the dir alone can't tell whether test was ever fetched.
 
     torchvision's download=True re-extracts the full tar unconditionally even
     when the data is already present — safe for a single run, but concurrent
     multi-node jobs racing to re-extract onto the same shared dataset dir
     corrupt each other's in-flight reads. Skip it once we already have the data.
     """
-    return not (Path(voc_root) / "VOCdevkit" / f"VOC{year}").is_dir()
+    return not (Path(voc_root) / "VOCdevkit" / f"VOC{year}" / "ImageSets" / "Main" / f"{image_set}.txt").is_file()
 
 
 def _resize_image_and_boxes(image, boxes, labels, img_size: int):
@@ -160,7 +163,7 @@ def create_voc_detection_loaders(cfg: DetSegDataConfig) -> Tuple:
     # VOC 07 test for evaluation
     voc07_test_raw = VOCDetection(
         root=cfg.voc_root, year="2007", image_set="test",
-        download=_needs_download(cfg.voc_root, "2007"),
+        download=_needs_download(cfg.voc_root, "2007", "test"),
     )
     val_ds = VOCDetectionDataset(voc07_test_raw, img_size=cfg.img_size)
 

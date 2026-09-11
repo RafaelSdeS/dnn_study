@@ -401,6 +401,7 @@ def compute_anchor_recall(
     total_boxes = 0
     matched_boxes = 0
     images_seen = 0
+    device = next(model.parameters()).device  # on GPU this takes seconds; on CPU, minutes
 
     model.eval()
     with torch.no_grad():
@@ -408,6 +409,7 @@ def compute_anchor_recall(
             if images_seen >= max_samples:
                 break
             images_seen += images.shape[0]
+            images = images.to(device)
 
             # Get default boxes (anchors) for this batch
             # backbone returns OrderedDict; anchor_generator expects list of tensors
@@ -418,7 +420,7 @@ def compute_anchor_recall(
             anchors = model.anchor_generator(ImageList(images, image_sizes), feature_list)
 
             for img_anchors, target in zip(anchors, targets):
-                gt_boxes = target["boxes"]
+                gt_boxes = target["boxes"].to(device)
                 if len(gt_boxes) == 0:
                     continue
 

@@ -82,8 +82,9 @@ configs/                  # YAML hyperparameters, loaded via configs/loader.py â
                           #   budget_unico.yaml = Winograd-FPGA study Fase 2 (14 *_fpga models, stages fp32+qat_wino,
                           #   uniform_hparams); an unknown name in any `models:` list now fails scripts/train.py
                           #   (and tests/test_registry.py) instead of being silently dropped
-                          #   `--smoke` on scripts/train.py and scripts/train_det_seg.py caps any experiment to 1
-                          #   epoch for a fast local pipeline check, superseding the old per-phase smoke config files.
+                          #   `--smoke` on scripts/train.py and scripts/train_det_seg.py caps every stage (fp32/qat/
+                          #   qat_wino) to 1 epoch for a fast local pipeline check, superseding the old per-phase
+                          #   smoke config files; on train_det_seg.py it runs the whole fp32->qat->int8 chain.
                           #   Smoke output (checkpoints/logs/tensorboard/resolved_config.json/aggregates CSV) is
                           #   written to a temp dir and discarded on exit -- never touches outputs/, wandb disabled
                           #   `extends: _protocols/<name>` (load_config, one level, dict-valued keys
@@ -290,6 +291,8 @@ conda env create -f environment.yml && conda activate alexnet_rafael
 python -m scripts.train --experiment default --runtime local        # classification, local
 python -m scripts.cluster submit --experiment default --runtime pcad --slurm single_gpu
 python -m scripts.cluster submit-sweep --experiment phase_8_efficient_vit --runtime pcad   # one job per model, Phase 8's 5 CLI-drivable models
+python -m scripts.cluster submit --experiment budget_unico --runtime pcad --slurm tupi_4090 --model wrn_16_4_fpga   # one model only
+python -m scripts.cluster submit-sweep --experiment budget_unico --runtime pcad --dry-run   # print the sbatch commands, submit nothing
 python -m scripts.cluster status <job_id>   # / cancel / resume
 python -m scripts.train_det_seg detection --model alexnet_bottleneck --dry-run   # Phase 7
 python -m scripts.profile_hardware --experiment phase_6_hardware_profiling --runtime local           # Phase 6

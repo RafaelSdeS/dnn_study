@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -29,7 +30,6 @@ def _build_sbatch_command(
     script = Path(__file__).resolve().parent / "slurm" / script_name
     output_root = Path(runtime_cfg.get("root", "outputs/pcad")).expanduser().resolve()
     log_dir = output_root / "logs" / experiment
-    log_dir.mkdir(parents=True, exist_ok=True)
 
     cmd = ["sbatch"]
     flag_map = {
@@ -44,6 +44,7 @@ def _build_sbatch_command(
         "mem": "--mem",
         "time": "--time",
         "signal": "--signal",
+        "open_mode": "--open-mode",
     }
     for key, flag in flag_map.items():
         if slurm_cfg.get(key):
@@ -73,25 +74,35 @@ def _build_sbatch_command(
     return cmd
 
 
+def _sbatch(cmd: list[str], dry_run: bool) -> str:
+    if dry_run:
+        return f"[DRY-RUN] {shlex.join(cmd)}"
+    Path(cmd[cmd.index("--output") + 1]).parent.mkdir(parents=True, exist_ok=True)  # Slurm won't create it
+    return subprocess.check_output(cmd, text=True).strip()
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Manage PCAD Slurm submissions for training runs and profiling.")
     sub = parser.add_subparsers(dest="command", required=True)
+    dry = argparse.ArgumentParser(add_help=False)
+    dry.add_argument("--dry-run", action="store_true", help="Print the sbatch command(s) instead of submitting")
 
-    submit = sub.add_parser("submit", help="Submit a new training job")
+    submit = sub.add_parser("submit", parents=[dry], help="Submit a new training job")
     submit.add_argument("--experiment", default="default")
     submit.add_argument("--runtime", default="pcad")
     submit.add_argument("--slurm", default="single_gpu")
     submit.add_argument("--device", default=None)
+    submit.add_argument("--model", default=None, help="Submit just this model of the experiment")
 
     submit_sweep = sub.add_parser(
-        "submit-sweep", help="Submit one job per model in an experiment's models: list"
+        "submit-sweep", parents=[dry], help="Submit one job per model in an experiment's models: list"
     )
     submit_sweep.add_argument("--experiment", default="large_scale")
     submit_sweep.add_argument("--runtime", default="pcad")
     submit_sweep.add_argument("--slurm", default="tupi_4090")
     submit_sweep.add_argument("--device", default=None)
 
-    profile_submit = sub.add_parser("profile-submit", help="Submit a Phase 6 profiling job")
+    profile_submit = sub.add_parser("profile-submit", parents=[dry], help="Submit a Phase 6 profiling job")
     profile_submit.add_argument("--experiment", default="phase_6_hardware_profiling")
     profile_submit.add_argument("--runtime", default="pcad")
     profile_submit.add_argument("--slurm", default="tupi_4090", help="SLURM config (default: tupi_4090 for RTX 4090)")
@@ -103,7 +114,7 @@ def build_parser() -> argparse.ArgumentParser:
     cancel = sub.add_parser("cancel", help="Cancel a job")
     cancel.add_argument("job_id")
 
-    resume = sub.add_parser("resume", help="Resubmit using a saved run config")
+    resume = sub.add_parser("resume", parents=[dry], help="Resubmit using a saved run config")
     resume.add_argument("run_dir")
     resume.add_argument("--runtime", default="pcad")
     resume.add_argument("--slurm", default="single_gpu")
@@ -124,8 +135,8 @@ def main() -> int:
     if args.command == "submit":
         runtime_cfg = _load_yaml(args.runtime, "runtime")
         slurm_cfg = _load_yaml(args.slurm, "slurm")
-        cmd = _build_sbatch_command(runtime_cfg, slurm_cfg, args.experiment, args.runtime, args.device)
-        print(subprocess.check_output(cmd, text=True).strip())
+        cmd = _build_sbatch_command(runtime_cfg, slurm_cfg, args.experiment, args.runtime, args.device, model=args.model)
+        print(_sbatch(cmd, args.dry_run))
         return 0
 
     if args.command == "submit-sweep":
@@ -141,8 +152,7 @@ def main() -> int:
             cmd = _build_sbatch_command(
                 runtime_cfg, per_model_slurm_cfg, args.experiment, args.runtime, args.device, model=model
             )
-            job_id = subprocess.check_output(cmd, text=True).strip()
-            print(f"{model}: {job_id}")
+            print(f"{model}: {_sbatch(cmd, args.dry_run)}")
         return 0
 
     if args.command == "profile-submit":
@@ -154,7 +164,7 @@ def main() -> int:
         )
         if args.resume:
             cmd += ["--resume"]
-        print(subprocess.check_output(cmd, text=True).strip())
+        print(_sbatch(cmd, args.dry_run))
         return 0
 
     if args.command == "resume":
@@ -169,7 +179,7 @@ def main() -> int:
         runtime_cfg = _load_yaml(args.runtime, "runtime")
         slurm_cfg = _load_yaml(args.slurm, "slurm")
         cmd = _build_sbatch_command(runtime_cfg, slurm_cfg, str(experiment_path), args.runtime, args.device)
-        print(subprocess.check_output(cmd, text=True).strip())
+        print(_sbatch(cmd, args.dry_run))
         return 0
 
     return 1

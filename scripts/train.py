@@ -116,10 +116,11 @@ def _build_qat_wino_config(base_cfg: dict[str, Any], experiment_cfg: dict[str, A
 
 
 def _apply_smoke_override(experiment_cfg: dict[str, Any]) -> dict[str, Any]:
-    """Cap fp32/QAT epochs to 1 so a full pipeline run (data/model/checkpoint/
+    """Cap fp32/QAT/qat_wino epochs to 1 so a full pipeline run (data/model/checkpoint/
     QAT-convert) finishes in minutes locally, to catch bugs before a PCAD submission."""
     experiment_cfg["training"] = {**experiment_cfg.get("training", {}), "epochs": 1, "warmup_epochs": 0}
     experiment_cfg["qat"] = {**experiment_cfg.get("qat", {}), "epochs": 1}
+    experiment_cfg["qat_wino"] = {**experiment_cfg.get("qat_wino", {}), "epochs": 1}
     return experiment_cfg
 
 
@@ -222,8 +223,11 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
         trainer = None
 
         def _request_stop(_signum, _frame):
-            if trainer is not None:
-                trainer.request_stop()
+            # 1st signal: stop after this epoch (resume checkpoint stays valid). A 2nd one, or one
+            # before any trainer exists, aborts now -- like a plain Ctrl+C.
+            if trainer is None or trainer.stop_requested:
+                raise KeyboardInterrupt
+            trainer.request_stop()
 
         signal.signal(signal.SIGTERM, _request_stop)
         signal.signal(signal.SIGINT, _request_stop)
@@ -290,8 +294,13 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
             qat_model = build_qat(model_name, save_dir=checkpoints_dir, device=device)
             qat_cfg_run = replace(model_cfg, epochs=qat_cfg.epochs, lr=qat_cfg.lr, weight_decay=qat_cfg.weight_decay, use_amp=False)
             resume_from = auto_resume_path(checkpoints_dir, f"qat_{model_name}")
-            if (checkpoints_dir / f"qat_{model_name}_best.pth").exists() and resume_from is None:
+            qat_best_path = checkpoints_dir / f"qat_{model_name}_best.pth"
+            if qat_best_path.exists() and resume_from is None:
                 logger.info("Skipping QAT stage for %s; best checkpoint exists.", model_name)
+                # build_qat() started from the FP32 weights; without this the int8 stage would
+                # convert an untrained, uncalibrated QAT model
+                qat_best = torch.load(qat_best_path, map_location=str(device), weights_only=False)
+                qat_model.load_state_dict(qat_best.get("model_state_dict", qat_best))
             else:
                 trainer = Trainer(
                     qat_model,

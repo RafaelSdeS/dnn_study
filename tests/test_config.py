@@ -114,5 +114,6 @@ def test_every_slurm_config_has_a_partition_and_gres():
 def test_tupi_4090_slurm_config_has_requeue_and_signal():
     slurm_cfg = yaml.safe_load((CONFIGS_DIR / "slurm" / "tupi_4090.yaml").read_text())
     assert slurm_cfg["requeue"] is True
-    assert slurm_cfg["signal"] == "B:USR1@300"
+    assert slurm_cfg["signal"] == "B:USR1@900"
+    assert slurm_cfg["open_mode"] == "append"
     assert slurm_cfg["time"] == "24:00:00"

@@ -4,7 +4,7 @@ Injects a stub in place of torchvision.datasets.VOCDetection so no VOC download 
 """
 from PIL import Image
 
-from ml.det_seg_data import VOCDetectionDataset
+from ml.det_seg_data import VOCDetectionDataset, _needs_download
 
 
 class _StubVOC:
@@ -49,3 +49,11 @@ def test_getitem_handles_image_with_no_annotated_objects():
 
     assert target["boxes"].shape == (0, 4)
     assert target["labels"].shape == (0,)
+
+
+def test_needs_download_checks_the_split_not_just_the_year_dir(tmp_path):
+    main = tmp_path / "VOCdevkit" / "VOC2007" / "ImageSets" / "Main"
+    main.mkdir(parents=True)
+    (main / "trainval.txt").write_text("000005\n")  # trainval tar extracted, the separate test tar not yet
+    assert not _needs_download(str(tmp_path), "2007")
+    assert _needs_download(str(tmp_path), "2007", "test")

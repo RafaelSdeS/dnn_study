@@ -56,7 +56,10 @@ def test_fit_one_epoch_populates_all_history_fields(tmp_path):
     assert history["images_per_sec"][0] > 0
 
     assert (tmp_path / "smoke_best.pth").exists()
-    assert (tmp_path / "smoke_resume.pth").exists()
+    # the resume file must record the epoch it was written for (here a new best), not the one
+    # before it -- a stale best lets a later, worse epoch overwrite _best.pth after a requeue
+    resume = torch.load(tmp_path / "smoke_resume.pth", weights_only=False)
+    assert resume["best_val_acc"] == history["val_acc"][0]
 
 
 class _AlwaysWrongModel(nn.Module):
@@ -127,3 +130,20 @@ def test_fit_restores_best_checkpoint_not_last_epoch(tmp_path):
     live = trainer.model.state_dict()
     for key, tensor in best.items():
         assert torch.equal(live[key], tensor), f"{key} kept the last epoch's weights"
+
+
+def test_resume_of_an_early_stopped_run_trains_no_further(tmp_path):
+    # lr=0 -> val_acc never moves -> epoch 2 doesn't improve -> patience 1 stops the run there
+    cfg = TrainerConfig(epochs=5, lr=0.0, warmup_epochs=0, use_amp=False, early_stopping_patience=1)
+    loader = _tiny_loader()
+
+    def fit(**kwargs):
+        return Trainer(_tiny_model(), loader, loader, cfg, torch.device("cpu"), tmp_path, "es",
+                       num_classes=5).fit(**kwargs)
+
+    first = fit()
+    assert len(first["history"]["val_acc"]) == 2
+    assert torch.load(tmp_path / "es_resume.pth", weights_only=False)["patience_counter"] == 1
+
+    resumed = fit(resume_from=tmp_path / "es_resume.pth")
+    assert len(resumed["history"]["val_acc"]) == 2  # a requeue / re-run adds no epochs

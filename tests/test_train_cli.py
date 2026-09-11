@@ -43,13 +43,17 @@ def test_smoke_flag_is_parsed():
 
 
 def test_smoke_override_caps_epochs_and_keeps_other_overrides():
-    experiment_cfg = {"training": {"epochs": 1000, "lr": 5e-4}, "qat": {"epochs": 100}}
+    experiment_cfg = {"training": {"epochs": 1000, "lr": 5e-4}, "qat": {"epochs": 100},
+                      "qat_wino": {"epochs": 15, "lr": 5e-5}}
     result = _apply_smoke_override(experiment_cfg)
     assert result["training"]["epochs"] == 1
     assert result["training"]["warmup_epochs"] == 0
     assert result["training"]["lr"] == 5e-4
     assert result["qat"]["epochs"] == 1
+    assert result["qat_wino"] == {"epochs": 1, "lr": 5e-5}
 
 
 def test_smoke_override_handles_missing_blocks():
-    assert _apply_smoke_override({}) == {"training": {"epochs": 1, "warmup_epochs": 0}, "qat": {"epochs": 1}}
+    assert _apply_smoke_override({}) == {
+        "training": {"epochs": 1, "warmup_epochs": 0}, "qat": {"epochs": 1}, "qat_wino": {"epochs": 1},
+    }

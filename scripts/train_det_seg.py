@@ -9,7 +9,9 @@ Usage:
 """
 import argparse
 import json
+import os
 import signal
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -39,6 +41,8 @@ from ml.quantization import make_qat_callback
 from ml.reporting import compute_detection_summary, compute_segmentation_summary
 from ml.runtime import capture_provenance, expand_path, load_runtime_root, set_global_seed
 from configs.loader import load_config
+
+SMOKE_DIR_ENV = "TRAIN_DET_SEG_SMOKE_DIR"  # set by the --smoke parent for each per-stage child
 
 
 # Everything detection and segmentation don't share. The stage pipeline itself (fp32 ->
@@ -99,8 +103,11 @@ def run(args):
     trainer = None
 
     def _request_stop(_signum, _frame):
-        if trainer is not None:
-            trainer.request_stop()
+        # 1st signal: stop after this epoch (resume checkpoint stays valid). A 2nd one, or one
+        # before any trainer exists (data download/loading), aborts now -- like a plain Ctrl+C.
+        if trainer is None or trainer.stop_requested:
+            raise KeyboardInterrupt
+        trainer.request_stop()
 
     signal.signal(signal.SIGTERM, _request_stop)
     signal.signal(signal.SIGINT, _request_stop)
@@ -180,7 +187,7 @@ def run(args):
             # full VOC07-test val set — the earlier "too slow" complaint was actually an
             # unbounded max_samples check, since fixed.
             if args.task == "detection" and not args.skip_anchor_check:
-                recall = compute_anchor_recall(model, val_loader, iou_threshold=0.5)
+                recall = compute_anchor_recall(model.to(device), val_loader, iou_threshold=0.5)
                 print(f"  Anchor recall @IoU 0.5: {recall:.3f}")
                 if recall < 0.95:
                     print(f"ABORT: anchor recall {recall:.3f} < 0.95 — fix anchor config first "
@@ -209,6 +216,11 @@ def run(args):
             log_file=run_dir / f"{run_id}.log"
         )
         history = trainer.fit(resume_from=run_dir / f"{run_id}_resume.pth")
+        if trainer.stop_requested:
+            # Truncated run: keep the resume checkpoint, write no metrics.json. A finished-looking
+            # one (and exit 0) would let an afterok dependency start the next stage on it.
+            print(f"\nStop requested -- {run_id} ends early; resume checkpoint kept, no metrics.json written.")
+            sys.exit(1)
         history["summary"] = task["summary"](
             model, data_cfg.img_size, val_loader, device,
             checkpoint_path=run_dir / f"{run_id}_best.pth",
@@ -279,7 +291,9 @@ def main():
     parser.add_argument("--runtime", choices=["local", "pcad"], default="local", help="Where to run")
     parser.add_argument("--save-dir", default=None, help="Output directory (default: <runtime root>/phase_7_detection_segmentation)")
     parser.add_argument("--dry-run", action="store_true", help="Don't train, just show config")
-    parser.add_argument("--smoke", action="store_true", help="Cap epochs to 1 for a fast local pipeline check")
+    parser.add_argument("--smoke", action="store_true",
+                        help="Fast local pipeline check: the whole fp32->qat->int8 chain at 1 epoch each, "
+                             "in a temp dir (ignores --stage)")
     parser.add_argument("--skip-anchor-check", action="store_true", help="Skip the anchor-recall pre-flight gate")
     parser.add_argument(
         "--pretrained-ckpt", type=Path, default=None,
@@ -294,14 +308,28 @@ def main():
         print("\n[CLUSTER MODE] Would submit to PCAD. Use: sbatch scripts/slurm/det_seg.sbatch")
         return
 
+    if args.smoke and os.environ.get(SMOKE_DIR_ENV):  # one stage of the chain below
+        args.save_dir = os.environ[SMOKE_DIR_ENV]
+        run(args)
+        return
+
     if args.smoke:
         # Checkpoints/logs/metrics.json/git_hash.txt all land under args.save_dir -- redirect it
         # to a temp dir so a smoke run never overwrites a real run's output; deleted on exit
         # either way, so a failure's traceback (printed to stderr before cleanup) is the only
-        # trace it leaves, which is the point.
+        # trace it leaves, which is the point. All three stages share it: qat/int8 load the
+        # previous stage's checkpoint from there, so a lone qat/int8 smoke could never start.
+        # One process per stage, as on PCAD: all three in one process kept the earlier
+        # stages' memory resident and got the whole editor killed by systemd-oomd on a
+        # 16 GB laptop (2026-09-11).
         with tempfile.TemporaryDirectory(prefix="smoke_") as tmp_dir:
-            args.save_dir = tmp_dir
-            run(args)
+            for stage in ("fp32", "qat", "int8"):
+                child = subprocess.run(
+                    [sys.executable, str(Path(__file__).resolve()), *sys.argv[1:], "--stage", stage],
+                    env={**os.environ, SMOKE_DIR_ENV: tmp_dir},
+                )
+                if child.returncode:
+                    sys.exit(child.returncode)
         return
 
     run(args)

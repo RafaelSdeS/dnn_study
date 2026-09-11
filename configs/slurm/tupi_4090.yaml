@@ -6,4 +6,8 @@ cpus_per_task: 8  # headroom over data.yaml's num_workers=4 + the main training 
 mem: 32G
 time: "24:00:00"  # 24h cap for the large-scale FP32(<=1000ep)+QAT(<=100ep) sweep, patience=20 usually stops well short
 requeue: true
-signal: "B:USR1@300"  # SIGUSR1 to the batch shell 300s before the wall-clock limit; see train.sbatch
+# SIGUSR1 to the batch shell 900s before the wall-clock limit (see train.sbatch). The stop only lands
+# at the end of the current epoch, so this must exceed the longest epoch -- qat_wino on wrn_16_4 is
+# ~7 min on a 4090; with 300s the job was killed before its requeue ever ran.
+signal: "B:USR1@900"
+open_mode: append  # a requeued job keeps appending to its %x-%j.out/.err instead of truncating them
