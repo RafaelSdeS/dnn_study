@@ -79,9 +79,12 @@ configs/                  # YAML hyperparameters, loaded via configs/loader.py �
                           #   repeating it — e.g. large_scale.yaml/alexnet_dilated_gap.yaml/
                           #   phase_9_bypass_ablation_large_scale.yaml/large_scale_fire_residual_resume.yaml
                           #   all extend _protocols/large_scale.yaml (1000ep/patience 50/QAT 100ep);
-                          #   phase_8_efficient_vit(_convstem).yaml extend _protocols/phase_8_vit.yaml
+                          #   phase_8_efficient_vit(_convstem).yaml extend _protocols/phase_8_vit.yaml;
+                          #   alexnet_3x3_fc/alexnet_3x3_gap/default/phase_9_bypass_ablation.yaml extend
+                          #   _protocols/standard.yaml (just seed: 42 + stages: [fp32, qat, int8])
     _protocols/            # extends-only fragments (no models:/name: — not runnable, excluded from
-                          #   _experiment_names()'s non-recursive glob): large_scale.yaml, phase_8_vit.yaml
+                          #   _experiment_names()'s non-recursive glob): large_scale.yaml, phase_8_vit.yaml,
+                          #   standard.yaml
 scripts/                  # CLI entry points (used instead of notebooks for PCAD/cluster runs)
   train.py                # `python -m scripts.train --experiment ... --runtime local|pcad` — classification FP32→QAT→INT8
   cluster.py               # `python -m scripts.cluster submit|status|cancel|resume` — submits slurm/train.sbatch or profile.sbatch
@@ -108,8 +111,9 @@ scripts/                  # CLI entry points (used instead of notebooks for PCAD
     backfill_model_size.py / backfill_best_epoch_eval.py / dilated_gap_local.py
   pcad/                    # PCAD submission wrappers
     migrate_pcad_gitignored.sh  # merges gitignored artifacts (*.pth, *.log) left in pre-reorg folder names after a pull
-    submit_phase_7_simple.sh / submit_phase_7_multinode.sh  # PCAD Phase 7 detection submission (simple vs FP32→QAT→INT8 chaining) — see research/logs/PHASE7_MULTINODE.md
-    submit_phase_7_segmentation.sh / submit_phase_7_segmentation_multinode.sh  # same, for segmentation (no --pretrained-ckpt support)
+    submit_phase_7_simple.sh / submit_phase_7_multinode.sh  # PCAD Phase 7 detection + segmentation submission
+                                #   (simple vs FP32→QAT→INT8 chaining; TASK=segmentation env var / positional
+                                #   arg selects the task; --pretrained-ckpt is detection-only) — see research/logs/PHASE7_MULTINODE.md
     preflight_budget_unico.py   # `python -m scripts.pcad.preflight_budget_unico` — laptop-side sanity check for
                                 #   configs/experiments/budget_unico.yaml's qat_wino stage before burning a PCAD
                                 #   allocation on it (checks the sibling Winograd-FPGA repo is reachable, etc.)

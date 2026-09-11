@@ -14,6 +14,7 @@
 #                                                            # checkpoints instead of random init
 #                                                            # (separate run_id tree, doesn't
 #                                                            # collide with the from-scratch sweep)
+#                                                            # -- detection only, see guard below
 #   bash scripts/pcad/submit_phase_7_multinode.sh --dry-run       # Show commands without submitting
 
 PROJECT_ROOT=$(git rev-parse --show-toplevel)
@@ -58,7 +59,18 @@ for arg in "$@"; do
     esac
 done
 
-EXPERIMENT="phase7_${TASK}"
+if [ "$RUN_PRETRAINED" = true ] && [ "$TASK" = "segmentation" ]; then
+    echo "ERROR: 'pretrained' is not supported for segmentation -- run_segmentation" >&2
+    echo "(scripts/train_det_seg.py) has no --pretrained-ckpt argument; segmentation" >&2
+    echo "backbones only train from scratch." >&2
+    exit 1
+fi
+
+EXPERIMENT="phase_7_${TASK}"
+
+# Job-name/log-file prefix matches each task's historical convention (p7_/p7seg_).
+JOB_PREFIX="p7"
+[ "$TASK" = "segmentation" ] && JOB_PREFIX="p7seg"
 
 # Suffix for job names/log files, distinguishing a pretrained-init sweep from the
 # from-scratch one (mirrors train_det_seg.py's run_id "_pretrained" suffix).
@@ -86,8 +98,8 @@ echo ""
 # Submit all FP32 jobs in parallel
 fp32_job_ids=()
 for model in "${MODELS[@]}"; do
-    job_name="p7_${model#alexnet_}_fp32${name_suffix}"
-    log_file="outputs/pcad/phase_7_detection_segmentation/logs/p7_${model}_fp32${name_suffix}_%j.log"
+    job_name="${JOB_PREFIX}_${model#alexnet_}_fp32${name_suffix}"
+    log_file="outputs/pcad/phase_7_detection_segmentation/logs/${JOB_PREFIX}_${model}_fp32${name_suffix}_%j.log"
     extra_args=""
     [ "$TASK" = "detection" ] && [ "$model" = "alexnet_tv" ] && extra_args="--skip-anchor-check"
     [ "$RUN_PRETRAINED" = true ] && extra_args="$extra_args --pretrained-ckpt ${CKPT_ROOT}/${model}/checkpoints/${model}_best.pth"
@@ -126,8 +138,8 @@ if [ "$RUN_QAT" = true ]; then
             continue
         fi
 
-        job_name="p7_${model#alexnet_}_qat${name_suffix}"
-        log_file="outputs/pcad/phase_7_detection_segmentation/logs/p7_${model}_qat${name_suffix}_%j.log"
+        job_name="${JOB_PREFIX}_${model#alexnet_}_qat${name_suffix}"
+        log_file="outputs/pcad/phase_7_detection_segmentation/logs/${JOB_PREFIX}_${model}_qat${name_suffix}_%j.log"
         # Presence (not content) of --pretrained-ckpt must match the FP32 stage's so
         # train_det_seg.py computes the same run_id suffix and finds the right
         # upstream checkpoint; the path itself is unused for qat/int8 backbone init.
@@ -166,8 +178,8 @@ if [ "$RUN_QAT" = true ]; then
                 continue
             fi
 
-            job_name="p7_${model#alexnet_}_int8${name_suffix}"
-            log_file="outputs/pcad/phase_7_detection_segmentation/logs/p7_${model}_int8${name_suffix}_%j.log"
+            job_name="${JOB_PREFIX}_${model#alexnet_}_int8${name_suffix}"
+            log_file="outputs/pcad/phase_7_detection_segmentation/logs/${JOB_PREFIX}_${model}_int8${name_suffix}_%j.log"
             extra_args=""
             [ "$RUN_PRETRAINED" = true ] && extra_args="--pretrained-ckpt ${CKPT_ROOT}/${model}/checkpoints/${model}_best.pth"
 

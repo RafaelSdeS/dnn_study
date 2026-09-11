@@ -16,8 +16,16 @@ else
 fi
 
 TASK="${TASK:-detection}"   # or: TASK=segmentation
-EXPERIMENT="phase7_${TASK}"
+EXPERIMENT="phase_7_${TASK}"
 PARTITION="tupi"   # RTX 4090 nodes; alternatives: shared (K20m, weak), grace (L40s), beagle (GTX1080Ti)
+
+# Job-name/log-file prefix matches each task's historical convention (p7_/p7seg_).
+JOB_PREFIX="p7"
+LOG_TAG="${TASK}_"
+if [ "$TASK" = "segmentation" ]; then
+    JOB_PREFIX="p7seg"
+    LOG_TAG=""
+fi
 
 mkdir -p outputs/pcad/phase_7_detection_segmentation/logs
 
@@ -35,12 +43,12 @@ for model in "${MODELS[@]}"; do
     # the STAGE slot and "phase_7_detection" in the MODEL slot; argparse would have rejected
     # both immediately.
     output=$(sbatch \
-        --job-name="p7_${model:0:8}" \
+        --job-name="${JOB_PREFIX}_${model:0:8}" \
         --time=12:00:00 \
         --mem=32G \
         --gpus=1 \
         --partition="$PARTITION" \
-        --output="outputs/pcad/phase_7_detection_segmentation/logs/p7_${TASK}_${model}_%j.log" \
+        --output="outputs/pcad/phase_7_detection_segmentation/logs/${JOB_PREFIX}_${LOG_TAG}${model}_%j.log" \
         scripts/slurm/det_seg.sbatch "$TASK" fp32 "$model" "$EXPERIMENT" 2>&1)
 
     job_id=$(echo "$output" | grep -oP 'Submitted batch job \K[0-9]+' || echo "")
