@@ -15,16 +15,19 @@ from .config import TrainerConfig
 from .profiling import GpuSampler
 
 
-class Trainer:
+class BaseTrainer:
     """
-    Single training loop for FP32 and QAT runs.
-
-    For QAT, pass use_amp=False in cfg and supply epoch_callback via
-    make_qat_callback(freeze_bn_epoch, disable_observer_epoch).
-
-    Skip/resume logic lives in the notebook loop — instantiate one Trainer
-    per model and call fit(resume_from=...) when resuming.
+    Shared fit() loop for classification/detection/segmentation trainers: optimizer/scheduler/
+    scaler construction, resume-state restore, per-epoch bookkeeping (GpuSampler, wandb,
+    metrics_callback, early stopping, stop_requested), envelope checkpointing (both the
+    per-epoch resume file and the best-metric file), and best-checkpoint reload before
+    returning. Concrete subclasses implement the hooks below; each keeps its own fit()
+    return shape via _shape_result() -- Trainer's is a tested, widely-consumed contract
+    (ml/reporting.py::make_run_summary, several notebooks), so unifying the loop mechanism
+    does not mean unifying every subclass's return keys.
     """
+
+    LOGGER_PREFIX = "trainer"
 
     def __init__(
         self,
@@ -55,7 +58,7 @@ class Trainer:
         self.stop_requested = False
         self.save_dir.mkdir(parents=True, exist_ok=True)
 
-        self.logger = logging.getLogger(f"trainer.{run_name}")
+        self.logger = logging.getLogger(f"{self.LOGGER_PREFIX}.{run_name}")
         self.logger.setLevel(logging.INFO)
         if not self.logger.handlers:
             self.logger.addHandler(logging.StreamHandler())
@@ -64,16 +67,39 @@ class Trainer:
                 fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
                 self.logger.addHandler(fh)
 
+    def request_stop(self) -> None:
+        self.stop_requested = True
+
+    # ── hooks concrete subclasses implement ─────────────────────────────
+    def _build_criterion(self) -> Optional[nn.Module]:
+        raise NotImplementedError
+
+    def _init_history_schema(self) -> dict:
+        raise NotImplementedError
+
+    def _train_one_epoch(self, model, optimizer, scaler, criterion) -> dict:
+        raise NotImplementedError
+
+    def _validate(self, model, criterion) -> dict:
+        raise NotImplementedError
+
+    def _primary_metric_key(self) -> str:
+        raise NotImplementedError
+
+    def _log_epoch(self, epoch: int, epoch_metrics: dict) -> None:
+        raise NotImplementedError
+
+    def _shape_result(self, history: dict, best_epoch: int, epochs_run: int,
+                       total_training_time_s: float, wandb_run_id) -> dict:
+        raise NotImplementedError
+
     def fit(self, resume_from: Optional[Path] = None) -> dict:
-        """Run train/val loop, checkpoint best, return history dict."""
+        """Run train/val loop, checkpoint best, return this subclass's result dict."""
         cfg = self.cfg
         model = self.model.to(self.device)
-        criterion = nn.CrossEntropyLoss(label_smoothing=cfg.label_smoothing)
+        criterion = self._build_criterion()
         optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
         if cfg.warmup_epochs > 0:
-            # Same LinearLR+SequentialLR composition as ml/det_seg_trainer.py's fit();
-            # transformer training (Phase 8) diverges early without warmup far more
-            # often than the CNN-tuned defaults this loop was built for.
             warmup = torch.optim.lr_scheduler.LinearLR(
                 optimizer, start_factor=0.1, total_iters=cfg.warmup_epochs
             )
@@ -87,21 +113,14 @@ class Trainer:
             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=cfg.epochs)
         scaler = torch.amp.GradScaler("cuda") if cfg.use_amp else None
 
+        primary_key = self._primary_metric_key()
         start_epoch = 0
-        best_val_acc = -1.0
-        best_val_top5 = 0.0
-        best_val_loss = float("inf")
+        best_primary = -1.0
         best_epoch = 0
         patience_counter = 0
         wandb_run_id = self.wandb_run.id if self.wandb_run else None
         elapsed_time_s = 0.0
-        history: dict[str, list] = {
-            "train_loss": [], "train_acc": [], "val_loss": [], "val_acc": [], "val_top5": [],
-            "epoch_time_s": [], "peak_gpu_mem_mb": [], "lr": [],
-            "images_per_sec": [], "avg_batch_time_s": [], "cpu_percent": [], "ram_used_mb": [],
-            "gpu_power_avg_w": [], "gpu_utilization_pct": [], "gpu_temp_avg_c": [],
-            "gpu_memory_used_avg_mb": [], "gpu_energy_wh": [],
-        }
+        history: dict[str, list] = self._init_history_schema()
         psutil.cpu_percent(interval=None)  # prime the delta-since-last-call counter
 
         # Load full training state if resuming
@@ -111,21 +130,18 @@ class Trainer:
                 device=str(self.device), reset_scheduler=cfg.reset_scheduler_on_resume,
             )
             start_epoch = state["epoch"] + 1
-            best_val_acc = state["best_val_acc"]
-            best_val_top5 = state["best_val_top5"]
+            best_primary = state["best_val_acc"]
             patience_counter = state["patience_counter"]
             elapsed_time_s = state["elapsed_time_s"]
             for k, v in state["history"].items():
                 if k in history:
                     history[k] = v
             wandb_run_id = state["wandb_run_id"]
-            # best_epoch/best_val_loss aren't in the checkpoint -- recover them from the
-            # restored history so the resumed run's summary reports the whole run, not
-            # just the segment after the resume. best_val_loss is the loss AT the
-            # best-accuracy epoch (not the minimum loss), matching the loop below.
-            if history["val_acc"]:
-                best_epoch = max(range(len(history["val_acc"])), key=history["val_acc"].__getitem__)
-                best_val_loss = history["val_loss"][best_epoch]
+            # best_epoch isn't in the checkpoint -- recover it from the restored history so
+            # the resumed run's summary reports the whole run, not just the segment after
+            # the resume.
+            if history[primary_key]:
+                best_epoch = max(range(len(history[primary_key])), key=history[primary_key].__getitem__)
             else:
                 best_epoch = start_epoch - 1
             if cfg.reset_scheduler_on_resume:
@@ -151,8 +167,8 @@ class Trainer:
                 torch.cuda.reset_peak_memory_stats(self.device)
 
             with GpuSampler() as gpu_sampler:
-                train_loss, train_acc, avg_grad_norm = self._train_one_epoch(model, optimizer, scaler, criterion)
-                val_loss, val_acc, val_top5 = self._validate(model, criterion)
+                train_metrics = self._train_one_epoch(model, optimizer, scaler, criterion)
+                val_metrics = self._validate(model, criterion)
             gpu_metrics = gpu_sampler.summary()
             scheduler.step()
             lr = optimizer.param_groups[0]["lr"]
@@ -168,36 +184,15 @@ class Trainer:
             cpu_percent = psutil.cpu_percent(interval=None)
             ram_used_mb = psutil.virtual_memory().used / (1024 ** 2)
 
-            history["train_loss"].append(train_loss)
-            history["train_acc"].append(train_acc)
-            history["val_loss"].append(val_loss)
-            history["val_acc"].append(val_acc)
-            history["val_top5"].append(val_top5)
-            history["epoch_time_s"].append(epoch_time)
-            history["peak_gpu_mem_mb"].append(peak_mem)
-            history["lr"].append(lr)
-            history["images_per_sec"].append(images_per_sec)
-            history["avg_batch_time_s"].append(avg_batch_time_s)
-            history["cpu_percent"].append(cpu_percent)
-            history["ram_used_mb"].append(ram_used_mb)
-            history["gpu_power_avg_w"].append(gpu_metrics["gpu_power_avg_w"])
-            history["gpu_utilization_pct"].append(gpu_metrics["gpu_utilization_pct"])
-            history["gpu_temp_avg_c"].append(gpu_metrics["gpu_temp_avg_c"])
-            history["gpu_memory_used_avg_mb"].append(gpu_metrics["gpu_memory_used_avg_mb"])
-            history["gpu_energy_wh"].append(gpu_metrics["gpu_energy_wh"])
-            if avg_grad_norm is not None:
-                history.setdefault("grad_norm", []).append(avg_grad_norm)
-
             epoch_metrics = {
-                "train_loss": train_loss, "train_acc": train_acc,
-                "val_loss": val_loss, "val_acc": val_acc, "val_top5": val_top5,
+                **train_metrics, **val_metrics,
                 "lr": lr, "epoch_time_s": epoch_time, "peak_gpu_mem_mb": peak_mem,
                 "images_per_sec": images_per_sec, "avg_batch_time_s": avg_batch_time_s,
                 "cpu_percent": cpu_percent, "ram_used_mb": ram_used_mb,
                 **gpu_metrics,
             }
-            if avg_grad_norm is not None:
-                epoch_metrics["grad_norm"] = avg_grad_norm
+            for key, value in epoch_metrics.items():
+                history.setdefault(key, []).append(value)
 
             if self.wandb_run is not None:
                 self.wandb_run.log(epoch_metrics, step=epoch + 1)
@@ -207,38 +202,33 @@ class Trainer:
 
             # Save resume checkpoint every epoch (full training state for recovery)
             save_checkpoint(
-                resume_path, model, optimizer, scheduler, epoch, {"val_acc": val_acc},
+                resume_path, model, optimizer, scheduler, epoch, val_metrics,
                 scaler=scaler,
-                best_val_acc=best_val_acc,
-                best_val_top5=best_val_top5,
+                best_val_acc=best_primary,
                 history=history,
                 wandb_run_id=wandb_run_id,
                 patience_counter=patience_counter,
                 elapsed_time_s=elapsed_time_s + (time.monotonic() - train_start),
             )
             # Write metadata sidecar for quick access
-            meta_path.write_text(json.dumps({"epoch": epoch, "best_val_acc": best_val_acc, "wandb_run_id": wandb_run_id}))
+            meta_path.write_text(json.dumps({
+                "epoch": epoch, f"best_{primary_key}": best_primary, "wandb_run_id": wandb_run_id,
+            }))
 
-            if val_acc > best_val_acc:
-                best_val_acc = val_acc
-                best_val_top5 = val_top5
-                best_val_loss = val_loss
+            current_primary = epoch_metrics[primary_key]
+            if current_primary > best_primary:
+                best_primary = current_primary
                 best_epoch = epoch
                 patience_counter = 0
-                save_checkpoint(best_path, model, optimizer, scheduler, epoch, {"val_acc": val_acc})
+                save_checkpoint(best_path, model, optimizer, scheduler, epoch, val_metrics)
+                self.logger.info("  ✓ Best %s so far! Saved to %s", primary_key, best_path)
                 if self.wandb_run is not None:
-                    self.wandb_run.log({"best_val_acc": best_val_acc})
+                    self.wandb_run.log({f"best_{primary_key}": best_primary})
                     self.wandb_run.save(str(best_path))
             else:
                 patience_counter += 1
 
-            self.logger.info(
-                "Epoch %3d/%d | train_loss=%.4f train_acc=%.2f%% | "
-                "val_loss=%.4f val_acc=%.2f%% val_top5=%.2f%% | "
-                "lr=%.2e peak_mem=%.0fMB time=%.1fs",
-                epoch + 1, cfg.epochs, train_loss, train_acc,
-                val_loss, val_acc, val_top5, lr, peak_mem, epoch_time,
-            )
+            self._log_epoch(epoch, epoch_metrics)
 
             if cfg.early_stopping_patience and patience_counter >= cfg.early_stopping_patience:
                 self.logger.info("Early stopping at epoch %d", epoch + 1)
@@ -249,22 +239,61 @@ class Trainer:
                 break
 
         # Restore the best checkpoint before returning. Without this, self.model keeps the
-        # LAST epoch's weights, so scripts/train.py's post-fit evaluate() measured a
-        # different model than the one saved as _best.pth -- the same checkpoint that
-        # build_qat()/load_best_model() then picks up for the QAT stage. FP32 and INT8
-        # ended up measured on different weights (last epoch vs. best + QAT), which read
-        # as spurious "INT8 accuracy gains" of up to +6.5pp for runs with a long
-        # post-peak tail. Also makes convert_to_int8(qat_model) use the best QAT epoch,
-        # matching what scripts/train_det_seg.py already does explicitly.
+        # LAST epoch's weights, so a caller evaluating right after fit() (or building a
+        # results summary from self.model) measures a different model than the one saved as
+        # _best.pth -- the same checkpoint the QAT stage then picks up. See CLAUDE.md's
+        # 2026-08-29 Trainer.fit() bug note for the classification-side history of this.
         if best_path.exists():
             best_state = torch.load(best_path, map_location=str(self.device), weights_only=False)
             model.load_state_dict(best_state.get("model_state_dict", best_state))
             self.logger.info("Restored best checkpoint (epoch %d) into the model", best_epoch + 1)
 
-        # From history, so these stay the LAST epoch's numbers regardless of the restore.
+        total_training_time_s = elapsed_time_s + (time.monotonic() - train_start)
+        return self._shape_result(history, best_epoch, epoch + 1, total_training_time_s, wandb_run_id)
+
+
+class Trainer(BaseTrainer):
+    """
+    Single training loop for FP32 and QAT runs.
+
+    For QAT, pass use_amp=False in cfg and supply epoch_callback via
+    make_qat_callback(freeze_bn_epoch, disable_observer_epoch).
+
+    Skip/resume logic lives in the notebook loop — instantiate one Trainer
+    per model and call fit(resume_from=...) when resuming.
+    """
+
+    def _build_criterion(self) -> nn.Module:
+        return nn.CrossEntropyLoss(label_smoothing=self.cfg.label_smoothing)
+
+    def _init_history_schema(self) -> dict:
+        return {
+            "train_loss": [], "train_acc": [], "val_loss": [], "val_acc": [], "val_top5": [],
+            "epoch_time_s": [], "peak_gpu_mem_mb": [], "lr": [],
+            "images_per_sec": [], "avg_batch_time_s": [], "cpu_percent": [], "ram_used_mb": [],
+            "gpu_power_avg_w": [], "gpu_utilization_pct": [], "gpu_temp_avg_c": [],
+            "gpu_memory_used_avg_mb": [], "gpu_energy_wh": [],
+        }
+
+    def _primary_metric_key(self) -> str:
+        return "val_acc"
+
+    def _log_epoch(self, epoch, m) -> None:
+        self.logger.info(
+            "Epoch %3d/%d | train_loss=%.4f train_acc=%.2f%% | "
+            "val_loss=%.4f val_acc=%.2f%% val_top5=%.2f%% | "
+            "lr=%.2e peak_mem=%.0fMB time=%.1fs",
+            epoch + 1, self.cfg.epochs, m["train_loss"], m["train_acc"],
+            m["val_loss"], m["val_acc"], m["val_top5"], m["lr"], m["peak_gpu_mem_mb"], m["epoch_time_s"],
+        )
+
+    def _shape_result(self, history, best_epoch, epochs_run, total_training_time_s, wandb_run_id) -> dict:
+        # best_val_loss is the loss AT the best-accuracy epoch (not the minimum loss).
+        best_val_acc = history["val_acc"][best_epoch] if history["val_acc"] else -1.0
+        best_val_top5 = history["val_top5"][best_epoch] if history["val_top5"] else 0.0
+        best_val_loss = history["val_loss"][best_epoch] if history["val_loss"] else float("inf")
         final_val_top1 = history["val_acc"][-1] if history["val_acc"] else 0.0
         final_val_top5 = history["val_top5"][-1] if history["val_top5"] else 0.0
-        total_training_time_s = elapsed_time_s + (time.monotonic() - train_start)
         total_time_str = time.strftime("%H:%M:%S", time.gmtime(total_training_time_s))
 
         self.logger.info(
@@ -278,7 +307,7 @@ class Trainer:
             "Best Val Loss  : %.4f\n"
             "Total Time     : %s\n"
             "===============================================",
-            self.run_name, epoch + 1, best_val_acc, best_val_top5,
+            self.run_name, epochs_run, best_val_acc, best_val_top5,
             final_val_top1, final_val_top5, best_val_loss, total_time_str,
         )
 
@@ -294,9 +323,6 @@ class Trainer:
             "history": history,
             "wandb_run_id": wandb_run_id,
         }
-
-    def request_stop(self) -> None:
-        self.stop_requested = True
 
     @torch.no_grad()
     def evaluate(self, loader: Optional[DataLoader] = None, topk: tuple = (1, 5)) -> dict:
@@ -355,7 +381,7 @@ class Trainer:
         throughput = total_images / elapsed
         return {"latency_ms_per_image": latency_ms, "throughput_img_per_s": throughput, "device": str(self.device)}
 
-    def _train_one_epoch(self, model, optimizer, scaler, criterion) -> tuple[float, float, float | None]:
+    def _train_one_epoch(self, model, optimizer, scaler, criterion) -> dict:
         model.train()
         cfg = self.cfg
         total_loss = correct = total = 0
@@ -388,11 +414,13 @@ class Trainer:
             total += target.size(0)
             bar.set_postfix(loss=f"{total_loss/total:.4f}", acc=f"{100*correct/total:.2f}%")
 
-        avg_norm = total_norm / len(self.train_loader) if cfg.grad_clip_norm else None
-        return total_loss / total, 100 * correct / total, avg_norm
+        result = {"train_loss": total_loss / total, "train_acc": 100 * correct / total}
+        if cfg.grad_clip_norm:
+            result["grad_norm"] = total_norm / len(self.train_loader)
+        return result
 
     @torch.no_grad()
-    def _validate(self, model, criterion) -> tuple[float, float, float]:
+    def _validate(self, model, criterion) -> dict:
         model.eval()
         total_loss = correct1 = correct5 = total = 0
 
@@ -405,4 +433,4 @@ class Trainer:
             total += target.size(0)
             bar.set_postfix(loss=f"{total_loss/total:.4f}", top1=f"{100*correct1/total:.2f}%", top5=f"{100*correct5/total:.2f}%")
 
-        return total_loss / total, 100 * correct1 / total, 100 * correct5 / total
+        return {"val_loss": total_loss / total, "val_acc": 100 * correct1 / total, "val_top5": 100 * correct5 / total}

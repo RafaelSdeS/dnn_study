@@ -37,7 +37,7 @@ def load_model(arch: str, device: torch.device) -> torch.nn.Module:
     ckpt_path = run_dir / f"{run_dir.name}_best.pth"
     model = build_deeplabv3_segmenter(arch, num_classes=21, image_size=256)
     state = torch.load(ckpt_path, map_location=device, weights_only=False)
-    model.load_state_dict(state)
+    model.load_state_dict(state.get("model_state_dict", state))
     return model.to(device).eval()
 
 

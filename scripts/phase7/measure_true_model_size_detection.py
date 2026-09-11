@@ -72,6 +72,7 @@ def measure(phase7_dir: Path) -> None:
         config = yaml.safe_load((run_dir / "config.yaml").read_text())
         img_size = config["data"]["img_size"]
         state = torch.load(ckpt_path, map_location=device, weights_only=False)
+        state = state.get("model_state_dict", state)
 
         fp32_skeleton = build_ssd_detector(model_name, num_classes=21, image_size=img_size)
         if m.group("stage") == "fp32":

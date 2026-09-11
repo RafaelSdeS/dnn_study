@@ -2,13 +2,9 @@
 Detection/segmentation trainer for Phase 7.
 Focused on mAP/mIoU metrics and loss computation specific to dense prediction.
 """
-import json
-import logging
-import time
 from pathlib import Path
 from typing import Callable, Optional
 
-import psutil
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -17,13 +13,14 @@ from torchmetrics.classification import MulticlassJaccardIndex
 from torchmetrics.detection import MeanAveragePrecision
 from tqdm.auto import tqdm
 
-from .checkpoint import save_checkpoint, load_resume_state
 from .config import TrainerConfig
-from .profiling import GpuSampler
+from .trainer import BaseTrainer
 
 
-class DetectionTrainer:
+class DetectionTrainer(BaseTrainer):
     """Training loop for SSD detection models on VOC."""
+
+    LOGGER_PREFIX = "det_trainer"
 
     def __init__(
         self,
@@ -37,177 +34,49 @@ class DetectionTrainer:
         num_classes: int = 21,
         wandb_run=None,
         epoch_callback: Optional[Callable[[int, nn.Module], None]] = None,
+        metrics_callback: Optional[Callable[[dict], None]] = None,
         log_file: Optional[Path] = None,
     ):
-        self.model = model
-        self.train_loader = train_loader
-        self.val_loader = val_loader
-        self.cfg = cfg
-        self.device = device
-        self.save_dir = Path(save_dir)
-        self.run_name = run_name
-        self.num_classes = num_classes
-        self.wandb_run = wandb_run
-        self.epoch_callback = epoch_callback
-        self.save_dir.mkdir(parents=True, exist_ok=True)
-
+        super().__init__(
+            model, train_loader, val_loader, cfg, device, save_dir, run_name,
+            num_classes=num_classes, wandb_run=wandb_run, epoch_callback=epoch_callback,
+            metrics_callback=metrics_callback, log_file=log_file,
+        )
         # mAP metric (CPU-based, accumulates over batches)
         self.mAP_metric = MeanAveragePrecision(box_format="xyxy", iou_type="bbox")
 
-        self.logger = logging.getLogger(f"det_trainer.{run_name}")
-        self.logger.setLevel(logging.INFO)
-        if not self.logger.handlers:
-            self.logger.addHandler(logging.StreamHandler())
-            if log_file is not None:
-                fh = logging.FileHandler(log_file)
-                fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
-                self.logger.addHandler(fh)
+    def _build_criterion(self) -> None:
+        return None
 
-    def fit(self, resume_from: Optional[Path] = None) -> dict:
-        """Run train/val loop, checkpoint best-mAP, return history dict."""
-        cfg = self.cfg
-        model = self.model.to(self.device)
-        optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
-        scaler = torch.amp.GradScaler("cuda") if cfg.use_amp else None
-        if cfg.warmup_epochs > 0:
-            warmup = torch.optim.lr_scheduler.LinearLR(
-                optimizer, start_factor=0.1, total_iters=cfg.warmup_epochs
-            )
-            cosine = torch.optim.lr_scheduler.CosineAnnealingLR(
-                optimizer, T_max=cfg.epochs - cfg.warmup_epochs
-            )
-            scheduler = torch.optim.lr_scheduler.SequentialLR(
-                optimizer, schedulers=[warmup, cosine], milestones=[cfg.warmup_epochs]
-            )
-        else:
-            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=cfg.epochs)
-
-        start_epoch = 0
-        best_val_mAP = -1.0
-        best_epoch = 0
-        patience_counter = 0
-        elapsed_time_s = 0.0
-        history = {
+    def _init_history_schema(self) -> dict:
+        return {
             "train_loss_bbox": [], "train_loss_cls": [], "train_loss_total": [],
             "val_mAP": [], "val_mAP50": [], "epoch_time_s": [], "peak_gpu_mem_mb": [],
             "lr": [], "images_per_sec": [], "avg_batch_time_s": [],
             "cpu_percent": [], "ram_used_mb": [],
         }
-        psutil.cpu_percent(interval=None)
 
-        # Load state if resuming
-        if resume_from is not None and Path(resume_from).exists():
-            state = load_resume_state(resume_from, model, optimizer, scheduler, scaler, device=str(self.device))
-            start_epoch = state["epoch"] + 1
-            best_val_mAP = state.get("best_val_acc", -1.0)
-            best_epoch = start_epoch - 1
-            patience_counter = state.get("patience_counter", 0)
-            elapsed_time_s = state.get("elapsed_time_s", 0.0)
-            for k, v in state["history"].items():
-                if k in history:
-                    history[k] = v
+    def _primary_metric_key(self) -> str:
+        return "val_mAP"
 
-        best_path = self.save_dir / f"{self.run_name}_best.pth"
-        resume_path = self.save_dir / f"{self.run_name}_resume.pth"
-        train_start = time.monotonic()
+    def _log_epoch(self, epoch, m) -> None:
+        self.logger.info(
+            f"Epoch {epoch + 1}/{self.cfg.epochs} | "
+            f"Loss: {m['train_loss_total']:.3f} (bbox:{m['train_loss_bbox']:.3f} cls:{m['train_loss_cls']:.3f}) | "
+            f"mAP: {m['val_mAP']:.4f} (@.50: {m['val_mAP50']:.4f}) | "
+            f"LR: {m['lr']:.2e} | "
+            f"Time: {m['epoch_time_s']:.1f}s"
+        )
 
-        for epoch in range(start_epoch, cfg.epochs):
-            epoch_start = time.monotonic()
-
-            if self.epoch_callback is not None:
-                self.epoch_callback(epoch, model)
-
-            if self.device.type == "cuda":
-                torch.cuda.reset_peak_memory_stats(self.device)
-
-            with GpuSampler() as gpu_sampler:
-                train_loss_bbox, train_loss_cls = self._train_one_epoch(model, optimizer, scaler)
-                val_mAP, val_mAP50 = self._validate(model)
-
-            gpu_metrics = gpu_sampler.summary()
-            scheduler.step()
-            lr = optimizer.param_groups[0]["lr"]
-
-            epoch_time = time.monotonic() - epoch_start
-            peak_mem = (
-                torch.cuda.max_memory_allocated(self.device) / (1024 ** 2)
-                if self.device.type == "cuda" else 0.0
-            )
-            n_batches = len(self.train_loader)
-            images_per_sec = (n_batches * self.train_loader.batch_size) / epoch_time if epoch_time > 0 else None
-            avg_batch_time_s = epoch_time / n_batches if n_batches else None
-            cpu_percent = psutil.cpu_percent(interval=None)
-            ram_used_mb = psutil.virtual_memory().used / (1024 ** 2)
-
-            train_loss_total = train_loss_bbox + train_loss_cls
-            history["train_loss_bbox"].append(train_loss_bbox)
-            history["train_loss_cls"].append(train_loss_cls)
-            history["train_loss_total"].append(train_loss_total)
-            history["val_mAP"].append(val_mAP)
-            history["val_mAP50"].append(val_mAP50)
-            history["epoch_time_s"].append(epoch_time)
-            history["peak_gpu_mem_mb"].append(peak_mem)
-            history["lr"].append(lr)
-            history["images_per_sec"].append(images_per_sec)
-            history["avg_batch_time_s"].append(avg_batch_time_s)
-            history["cpu_percent"].append(cpu_percent)
-            history["ram_used_mb"].append(ram_used_mb)
-
-            epoch_metrics = {
-                "train_loss_bbox": train_loss_bbox, "train_loss_cls": train_loss_cls,
-                "train_loss_total": train_loss_total, "val_mAP": val_mAP, "val_mAP50": val_mAP50,
-                "lr": lr, "epoch_time_s": epoch_time, "peak_gpu_mem_mb": peak_mem,
-                "images_per_sec": images_per_sec, "avg_batch_time_s": avg_batch_time_s,
-                "cpu_percent": cpu_percent, "ram_used_mb": ram_used_mb,
-                **gpu_metrics,
-            }
-
-            if self.wandb_run is not None:
-                self.wandb_run.log(epoch_metrics, step=epoch + 1)
-
-            self.logger.info(
-                f"Epoch {epoch + 1}/{cfg.epochs} | "
-                f"Loss: {train_loss_total:.3f} (bbox:{train_loss_bbox:.3f} cls:{train_loss_cls:.3f}) | "
-                f"mAP: {val_mAP:.4f} (@.50: {val_mAP50:.4f}) | "
-                f"LR: {lr:.2e} | "
-                f"Time: {epoch_time:.1f}s"
-            )
-
-            # Early stopping on mAP
-            if val_mAP > best_val_mAP:
-                best_val_mAP = val_mAP
-                best_epoch = epoch
-                patience_counter = 0
-                torch.save(model.state_dict(), best_path)
-                self.logger.info(f"  ✓ Best mAP so far! Saved to {best_path}")
-            else:
-                patience_counter += 1
-
-            # Save resume checkpoint
-            save_checkpoint(
-                resume_path, model, optimizer, scheduler, epoch,
-                metrics={"val_mAP": val_mAP, "val_mAP50": val_mAP50},
-                scaler=scaler,
-                best_val_acc=best_val_mAP,
-                history=history,
-                patience_counter=patience_counter,
-                elapsed_time_s=elapsed_time_s + (time.monotonic() - train_start),
-            )
-
-            if cfg.early_stopping_patience is not None and patience_counter >= cfg.early_stopping_patience:
-                self.logger.info(f"Early stopping triggered after {cfg.early_stopping_patience} epochs without improvement")
-                break
-
-        elapsed_time_s += time.monotonic() - train_start
-        history["total_time_s"] = elapsed_time_s
+    def _shape_result(self, history, best_epoch, epochs_run, total_training_time_s, wandb_run_id) -> dict:
+        history["total_time_s"] = total_training_time_s
         history["best_epoch"] = best_epoch
-        history["best_val_mAP"] = best_val_mAP
-
-        self.logger.info(f"Training complete. Best mAP: {best_val_mAP:.4f} at epoch {best_epoch + 1}")
+        history["best_val_mAP"] = history["val_mAP"][best_epoch] if history["val_mAP"] else -1.0
+        self.logger.info(f"Training complete. Best mAP: {history['best_val_mAP']:.4f} at epoch {best_epoch + 1}")
         return history
 
-    def _train_one_epoch(self, model: nn.Module, optimizer: torch.optim.Optimizer, scaler=None) -> tuple:
-        """Train one epoch, return (loss_bbox, loss_cls)."""
+    def _train_one_epoch(self, model: nn.Module, optimizer: torch.optim.Optimizer, scaler, criterion) -> dict:
+        """Train one epoch, return {train_loss_bbox, train_loss_cls, train_loss_total}."""
         model.train()
         cfg = self.cfg
         total_loss_bbox = 0.0
@@ -243,10 +112,12 @@ class DetectionTrainer:
             total_loss_cls += loss_dict["classification"].item()
             n_batches += 1
 
-        return total_loss_bbox / max(n_batches, 1), total_loss_cls / max(n_batches, 1)
+        loss_bbox = total_loss_bbox / max(n_batches, 1)
+        loss_cls = total_loss_cls / max(n_batches, 1)
+        return {"train_loss_bbox": loss_bbox, "train_loss_cls": loss_cls, "train_loss_total": loss_bbox + loss_cls}
 
-    def _validate(self, model: nn.Module) -> tuple:
-        """Validate, return (mAP, mAP@.5)."""
+    def _validate(self, model: nn.Module, criterion) -> dict:
+        """Validate, return {val_mAP, val_mAP50}."""
         model.eval()
         self.mAP_metric.reset()
 
@@ -276,11 +147,13 @@ class DetectionTrainer:
         mAP = metrics["map"].item()  # mAP averaged over all IoU thresholds
         mAP50 = metrics["map_50"].item()  # mAP@.5
 
-        return mAP, mAP50
+        return {"val_mAP": mAP, "val_mAP50": mAP50}
 
 
-class SegmentationTrainer:
+class SegmentationTrainer(BaseTrainer):
     """Training loop for DeepLab segmentation models on VOC."""
+
+    LOGGER_PREFIX = "seg_trainer"
 
     def __init__(
         self,
@@ -294,175 +167,51 @@ class SegmentationTrainer:
         num_classes: int = 21,
         wandb_run=None,
         epoch_callback: Optional[Callable[[int, nn.Module], None]] = None,
+        metrics_callback: Optional[Callable[[dict], None]] = None,
         log_file: Optional[Path] = None,
     ):
-        self.model = model
-        self.train_loader = train_loader
-        self.val_loader = val_loader
-        self.cfg = cfg
-        self.device = device
-        self.save_dir = Path(save_dir)
-        self.run_name = run_name
-        self.num_classes = num_classes
-        self.wandb_run = wandb_run
-        self.epoch_callback = epoch_callback
-        self.save_dir.mkdir(parents=True, exist_ok=True)
-
-        self.logger = logging.getLogger(f"seg_trainer.{run_name}")
-        self.logger.setLevel(logging.INFO)
-        if not self.logger.handlers:
-            self.logger.addHandler(logging.StreamHandler())
-            if log_file is not None:
-                fh = logging.FileHandler(log_file)
-                fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
-                self.logger.addHandler(fh)
-
+        super().__init__(
+            model, train_loader, val_loader, cfg, device, save_dir, run_name,
+            num_classes=num_classes, wandb_run=wandb_run, epoch_callback=epoch_callback,
+            metrics_callback=metrics_callback, log_file=log_file,
+        )
         # mIoU metric. VOC masks use 255 as a "void"/boundary label — excluded via ignore_index.
         self.iou_metric = MulticlassJaccardIndex(
             num_classes=self.num_classes, ignore_index=255, average="macro"
         )
 
-    def fit(self, resume_from: Optional[Path] = None) -> dict:
-        """Run train/val loop, checkpoint best-mIoU, return history dict."""
-        cfg = self.cfg
-        model = self.model.to(self.device)
-        optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
-        scaler = torch.amp.GradScaler("cuda") if cfg.use_amp else None
-        if cfg.warmup_epochs > 0:
-            warmup = torch.optim.lr_scheduler.LinearLR(
-                optimizer, start_factor=0.1, total_iters=cfg.warmup_epochs
-            )
-            cosine = torch.optim.lr_scheduler.CosineAnnealingLR(
-                optimizer, T_max=cfg.epochs - cfg.warmup_epochs
-            )
-            scheduler = torch.optim.lr_scheduler.SequentialLR(
-                optimizer, schedulers=[warmup, cosine], milestones=[cfg.warmup_epochs]
-            )
-        else:
-            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=cfg.epochs)
+    def _build_criterion(self) -> None:
+        return None
 
-        start_epoch = 0
-        best_val_mIoU = -1.0
-        best_epoch = 0
-        patience_counter = 0
-        elapsed_time_s = 0.0
-        history = {
+    def _init_history_schema(self) -> dict:
+        return {
             "train_loss": [], "val_loss": [], "val_mIoU": [],
             "epoch_time_s": [], "peak_gpu_mem_mb": [],
             "lr": [], "images_per_sec": [], "avg_batch_time_s": [],
             "cpu_percent": [], "ram_used_mb": [],
         }
-        psutil.cpu_percent(interval=None)
 
-        # Load state if resuming
-        if resume_from is not None and Path(resume_from).exists():
-            state = load_resume_state(resume_from, model, optimizer, scheduler, scaler, device=str(self.device))
-            start_epoch = state["epoch"] + 1
-            best_val_mIoU = state.get("best_val_acc", -1.0)
-            best_epoch = start_epoch - 1
-            patience_counter = state.get("patience_counter", 0)
-            elapsed_time_s = state.get("elapsed_time_s", 0.0)
-            for k, v in state["history"].items():
-                if k in history:
-                    history[k] = v
+    def _primary_metric_key(self) -> str:
+        return "val_mIoU"
 
-        best_path = self.save_dir / f"{self.run_name}_best.pth"
-        resume_path = self.save_dir / f"{self.run_name}_resume.pth"
-        train_start = time.monotonic()
+    def _log_epoch(self, epoch, m) -> None:
+        self.logger.info(
+            f"Epoch {epoch + 1}/{self.cfg.epochs} | "
+            f"Loss: {m['train_loss']:.3f} (val: {m['val_loss']:.3f}) | "
+            f"mIoU: {m['val_mIoU']:.4f} | "
+            f"LR: {m['lr']:.2e} | "
+            f"Time: {m['epoch_time_s']:.1f}s"
+        )
 
-        for epoch in range(start_epoch, cfg.epochs):
-            epoch_start = time.monotonic()
-
-            if self.epoch_callback is not None:
-                self.epoch_callback(epoch, model)
-
-            if self.device.type == "cuda":
-                torch.cuda.reset_peak_memory_stats(self.device)
-
-            with GpuSampler() as gpu_sampler:
-                train_loss = self._train_one_epoch(model, optimizer, scaler)
-                val_loss, val_mIoU = self._validate(model)
-
-            gpu_metrics = gpu_sampler.summary()
-            scheduler.step()
-            lr = optimizer.param_groups[0]["lr"]
-
-            epoch_time = time.monotonic() - epoch_start
-            peak_mem = (
-                torch.cuda.max_memory_allocated(self.device) / (1024 ** 2)
-                if self.device.type == "cuda" else 0.0
-            )
-            n_batches = len(self.train_loader)
-            images_per_sec = (n_batches * self.train_loader.batch_size) / epoch_time if epoch_time > 0 else None
-            avg_batch_time_s = epoch_time / n_batches if n_batches else None
-            cpu_percent = psutil.cpu_percent(interval=None)
-            ram_used_mb = psutil.virtual_memory().used / (1024 ** 2)
-
-            history["train_loss"].append(train_loss)
-            history["val_loss"].append(val_loss)
-            history["val_mIoU"].append(val_mIoU)
-            history["epoch_time_s"].append(epoch_time)
-            history["peak_gpu_mem_mb"].append(peak_mem)
-            history["lr"].append(lr)
-            history["images_per_sec"].append(images_per_sec)
-            history["avg_batch_time_s"].append(avg_batch_time_s)
-            history["cpu_percent"].append(cpu_percent)
-            history["ram_used_mb"].append(ram_used_mb)
-
-            epoch_metrics = {
-                "train_loss": train_loss, "val_loss": val_loss, "val_mIoU": val_mIoU,
-                "lr": lr, "epoch_time_s": epoch_time, "peak_gpu_mem_mb": peak_mem,
-                "images_per_sec": images_per_sec, "avg_batch_time_s": avg_batch_time_s,
-                "cpu_percent": cpu_percent, "ram_used_mb": ram_used_mb,
-                **gpu_metrics,
-            }
-
-            if self.wandb_run is not None:
-                self.wandb_run.log(epoch_metrics, step=epoch + 1)
-
-            self.logger.info(
-                f"Epoch {epoch + 1}/{cfg.epochs} | "
-                f"Loss: {train_loss:.3f} (val: {val_loss:.3f}) | "
-                f"mIoU: {val_mIoU:.4f} | "
-                f"LR: {lr:.2e} | "
-                f"Time: {epoch_time:.1f}s"
-            )
-
-            # Early stopping on mIoU
-            if val_mIoU > best_val_mIoU:
-                best_val_mIoU = val_mIoU
-                best_epoch = epoch
-                patience_counter = 0
-                torch.save(model.state_dict(), best_path)
-                self.logger.info(f"  ✓ Best mIoU so far! Saved to {best_path}")
-            else:
-                patience_counter += 1
-
-            # Save resume checkpoint
-            save_checkpoint(
-                resume_path, model, optimizer, scheduler, epoch,
-                metrics={"val_loss": val_loss, "val_mIoU": val_mIoU},
-                scaler=scaler,
-                best_val_acc=best_val_mIoU,
-                history=history,
-                patience_counter=patience_counter,
-                elapsed_time_s=elapsed_time_s + (time.monotonic() - train_start),
-            )
-
-            if cfg.early_stopping_patience is not None and patience_counter >= cfg.early_stopping_patience:
-                self.logger.info(f"Early stopping triggered after {cfg.early_stopping_patience} epochs without improvement")
-                break
-
-        elapsed_time_s += time.monotonic() - train_start
-        history["total_time_s"] = elapsed_time_s
+    def _shape_result(self, history, best_epoch, epochs_run, total_training_time_s, wandb_run_id) -> dict:
+        history["total_time_s"] = total_training_time_s
         history["best_epoch"] = best_epoch
-        history["best_val_mIoU"] = best_val_mIoU
-
-        self.logger.info(f"Training complete. Best mIoU: {best_val_mIoU:.4f} at epoch {best_epoch + 1}")
+        history["best_val_mIoU"] = history["val_mIoU"][best_epoch] if history["val_mIoU"] else -1.0
+        self.logger.info(f"Training complete. Best mIoU: {history['best_val_mIoU']:.4f} at epoch {best_epoch + 1}")
         return history
 
-    def _train_one_epoch(self, model: nn.Module, optimizer: torch.optim.Optimizer, scaler=None) -> float:
-        """Train one epoch, return average loss."""
+    def _train_one_epoch(self, model: nn.Module, optimizer: torch.optim.Optimizer, scaler, criterion) -> dict:
+        """Train one epoch, return {train_loss}."""
         model.train()
         cfg = self.cfg
         total_loss = 0.0
@@ -495,10 +244,10 @@ class SegmentationTrainer:
             total_loss += loss.item()
             n_batches += 1
 
-        return total_loss / max(n_batches, 1)
+        return {"train_loss": total_loss / max(n_batches, 1)}
 
-    def _validate(self, model: nn.Module) -> tuple:
-        """Validate, return (val_loss, mIoU)."""
+    def _validate(self, model: nn.Module, criterion) -> dict:
+        """Validate, return {val_loss, val_mIoU}."""
         model.eval()
         self.iou_metric.reset()
         total_loss = 0.0
@@ -519,7 +268,7 @@ class SegmentationTrainer:
 
         val_loss = total_loss / max(n_batches, 1)
         mIoU = self.iou_metric.compute().item()
-        return val_loss, mIoU
+        return {"val_loss": val_loss, "val_mIoU": mIoU}
 
 
 class TinyLoader:

@@ -26,7 +26,7 @@ class DistillationTrainer(Trainer):
             p.requires_grad_(False)
         self.alpha = alpha
 
-    def _train_one_epoch(self, model, optimizer, scaler, criterion) -> tuple[float, float, float | None]:
+    def _train_one_epoch(self, model, optimizer, scaler, criterion) -> dict:
         model.train()
         cfg = self.cfg
         total_loss = correct = total = 0
@@ -62,8 +62,10 @@ class DistillationTrainer(Trainer):
             total += target.size(0)
             bar.set_postfix(loss=f"{total_loss/total:.4f}", acc=f"{100*correct/total:.2f}%")
 
-        avg_norm = total_norm / len(self.train_loader) if cfg.grad_clip_norm else None
-        return total_loss / total, 100 * correct / total, avg_norm
+        result = {"train_loss": total_loss / total, "train_acc": 100 * correct / total}
+        if cfg.grad_clip_norm:
+            result["grad_norm"] = total_norm / len(self.train_loader)
+        return result
 
 
 def demo() -> None:
@@ -100,7 +102,8 @@ def demo() -> None:
         criterion = nn.CrossEntropyLoss()
         optimizer = torch.optim.AdamW(student.parameters(), lr=1e-3)
         teacher_params_before = [p.clone() for p in teacher.parameters()]
-        loss, acc, _ = trainer._train_one_epoch(student, optimizer, None, criterion)
+        result = trainer._train_one_epoch(student, optimizer, None, criterion)
+        loss, acc = result["train_loss"], result["train_acc"]
 
         assert loss > 0, "distillation loss should be non-zero on a random init"
         for p in teacher.parameters():

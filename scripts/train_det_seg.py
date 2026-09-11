@@ -11,6 +11,7 @@ import argparse
 import json
 import logging
 import os
+import signal
 import sys
 from pathlib import Path
 from dataclasses import asdict, replace
@@ -61,6 +62,16 @@ def run_detection(args):
         trainer_cfg = replace(trainer_cfg, **exp_cfg.get("trainer", {}))
 
     set_global_seed(data_cfg.seed)
+
+    trainer = None
+
+    def _request_stop(_signum, _frame):
+        if trainer is not None:
+            trainer.request_stop()
+
+    signal.signal(signal.SIGTERM, _request_stop)
+    signal.signal(signal.SIGINT, _request_stop)
+    signal.signal(signal.SIGUSR1, _request_stop)  # Slurm pre-timeout warning (see train.sbatch)
 
     # Adjust trainer config for QAT (shorter epochs, lower lr, no AMP).
     # Disabling AMP roughly doubles activation memory at the same batch size, which
@@ -157,7 +168,7 @@ def run_detection(args):
 
         model = build_ssd_detector(args.model, num_classes=21, image_size=data_cfg.img_size)
         ckpt_state = torch.load(fp32_ckpt, map_location=device, weights_only=False)
-        model.load_state_dict(ckpt_state)
+        model.load_state_dict(ckpt_state.get("model_state_dict", ckpt_state))
         model.to(device)
         print(f"  ✓ Loaded FP32 checkpoint: {fp32_ckpt}")
 
@@ -209,7 +220,7 @@ def run_detection(args):
         true_params_m = sum(p.numel() for p in model_qat.parameters()) / 1e6
         model_qat = build_qat_ssd_detector(model_qat, device)
         ckpt_state = torch.load(qat_ckpt, map_location=device, weights_only=False)
-        model_qat.load_state_dict(ckpt_state)
+        model_qat.load_state_dict(ckpt_state.get("model_state_dict", ckpt_state))
         model_qat.to(device)
         print(f"  ✓ Loaded QAT checkpoint: {qat_ckpt}")
 
@@ -237,7 +248,8 @@ def run_detection(args):
         )
 
         # Run validation only (no training)
-        val_mAP, val_mAP50 = trainer._validate(model_int8)
+        val_metrics = trainer._validate(model_int8, criterion=None)
+        val_mAP, val_mAP50 = val_metrics["val_mAP"], val_metrics["val_mAP50"]
         history = {
             "val_mAP": [val_mAP],
             "val_mAP50": [val_mAP50],
@@ -287,6 +299,16 @@ def run_segmentation(args):
         trainer_cfg = replace(trainer_cfg, **exp_cfg.get("trainer", {}))
 
     set_global_seed(data_cfg.seed)
+
+    trainer = None
+
+    def _request_stop(_signum, _frame):
+        if trainer is not None:
+            trainer.request_stop()
+
+    signal.signal(signal.SIGTERM, _request_stop)
+    signal.signal(signal.SIGINT, _request_stop)
+    signal.signal(signal.SIGUSR1, _request_stop)  # Slurm pre-timeout warning (see train.sbatch)
 
     # Adjust trainer config for QAT (shorter epochs, lower lr, no AMP). Disabling AMP
     # roughly doubles activation memory at the same batch size — halve it to compensate
@@ -366,7 +388,7 @@ def run_segmentation(args):
 
         model = build_deeplabv3_segmenter(args.model, num_classes=21, image_size=data_cfg.img_size)
         ckpt_state = torch.load(fp32_ckpt, map_location=device, weights_only=False)
-        model.load_state_dict(ckpt_state)
+        model.load_state_dict(ckpt_state.get("model_state_dict", ckpt_state))
         model.to(device)
         print(f"  ✓ Loaded FP32 checkpoint: {fp32_ckpt}")
 
@@ -414,7 +436,7 @@ def run_segmentation(args):
         true_params_m = sum(p.numel() for p in model_qat.parameters()) / 1e6
         model_qat = build_qat_deeplabv3_segmenter(model_qat, device)
         ckpt_state = torch.load(qat_ckpt, map_location=device, weights_only=False)
-        model_qat.load_state_dict(ckpt_state)
+        model_qat.load_state_dict(ckpt_state.get("model_state_dict", ckpt_state))
         model_qat.to(device)
         print(f"  ✓ Loaded QAT checkpoint: {qat_ckpt}")
 
@@ -439,7 +461,8 @@ def run_segmentation(args):
         )
 
         # Run validation only (no training)
-        val_loss, val_mIoU = trainer._validate(model_int8)
+        val_metrics = trainer._validate(model_int8, criterion=None)
+        val_loss, val_mIoU = val_metrics["val_loss"], val_metrics["val_mIoU"]
         history = {
             "val_loss": [val_loss],
             "val_mIoU": [val_mIoU],

@@ -101,7 +101,7 @@ class _DecayingValTrainer(Trainer):
         model.eval()
         acc = self.SCRIPTED_ACC[len(self._seen)]
         self._seen.append(acc)
-        return 1.0, acc, acc
+        return {"val_loss": 1.0, "val_acc": acc, "val_top5": acc}
 
 
 def test_fit_restores_best_checkpoint_not_last_epoch(tmp_path):

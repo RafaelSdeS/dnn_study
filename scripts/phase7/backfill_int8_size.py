@@ -70,6 +70,7 @@ def backfill(phase7_dir: Path) -> None:
 
         model_qat_skeleton = build_qat_ssd_detector(model_fp32_skeleton, device)
         state = torch.load(qat_ckpt, map_location=device, weights_only=False)
+        state = state.get("model_state_dict", state)
         try:
             model_qat_skeleton.load_state_dict(state)
         except RuntimeError as e:
