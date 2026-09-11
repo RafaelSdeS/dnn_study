@@ -13,7 +13,7 @@ def _tiny_model():
     return nn.Sequential(nn.Conv2d(3, 4, 3, padding=1), nn.AdaptiveAvgPool2d(1), nn.Flatten(), nn.Linear(4, 200))
 
 
-def _run(tmp_path, monkeypatch, stages):
+def _run(tmp_path, monkeypatch, stages, **runtime):
     g = torch.Generator().manual_seed(0)
     loader = DataLoader(TensorDataset(torch.randn(8, 3, 8, 8, generator=g), torch.randint(0, 200, (8,), generator=g)),
                         batch_size=4)
@@ -25,14 +25,16 @@ def _run(tmp_path, monkeypatch, stages):
         {"name": "exp", "models": ["tiny"], "stages": stages,
          "training": {"epochs": 3, "use_amp": False, "early_stopping_patience": None},
          "qat": {"epochs": 1}},
-        {"root": str(tmp_path), "device": "cpu", "tensorboard": False, "benchmark_warmup": 1},
+        {"root": str(tmp_path), "device": "cpu", "tensorboard": False, "benchmark_warmup": 1, **runtime},
     )
     return rows, tmp_path / "exp" / "tiny"
 
 
 def test_fp32_stage_writes_summary(tmp_path, monkeypatch):
-    rows, run_root = _run(tmp_path, monkeypatch, ["fp32"])
+    # an invalid engine stands in for a node without fbgemm (PCAD's beagle): fp32 never touches it
+    rows, run_root = _run(tmp_path, monkeypatch, ["fp32"], quantized_engine="not-an-engine")
     assert [row["model_name"] for row in rows] == ["tiny"]
+    assert (rows[0]["epochs_used"], rows[0]["epochs_budget"]) == (3, 3)
     assert (run_root / "results" / "tiny_summary.json").exists()
     assert (run_root / "resolved_config.json").exists()
 

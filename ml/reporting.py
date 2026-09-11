@@ -286,7 +286,9 @@ def make_run_summary(
     return {
         "model_name": name,
         "mode": mode,
-        "epochs": fit_results.get("best_epoch"),
+        "epochs": fit_results.get("best_epoch"),  # historical name: the 0-based BEST epoch, not a count
+        "epochs_used": fit_results.get("epochs_used"),  # epochs actually trained (early stopping included)
+        "epochs_budget": fit_results.get("epochs_budget"),  # the configured cap
         # FP32 training metrics
         "best_val_top1": fit_results.get("best_val_top1"),
         "best_val_top5": fit_results.get("best_val_top5"),

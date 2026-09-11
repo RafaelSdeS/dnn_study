@@ -322,6 +322,8 @@ class Trainer(BaseTrainer):
             "final_val_top1": final_val_top1,
             "final_val_top5": final_val_top5,
             "best_epoch": best_epoch,
+            "epochs_used": epochs_run,
+            "epochs_budget": self.cfg.epochs,
             "total_training_time_s": total_training_time_s,
             "total_training_time": total_time_str,
             "history": history,

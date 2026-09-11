@@ -165,7 +165,10 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
     train_ds, val_ds, train_loader, val_loader = create_imagenet_loaders(data_cfg, persistent_workers=runtime_cfg.get("persistent_workers", False))
 
     results_rows: list[dict[str, Any]] = []
-    torch.backends.quantized.engine = runtime_cfg.get("quantized_engine", "fbgemm")
+    # Only the fbgemm stages need it, and fbgemm needs AVX2: set unconditionally, a node without
+    # it (PCAD's beagle) couldn't even run fp32 / qat_wino.
+    if {"qat", "int8"} & set(stage_list):
+        torch.backends.quantized.engine = runtime_cfg.get("quantized_engine", "fbgemm")
     device = torch.device(runtime_cfg.get("device", "cuda" if torch.cuda.is_available() else "cpu"))
     provenance = capture_provenance()
     # *_fpga models and the qat_wino stage run Winograd-FPGA code (ml/winograd_bridge.py),
