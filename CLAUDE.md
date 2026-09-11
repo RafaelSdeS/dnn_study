@@ -75,7 +75,9 @@ configs/                  # YAML hyperparameters, loaded via configs/loader.py �
   slurm/                  # single_gpu.yaml, tupi_4090.yaml, beagle.yaml — partition/GPU/CPU/wall-time
   experiments/            # default.yaml + per-run overrides (alexnet_3x3_gap, phase_7_detection, large_scale, phase8, ...);
                           #   `--smoke` on scripts/train.py and scripts/train_det_seg.py caps any experiment to 1
-                          #   epoch for a fast local pipeline check, superseding the old per-phase smoke config files
+                          #   epoch for a fast local pipeline check, superseding the old per-phase smoke config files.
+                          #   Smoke output (checkpoints/logs/tensorboard/resolved_config.json/aggregates CSV) is
+                          #   written to a temp dir and discarded on exit -- never touches outputs/, wandb disabled
                           #   `extends: _protocols/<name>` (load_config, one level, dict-valued keys
                           #   merge field-by-field) lets a file inherit a shared protocol instead of
                           #   repeating it — e.g. large_scale.yaml/alexnet_dilated_gap.yaml/

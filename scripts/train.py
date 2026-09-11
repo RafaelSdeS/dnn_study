@@ -7,6 +7,7 @@ import logging
 import os
 import signal
 import sys
+import tempfile
 from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any
@@ -535,10 +536,21 @@ def main() -> int:
         experiment_cfg["models"] = [args.model]
     if args.smoke:
         experiment_cfg = _apply_smoke_override(experiment_cfg)
+        runtime_cfg["wandb"] = False  # smoke runs discard all output; an offline wandb run would escape the temp dir
     if args.dry_run:
         print(json.dumps({"experiment": experiment_cfg, "runtime": runtime_cfg}, indent=2, default=str))
         return 0
-    run_experiment(experiment_cfg, runtime_cfg)
+    if args.smoke:
+        # Everything run_experiment() writes (checkpoints/logs/tensorboard/resolved_config.json/
+        # aggregates CSV) lands under this temp root and is discarded on exit -- a smoke run
+        # must never touch or overwrite a real run's output. On failure, the exception's
+        # traceback still prints to stderr before cleanup, which is the "error message" a smoke
+        # run should surface -- no separate error log needed.
+        with tempfile.TemporaryDirectory(prefix="smoke_") as tmp_root:
+            runtime_cfg["root"] = tmp_root
+            run_experiment(experiment_cfg, runtime_cfg)
+    else:
+        run_experiment(experiment_cfg, runtime_cfg)
     return 0
 
 

@@ -13,6 +13,7 @@ import logging
 import os
 import signal
 import sys
+import tempfile
 from pathlib import Path
 from dataclasses import asdict, replace
 
@@ -520,6 +521,19 @@ def main():
 
     if args.runtime == "pcad":
         print("\n[CLUSTER MODE] Would submit to PCAD. Use: sbatch scripts/slurm/det_seg.sbatch")
+        return
+
+    if args.smoke:
+        # Checkpoints/logs/metrics.json/git_hash.txt all land under args.save_dir -- redirect it
+        # to a temp dir so a smoke run never overwrites a real run's output; deleted on exit
+        # either way, so a failure's traceback (printed to stderr before cleanup) is the only
+        # trace it leaves, which is the point.
+        with tempfile.TemporaryDirectory(prefix="smoke_") as tmp_dir:
+            args.save_dir = tmp_dir
+            if args.task == "detection":
+                run_detection(args)
+            else:
+                run_segmentation(args)
         return
 
     if args.task == "detection":
