@@ -122,6 +122,14 @@ def _build_qat_wino_config(base_cfg: dict[str, Any], experiment_cfg: dict[str, A
     return replace(qat_wino_cfg, **overrides)
 
 
+def _apply_smoke_override(experiment_cfg: dict[str, Any]) -> dict[str, Any]:
+    """Cap fp32/QAT epochs to 1 so a full pipeline run (data/model/checkpoint/
+    QAT-convert) finishes in minutes locally, to catch bugs before a PCAD submission."""
+    experiment_cfg["training"] = {**experiment_cfg.get("training", {}), "epochs": 1, "warmup_epochs": 0}
+    experiment_cfg["qat"] = {**experiment_cfg.get("qat", {}), "epochs": 1}
+    return experiment_cfg
+
+
 def _import_qat_wino():
     """Bridge to the Winograd-FPGA sibling repo's accelerator-numeric QAT
     (scripts/avaliacao_redes/qat_wino.py). Not vendored here on purpose --
@@ -513,6 +521,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--device", default=None, help="Override device, e.g. cuda or cpu")
     parser.add_argument("--model", default=None, help="Restrict the experiment to a single registered model name")
     parser.add_argument("--dry-run", action="store_true", help="Load configs and print the resolved run plan")
+    parser.add_argument("--smoke", action="store_true", help="Cap epochs to 1 for a fast local pipeline check before a PCAD submission")
     return parser
 
 
@@ -524,6 +533,8 @@ def main() -> int:
         runtime_cfg["device"] = args.device
     if args.model:
         experiment_cfg["models"] = [args.model]
+    if args.smoke:
+        experiment_cfg = _apply_smoke_override(experiment_cfg)
     if args.dry_run:
         print(json.dumps({"experiment": experiment_cfg, "runtime": runtime_cfg}, indent=2, default=str))
         return 0

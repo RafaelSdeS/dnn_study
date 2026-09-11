@@ -81,6 +81,9 @@ def run_detection(args):
         trainer_cfg = replace(trainer_cfg, epochs=100, lr=1e-5, use_amp=False)
         data_cfg = replace(data_cfg, batch_size=max(1, data_cfg.batch_size // 2))
 
+    if args.smoke:
+        trainer_cfg = replace(trainer_cfg, epochs=1)
+
     # Setup paths
     # init_suffix distinguishes a pretrained-init sweep from the from-scratch one so
     # they get separate output dirs and never clobber each other's checkpoints/logs.
@@ -317,6 +320,9 @@ def run_segmentation(args):
         trainer_cfg = replace(trainer_cfg, epochs=100, lr=1e-5, use_amp=False)
         data_cfg = replace(data_cfg, batch_size=max(1, data_cfg.batch_size // 2))
 
+    if args.smoke:
+        trainer_cfg = replace(trainer_cfg, epochs=1)
+
     # Setup paths
     # init_suffix distinguishes a pretrained-init sweep from the from-scratch one so
     # they get separate output dirs and never clobber each other's checkpoints/logs
@@ -501,6 +507,7 @@ def main():
     parser.add_argument("--runtime", choices=["local", "pcad"], default="local", help="Where to run")
     parser.add_argument("--save-dir", default=None, help="Output directory (default: <runtime root>/phase_7_detection_segmentation)")
     parser.add_argument("--dry-run", action="store_true", help="Don't train, just show config")
+    parser.add_argument("--smoke", action="store_true", help="Cap epochs to 1 for a fast local pipeline check")
     parser.add_argument("--skip-anchor-check", action="store_true", help="Skip the anchor-recall pre-flight gate")
     parser.add_argument(
         "--pretrained-ckpt", type=Path, default=None,

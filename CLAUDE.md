@@ -73,7 +73,9 @@ configs/                  # YAML hyperparameters, loaded via configs/loader.py �
   data.yaml training.yaml qat.yaml qat_wino.yaml profiling.yaml compression.yaml detection.yaml segmentation.yaml
   runtime/                # local.yaml, pcad.yaml — dataset root, conda env, per-runtime toggles
   slurm/                  # single_gpu.yaml, tupi_4090.yaml, beagle.yaml — partition/GPU/CPU/wall-time
-  experiments/            # default.yaml + per-run overrides (alexnet_3x3_gap, phase_7_detection, phase_7_smoke, large_scale, phase8, ...)
+  experiments/            # default.yaml + per-run overrides (alexnet_3x3_gap, phase_7_detection, large_scale, phase8, ...);
+                          #   `--smoke` on scripts/train.py and scripts/train_det_seg.py caps any experiment to 1
+                          #   epoch for a fast local pipeline check, superseding the old per-phase smoke config files
                           #   `extends: _protocols/<name>` (load_config, one level, dict-valued keys
                           #   merge field-by-field) lets a file inherit a shared protocol instead of
                           #   repeating it — e.g. large_scale.yaml/alexnet_dilated_gap.yaml/
