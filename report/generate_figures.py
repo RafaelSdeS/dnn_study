@@ -2,7 +2,7 @@
 """
 Generate the report-only figure variants for report/ic_report.tex.
 
-These three PNGs (kernel_restriction_cost, quant_stability_bar, extreme_compression_methods)
+These two PNGs (kernel_restriction_cost, extreme_compression_methods)
 started as copies of presentation/make_figures.py's slide figures, hand-edited ad hoc for print
 (white background, portrait bar chart) with no committed source. This script is that source now,
 so the report figures can be regenerated instead of hand-patched again.
@@ -22,6 +22,7 @@ results/phase_4_compression_and_final_architecture/final_comparison.csv
 """
 
 import json
+import sys
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -30,12 +31,17 @@ from matplotlib.patches import Patch
 from matplotlib.lines import Line2D
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # so `import ml` resolves when run as a script
+from ml.plotting import (
+    BLUE, RED, GREEN, PURPLE, AMBER, TEXT_PRIMARY, TEXT_SECONDARY,
+    GROUP_COLORS, MODEL_GROUP, BACKBONE_COLORS, apply_report_style, group_legend,
+)
+from pareto import pareto_frontier, pareto_front_mask
+
+apply_report_style()
+
 OUTPUT_DIR = Path("report/figures")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-
-# Palette shared with generate_architecture_figures.py -- see report/palette.py.
-from palette import BLUE, RED, GREEN, PURPLE, AMBER, TEXT_PRIMARY, TEXT_SECONDARY, GRID
-from pareto import pareto_frontier, pareto_front_mask
 
 # One legend fontsize for every figure in this script -- previously each legend picked its own
 # size ad hoc (8 to 12), so the same "elegível a Winograd" / group-color legend looked a different
@@ -52,16 +58,6 @@ _fire_residual_row = pd.DataFrame([{
     "size_MB_INT8": _p4.loc[_p4["model"] == "alexnet_final_fire_residual_INT8", "size_MB"].iloc[0],
 }])
 df = pd.concat([df, _fire_residual_row], ignore_index=True)
-
-
-def _style_axes(ax):
-    ax.grid(axis="x", color=GRID, linestyle="-", linewidth=0.5, alpha=0.7)
-    ax.set_axisbelow(True)
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.spines["left"].set_color(GRID)
-    ax.spines["bottom"].set_color(GRID)
-    ax.tick_params(colors=GRID, labelcolor=TEXT_SECONDARY)
 
 
 # ====== Figure 1: Kernel Restriction Cost & Recovery ======
@@ -88,55 +84,7 @@ group_fig1 = [
     "Tentativas de compensação", "Tentativas de compensação", "Tentativas de compensação",
     "Arquitetura híbrida final",
 ]
-GROUP_COLORS = {
-    "Baselines irrestritos": BLUE,
-    "Restrição ingênua": RED,
-    "Tentativas de compensação": GREEN,
-    "Arquitetura híbrida final": PURPLE,
-    "Atenção local": AMBER,
-}
 colors_fig1 = [GROUP_COLORS[g] for g in group_fig1]
-
-
-def _group_legend(groups):
-    """Legend patches for only the groups actually plotted, in GROUP_COLORS order.
-
-    Not every figure plots every group (Figure 1 has no attention models, for instance), and a
-    legend built straight from GROUP_COLORS would show entries with no points under them.
-    """
-    present = set(groups)
-    return [Patch(facecolor=c, label=g) for g, c in GROUP_COLORS.items() if g in present]
-
-# Shared model->group map, reused by every other figure below that plots individual models
-# (Figures 3 and 6) so the color coding stays identical to this one across the whole report.
-# Two spellings of ResNet18 appear because the source CSVs disagree (resnet18_tv vs resnet18tv).
-MODEL_GROUP = {
-    "alexnet_tv": "Baselines irrestritos", "mobilenetv2": "Baselines irrestritos",
-    "resnet18_tv": "Baselines irrestritos", "resnet18tv": "Baselines irrestritos",
-    "vgg_style": "Baselines irrestritos",
-    "alexnet_3x3_fc": "Restrição ingênua", "alexnet_2x2_fc": "Restrição ingênua",
-    "alexnet_3x3_gap": "Restrição ingênua",
-    "alexnet_mixed": "Tentativas de compensação", "alexnet_small_kernel": "Tentativas de compensação",
-    "alexnet_residual": "Tentativas de compensação", "alexnet_bottleneck": "Tentativas de compensação",
-    "alexnet_fire": "Tentativas de compensação", "alexnet_depthwisesep": "Tentativas de compensação",
-    "alexnet_dilated_gap": "Tentativas de compensação", "alexnet_stacked": "Tentativas de compensação",
-    "alexnet_groupconv": "Tentativas de compensação", "alexnet_factorized": "Tentativas de compensação",
-    "alexnet_se": "Tentativas de compensação",
-    # Legacy duplicate result files (same architecture/params/MACs as their non-suffixed twin from
-    # a later superseded run, see WINOGRAD_ELIGIBLE's comment below) -- same group as their twin.
-    "alexnet_2x2": "Restrição ingênua", "alexnet_2x2_gap": "Restrição ingênua",
-    "alexnet_3x3": "Restrição ingênua", "alexnet_gap": "Restrição ingênua",
-    "alexnet_final_fire_residual": "Arquitetura híbrida final",
-    "alexnet_final_bottleneck_residual": "Arquitetura híbrida final",
-    "alexnet_final_bottleneck_fire": "Arquitetura híbrida final",
-    "alexnet_final_depthwise_fire": "Arquitetura híbrida final",
-    "alexnet_fire_bypass": "Arquitetura híbrida final",
-    "swin_pico_w2": "Atenção local", "swin_pico_w4": "Atenção local",
-    "swin_pico_w8": "Atenção local", "swin_pico_poolmixer": "Atenção local",
-    "hybrid_bottleneck_swin": "Atenção local", "vit_tiny": "Atenção local",
-    "deit_tiny": "Atenção local",
-    "vit_tiny_convstem": "Atenção local", "swin_pico_convstem": "Atenção local",
-}
 
 # Architectural Winograd eligibility (has >=1 dense, stride-1, 3x3 Conv2d -- the only structure
 # that triggers Winograd F(2x2,3x3), ic_report.tex Eixo 3/7) for every model plotted in the two
@@ -164,8 +112,7 @@ model_to_size = dict(zip(rows["base_model"], rows["size_MB_FP32"]))
 accuracies = [model_to_acc[m] for m in models_fig1]
 sizes = [model_to_size[m] for m in models_fig1]
 
-fig, ax = plt.subplots(figsize=(5.4, 7), facecolor="white")
-ax.set_facecolor("white")
+fig, ax = plt.subplots(figsize=(5.4, 7))
 
 y_pos = range(len(labels_fig1))
 bars = ax.barh(y_pos, accuracies, color=colors_fig1, height=0.6, edgecolor="none")
@@ -179,59 +126,17 @@ for i, (acc, size) in enumerate(zip(accuracies, sizes)):
 
 ax.set_xlabel("Acurácia top-1 FP32 (%)", fontsize=10, color=TEXT_PRIMARY)
 ax.set_xlim(0, 78)
-_style_axes(ax)
+ax.grid(False, axis="y")
 
-legend_handles = _group_legend(group_fig1)
+legend_handles = group_legend(models_fig1)
 ax.legend(handles=legend_handles, loc="upper center", bbox_to_anchor=(0.5, -0.08),
           ncol=2, frameon=False, fontsize=LEGEND_FONTSIZE)
 
 plt.title("Custo e recuperação da restrição de kernel", fontsize=12, fontweight="normal",
           color=TEXT_PRIMARY, pad=12)
 plt.tight_layout()
-plt.savefig(OUTPUT_DIR / "kernel_restriction_cost.png", dpi=150, bbox_inches="tight", facecolor="white")
+plt.savefig(OUTPUT_DIR / "kernel_restriction_cost.png")
 print("✓ kernel_restriction_cost.png")
-plt.close()
-
-
-# ====== Figure: Quantization Stability by Architecture ======
-models_fig3 = ["alexnet_small_kernel", "vgg_style", "alexnet_bottleneck", "alexnet_fire"]
-labels_fig3 = ["SmallKernel\n(frágil)", "VGG-Style\n(referência)", "Bottleneck\n(robusta)", "Fire\n(robusta)"]
-
-rows3 = []
-for model in models_fig3:
-    if model == "alexnet_small_kernel":
-        rows3.append(df[(df["base_model"] == model) & (df["phase"] == "Phase 2 — AlexNet Variants")].iloc[0])
-    else:
-        rows3.append(df[df["base_model"] == model].sort_values("phase", ascending=False).iloc[0])
-rows3 = pd.DataFrame(rows3)
-quant_drops = rows3["qat_top1_drop_%"].values
-
-bar_colors = [RED if d > 0.5 else (GREEN if d < -0.5 else AMBER) for d in quant_drops]
-
-fig, ax = plt.subplots(figsize=(8, 5), facecolor="white")
-ax.set_facecolor("white")
-
-bars = ax.bar(labels_fig3, quant_drops, color=bar_colors, width=0.6, edgecolor="none")
-ax.axhline(0, color=GRID, linestyle="-", linewidth=1, zorder=0)
-for i, drop in enumerate(quant_drops):
-    va = "bottom" if drop >= 0 else "top"
-    y_offset = 0.2 if drop >= 0 else -0.2
-    ax.text(i, drop + y_offset, f"{drop:.2f}pp", ha="center", va=va, fontsize=10, color=TEXT_PRIMARY)
-
-ax.set_ylabel("Queda de quantização (FP32 → INT8, p.p.)", fontsize=11, color=TEXT_PRIMARY)
-ax.set_ylim(-2.5, 12)
-ax.grid(axis="y", color=GRID, linestyle="-", linewidth=0.5, alpha=0.5)
-ax.set_axisbelow(True)
-ax.spines["top"].set_visible(False)
-ax.spines["right"].set_visible(False)
-ax.spines["left"].set_color(GRID)
-ax.spines["bottom"].set_color(GRID)
-ax.tick_params(colors=GRID, labelcolor=TEXT_SECONDARY)
-
-plt.title("Estabilidade de quantização por arquitetura", fontsize=13, fontweight="normal", color=TEXT_PRIMARY, pad=16)
-plt.tight_layout()
-plt.savefig(OUTPUT_DIR / "quant_stability_bar.png", dpi=150, bbox_inches="tight", facecolor="white")
-print("✓ quant_stability_bar.png")
 plt.close()
 
 
@@ -263,8 +168,7 @@ comp_df = comp_df.set_index("method").loc[COMP_METHOD_ORDER].reset_index()
 comp_df["label"] = comp_df["method"].map(COMP_LABELS)
 comp_df["color"] = comp_df["method"].map(COMP_GROUP).map(COMP_GROUP_COLORS)
 
-fig, ax = plt.subplots(figsize=(11, 6), facecolor="white")
-ax.set_facecolor("white")
+fig, ax = plt.subplots(figsize=(11, 6))
 
 y_pos = range(len(comp_df))
 ax.barh(y_pos, comp_df["mean_top1"], color=comp_df["color"], height=0.6, edgecolor="none")
@@ -280,7 +184,7 @@ for i, row in comp_df.reset_index(drop=True).iterrows():
 ax.set_xlabel("Acurácia top-1 média (%)", fontsize=13, color=TEXT_PRIMARY)
 ax.tick_params(axis="x", labelsize=11)
 ax.set_xlim(0, 82)
-_style_axes(ax)
+ax.grid(False, axis="y")
 
 legend_handles = [Patch(facecolor=c, label=g) for g, c in COMP_GROUP_COLORS.items()]
 # bbox_to_anchor is in axes-fraction coords; plt.tight_layout() (removed below) fights this by
@@ -293,7 +197,7 @@ ax.legend(handles=legend_handles, loc="center left", bbox_to_anchor=(1.02, 0.5),
 fig.suptitle("Métodos de compressão além de INT8\n"
              "(taxa = tamanho teórico dos pesos em FP32 ÷ tamanho teórico após compressão)",
              fontsize=12, color=TEXT_PRIMARY)
-plt.savefig(OUTPUT_DIR / "extreme_compression_methods.png", dpi=150, bbox_inches="tight", facecolor="white")
+plt.savefig(OUTPUT_DIR / "extreme_compression_methods.png")
 print("✓ extreme_compression_methods.png")
 plt.close()
 
@@ -333,7 +237,7 @@ def _label_points(ax, xs, ys, labels, fontsize=7.5):
         ax.annotate(label, (x, y), fontsize=fontsize, xytext=chosen, textcoords="offset points")
 
 
-fig, ax = plt.subplots(figsize=(9, 6.5), facecolor="white")
+fig, ax = plt.subplots(figsize=(9, 6.5))
 
 for model_name, grp in pareto_df.groupby("model"):
     if set(grp["precision"]) >= {"fp32", "int8"}:
@@ -383,16 +287,15 @@ shape_legend = [
     Patch(facecolor="0.85", edgecolor="black", hatch="////", label="Elegível a Winograd"),
 ]
 leg1 = ax.legend(handles=shape_legend, loc="upper left", fontsize=LEGEND_FONTSIZE, frameon=False)
-group_legend = _group_legend(pareto_df["model"].map(MODEL_GROUP))
+group_handles = group_legend(pareto_df["model"])
 # Smaller than the other legends in this script -- at LEGEND_FONTSIZE it covered the
 # alexnet_tv INT8 point and label sitting right behind it in the lower-right corner.
-ax.legend(handles=group_legend, loc="lower right", fontsize=8, frameon=False)
+ax.legend(handles=group_handles, loc="lower right", fontsize=8, frameon=False)
 ax.add_artist(leg1)
-ax.grid(alpha=0.3)
 
 fig.suptitle("Acurácia vs. latência: fronteira de Pareto e referência", fontsize=12)
 fig.tight_layout()
-plt.savefig(OUTPUT_DIR / "phase6_accuracy_vs_latency_pareto.png", dpi=150, bbox_inches="tight", facecolor="white")
+plt.savefig(OUTPUT_DIR / "phase6_accuracy_vs_latency_pareto.png")
 print("✓ phase6_accuracy_vs_latency_pareto.png")
 plt.close()
 
@@ -411,10 +314,9 @@ PANELS = [
     ("int8", 1, "INT8 CPU, lote=1"),
 ]
 
-fig, axes = plt.subplots(1, 3, figsize=(15, 5), facecolor="white")
+fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 
 for ax, (prec, batch, subtitle) in zip(axes, PANELS):
-    ax.set_facecolor("white")
     subset = kernel_df[(kernel_df["precision"] == prec) & (kernel_df["batch_size"] == batch)]
     for in_ch, color in IN_CH_COLORS.items():
         row = subset[subset["in_ch"] == in_ch]
@@ -429,8 +331,7 @@ for ax, (prec, batch, subtitle) in zip(axes, PANELS):
     ax.axvline(3, color="0.6", linestyle=":", linewidth=1)
     ax.set_xlabel("tamanho de kernel ($k$)", color=TEXT_PRIMARY)
     ax.set_title(subtitle, fontsize=10.5, color=TEXT_PRIMARY)
-    ax.grid(alpha=0.3, which="both")
-    ax.tick_params(colors=GRID, labelcolor=TEXT_SECONDARY)
+    ax.grid(True, which="both")
 axes[0].set_ylabel("latência / $k^2$ (ms por unidade de FLOP)", color=TEXT_PRIMARY)
 
 # One shared legend below all 3 panels instead of one per panel -- a per-panel legend sat right
@@ -443,22 +344,15 @@ fig.suptitle("RTX 4060 Laptop (local): latência de camada por FLOP vs. tamanho 
              "(densa/groups=1, resolução 64)",
              fontsize=12, color=TEXT_PRIMARY)
 fig.tight_layout(rect=[0, 0.08, 1, 1])
-plt.savefig(OUTPUT_DIR / "phase6_latency_vs_kernel_size.png", dpi=150, bbox_inches="tight", facecolor="white")
+plt.savefig(OUTPUT_DIR / "phase6_latency_vs_kernel_size.png")
 print("✓ phase6_latency_vs_kernel_size.png")
 plt.close()
 
 
-# ====== Figure: Accuracy vs. Size — 15-model subset, data source for the MACs companion below ======
-# NOT the report's "accuracy_vs_size_all_models.png" (that's the real 33-model/4-panel figure from
-# notebooks/phase_10_final_summary/final_summary.ipynb, cell 12 -- copied in as a file below; this
-# script previously duplicated the filename with a simplified single-panel/15-model reproduction,
-# silently overwriting the real one, while the report's caption/prose kept describing the 33-model
-# version. This block now only exists to build size_acc_df/DISPLAY_NAME for the MACs figure).
-# Same visual language as the accuracy-vs-latency Pareto figure above (gray FP32->INT8 connector,
-# BLUE/RED circle/square markers, log-x, offset-search labels) but x-axis is model size instead of
-# latency. Phase 4/9 hybrids aren't in results_cross_phase.csv (three different CSV schemas across
-# phases -- same situation the phase5 notebook already flagged), so those rows are pulled from their
-# own source CSVs and concatenated, same approach as the alexnet_final_fire_residual splice above.
+# ====== Data: 15-model subset (size_acc_df/DISPLAY_NAME) for the MACs figure below ======
+# Phase 4/9 hybrids aren't in results_cross_phase.csv (three different CSV schemas across phases),
+# so those rows are pulled from their own source CSVs and concatenated, same approach as the
+# alexnet_final_fire_residual splice above.
 size_acc_models = [
     "alexnet_tv", "alexnet_3x3_fc", "alexnet_3x3_gap", "alexnet_2x2_fc", "alexnet_small_kernel",
     "alexnet_bottleneck", "alexnet_fire", "mobilenetv2", "resnet18_tv", "vgg_style",
@@ -500,9 +394,10 @@ _p8 = pd.read_csv(
 _p8_rows = _p8[["model", "fp32_top1", "fp32_size_mb", "int8_top1", "int8_size_mb", "macs"]].copy()
 
 # H5 follow-up (Winograd-eligible conv-stem counterfactual, ic_report.tex Eixo 7): two more
-# attention models, trained separately (configs/experiments/phase_8_efficient_vit_convstem.yaml) and never
-# folded into phase8_comparison.csv -- read straight from their own summary JSONs, same
-# own-summary-JSON splice pattern as the alexnet_fire_bypass row above.
+# attention models, trained separately (configs/experiments/phase_8_efficient_vit_convstem.yaml) -- read
+# straight from their own summary JSONs, same own-summary-JSON splice pattern as the
+# alexnet_fire_bypass row above. Newer reruns of the Phase 8 notebook also fold them into
+# phase8_comparison.csv, hence the dedup below.
 _p8_convstem = pd.DataFrame([
     json.load(open(f"outputs/local/phase_8_efficient_vit_convstem/{name}/results/{name}_summary.json"))
     for name in ["vit_tiny_convstem", "swin_pico_convstem"]
@@ -514,7 +409,7 @@ size_acc_df = pd.concat(
     [size_acc_rows, pd.DataFrame(_p4_pairs), _p8_rows.drop(columns="macs"),
      _p8_convstem.drop(columns="macs")],
     ignore_index=True,
-)
+).drop_duplicates(subset="model", keep="last").reset_index(drop=True)
 
 # MACs for the same models, reused below for the MACs-vs-accuracy companion figure. The 10
 # base models are in model_details_cross_phase.csv; the Phase 4/9 hybrids aren't (same schema gap
@@ -553,76 +448,16 @@ DISPLAY_NAME = {
     "alexnet_depthwisesep": "AlexNetDepthwiseSep",
 }
 
-# Same 4-group color coding as Figure 1 (MODEL_GROUP/GROUP_COLORS, defined above) -- shape
-# (circle/square) encodes precision, color encodes group, matching the dual-legend pattern
-# already used in the compression-methods figure elsewhere in this repo.
-point_colors = size_acc_df["model"].map(MODEL_GROUP).map(GROUP_COLORS)
-
-fig, ax = plt.subplots(figsize=(13, 7), facecolor="white")
-
-for _, row in size_acc_df.iterrows():
-    ax.plot([row["fp32_size_mb"], row["int8_size_mb"]], [row["fp32_top1"], row["int8_top1"]],
-            color="0.85", linewidth=1, zorder=1)
-
-ax.scatter(size_acc_df["fp32_size_mb"], size_acc_df["fp32_top1"], marker="o", c=point_colors,
-           s=100, alpha=0.9, zorder=3, edgecolors="white", linewidths=0.7)
-ax.scatter(size_acc_df["int8_size_mb"], size_acc_df["int8_top1"], marker="s", c=point_colors,
-           s=100, alpha=0.9, zorder=3, edgecolors="white", linewidths=0.7)
-
-
-fp32_frontier = pareto_frontier(size_acc_df["fp32_size_mb"], size_acc_df["fp32_top1"])
-int8_frontier = pareto_frontier(size_acc_df["int8_size_mb"], size_acc_df["int8_top1"])
-ax.plot([p[0] for p in fp32_frontier], [p[1] for p in fp32_frontier], linestyle="--",
-        color="0.3", linewidth=1.8, zorder=2)
-ax.plot([p[0] for p in int8_frontier], [p[1] for p in int8_frontier], linestyle=":",
-        color="0.3", linewidth=1.8, zorder=2)
-
-ax.set_xscale("log")
-ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:g}"))
-
-all_xs = pd.concat([size_acc_df["fp32_size_mb"], size_acc_df["int8_size_mb"]]).to_numpy()
-all_ys = pd.concat([size_acc_df["fp32_top1"], size_acc_df["int8_top1"]]).to_numpy()
-# fp32/int8 blocks (matches the pd.concat order above), not interleaved per model.
-labels = [DISPLAY_NAME[m] for m in size_acc_df["model"]] * 2
-_label_points(ax, all_xs, all_ys, labels, fontsize=7)
-
-ax.set_xlabel("Tamanho do modelo (MB, escala log)", fontsize=11, color=TEXT_PRIMARY)
-ax.set_ylabel("Acurácia top-1 (%)", fontsize=11, color=TEXT_PRIMARY)
-
-shape_legend = [
-    Line2D([0], [0], marker="o", color="w", markerfacecolor="0.4", markersize=9, label="FP32"),
-    Line2D([0], [0], marker="s", color="w", markerfacecolor="0.4", markersize=9, label="INT8"),
-    Line2D([0], [0], color="0.3", linestyle="--", linewidth=1.8, label="Fronteira Pareto (FP32)"),
-    Line2D([0], [0], color="0.3", linestyle=":", linewidth=1.8, label="Fronteira Pareto (INT8)"),
-]
-leg1 = ax.legend(handles=shape_legend, loc="upper left", fontsize=LEGEND_FONTSIZE, frameon=False)
-group_legend = _group_legend(size_acc_df["model"].map(MODEL_GROUP))
-ax.legend(handles=group_legend, loc="center right", bbox_to_anchor=(1.0, 0.62),
-          fontsize=LEGEND_FONTSIZE, frameon=False)
-ax.add_artist(leg1)
-
-ax.grid(alpha=0.3)
-
-fig.suptitle("Acurácia vs. tamanho: subconjunto de 15 modelos, fonte da figura de MACs",
-             fontsize=12, color=TEXT_PRIMARY)
-fig.tight_layout()
-plt.savefig(OUTPUT_DIR / "accuracy_vs_size_15model_subset.png", dpi=150, bbox_inches="tight", facecolor="white")
-print("✓ accuracy_vs_size_15model_subset.png (not embedded in the report -- data source only)")
-plt.close()
 
 # ====== Figure: Accuracy vs. Size — real 33-model, 4-panel figure (the report's actual
 # "accuracy_vs_size_all_models.png") ======
 # Reproduced here from notebooks/phase_10_final_summary/final_summary.ipynb, cell 12, instead of
 # copying that cell's PNG output in as a file: the notebook labels each of the 6 groups "Phase N —
-# ..." (English, and "Phase" doesn't appear anywhere else in this Portuguese-language report) and
-# colors them with its own tab10 colormap, which disagreed with the MODEL_GROUP/GROUP_COLORS
-# scheme every other figure in this script uses for the same phases (e.g. baselines were blue in
-# Figure 1 but red here). Both are fixed below: GROUP_DIRS' labels are Portuguese purely for
-# readability (they no longer drive color -- point color comes from MODEL_GROUP/GROUP_COLORS via
-# model_name, same as every other figure), and the legend reuses _group_legend so the two figures
-# are colored identically. The underlying data assembly (GROUP_DIRS, SHARED_COLS, cross-frame
-# dedup, pareto_front_mask) is otherwise unchanged from the notebook, so the two 8/33 and 5/30
-# Pareto-front counts in the report's caption still hold.
+# ..." (English, and "Phase" doesn't appear anywhere else in this Portuguese-language report).
+# GROUP_DIRS' labels below are Portuguese purely for readability -- they don't drive color, which
+# comes from MODEL_GROUP/GROUP_COLORS via model_name like every other figure. The underlying data
+# assembly (GROUP_DIRS, SHARED_COLS, cross-frame dedup, pareto_front_mask) is otherwise unchanged
+# from the notebook.
 def _load_summary_jsons(root: Path, group_label: str) -> pd.DataFrame:
     if not root.exists():
         return pd.DataFrame()
@@ -678,62 +513,61 @@ _panels = [
     ("fp32_size_mb", "fp32_top1", "FP32", "Top-1"),
     ("int8_size_mb", "int8_top1", "INT8", "Top-1"),
 ]
-with plt.style.context("seaborn-v0_8-whitegrid"):
-    # Already full double-column width (figure* in ic_report.tex) -- printed width is capped at
-    # \linewidth regardless of figsize, so making this "bigger" means taller, not wider: more
-    # absolute vertical room for the crowded 33-point scatter and its labels, at the same
-    # print-scale factor (unaffected by height, only by width) as before.
-    fig, axes = plt.subplots(1, 2, figsize=(15, 8.5), facecolor="white")
-    for ax, (size_col, acc_col, precision, metric) in zip(axes.flat, _panels):
-        df_size = df_all_classification[
-            df_all_classification[acc_col].notna() & df_all_classification[size_col].notna()
-        ].copy()
-        mask = pareto_front_mask(df_size[size_col].values, df_size[acc_col].values)
-        pf = df_size[mask].sort_values(size_col)
-        point_colors = df_size["model_name"].map(MODEL_GROUP).map(GROUP_COLORS)
-        elig_mask = df_size["model_name"].isin(WINOGRAD_ELIGIBLE).to_numpy()
-        # Two scatter calls, not one: PathCollection.set_hatch() applies to the whole
-        # collection, so per-point hatching needs the eligible/ineligible points split apart.
-        ax.scatter(df_size[size_col][~elig_mask], df_size[acc_col][~elig_mask],
-                   c=np.array(point_colors)[~elig_mask], s=110,
-                   edgecolors="white", lw=0.5, alpha=0.9, zorder=3)
-        ax.scatter(df_size[size_col][elig_mask], df_size[acc_col][elig_mask],
-                   c=np.array(point_colors)[elig_mask], s=110, hatch="////",
-                   edgecolors="black", lw=0.7, alpha=0.9, zorder=3)
-        ax.step(pf[size_col], pf[acc_col], where="post", color="black", lw=1.2, ls="--", alpha=0.6, zorder=2)
-        # ponytail: labels alternate above/below the point instead of a fixed offset, since the
-        # Pareto front is a monotonic up-right staircase and same-direction offsets stack labels
-        # from adjacent points on top of each other. Swap for adjustText if this stops being enough.
-        for i, (_, row) in enumerate(pf.iterrows()):
-            dy = 6 if i % 2 == 0 else -14
-            ax.annotate(DISPLAY_NAME[row["model_name"]], (row[size_col], row[acc_col]), xytext=(6, dy),
-                       textcoords="offset points", fontsize=9, fontweight="bold",
-                       va="bottom" if dy > 0 else "top")
-        ax.set_xscale("log")
-        ax.set_xlabel(f"Tamanho {precision} do modelo (MB, escala log)")
-        ax.set_ylabel(f"Acurácia {precision} {metric} (%)")
-        ax.set_title(f"{precision} {metric} (fronteira de Pareto: {len(pf)}/{len(df_size)})")
-        # Headroom above the topmost point -- its offset label (dy=6 points, above the point)
-        # otherwise landed right on the axes' top border for whichever point happens to be highest.
-        ymin, ymax = ax.get_ylim()
-        ax.set_ylim(ymin, ymax + (ymax - ymin) * 0.08)
+# Already full double-column width (figure* in ic_report.tex) -- printed width is capped at
+# \linewidth regardless of figsize, so making this "bigger" means taller, not wider: more
+# absolute vertical room for the crowded 33-point scatter and its labels, at the same
+# print-scale factor (unaffected by height, only by width) as before.
+fig, axes = plt.subplots(1, 2, figsize=(15, 8.5))
+for ax, (size_col, acc_col, precision, metric) in zip(axes.flat, _panels):
+    df_size = df_all_classification[
+        df_all_classification[acc_col].notna() & df_all_classification[size_col].notna()
+    ].copy()
+    mask = pareto_front_mask(df_size[size_col].values, df_size[acc_col].values)
+    pf = df_size[mask].sort_values(size_col)
+    point_colors = df_size["model_name"].map(MODEL_GROUP).map(GROUP_COLORS)
+    elig_mask = df_size["model_name"].isin(WINOGRAD_ELIGIBLE).to_numpy()
+    # Two scatter calls, not one: PathCollection.set_hatch() applies to the whole
+    # collection, so per-point hatching needs the eligible/ineligible points split apart.
+    ax.scatter(df_size[size_col][~elig_mask], df_size[acc_col][~elig_mask],
+               c=np.array(point_colors)[~elig_mask], s=110,
+               edgecolors="white", lw=0.5, alpha=0.9, zorder=3)
+    ax.scatter(df_size[size_col][elig_mask], df_size[acc_col][elig_mask],
+               c=np.array(point_colors)[elig_mask], s=110, hatch="////",
+               edgecolors="black", lw=0.7, alpha=0.9, zorder=3)
+    ax.step(pf[size_col], pf[acc_col], where="post", color="black", lw=1.2, ls="--", alpha=0.6, zorder=2)
+    # ponytail: labels alternate above/below the point instead of a fixed offset, since the
+    # Pareto front is a monotonic up-right staircase and same-direction offsets stack labels
+    # from adjacent points on top of each other. Swap for adjustText if this stops being enough.
+    for i, (_, row) in enumerate(pf.iterrows()):
+        dy = 6 if i % 2 == 0 else -14
+        ax.annotate(DISPLAY_NAME[row["model_name"]], (row[size_col], row[acc_col]), xytext=(6, dy),
+                   textcoords="offset points", fontsize=9, fontweight="bold",
+                   va="bottom" if dy > 0 else "top")
+    ax.set_xscale("log")
+    ax.set_xlabel(f"Tamanho {precision} do modelo (MB, escala log)")
+    ax.set_ylabel(f"Acurácia {precision} {metric} (%)")
+    ax.set_title(f"{precision} {metric} (fronteira de Pareto: {len(pf)}/{len(df_size)})")
+    # Headroom above the topmost point -- its offset label (dy=6 points, above the point)
+    # otherwise landed right on the axes' top border for whichever point happens to be highest.
+    ymin, ymax = ax.get_ylim()
+    ax.set_ylim(ymin, ymax + (ymax - ymin) * 0.08)
 
-    handles = _group_legend(df_all_classification["model_name"].map(MODEL_GROUP))
-    labels = [h.get_label() for h in handles]
-    handles.append(Patch(facecolor="0.85", edgecolor="black", hatch="////"))
-    labels.append("Elegível a Winograd")
-    fig.legend(handles, labels, loc="lower center", bbox_to_anchor=(0.5, -0.11), ncol=3,
-              fontsize=LEGEND_FONTSIZE + 2, title="Grupo de modelos", title_fontsize=LEGEND_FONTSIZE + 4,
-              handlelength=1.4, handleheight=1.4, markerscale=1.1)
-    fig.suptitle("Acurácia vs. Tamanho — Fronteiras de Pareto (todos os modelos de classificação)",
-                fontsize=13)
-    # rect[1] (the axes' bottom edge) and the legend's bbox_to_anchor y are independent knobs --
-    # the legend sits entirely below y=0 (outside the rect-reserved margin), so rect[1] only needs
-    # to clear the x-axis tick labels below the panels, not the legend itself. Previous values
-    # (rect[1] up to 0.19 against anchor -0.14) reserved a margin far bigger than the x-labels
-    # need, which is exactly the dead blank band between the panels and the legend.
-    plt.tight_layout(rect=[0, 0.05, 1, 0.95])
-    plt.savefig(OUTPUT_DIR / "accuracy_vs_size_all_models.png", bbox_inches="tight", facecolor="white")
+handles = group_legend(df_all_classification["model_name"])
+labels = [h.get_label() for h in handles]
+handles.append(Patch(facecolor="0.85", edgecolor="black", hatch="////"))
+labels.append("Elegível a Winograd")
+fig.legend(handles, labels, loc="lower center", bbox_to_anchor=(0.5, -0.11), ncol=3,
+          fontsize=LEGEND_FONTSIZE + 2, title="Grupo de modelos", title_fontsize=LEGEND_FONTSIZE + 4,
+          handlelength=1.4, handleheight=1.4, markerscale=1.1)
+fig.suptitle("Acurácia vs. Tamanho — Fronteiras de Pareto (todos os modelos de classificação)",
+            fontsize=13)
+# rect[1] (the axes' bottom edge) and the legend's bbox_to_anchor y are independent knobs --
+# the legend sits entirely below y=0 (outside the rect-reserved margin), so rect[1] only needs
+# to clear the x-axis tick labels below the panels, not the legend itself. Previous values
+# (rect[1] up to 0.19 against anchor -0.14) reserved a margin far bigger than the x-labels
+# need, which is exactly the dead blank band between the panels and the legend.
+plt.tight_layout(rect=[0, 0.05, 1, 0.95])
+plt.savefig(OUTPUT_DIR / "accuracy_vs_size_all_models.png")
 print("✓ accuracy_vs_size_all_models.png")
 plt.close()
 
@@ -744,7 +578,7 @@ plt.close()
 # one above.
 point_colors = size_acc_df["model"].map(MODEL_GROUP).map(GROUP_COLORS)
 
-fig, ax = plt.subplots(figsize=(13, 7), facecolor="white")
+fig, ax = plt.subplots(figsize=(13, 7))
 
 for _, row in size_acc_df.iterrows():
     ax.plot([row["macs_m"], row["macs_m"]], [row["fp32_top1"], row["int8_top1"]],
@@ -789,9 +623,15 @@ ax.set_ylabel("Acurácia top-1 (%)", fontsize=11, color=TEXT_PRIMARY)
 # Both legends sit fully outside the axes (bbox_to_anchor x > 1) -- with 22 models now spread
 # across the whole plot area, there's no corner left that a legend can sit in without covering a
 # point or its label.
-group_legend = _group_legend(size_acc_df["model"].map(MODEL_GROUP))
-leg1 = ax.legend(handles=group_legend, loc="upper left", bbox_to_anchor=(1.01, 1.0),
+group_handles = group_legend(size_acc_df["model"])
+leg1 = ax.legend(handles=group_handles, loc="upper left", bbox_to_anchor=(1.01, 1.0),
                   fontsize=LEGEND_FONTSIZE, frameon=False)
+shape_legend = [
+    Line2D([0], [0], marker="o", color="w", markerfacecolor="0.4", markersize=9, label="FP32"),
+    Line2D([0], [0], marker="s", color="w", markerfacecolor="0.4", markersize=9, label="INT8"),
+    Line2D([0], [0], color="0.3", linestyle="--", linewidth=1.8, label="Fronteira Pareto (FP32)"),
+    Line2D([0], [0], color="0.3", linestyle=":", linewidth=1.8, label="Fronteira Pareto (INT8)"),
+]
 _shape_legend_hatched = shape_legend + [
     Patch(facecolor="0.85", edgecolor="black", hatch="////",
           label="Elegível a Winograd")
@@ -800,12 +640,10 @@ ax.legend(handles=_shape_legend_hatched, loc="lower left", bbox_to_anchor=(1.01,
           fontsize=LEGEND_FONTSIZE, frameon=False)
 ax.add_artist(leg1)
 
-ax.grid(alpha=0.3)
-
 fig.suptitle("Acurácia vs. MACs: todos os modelos discutidos neste relatório (FP32 e INT8)",
              fontsize=12, color=TEXT_PRIMARY)
 fig.tight_layout()
-plt.savefig(OUTPUT_DIR / "macs_vs_accuracy_all_models.png", dpi=150, bbox_inches="tight", facecolor="white")
+plt.savefig(OUTPUT_DIR / "macs_vs_accuracy_all_models.png")
 print("✓ macs_vs_accuracy_all_models.png")
 plt.close()
 
@@ -813,12 +651,11 @@ plt.close()
 # ====== Figure: Eixo 6 detection accuracy vs. true model size (bigger legend) ======
 # Reproduced from notebooks/phase_7_detection_segmentation/phase7_results_analysis.ipynb,
 # cell 19 -- same 9 post-anchor-fix, non-pretrained SSD detection runs (3 backbones x FP32/QAT/INT8),
-# same true_size_mb-with-model_size_mb-fallback logic, same MODEL_COLORS (PALETTE[2]/[1]/[0] for
-# bottleneck/fire/tv) and FP32/QAT/INT8 marker shapes.
+# same true_size_mb-with-model_size_mb-fallback logic, same BACKBONE_COLORS and FP32/QAT/INT8
+# marker shapes.
 _p7_dir = Path("outputs/pcad/phase_7_detection_segmentation")
 _p7_models = ["alexnet_bottleneck", "alexnet_fire", "alexnet_tv"]
-# ml/plotting.py's PALETTE[2]/[1]/[0] -- same colors the source notebook used.
-_p7_colors = {"alexnet_bottleneck": "#1baf7a", "alexnet_fire": "#eb6834", "alexnet_tv": "#2a78d6"}
+_p7_colors = BACKBONE_COLORS
 _p7_names = {"alexnet_bottleneck": "AlexNetBottleneck", "alexnet_fire": "AlexNetFire",
              "alexnet_tv": "AlexNetTV"}
 _p7_markers = {"fp32": "o", "qat": "s", "int8": "^"}
@@ -836,7 +673,7 @@ for _model in _p7_models:
                          "is_true": _true is not None})
 p7_df = pd.DataFrame(_p7_rows)
 
-fig, ax = plt.subplots(figsize=(7.5, 5), facecolor="white")
+fig, ax = plt.subplots(figsize=(7.5, 5))
 for _model in _p7_models:
     sub = p7_df[p7_df.model == _model].set_index("stage")
     pts = [(sub.loc[s, "size_mb"], sub.loc[s, "mAP"]) for s in ("fp32", "qat", "int8") if s in sub.index]
@@ -878,10 +715,9 @@ leg1 = ax.legend(handles=stage_legend, loc="upper left", fontsize=_FIG7_LEGEND_F
 ax.legend(handles=model_legend, loc="upper center", bbox_to_anchor=(0.5, -0.13), ncol=3,
           fontsize=_FIG7_LEGEND_FONTSIZE, frameon=False)
 ax.add_artist(leg1)
-ax.grid(alpha=0.3)
 
 fig.tight_layout()
-plt.savefig(OUTPUT_DIR / "phase7_accuracy_vs_size.png", dpi=150, bbox_inches="tight", facecolor="white")
+plt.savefig(OUTPUT_DIR / "phase7_accuracy_vs_size.png")
 print("✓ phase7_accuracy_vs_size.png")
 plt.close()
 
@@ -895,8 +731,7 @@ WINDOW_SIZES = {"swin_pico_w2": 2, "swin_pico_w4": 4, "swin_pico_w8": 8}
 h1_df = _p8.set_index("model").loc[list(WINDOW_SIZES), ["fp32_top1", "int8_top1"]]
 h1_df["window_size"] = [WINDOW_SIZES[m] for m in h1_df.index]
 
-fig, ax = plt.subplots(figsize=(6, 4.5), facecolor="white")
-ax.set_facecolor("white")
+fig, ax = plt.subplots(figsize=(6, 4.5))
 ax.plot(h1_df["window_size"], h1_df["fp32_top1"], "o-", label="FP32", color=BLUE, linewidth=2)
 ax.plot(h1_df["window_size"], h1_df["int8_top1"], "s--", label="INT8", color=RED, linewidth=2)
 ax.set_xticks(h1_df["window_size"])
@@ -904,11 +739,9 @@ ax.set_xlabel("Tamanho da janela de atenção", fontsize=11, color=TEXT_PRIMARY)
 ax.set_ylabel("Acurácia top-1 (%)", fontsize=11, color=TEXT_PRIMARY)
 ax.set_title("Acurácia vs. tamanho da janela de atenção local", fontsize=12, color=TEXT_PRIMARY)
 ax.legend(frameon=False, fontsize=LEGEND_FONTSIZE)
-ax.grid(alpha=0.3)
-ax.tick_params(colors=GRID, labelcolor=TEXT_SECONDARY)
 
 fig.tight_layout()
-plt.savefig(OUTPUT_DIR / "phase8_h1_window_size_sweep.png", dpi=150, bbox_inches="tight", facecolor="white")
+plt.savefig(OUTPUT_DIR / "phase8_h1_window_size_sweep.png")
 print("✓ phase8_h1_window_size_sweep.png")
 plt.close()
 
@@ -923,12 +756,11 @@ H5_PAIRS = {"ViT-Tiny": ("vit_tiny", "vit_tiny_convstem"), "Swin-pico (janela 4)
 without_idx = _p8.set_index("model")
 with_idx = _p8_convstem.set_index("model")
 
-fig, axes = plt.subplots(1, 2, figsize=(12, 5.5), facecolor="white")
+fig, axes = plt.subplots(1, 2, figsize=(12, 5.5))
 x = np.arange(len(H5_PAIRS))
 width = 0.32
 
 for ax, col, precision, color in zip(axes, ["fp32_top1", "int8_top1"], ["FP32", "INT8"], [BLUE, RED]):
-    ax.set_facecolor("white")
     before = [without_idx.loc[without_m, col] for without_m, _ in H5_PAIRS.values()]
     after = [with_idx.loc[with_m, col] for _, with_m in H5_PAIRS.values()]
 
@@ -951,17 +783,11 @@ for ax, col, precision, color in zip(axes, ["fp32_top1", "int8_top1"], ["FP32", 
     ax.set_ylim(0, 75)
     ax.set_title(precision, fontsize=11.5, color=TEXT_PRIMARY, pad=8)
     ax.legend(frameon=False, fontsize=9.5, loc="upper left")
-    ax.grid(axis="y", alpha=0.3)
-    ax.set_axisbelow(True)
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.spines["left"].set_color(GRID)
-    ax.spines["bottom"].set_color(GRID)
-    ax.tick_params(colors=GRID, labelcolor=TEXT_SECONDARY)
+    ax.grid(False, axis="x")
 
 fig.suptitle("Acurácia antes/depois de acrescentar um stem 3×3 Winograd-elegível",
              fontsize=12.5, fontweight="normal", color=TEXT_PRIMARY, y=1.0)
 fig.tight_layout()
-plt.savefig(OUTPUT_DIR / "phase8_h5_convstem_gain.png", dpi=150, bbox_inches="tight", facecolor="white")
+plt.savefig(OUTPUT_DIR / "phase8_h5_convstem_gain.png")
 print("✓ phase8_h5_convstem_gain.png")
 plt.close()

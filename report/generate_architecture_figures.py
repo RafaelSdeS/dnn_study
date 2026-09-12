@@ -37,11 +37,11 @@ sys.path.insert(0, str(project_root))  # so `import ml`/`import models` resolve 
 import ml.model_registrations  # noqa: F401  (populates MODEL_REGISTRY)
 from ml import MODEL_REGISTRY
 from ml.quantization import load_best_model
-from ml.plotting import apply_report_style, PALETTE
+from ml.plotting import apply_report_style, BLUE, RED, GREEN, AMBER, NEUTRAL, TEXT_PRIMARY, TEXT_SECONDARY, GRID
 from models.compensation import _AlexBottleneck, _FireModule
 from models.final_architecture import _FireResBlock
 
-apply_report_style(palette=PALETTE)
+apply_report_style()
 
 FIGURES_DIR = project_root / "report" / "figures"
 FIGURES_DIR.mkdir(parents=True, exist_ok=True)
@@ -168,16 +168,16 @@ for name, stages in STAGES.items():
     n_blocks = sum(1 for s in stages if s["type"] != "pool")
     print(f"{name}: {n_blocks} blocks, {len(stages)} total stages")
 
-KERNEL_COLORS = {1: "#9e9e9e", 3: "#1baf7a"}  # 1x1 grey, 3x3 teal (the Winograd-friendly core)
+KERNEL_COLORS = {1: NEUTRAL, 3: GREEN}  # 1x1 grey, 3x3 green (the Winograd-friendly core)
 # Block-type border color + corner tag -- lets a diagram that mixes block types (only
 # AlexNetFinalFireResidual does: plain stem conv + FireResBlock stages) read at a glance which
 # stage is which, without needing the caption. Bottleneck/Fire/FireBypass are uniform internally,
 # so this is a no-op visual change for them (every block gets the same tag/border throughout).
 BLOCK_TYPE_STYLE = {
-    "conv": ("#3b6fa8", "STEM"),
-    "AlexBottleneck": ("#555555", "BOTTLENECK"),
-    "FireModule": ("#e8871e", "FIRE"),
-    "FireResBlock": ("#e8871e", "FIRE"),
+    "conv": (BLUE, "STEM"),
+    "AlexBottleneck": (TEXT_SECONDARY, "BOTTLENECK"),
+    "FireModule": (AMBER, "FIRE"),
+    "FireResBlock": (AMBER, "FIRE"),
 }
 
 # Fixed box height for every stage (input/blocks/head); width grows left-to-right with the model
@@ -202,25 +202,25 @@ def total_width(stages):
 
 def draw_input_box(ax, x_left, x_right, input_hw):
     ax.add_patch(mpatches.FancyBboxPatch((x_left, 0), x_right - x_left, BOX_H, boxstyle="round,pad=0.02",
-                 linewidth=1.1, edgecolor="#333", facecolor="#f2f2f2", zorder=2))
+                 linewidth=1.1, edgecolor=TEXT_PRIMARY, facecolor=GRID, zorder=2))
     cx = (x_left + x_right) / 2
-    ax.text(cx, 0.16, "Input", fontsize=9, fontweight="bold", va="top", ha="center", color="#333")
+    ax.text(cx, 0.16, "Input", fontsize=9, fontweight="bold", va="top", ha="center", color=TEXT_PRIMARY)
     ax.text(cx, BOX_H / 2, f"3×{input_hw[0]}×{input_hw[1]}", fontsize=9.5, va="center", ha="center",
-            fontweight="bold", color="#1baf7a")
+            fontweight="bold", color=GREEN)
     ax.text(cx, BOX_H - 0.14, "RGB · Tiny\nImageNet-200", fontsize=6, va="bottom", ha="center",
-            color="#777", style="italic", linespacing=1.3)
+            color=TEXT_SECONDARY, style="italic", linespacing=1.3)
 
 
 def draw_head_box(ax, x_left, x_right, head):
-    HEAD_COLOR = "#5b7fbd"
+    HEAD_COLOR = BLUE
     ax.add_patch(mpatches.FancyBboxPatch((x_left, 0), x_right - x_left, BOX_H, boxstyle="round,pad=0.02",
-                 linewidth=1.1, edgecolor="#333", facecolor="white", zorder=2))
+                 linewidth=1.1, edgecolor=TEXT_PRIMARY, facecolor="white", zorder=2))
     cx = (x_left + x_right) / 2
-    ax.text(cx, 0.14, "Classifier Head", fontsize=8, fontweight="bold", va="top", ha="center", color="#333")
+    ax.text(cx, 0.14, "Classifier Head", fontsize=8, fontweight="bold", va="top", ha="center", color=TEXT_PRIMARY)
 
     c, (fh, fw) = head["in_ch"], head["in_hw"]
     info = f"{c}×{fh}×{fw} in · {head['out_features']} out\n{fmt_params(head['n_params'])} params"
-    ax.text(cx, 0.46, info, fontsize=6.2, va="top", ha="center", color="#555", linespacing=1.4)
+    ax.text(cx, 0.46, info, fontsize=6.2, va="top", ha="center", color=TEXT_SECONDARY, linespacing=1.4)
 
     chips = [("GAP", f"→ {c}×1×1"), ("Flatten", f"→ {c}"), ("Linear", f"→ {head['out_features']}")]
     chip_top, chip_bot = 0.95, BOX_H - 0.12
@@ -259,12 +259,12 @@ def draw_architecture(ax, stages, title, metrics, head, input_hw=INPUT_HW):
             label = f"MaxPool {stage['pool_kernel']}×{stage['pool_kernel']}\nstride {stage['pool_stride']}"
             if h is not None:
                 label += f"\n→ {h}×{w}"
-            ax.plot([x_left, x_right], [BOX_H / 2, BOX_H / 2], ":", color="#999", lw=1.4, zorder=1)
+            ax.plot([x_left, x_right], [BOX_H / 2, BOX_H / 2], ":", color=NEUTRAL, lw=1.4, zorder=1)
             ax.text((x_left + x_right) / 2, BOX_H / 2 - 0.55, label, ha="center", va="center",
-                    fontsize=8, color="#888", linespacing=1.25)
+                    fontsize=8, color=TEXT_SECONDARY, linespacing=1.25)
             continue
 
-        border_color, type_tag = BLOCK_TYPE_STYLE.get(stage["type"], ("#333333", ""))
+        border_color, type_tag = BLOCK_TYPE_STYLE.get(stage["type"], (TEXT_PRIMARY, ""))
         ax.add_patch(mpatches.FancyBboxPatch((x_left, 0), x_right - x_left, BOX_H, boxstyle="round,pad=0.02",
                      linewidth=2.0, edgecolor=border_color, facecolor="white", zorder=2))
         if type_tag:
@@ -277,7 +277,7 @@ def draw_architecture(ax, stages, title, metrics, head, input_hw=INPUT_HW):
             info += f"  ·  {h}×{w}"
         info += f"\n{fmt_params(stage['n_params'])} params"
         ax.text((x_left + x_right) / 2, 0.16, info, fontsize=6.3, va="top", ha="center",
-                color="#555", linespacing=1.5)
+                color=TEXT_SECONDARY, linespacing=1.5)
 
         kernels, roles = stage["kernels"], stage["roles"]
         n = len(kernels)
@@ -286,13 +286,13 @@ def draw_architecture(ax, stages, title, metrics, head, input_hw=INPUT_HW):
         for j, (k, role) in enumerate(zip(kernels, roles)):
             cx0 = x_left + 0.1 + j * chip_w
             ax.add_patch(mpatches.Rectangle((cx0, chip_top), chip_w - CHIP_PAD, chip_bot - chip_top,
-                         facecolor=KERNEL_COLORS.get(k, "#dddddd"), edgecolor="white", lw=0.5, zorder=3))
+                         facecolor=KERNEL_COLORS.get(k, GRID), edgecolor="white", lw=0.5, zorder=3))
             label = f"{role}\n{k}×{k}" if role else f"{k}×{k}"
             ax.text(cx0 + (chip_w - CHIP_PAD) / 2, (chip_top + chip_bot) / 2, label,
                     ha="center", va="center", fontsize=6.0, fontweight="bold", color="white",
                     linespacing=1.3, zorder=4)
 
-        ax.text((x_left + x_right) / 2, BOX_H - 0.06, "BN · ReLU each", fontsize=5.6, color="#888",
+        ax.text((x_left + x_right) / 2, BOX_H - 0.06, "BN · ReLU each", fontsize=5.6, color=TEXT_SECONDARY,
                 ha="center", va="bottom", style="italic")
 
         span = stage.get("residual_span", 0)
@@ -304,7 +304,7 @@ def draw_architecture(ax, stages, title, metrics, head, input_hw=INPUT_HW):
             arc = mpatches.FancyArrowPatch((x_start, -0.08), (x_right, -0.08),
                                             connectionstyle="arc3,rad=-0.35",
                                             arrowstyle="-|>", mutation_scale=10,
-                                            color="#d1495b", lw=1.5, zorder=5)
+                                            color=RED, lw=1.5, zorder=5)
             ax.add_patch(arc)
 
     ax.set_xlim(-0.15, total_w + 0.15)
@@ -319,7 +319,7 @@ def draw_architecture(ax, stages, title, metrics, head, input_hw=INPUT_HW):
 
 def add_legend(fig, stages):
     kernel_handles = [mpatches.Patch(color=c, label=f"{k}×{k} conv") for k, c in KERNEL_COLORS.items()]
-    kernel_handles.append(plt.Line2D([0], [0], color="#d1495b", lw=1.5, label="residual / bypass skip"))
+    kernel_handles.append(plt.Line2D([0], [0], color=RED, lw=1.5, label="residual / bypass skip"))
     present_types = {s["type"] for s in stages if s["type"] != "pool"}
     type_handles = [
         mpatches.Patch(facecolor="white", edgecolor=color, linewidth=2, label=f"{tag.title()} block")

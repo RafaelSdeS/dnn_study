@@ -13,7 +13,7 @@
     "fp32_top1": 57.99558162689209,
     "fp32_top5": 81.51498436927795,
     "params_m": 2.480072,
-    "fp32_size_mb": 28.751924514770508,
+    "fp32_size_mb": 9.693723678588867,
     "winograd_friendly": false
   },
   "best_int8_overall": {
@@ -36,11 +36,11 @@
   "most_size_efficient": {
     "phase": "Phase 3 - Compensation",
     "model_name": "alexnet_depthwisesep",
-    "fp32_size_mb": 3.6540164947509766,
+    "fp32_size_mb": 1.2304954528808594,
     "int8_size_mb": 0.39975547790527344,
-    "compression_ratio": 9.14062895122312,
+    "compression_ratio": 3.078120303263084,
     "param_efficiency_top1_per_m": 141.8181934122133,
-    "accuracy_per_mb_fp32": 12.148278722197022,
+    "accuracy_per_mb_fp32": 36.07490846862822,
     "winograd_friendly": true
   },
   "winograd_group_summary": [

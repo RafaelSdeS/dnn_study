@@ -1,4 +1,5 @@
 phase,experiment,model,stage,runtime,host,git_hash,path,top1,size_mb
+phase_6,phase_6_hardware_profiling,(sweep),profile,local,NVIDIA GeForce RTX 4060 Laptop GPU,,outputs/local/phase_6_hardware_profiling/nvidia_geforce_rtx_4060_laptop_gpu_rafael_predator_phn16_71_profile.json,,
 phase_8,phase_8_efficient_vit_convstem,swin_pico_convstem,fp32/qat/int8,local,,,outputs/local/phase_8_efficient_vit_convstem/swin_pico_convstem/results/swin_pico_convstem_summary.json,41.8,0.7226495742797852
 phase_8,phase_8_efficient_vit_convstem,vit_tiny_convstem,fp32/qat/int8,local,,,outputs/local/phase_8_efficient_vit_convstem/vit_tiny_convstem/results/vit_tiny_convstem_summary.json,49.62,5.581674575805664
 phase_2,phase_2_kernel_restriction,alexnet_2x2_fc,fp32,notebooks,,,outputs/notebooks/phase_2_kernel_restriction/alexnet_2x2_fc_meta.json,30.68,
