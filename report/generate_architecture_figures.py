@@ -43,8 +43,6 @@ from models.final_architecture import _FireResBlock
 
 apply_report_style(palette=PALETTE)
 
-PCAD_DIR = project_root / "outputs" / "pcad"
-LARGE_SCALE_DIR = PCAD_DIR / "archive_legacy_phases" / "phase_4_5_large_scale"
 FIGURES_DIR = project_root / "report" / "figures"
 FIGURES_DIR.mkdir(parents=True, exist_ok=True)
 

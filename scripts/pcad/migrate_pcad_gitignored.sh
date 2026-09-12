@@ -5,7 +5,10 @@
 # Phase 1-4/8 notebooks were run (top-level checkpoints/).
 # Every move is a no-op if its source doesn't exist. Safe to re-run.
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
+# Every move below is relative to the repo root; landing anywhere else would make
+# each one a silent no-op (this script sat two levels deep with one `..` for a while).
+[ -d outputs ] || { echo "ERROR: no outputs/ under $(pwd) — run this from the repo checkout" >&2; exit 1; }
 
 move() {
     local src="$1" dst="$2"
@@ -13,9 +16,10 @@ move() {
     [ "$src" = "$dst" ] && return 0
     mkdir -p "$dst"
     echo "Merging $src -> $dst"
-    # -n: don't clobber files git already placed at the destination
-    cp -rn "$src"/. "$dst"/ 2>/dev/null || true
-    find "$src" -type f -exec rm -f {} \;
+    # --ignore-existing keeps what git already placed at the destination, and
+    # --remove-source-files only drops what actually transferred, so a name clash
+    # leaves the source behind to be looked at instead of deleting it unread.
+    rsync -a --ignore-existing --remove-source-files "$src"/ "$dst"/
     find "$src" -depth -type d -empty -delete
 }
 
@@ -30,7 +34,14 @@ move "outputs/pcad/logs/phase8"                         "outputs/pcad/logs/phase
 move "outputs/pcad/logs/phase9_fire_bypass"             "outputs/pcad/logs/phase_9_bypass_ablation"
 move "outputs/pcad/logs/phase9_fire_bypass_large_scale" "outputs/pcad/logs/phase_9_bypass_ablation_large_scale"
 move "outputs/pcad/logs/phase9_pruning"                 "outputs/pcad/logs/phase_9_pruning"
+# A run submitted with `--experiment configs/experiments/<name>.yaml` (a path, which
+# load_profile accepts) makes cluster.py name the log dir after the raw string.
+move "outputs/pcad/logs/configs/experiments/large_scale_fire_residual_resume.yaml" \
+                                                        "outputs/pcad/logs/large_scale_fire_residual_resume"
 move "outputs/local/phase6"                             "outputs/local/phase_6_hardware_profiling"
+# phase6_verify holds a second cpu.log, same name as phase6's: move() leaves the
+# collider in place rather than deleting it unread — keep it that way.
+move "outputs/local/phase6_verify"                      "outputs/local/phase_6_hardware_profiling"
 move "outputs/local/phase8_convstem"                    "outputs/local/phase_8_efficient_vit_convstem"
 move "outputs/local/phase9_pruning"                     "outputs/local/phase_9_pruning"
 move "outputs/local/phase9_compression"                 "outputs/local/phase_9_compression"
