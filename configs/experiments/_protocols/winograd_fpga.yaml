@@ -1,0 +1,13 @@
+# Shared Winograd-FPGA study protocol (plano Fase 2): every model from scratch on the SAME
+# budget, so the table compares architectures and not tuning effort. `uniform_hparams: true`
+# bypasses ml/model_registrations.py's per-model lr/weight_decay -- without it scripts/train.py's
+# per-model override would silently break the "same lr for everyone" premise. stages omits
+# qat/int8: the accelerator contract is qat_wino (ml/winograd_bridge.py). Used via `extends:` by
+# budget_unico.yaml -- change here, not per-file.
+seed: 42
+uniform_hparams: true
+stages:
+  - fp32
+  - qat_wino
+training:
+  early_stopping_patience: 10

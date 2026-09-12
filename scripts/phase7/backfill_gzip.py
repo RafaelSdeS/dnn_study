@@ -1,4 +1,4 @@
-"""Gzip-compress existing checkpoint files that predate ml.checkpoint.compress_checkpoint().
+"""[one-off] Gzip-compress existing checkpoint files that predate ml.checkpoint.compress_checkpoint().
 
 New training runs write a `.pth.gz` alongside every finished FP32/INT8 checkpoint
 automatically (see ml/checkpoint.py, wired into scripts/train.py and the training

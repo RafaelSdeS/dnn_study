@@ -1,4 +1,4 @@
-"""Measure the *true* deployable size of Phase 7 segmentation checkpoints.
+"""[one-off] Measure the *true* deployable size of Phase 7 segmentation checkpoints.
 
 The on-disk `*_best.pth` size (what the notebook's `ckpt_size_mb` reads) and the existing
 `summary.model_size_mb` (from compute_segmentation_summary / scripts/phase7/backfill_int8_size_segmentation.py)

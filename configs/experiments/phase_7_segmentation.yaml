@@ -1,4 +1,6 @@
 # Phase 7 segmentation experiments
+# Deliberately NOT the models:/extends: schema: consumed by scripts/train_det_seg.py, which
+# needs data.num_workers / trainer.epochs directly. Different task, different loader -- not drift.
 # Matches phase_7_detection.yaml's epochs/early_stopping_patience, identically
 # across all 3 backbones — flat config, not per-model.
 trainer:

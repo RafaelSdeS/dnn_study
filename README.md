@@ -169,10 +169,10 @@ YAML-based configuration loading via `configs/loader.py`. Full list in `CLAUDE.m
 - **Tier 1 models (Bottleneck, Fire) are Pareto-optimal:** Tiny (4–6 MB), competitive accuracy (43–44%), quantization-stable
 - **Small kernels face QAT challenges:** AlexNetSmallKernel's –9.89pp drop suggests aggressive quantization sensitivity
 - **Compensation mechanisms work:** Bottleneck & Fire achieve high efficiency (7–10 Acc/MB) while maintaining accuracy
-- **Model efficiency summary:** Results in `results/results_aggregate/results_cross_phase.csv` and per-model details in `results/results_aggregate/model_details_cross_phase.csv`
+- **Model efficiency summary:** Results in `results/results_aggregate/results_cross_phase.csv` and per-model details in `results/results_aggregate/model_details_cross_phase.csv` — regenerate both with `python -m scripts.build_cross_phase_results`
 - **Visualizations:** Cross-phase figures in `results/figures_generated/phase_1_2_3_baseline_and_kernels/` and `phase_5_cross_phase_analysis/`
 
-Phases 4–9 have since completed — see `CLAUDE.md`'s Model Inventory and `docs/plans/BEST_MODELS.md` (currently scoped to Phases 1–3; not yet updated with later-phase rankings).
+Phases 4–9 have since completed — see `CLAUDE.md`'s Model Inventory and `docs/plans/BEST_MODELS.md`.
 
 ---
 

@@ -1,4 +1,4 @@
-"""Backfill real INT8 model sizes for completed Phase 7 detection runs.
+"""[one-off] Backfill real INT8 model sizes for completed Phase 7 detection runs.
 
 scripts/train_det_seg.py's `int8` branch never saved a checkpoint or called
 compute_detection_summary() (only `fp32`/`qat` do), so existing INT8 runs' metrics.json

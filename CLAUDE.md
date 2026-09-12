@@ -33,6 +33,13 @@ runtime — that roll-up dir is `outputs/<runtime>/aggregates/`.
 config filenames on the same slug is what stops the naming drift from coming back — rename the
 experiment, not the folder it produced.
 
+**One canonical result per model+phase+protocol.** Two runs of the same model under the *same*
+protocol: keep the one with more completed epochs before early stopping. A run under a
+*different* protocol (different phase, different epoch budget/patience) is not a duplicate to
+epoch-compare — it is a separate experiment, labeled with its own phase slug, never filed into
+another phase's slot. `scripts/build_runs_index.py` reads a backfilled run's `source`, not its
+directory, for exactly this reason.
+
 | Phase | slug |
 |-------|------|
 | 1 | `phase_1_baseline` |
@@ -80,8 +87,11 @@ configs/                  # YAML hyperparameters, loaded via configs/loader.py �
   slurm/                  # single_gpu.yaml, tupi_4090.yaml, beagle.yaml — partition/GPU/CPU/wall-time
   experiments/            # default.yaml + per-run overrides (alexnet_3x3_gap, phase_7_detection, large_scale, phase8, ...);
                           #   budget_unico.yaml = Winograd-FPGA study Fase 2 (14 *_fpga models, stages fp32+qat_wino,
-                          #   uniform_hparams); an unknown name in any `models:` list now fails scripts/train.py
-                          #   (and tests/test_registry.py) instead of being silently dropped
+                          #   uniform_hparams, via extends: _protocols/winograd_fpga); an unknown name in any
+                          #   `models:` list now fails scripts/train.py (and tests/test_registry.py) instead of
+                          #   being silently dropped. tests/test_config.py also fails any `models:`-style
+                          #   experiment file that doesn't `extends:` a _protocols/*.yaml fragment — phase_7_*.yaml
+                          #   below are the deliberate exception (different schema, different script)
                           #   `--smoke` on scripts/train.py and scripts/train_det_seg.py caps every stage (fp32/qat/
                           #   qat_wino) to 1 epoch for a fast local pipeline check, superseding the old per-phase
                           #   smoke config files; on train_det_seg.py it runs the whole fp32->qat->int8 chain.
@@ -94,10 +104,14 @@ configs/                  # YAML hyperparameters, loaded via configs/loader.py �
                           #   all extend _protocols/large_scale.yaml (1000ep/patience 50/QAT 100ep);
                           #   phase_8_efficient_vit(_convstem).yaml extend _protocols/phase_8_vit.yaml;
                           #   alexnet_3x3_fc/alexnet_3x3_gap/default/phase_9_bypass_ablation.yaml extend
-                          #   _protocols/standard.yaml (just seed: 42 + stages: [fp32, qat, int8])
+                          #   _protocols/standard.yaml (just seed: 42 + stages: [fp32, qat, int8]);
+                          #   budget_unico.yaml extends _protocols/winograd_fpga.yaml
+                          #   phase_7_detection.yaml/phase_7_segmentation.yaml are deliberately NOT this
+                          #   schema (no models:/extends:) — consumed by scripts/train_det_seg.py, which reads
+                          #   data.num_workers/trainer.epochs directly; different task, different loader
     _protocols/            # extends-only fragments (no models:/name: — not runnable, excluded from
                           #   _experiment_names()'s non-recursive glob): large_scale.yaml, phase_8_vit.yaml,
-                          #   standard.yaml
+                          #   standard.yaml, winograd_fpga.yaml
 scripts/                  # CLI entry points (used instead of notebooks for PCAD/cluster runs)
   train.py                # `python -m scripts.train --experiment ... --runtime local|pcad` — classification FP32→QAT→INT8
   cluster.py               # `python -m scripts.cluster submit|status|cancel|resume` — submits slurm/train.sbatch or profile.sbatch
@@ -108,8 +122,18 @@ scripts/                  # CLI entry points (used instead of notebooks for PCAD
                            #   written to the curated results/<experiment>/ tree
   build_runs_index.py      # `python -m scripts.build_runs_index` — scans every run layout under outputs/
                            #   (train.py, train_det_seg.py, notebooks, profile_hardware.py) into one row-per-run
-                           #   results/runs_index.csv, without unifying the four writer layouts themselves
-  # --- everything below is grouped, so `ls scripts/` shows the 6 entry points above ---
+                           #   results/runs_index.csv, without unifying the four writer layouts themselves.
+                           #   Trusts a backfilled *_meta.json's own `source` field over the directory it was
+                           #   filed under, so a run imported from a different phase/protocol can't be indexed
+                           #   as that directory's phase (see CLAUDE.md's "one canonical result" rule above)
+  build_cross_phase_results.py # `python -m scripts.build_cross_phase_results` — rolls every curated
+                           #   results/phase_*/*_summary.json (+ Phase 8's phase8_comparison.csv) into
+                           #   results/results_aggregate/{results,model_details}_cross_phase.csv; idempotent,
+                           #   replaces hand-maintaining those two files
+  # --- everything below is grouped, so `ls scripts/` shows the 7 entry points above ---
+  # A `[one-off]` prefix on a script's docstring means it was a historical fixup, already applied,
+  # kept for provenance — not part of the reproducible pipeline. Untagged = pipeline, re-runnable.
+  # `grep -rl '"""\[one-off\]' scripts/`
   phase6/                  # `python -m scripts.phase6.<name>`
     winograd_quant_error.py    # Phase 6 extension: INT8 quantization error from Winograd F(2x2,3x3) transforms
     phase6_eixo3_stats.py      # Eixo 3 statistics over the profiling runs
@@ -158,8 +182,8 @@ results/                  # tracked CSVs/JSON/figures, one dir per phase slug + 
                           #   straight at its own phase subdir, so a rerun lands in the right place with no
                           #   hand-sorting (this used to be manual, and the phase dirs went stale as a result)
                           #   results_aggregate/results_cross_phase.csv and model_details_cross_phase.csv
-                          #   have no known build script (consumed by report/presentation, not reproducible
-                          #   from scratch) — treat edits to them as hand-authored until one exists
+                          #   are regenerated by `python -m scripts.build_cross_phase_results` from the
+                          #   curated per-model summary JSONs — don't hand-edit; rerun it
 presentation/             # slides.md/slides.pdf + figures/ (generated by presentation/make_figures.py)
 report/                   # LaTeX writeup: ic_report.tex/.pdf, figures/ (generated by generate_figures.py,
                           #   generate_architecture_figures.py)

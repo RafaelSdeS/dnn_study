@@ -1,4 +1,4 @@
-"""Measure the *true* deployable size of Phase 7 detection (SSD) checkpoints.
+"""[one-off] Measure the *true* deployable size of Phase 7 detection (SSD) checkpoints.
 
 Detection counterpart to scripts/phase7/measure_true_model_size_segmentation.py -- same bug, same fix.
 The existing `summary.model_size_mb` (from compute_detection_summary / scripts/phase7/backfill_int8_size.py)

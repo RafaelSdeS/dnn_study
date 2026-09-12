@@ -1,3 +1,5 @@
+# Deliberately NOT the models:/extends: schema: consumed by scripts/train_det_seg.py, which
+# needs data.num_workers / trainer.epochs directly. Different task, different loader -- not drift.
 # Phase 7 detection experiments
 # num_workers: 1 — jobs 811106/811127/811128 hit the same DataLoader worker
 # segfault at num_workers=4/512px that first hit job 805529;

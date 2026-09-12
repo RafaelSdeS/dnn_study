@@ -96,6 +96,21 @@ def test_protocol_fragments_are_not_treated_as_experiments():
     assert not any(name.startswith("_protocols") for name in _experiment_names())
 
 
+def test_every_classification_experiment_extends_a_protocol_fragment():
+    """The extends:/_protocols mechanism is what keeps every train.py-style run on a declared,
+    shared protocol instead of a hand-copied one. Read the raw YAML -- load_config pops `extends`.
+    """
+    for name in _experiment_names():
+        raw = yaml.safe_load((CONFIGS_DIR / "experiments" / f"{name}.yaml").read_text())
+        if "models" not in raw:
+            continue  # Phase 7 configs (scripts/train_det_seg.py) use a per-model schema, not this one
+        parent = raw.get("extends")
+        assert parent, f"{name}.yaml has no `extends:` -- inline protocol, see configs/experiments/_protocols/"
+        parent_path = (CONFIGS_DIR / "experiments" / parent).with_suffix(".yaml")
+        assert parent_path.is_file(), f"{name}.yaml extends {parent!r}, which does not exist"
+        assert parent_path.parent.name == "_protocols", f"{name}.yaml extends {parent!r}, not a _protocols/ fragment"
+
+
 def test_every_runtime_config_is_a_dict_with_a_root():
     for name in _runtime_names():
         runtime_cfg = yaml.safe_load((CONFIGS_DIR / "runtime" / f"{name}.yaml").read_text())

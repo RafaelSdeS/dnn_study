@@ -1,4 +1,4 @@
-"""Backfill FP32/INT8 accuracy for models hit by the last-epoch-not-best-epoch bug.
+"""[one-off] Backfill FP32/INT8 accuracy for models hit by the last-epoch-not-best-epoch bug.
 
 ml/trainer.py's Trainer.fit() used to return without reloading `{run_name}_best.pth` into
 self.model, so scripts/train.py's post-fit evaluate() call measured the LAST epoch's

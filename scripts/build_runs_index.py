@@ -108,12 +108,20 @@ def _notebook_rows(outputs_root: Path):
         stem = meta_path.stem.removesuffix("_meta")
         stage, model = ("qat", stem.removeprefix("qat_")) if stem.startswith("qat_") else ("fp32", stem)
         ckpt_path = meta_path.with_name(f"{stem}_best.pth")
+        # A backfilled meta.json records the run's real origin in `source`; the directory it was
+        # filed under is just where someone put the file. Trust the run, not the filing -- a
+        # phase_4_5_large_scale rerun filed under phase_1_baseline/ must not be indexed as a
+        # phase_1_baseline result (2026-09-12).
+        experiment = meta.get("source", "").rsplit("/", 1)[-1] or meta_path.parent.name
         yield _row(
             outputs_root, meta_path,
-            experiment=meta_path.parent.name,
+            experiment=experiment,
             model=model,
             stage=stage,
             top1=meta.get("best_val_acc", ""),
+            # ponytail: size_mb here stats the raw {model}_best.pth, which still includes AdamW
+            # optimizer state (~3x inflation vs. the weights-only measurement ml/reporting.py
+            # already fixed 2026-09-02); revisit if this index is used for size comparisons.
             size_mb=round(ckpt_path.stat().st_size / 1e6, 2) if ckpt_path.exists() else "",
         )
 

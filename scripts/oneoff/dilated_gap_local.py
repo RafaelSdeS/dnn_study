@@ -1,5 +1,4 @@
-"""
-One-off local smoke run for alexnet_dilated_gap.
+"""[one-off] Local smoke run for alexnet_dilated_gap.
 
 Lighter budget than the PCAD large_scale protocol (configs/experiments/
 alexnet_dilated_gap.yaml: 1000 epochs/patience 20 FP32, 100 epochs QAT) --

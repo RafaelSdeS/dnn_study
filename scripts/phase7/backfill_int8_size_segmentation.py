@@ -1,4 +1,4 @@
-"""Backfill real INT8 model sizes for completed Phase 7 segmentation runs.
+"""[one-off] Backfill real INT8 model sizes for completed Phase 7 segmentation runs.
 
 Segmentation counterpart to scripts/phase7/backfill_int8_size.py (same rationale: the `int8`
 stage in scripts/train_det_seg.py's run_segmentation() didn't save a checkpoint or call

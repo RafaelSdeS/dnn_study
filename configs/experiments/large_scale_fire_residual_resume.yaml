@@ -1,4 +1,6 @@
 extends: _protocols/large_scale
+# name: != filename on purpose -- reuses the parent experiment's output dir on resume
+# (allowed by tests/test_config.py::test_experiment_name_matches_filename_stem).
 name: large_scale
 models:
   - alexnet_final_fire_residual

@@ -1,4 +1,4 @@
-"""One-off: correct fp32_size_mb / fp32_gzip_mb in the per-model summary JSONs.
+"""[one-off] Correct fp32_size_mb / fp32_gzip_mb in the per-model summary JSONs.
 
 Until 2026-09-02, ml/reporting.py's disk_mb()/gzip_mb() measured the raw file. The FP32
 side is a `{name}_best.pth` written by save_checkpoint(), which stores optimizer +

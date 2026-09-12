@@ -3,9 +3,9 @@
 # nao o melhor resultado por rede. Os checkpoints legados de BEST_MODELS.md
 # (32-152 epocas, spread 4.75x) NAO entram nesta tabela.
 #
-# `uniform_hparams: true` bypassa o lr/weight_decay por-modelo de
-# ml/model_registrations.py -- sem isso o "mesmo lr para todos" do plano seria
-# furado em silencio pelo override por-modelo do scripts/train.py.
+# seed/uniform_hparams/stages/early_stopping_patience come from
+# configs/experiments/_protocols/winograd_fpga.yaml via `extends:` below --
+# same protocol mechanism every other experiment uses, change it there.
 #
 # Todo modelo aqui e' *_fpga: a geometria vem dos builders do proprio
 # Winograd-FPGA (ml/winograd_bridge.py), ja' convertida pro contrato do
@@ -21,9 +21,8 @@
 # job e' wrn_16_4 -- FP32 67 ms/passo, qat_wino 597 ms/passo -> ~6,3 h nessa GPU para
 # 100 + 15 epocas, ~3 h num 4090. Pico de GPU 3,4 GB. O FP32 do resto fica preso no
 # carregamento de dados (~40 s/epoca medido no PCAD). Sobra folga de 4x no limite.
+extends: _protocols/winograd_fpga
 name: budget_unico
-uniform_hparams: true
-seed: 42
 models:
   # Tier A -- mapeamento integral
   - vgg_style_fpga
@@ -44,9 +43,3 @@ models:
   - wrn_28_2_fpga
   # squeezenet1_1_fpga FORA (decidido 2026-09-11, plano §2.4): F(4,3) reprova 4/9 convs
   # a 64x64 e o qat_wino quebra nela (mapa 15x15 -> 12x12, torch.cat do Fire falha).
-stages:
-  - fp32
-  - qat_wino
-# So' o que difere de configs/training.yaml / configs/qat_wino.yaml.
-training:
-  early_stopping_patience: 10
