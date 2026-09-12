@@ -1,1 +1,1 @@
-{"epoch": 38, "best_val_acc": 35.85, "wandb_run_id": "qephk1az"}
+{"epoch": 29, "best_val_acc": 34.13, "source": "pcad_archive_legacy_phases/phase_2_kernel_restriction"}

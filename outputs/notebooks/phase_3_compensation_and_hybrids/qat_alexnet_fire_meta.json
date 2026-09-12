@@ -1,1 +1,1 @@
-{"epoch": 13, "best_val_acc": 44.84, "wandb_run_id": "gh931xt2"}
+{"epoch": 50, "best_val_acc": 52.68, "source": "pcad_archive_legacy_phases/phase_4_5_large_scale"}
