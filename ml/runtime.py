@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import random
 import socket
 import subprocess
@@ -63,7 +64,11 @@ def load_runtime_root(runtime_name: str) -> Path:
 
 
 def capture_provenance() -> dict[str, Any]:
-    """Git hash, dirty flag, hostname, UTC timestamp, torch version — for run provenance records."""
+    """Git hash, dirty flag, hostname, UTC timestamp, and the training environment (torch/
+    torchvision/CUDA/cuDNN versions, GPU name, Python, CPU count, SLURM job id) -- so a run is
+    still reproducible months later without re-deriving what it ran on."""
+    import torchvision
+
     try:
         git_hash = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
     except Exception:
@@ -78,6 +83,13 @@ def capture_provenance() -> dict[str, Any]:
         "hostname": socket.gethostname(),
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "torch_version": torch.__version__,
+        "torchvision_version": torchvision.__version__,
+        "cuda_version": torch.version.cuda,
+        "cudnn_version": torch.backends.cudnn.version() if torch.backends.cudnn.is_available() else None,
+        "gpu_name": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+        "python_version": platform.python_version(),
+        "cpu_count": os.cpu_count(),
+        "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
     }
 
 

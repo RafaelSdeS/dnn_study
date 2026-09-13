@@ -7,11 +7,16 @@ notebook that owns each model (see CLAUDE.md's Model Inventory table) — keep
 them in sync if a notebook's fuse_map or lr changes.
 """
 
+from functools import partial
+
+from torchvision.models.vgg import cfgs as VGG_CFGS
+
 from ml.quantization import find_fuse_groups
 from ml.registry import register_model
 from ml.winograd_bridge import custom_model, torchvision_model
 from models import (
     AlexNetTV,
+    VGG16,
     VGGStyleCNN,
     MobileNetV2TV,
     ResNet18TV,
@@ -80,6 +85,33 @@ register_model("alexnet_2x2_gap", AlexNet2x2GAP, fuse_map=FUSE_MAP_ALEXNET_TV, f
 register_model("alexnet_2x2_fc", AlexNet2x2FC, fuse_map=FUSE_MAP_ALEXNET_TV, fuse_root_attr="features", lr=3e-4)
 register_model("alexnet_stacked", AlexNetStacked, fuse_map=FUSE_MAP_STACKED, fuse_root_attr="features", lr=1e-3)
 register_model("alexnet_mixed", AlexNetMixed, fuse_map=FUSE_MAP_ALEXNET_TV, fuse_root_attr="features", lr=3e-4)
+
+# Phase 11 (configs/experiments/phase_11_kernel_size_comparison.yaml): original torchvision
+# AlexNet/VGG16, from scratch, only kernel_size changes -- see models/baselines.py.
+def _fuse_map_vgg16(cfg=VGG_CFGS["D"]):
+    """[[conv_idx, relu_idx], ...] for the Sequential models.baselines._vgg16_features builds,
+    computed from cfgs["D"] alone -- avoids instantiating VGG16 (134M params) just for this."""
+    pairs, idx = [], 0
+    for v in cfg:
+        if v == "M":
+            idx += 1
+        else:
+            pairs.append([str(idx), str(idx + 1)])
+            idx += 2
+    return pairs
+
+
+FUSE_MAP_VGG16 = _fuse_map_vgg16()
+register_model("alexnet_tv_scratch", partial(AlexNetTV, pretrained=False),
+               fuse_map=FUSE_MAP_ALEXNET_TV, fuse_root_attr="features", lr=3e-4)
+register_model("alexnet_tv_3x3", partial(AlexNetTV, pretrained=False, kernel_size=3),
+               fuse_map=FUSE_MAP_ALEXNET_TV, fuse_root_attr="features", lr=3e-4)
+register_model("alexnet_tv_2x2", partial(AlexNetTV, pretrained=False, kernel_size=2),
+               fuse_map=FUSE_MAP_ALEXNET_TV, fuse_root_attr="features", lr=3e-4)
+register_model("vgg16", partial(VGG16, kernel_size=3),
+               fuse_map=FUSE_MAP_VGG16, fuse_root_attr="features", lr=1e-3)
+register_model("vgg16_2x2", partial(VGG16, kernel_size=2),
+               fuse_map=FUSE_MAP_VGG16, fuse_root_attr="features", lr=1e-3)
 
 # large-scale sweep (see configs/experiments/large_scale.yaml)
 FUSE_MAP_ALEXNET_SMALLKERNEL = [["0", "1"], ["3", "4"], ["6", "7"], ["8", "9"], ["10", "11"]]

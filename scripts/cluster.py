@@ -26,6 +26,7 @@ def _build_sbatch_command(
     device: str | None = None,
     script_name: str = "train.sbatch",
     model: str | None = None,
+    smoke: bool = False,
 ) -> list[str]:
     script = Path(__file__).resolve().parent / "slurm" / script_name
     output_root = Path(runtime_cfg.get("root", "outputs/pcad")).expanduser().resolve()
@@ -71,6 +72,8 @@ def _build_sbatch_command(
         cmd += ["--device", device]
     if model:
         cmd += ["--model", model]
+    if smoke:
+        cmd += ["--smoke"]
     return cmd
 
 
@@ -93,6 +96,7 @@ def build_parser() -> argparse.ArgumentParser:
     submit.add_argument("--slurm", default="single_gpu")
     submit.add_argument("--device", default=None)
     submit.add_argument("--model", default=None, help="Submit just this model of the experiment")
+    submit.add_argument("--smoke", action="store_true", help="Cap epochs to 1 and discard output -- a fast pipeline check before a real submission")
 
     submit_sweep = sub.add_parser(
         "submit-sweep", parents=[dry], help="Submit one job per model in an experiment's models: list"
@@ -135,7 +139,7 @@ def main() -> int:
     if args.command == "submit":
         runtime_cfg = _load_yaml(args.runtime, "runtime")
         slurm_cfg = _load_yaml(args.slurm, "slurm")
-        cmd = _build_sbatch_command(runtime_cfg, slurm_cfg, args.experiment, args.runtime, args.device, model=args.model)
+        cmd = _build_sbatch_command(runtime_cfg, slurm_cfg, args.experiment, args.runtime, args.device, model=args.model, smoke=args.smoke)
         print(_sbatch(cmd, args.dry_run))
         return 0
 

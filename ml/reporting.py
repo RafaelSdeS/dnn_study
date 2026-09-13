@@ -8,8 +8,10 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import torch
+import torch.nn as nn
 
 
 def compute_detection_summary(
@@ -211,6 +213,111 @@ def compute_flops(model, input_size: tuple = (1, 3, 64, 64)) -> dict:
     return {"macs": macs, "flops": macs * 2}
 
 
+def expected_calibration_error(logits: torch.Tensor, labels: torch.Tensor, n_bins: int = 15) -> float:
+    """ECE: mean |accuracy - confidence| over n_bins equal-width softmax-confidence bins,
+    weighted by bin occupancy. Standard calibration metric (Guo et al. 2017)."""
+    probs = torch.softmax(logits.float(), dim=1)
+    confidences, predictions = probs.max(dim=1)
+    correct = predictions.eq(labels)
+    edges = torch.linspace(0, 1, n_bins + 1)
+    n = logits.size(0)
+    ece = 0.0
+    for lo, hi in zip(edges[:-1], edges[1:]):
+        in_bin = (confidences > lo) & (confidences <= hi)
+        count = int(in_bin.sum())
+        if count == 0:
+            continue
+        acc_bin = correct[in_bin].float().mean().item()
+        conf_bin = confidences[in_bin].mean().item()
+        ece += (count / n) * abs(acc_bin - conf_bin)
+    return ece
+
+
+def prediction_agreement(path_a: str | Path, path_b: str | Path) -> float | None:
+    """Fraction of identical top-1 predictions between two Trainer.evaluate(save_logits=...)
+    .npz files (e.g. FP32 vs INT8 on the same val set). None if either file is missing."""
+    path_a, path_b = Path(path_a), Path(path_b)
+    if not path_a.exists() or not path_b.exists():
+        return None
+    pred_a = np.load(path_a)["logits"].argmax(axis=1)
+    pred_b = np.load(path_b)["logits"].argmax(axis=1)
+    return float((pred_a == pred_b).mean())
+
+
+def layer_stats(model: nn.Module, loader, device, n_batches: int = 10) -> dict:
+    """Per Conv2d/Linear: geometry, params/MACs (fvcore by_module), weight range/std, and
+    activation stats over up to n_batches of `loader` -- exact max|act| plus p99.9/p99.99 from
+    up to 100k subsampled elements per batch (torch.quantile caps at 16M elements total, and a
+    deep conv's activations alone can exceed that across many batches). This is the calibration
+    data the Winograd-FPGA export (its plan's Sec 5.1) needs, captured once from a saved
+    checkpoint so a later export never has to rerun inference to get it.
+    """
+    from fvcore.nn import FlopCountAnalysis
+
+    model = model.eval().to(device)
+    modules = {name: m for name, m in model.named_modules() if isinstance(m, (nn.Conv2d, nn.Linear))}
+
+    sample = next(iter(loader))[0][:1].to(device)
+    flops = FlopCountAnalysis(model, sample)
+    flops.unsupported_ops_warnings(False)
+    flops.uncalled_modules_warnings(False)
+    macs_by_module = flops.by_module()
+
+    acc = {name: {"in_max": 0.0, "in_samples": [], "out_max": 0.0, "out_samples": []} for name in modules}
+
+    def _track(entry: dict, prefix: str, x: torch.Tensor) -> None:
+        flat = x.detach().abs().flatten().float()
+        entry[f"{prefix}_max"] = max(entry[f"{prefix}_max"], flat.max().item())
+        if flat.numel() > 100_000:
+            flat = flat[torch.randperm(flat.numel())[:100_000]]
+        entry[f"{prefix}_samples"].append(flat.cpu())
+
+    def _hook(name):
+        def fn(_m, inp, out):
+            _track(acc[name], "in", inp[0])
+            _track(acc[name], "out", out)
+        return fn
+
+    handles = [m.register_forward_hook(_hook(name)) for name, m in modules.items()]
+    seen = 0
+    with torch.no_grad():
+        for data, _ in loader:
+            model(data.to(device))
+            seen += 1
+            if seen >= n_batches:
+                break
+    for h in handles:
+        h.remove()
+
+    def _percentiles(entry: dict, prefix: str) -> dict:
+        samples = torch.cat(entry[f"{prefix}_samples"]) if entry[f"{prefix}_samples"] else torch.zeros(1)
+        return {
+            "max": entry[f"{prefix}_max"],
+            "p999": torch.quantile(samples, 0.999).item(),
+            "p9999": torch.quantile(samples, 0.9999).item(),
+        }
+
+    stats = {}
+    for name, m in modules.items():
+        entry = {
+            "type": type(m).__name__,
+            "params": sum(p.numel() for p in m.parameters()),
+            "macs": macs_by_module.get(name, 0),
+            "weight_max_abs": m.weight.detach().abs().max().item(),
+            "weight_std": m.weight.detach().std().item(),
+            "activation_in": _percentiles(acc[name], "in"),
+            "activation_out": _percentiles(acc[name], "out"),
+        }
+        if isinstance(m, nn.Conv2d):
+            entry.update(
+                kernel_size=list(m.kernel_size), stride=list(m.stride), padding=list(m.padding),
+                groups=m.groups, dilation=list(m.dilation),
+                in_channels=m.in_channels, out_channels=m.out_channels,
+            )
+        stats[name] = entry
+    return stats
+
+
 def _avg(values: list) -> float | None:
     """Mean of the non-None entries in values, or None if there are none."""
     clean = [v for v in values if v is not None]
@@ -237,8 +344,13 @@ def make_run_summary(
     int8_benchmark: dict | None = None,
     fp32_gzip_mb: float | None = None,
     int8_gzip_mb: float | None = None,
+    extra: dict | None = None,
 ) -> dict:
-    """Assemble the full per-model run summary with FP32 and INT8 metrics."""
+    """Assemble the full per-model run summary with FP32 and INT8 metrics.
+
+    extra, if given, is merged in last -- scripts/train.py's QAT/ECE/agreement/latency-variant
+    fields go through it instead of inflating this signature further.
+    """
     history = fit_results.get("history", {})
     final_train_loss = history.get("train_loss", [None])[-1]
     epoch_times = history.get("epoch_time_s", [])
@@ -283,7 +395,7 @@ def make_run_summary(
         if int8_eval and "top1" in int8_eval else None
     )
 
-    return {
+    summary = {
         "model_name": name,
         "mode": mode,
         "epochs": fit_results.get("best_epoch"),  # historical name: the 0-based BEST epoch, not a count
@@ -343,6 +455,9 @@ def make_run_summary(
         "avg_gpu_temp_c": avg_gpu_temp_c,
         "total_gpu_energy_wh": total_gpu_energy_wh,
     }
+    if extra:
+        summary.update(extra)
+    return summary
 
 
 _CLASSIFICATION_LOG_RE = re.compile(

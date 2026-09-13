@@ -1,0 +1,12 @@
+# Original torchvision AlexNet / VGG16 topologies, from scratch, only the kernel size changes
+# (models/baselines.py: AlexNetTV(kernel_size=...), VGG16(kernel_size=...)). VGG16 is 3x3 by design,
+# so vgg16 is both its "original" and its "3x3" point.
+# Submit: python -m scripts.cluster submit-sweep --experiment phase_11_kernel_size_comparison --runtime pcad
+extends: _protocols/no_patience
+name: phase_11_kernel_size_comparison
+models:
+  - alexnet_tv_scratch
+  - alexnet_tv_3x3
+  - alexnet_tv_2x2
+  - vgg16
+  - vgg16_2x2

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import logging
 import signal
@@ -10,6 +11,8 @@ from pathlib import Path
 from typing import Any
 
 import torch
+import torch.ao.quantization as tq
+from torch.utils.data import DataLoader, Subset
 from torch.utils.tensorboard import SummaryWriter
 
 import ml.model_registrations  # noqa: F401 — populates MODEL_REGISTRY
@@ -33,15 +36,25 @@ from ml import (
     gzip_mb,
     ensure_dataset_path,
     expand_path,
+    layer_stats,
     load_profile,
     make_model_runs,
     make_qat_callback,
     make_run_summary,
     load_best_model,
+    prediction_agreement,
     save_resolved_config,
     set_global_seed,
 )
 from ml.winograd_bridge import bridge_provenance, dump_wino_calibration, load_qat_wino_model
+
+DEFAULT_BENCHMARK_BS1_IMAGES = 1000
+
+
+def _bs1_loader(dataset, n: int = DEFAULT_BENCHMARK_BS1_IMAGES) -> DataLoader:
+    """A batch-size-1 loader over the first min(n, len(dataset)) val images -- real per-image
+    latency, not a batch-64 number divided by 64."""
+    return DataLoader(Subset(dataset, range(min(n, len(dataset)))), batch_size=1, shuffle=False)
 
 
 def _resolve_model_names(model_names: list[str] | str | None) -> list[str]:
@@ -163,6 +176,7 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
     data_cfg.dataset_path = str(dataset_path)
 
     train_ds, val_ds, train_loader, val_loader = create_imagenet_loaders(data_cfg, persistent_workers=runtime_cfg.get("persistent_workers", False))
+    bs1_loader = _bs1_loader(val_ds)
 
     results_rows: list[dict[str, Any]] = []
     # Only the fbgemm stages need it, and fbgemm needs AVX2: set unconditionally, a node without
@@ -238,9 +252,15 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
 
         fp32_fit = {}
         fp32_eval = {}
+        qat_fit = {}
+        qat_eval = None
         int8_eval = None
         int8_benchmark = None
+        int8_bs1_benchmark = None
         fp32_benchmark = {"latency_ms_per_image": None, "throughput_img_per_s": None}
+        fp32_bs1_benchmark = {"latency_ms_per_image": None, "throughput_img_per_s": None}
+        fp32_cpu_benchmark = None
+        fp32_cpu_bs1_benchmark = None
         best_model_path = checkpoints_dir / f"{model_name}_best.pth"
         int8_path = checkpoints_dir / f"qat_{model_name}.pth"
         wandb_run = _maybe_init_wandb(
@@ -250,6 +270,19 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
             mode=runtime_cfg.get("wandb_mode", "offline"),
             group=experiment_name,
         )
+
+        def _fp32_extra(trainer: Trainer):
+            """eval (+ saved logits/ECE) and the three extra benchmark points (bs64-GPU already
+            covered by the caller; bs1, and both again on CPU when training ran on GPU) -- so a
+            later CPU-vs-GPU or bs1-vs-bs64 comparison never needs to rerun inference."""
+            eval_result = trainer.evaluate(topk=(1, 5), save_logits=results_dir / f"{model_name}_fp32_val_logits.npz")
+            bench = trainer.benchmark(warmup=int(runtime_cfg.get("benchmark_warmup", 100)))
+            bench_bs1 = trainer.benchmark(loader=bs1_loader, warmup=1)
+            bench_cpu = bench_cpu_bs1 = None
+            if device.type == "cuda":
+                bench_cpu = trainer.benchmark(warmup=int(runtime_cfg.get("benchmark_warmup", 100)), device="cpu")
+                bench_cpu_bs1 = trainer.benchmark(loader=bs1_loader, warmup=1, device="cpu")
+            return eval_result, bench, bench_bs1, bench_cpu, bench_cpu_bs1
 
         if "fp32" in stage_list:
             resume_from = auto_resume_path(checkpoints_dir, model_name)
@@ -269,8 +302,7 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
                     metrics_callback=metrics_callback,
                     log_file=log_file,
                 )
-                fp32_eval = trainer.evaluate(topk=(1, 5))
-                fp32_benchmark = trainer.benchmark(warmup=int(runtime_cfg.get("benchmark_warmup", 100)))
+                fp32_eval, fp32_benchmark, fp32_bs1_benchmark, fp32_cpu_benchmark, fp32_cpu_bs1_benchmark = _fp32_extra(trainer)
             else:
                 trainer = Trainer(
                     spec["ctor"]().to(device),
@@ -288,11 +320,9 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
                 fp32_fit = trainer.fit(resume_from=resume_from)
                 if _stop_requested(trainer, "fp32", model_name, writer, wandb_run):
                     break
-                fp32_eval = trainer.evaluate(topk=(1, 5))
-                fp32_benchmark = trainer.benchmark(warmup=int(runtime_cfg.get("benchmark_warmup", 100)))
+                fp32_eval, fp32_benchmark, fp32_bs1_benchmark, fp32_cpu_benchmark, fp32_cpu_bs1_benchmark = _fp32_extra(trainer)
 
         qat_model = None
-        qat_fit = {}
         if "qat" in stage_list:
             qat_model = build_qat(model_name, save_dir=checkpoints_dir, device=device)
             qat_cfg_run = replace(model_cfg, epochs=qat_cfg.epochs, lr=qat_cfg.lr, weight_decay=qat_cfg.weight_decay, use_amp=False)
@@ -323,6 +353,20 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
                 if _stop_requested(trainer, "qat", model_name, writer, wandb_run):
                     break
                 trainer.logger.info("QAT training complete for %s", model_name)
+
+            # Fake-quant accuracy, on a DEEPCOPY with observers/BN stats forced off: the live
+            # qat_model may have observers still enabled (load_state_dict doesn't restore that
+            # plain module attribute, see make_qat_callback), and evaluating it directly would
+            # recalibrate them from val data and change what int8-convert produces below.
+            qat_eval_model = copy.deepcopy(qat_model)
+            qat_eval_model.apply(tq.disable_observer)
+            qat_eval_model.apply(torch.nn.intrinsic.qat.freeze_bn_stats)
+            qat_eval_trainer = Trainer(
+                qat_eval_model, train_loader, val_loader, replace(model_cfg, use_amp=False),
+                device, checkpoints_dir, f"qat_{model_name}", num_classes=data_cfg.num_classes,
+            )
+            qat_eval = qat_eval_trainer.evaluate(
+                topk=(1, 5), save_logits=results_dir / f"{model_name}_qat_val_logits.npz")
 
         if "qat_wino" in stage_list:
             # Fase 2 do plano de avaliacao Winograd (accelerator-numeric QAT,
@@ -363,7 +407,8 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
                 if _stop_requested(trainer, "qat_wino", model_name, writer, wandb_run):
                     break
                 trainer.logger.info("qat_wino training complete for %s", model_name)
-            qat_wino_eval = trainer.evaluate(topk=(1, 5))
+            qat_wino_logits_path = results_dir / f"{model_name}_qat_wino_val_logits.npz"
+            qat_wino_eval = trainer.evaluate(topk=(1, 5), save_logits=qat_wino_logits_path)
             wino_summary = {
                 "name": model_name,
                 "stage": "qat_wino",
@@ -371,6 +416,8 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
                 "eval": qat_wino_eval,
                 "calibration": dump_wino_calibration(qat_wino_model),
                 "checkpoint": str(wino_best_path),
+                "agreement_fp32_qat_wino": prediction_agreement(
+                    results_dir / f"{model_name}_fp32_val_logits.npz", qat_wino_logits_path),
             }
             create_results_summary(wino_summary, resolved_config, results_dir / f"{model_name}_qat_wino_summary.json")
 
@@ -396,8 +443,10 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
                     wandb_run=wandb_run,
                     log_file=logs_dir / f"qat_{model_name}_int8.log",
                 )
-                int8_eval = int8_trainer.evaluate(topk=(1, 5))
+                int8_eval = int8_trainer.evaluate(
+                    topk=(1, 5), save_logits=results_dir / f"{model_name}_int8_val_logits.npz")
                 int8_benchmark = int8_trainer.benchmark(warmup=int(runtime_cfg.get("benchmark_warmup", 100)))
+                int8_bs1_benchmark = int8_trainer.benchmark(loader=bs1_loader, warmup=1)
 
         fp32_model = load_best_model(model_name, spec["ctor"], checkpoints_dir, device) if best_model_path.exists() else spec["ctor"]().to(device)
         flops_results = compute_flops(fp32_model)
@@ -408,6 +457,43 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
             compress_checkpoint(int8_path)
         fp32_gzip_mb = gzip_mb(best_model_path)
         int8_gzip_mb = gzip_mb(int8_path) if int8_path.exists() else None
+
+        layer_stats_path = results_dir / f"{model_name}_layer_stats.json"
+        if best_model_path.exists():
+            layer_stats_result = layer_stats(fp32_model, val_loader, device)
+            layer_stats_path.write_text(json.dumps(layer_stats_result, indent=2, default=str))
+        else:
+            layer_stats_path = None
+
+        fp32_logits_path = results_dir / f"{model_name}_fp32_val_logits.npz"
+        extra = {
+            "fp32_ece": fp32_eval.get("ece") if fp32_eval else None,
+            "fp32_bs1_latency_ms_per_image": fp32_bs1_benchmark.get("latency_ms_per_image"),
+            "fp32_bs1_throughput_img_per_s": fp32_bs1_benchmark.get("throughput_img_per_s"),
+            "fp32_cpu_latency_ms_per_image": fp32_cpu_benchmark.get("latency_ms_per_image") if fp32_cpu_benchmark else None,
+            "fp32_cpu_throughput_img_per_s": fp32_cpu_benchmark.get("throughput_img_per_s") if fp32_cpu_benchmark else None,
+            "fp32_cpu_bs1_latency_ms_per_image": fp32_cpu_bs1_benchmark.get("latency_ms_per_image") if fp32_cpu_bs1_benchmark else None,
+            "int8_ece": int8_eval.get("ece") if int8_eval else None,
+            "int8_bs1_latency_ms_per_image": int8_bs1_benchmark.get("latency_ms_per_image") if int8_bs1_benchmark else None,
+            "int8_bs1_throughput_img_per_s": int8_bs1_benchmark.get("throughput_img_per_s") if int8_bs1_benchmark else None,
+            "qat_top1": qat_eval.get("top1") if qat_eval else None,
+            "qat_top5": qat_eval.get("top5") if qat_eval else None,
+            "qat_ece": qat_eval.get("ece") if qat_eval else None,
+            "qat_best_val_top1": qat_fit.get("best_val_top1"),
+            "qat_best_val_top5": qat_fit.get("best_val_top5"),
+            "qat_best_epoch": qat_fit.get("best_epoch"),
+            "qat_epochs_used": qat_fit.get("epochs_used"),
+            "qat_epochs_budget": qat_fit.get("epochs_budget"),
+            "qat_total_training_time_s": qat_fit.get("total_training_time_s"),
+            "qat_total_gpu_energy_wh": sum(
+                (e for e in qat_fit.get("history", {}).get("gpu_energy_wh", []) if e is not None), 0.0
+            ) or None,
+            "agreement_fp32_qat": prediction_agreement(
+                fp32_logits_path, results_dir / f"{model_name}_qat_val_logits.npz"),
+            "agreement_fp32_int8": prediction_agreement(
+                fp32_logits_path, results_dir / f"{model_name}_int8_val_logits.npz"),
+            "layer_stats_path": str(layer_stats_path) if layer_stats_path else None,
+        }
 
         summary = make_run_summary(
             name=model_name,
@@ -423,6 +509,7 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
             int8_benchmark=int8_benchmark,
             fp32_gzip_mb=fp32_gzip_mb,
             int8_gzip_mb=int8_gzip_mb,
+            extra=extra,
         )
         create_results_summary(summary, resolved_config, results_dir / f"{model_name}_summary.json")
         results_rows.append(summary)

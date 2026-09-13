@@ -18,7 +18,7 @@ def _run(tmp_path, monkeypatch, stages, **runtime):
     loader = DataLoader(TensorDataset(torch.randn(8, 3, 8, 8, generator=g), torch.randint(0, 200, (8,), generator=g)),
                         batch_size=4)
     monkeypatch.setattr(train, "ensure_dataset_path", lambda cfg: tmp_path)
-    monkeypatch.setattr(train, "create_imagenet_loaders", lambda cfg, persistent_workers=False: (None, None, loader, loader))
+    monkeypatch.setattr(train, "create_imagenet_loaders", lambda cfg, persistent_workers=False: (loader.dataset, loader.dataset, loader, loader))
     monkeypatch.setattr(train.signal, "signal", lambda *args: None)  # keep pytest's own SIGINT handler
     monkeypatch.setitem(MODEL_REGISTRY, "tiny", {"ctor": _tiny_model, "fuse_map": []})
     rows = train.run_experiment(
@@ -37,6 +37,11 @@ def test_fp32_stage_writes_summary(tmp_path, monkeypatch):
     assert (rows[0]["epochs_used"], rows[0]["epochs_budget"]) == (3, 3)
     assert (run_root / "results" / "tiny_summary.json").exists()
     assert (run_root / "resolved_config.json").exists()
+    # metrics saved once so a later accuracy/calibration question never needs a rerun
+    assert (run_root / "results" / "tiny_fp32_val_logits.npz").exists()
+    assert (run_root / "results" / "tiny_layer_stats.json").exists()
+    assert rows[0]["fp32_ece"] is not None
+    assert rows[0]["fp32_bs1_latency_ms_per_image"] is not None
 
 
 def test_stop_during_fp32_ends_the_run_before_qat(tmp_path, monkeypatch):

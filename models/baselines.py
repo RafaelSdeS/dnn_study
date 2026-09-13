@@ -1,10 +1,12 @@
 """Phase 1 — Reference Architectures for Tiny ImageNet-200."""
 
+import torch
 import torch.nn as nn
 import torch.ao.quantization as tq
 from torchvision.models import alexnet, mobilenet_v2
 from torchvision.models.quantization import mobilenet_v2 as mobilenet_v2_qat
 from torchvision.models.quantization import resnet18 as resnet18_qat
+from torchvision.models.vgg import VGG, cfgs as VGG_CFGS
 
 
 def _fix_relu_inplace(module: nn.Module) -> None:
@@ -17,8 +19,18 @@ def _fix_relu_inplace(module: nn.Module) -> None:
 
 # ─── AlexNetTV ────────────────────────────────────────────────────────────────
 
+# features[0, 3, 6, 8, 10] -> (kernel, stride, padding), for kernel_size={3,2} below. Chosen so
+# every pool's output size matches the original 11x11/5x5/3x3 network's exactly (verified at
+# 64x64: pool outputs 7, 3, 1 for both variants, same as the original).
+_ALEXNET_KERNEL_SPECS = {
+    3: [(3, 4, 1), (3, 1, 1), (3, 1, 1), (3, 1, 1), (3, 1, 1)],
+    2: [(2, 4, 0), (2, 1, 1), (2, 1, 1), (2, 1, 0), (2, 1, 1)],
+}
+_ALEXNET_CONV_INDICES = [0, 3, 6, 8, 10]
+
+
 class AlexNetTV(nn.Module):
-    """Torchvision AlexNet pretrained on ImageNet, fine-tuned for 200 classes.
+    """Torchvision AlexNet, fine-tuned for 200 classes.
 
     Architecture: 5 conv stages with large kernels (11×11, 5×5, then 3×3), FC head.
     Expected top-1: ~27-30% (pretrained weights give strong feature initialization).
@@ -26,15 +38,22 @@ class AlexNetTV(nn.Module):
     Training speed: medium (large FC head dominates memory).
     QAT: full — flat Sequential features, easy Conv-BN-ReLU fusion via fuse_map.
     Trade-off: large kernel sizes vs accuracy; classical vs modern architecture.
+    kernel_size=3 or 2 replaces all 5 convs with that kernel (see _ALEXNET_KERNEL_SPECS),
+    keeping channels/pool structure -- for the kernel-restriction comparison (Phase 11).
     """
 
-    def __init__(self, num_classes: int = 200, pretrained: bool = True):
+    def __init__(self, num_classes: int = 200, pretrained: bool = True, kernel_size: int | None = None):
         super().__init__()
         base = alexnet(weights="IMAGENET1K_V1" if pretrained else None)
         base.classifier[6] = nn.Linear(4096, num_classes)
         for name, module in base.features.named_children():
             if isinstance(module, nn.ReLU):
                 setattr(base.features, name, nn.ReLU(inplace=False))
+
+        if kernel_size is not None:
+            for idx, (k, s, p) in zip(_ALEXNET_CONV_INDICES, _ALEXNET_KERNEL_SPECS[kernel_size]):
+                old_conv = base.features[idx]
+                base.features[idx] = nn.Conv2d(old_conv.in_channels, old_conv.out_channels, k, stride=s, padding=p)
 
         self.quant = tq.QuantStub()
         self.features = base.features
@@ -106,6 +125,69 @@ class VGGStyleCNN(nn.Module):
     def forward(self, x):
         x = self.quant(x)
         x = self.features(x)
+        x = self.classifier(x)
+        x = self.dequant(x)
+        return x
+
+
+# ─── VGG16 ────────────────────────────────────────────────────────────────────
+
+def _vgg16_stages(cfg: list) -> list[list[int]]:
+    """Split torchvision's VGG cfg (e.g. cfgs["D"]) into per-stage channel lists, one list per
+    'M' (maxpool) marker, with the markers themselves dropped."""
+    stages, stage = [], []
+    for v in cfg:
+        if v == "M":
+            stages.append(stage)
+            stage = []
+        else:
+            stage.append(v)
+    return stages
+
+
+def _vgg16_features(kernel_size: int) -> nn.Sequential:
+    """VGG16 features (torchvision cfgs["D"]), no BatchNorm. kernel_size=3 is the original
+    architecture (all convs 3x3/s1/pad1). kernel_size=2 restarts a 1/0 padding alternation at
+    every stage, which keeps every stage's pre-pool spatial size -- and so every pooled size --
+    identical to the original (verified at 64x64: pools output 32,16,8,4,2 either way).
+    """
+    layers: list[nn.Module] = []
+    in_ch = 3
+    for stage in _vgg16_stages(VGG_CFGS["D"]):
+        for i, out_ch in enumerate(stage):
+            padding = 1 if kernel_size == 3 or i % 2 == 0 else 0
+            layers += [nn.Conv2d(in_ch, out_ch, kernel_size, padding=padding), nn.ReLU(inplace=False)]
+            in_ch = out_ch
+        layers.append(nn.MaxPool2d(2, 2))
+    return nn.Sequential(*layers)
+
+
+class VGG16(nn.Module):
+    """VGG16 (torchvision cfgs["D"]), from scratch -- no BatchNorm, no pretrained weights.
+
+    Architecture: 13 conv layers in 5 stages, FC head -- the original VGG16, which is already
+    all-3x3 by design. kernel_size=2 keeps every pooled spatial size identical (see
+    _vgg16_features) so both variants share one classifier head; only the kernel changes.
+    QAT: full — flat Sequential features, Conv-ReLU fuseable throughout.
+    Trade-off: kernel-size restriction below VGG's own native size (Phase 11).
+    """
+
+    def __init__(self, num_classes: int = 200, kernel_size: int = 3):
+        super().__init__()
+        base = VGG(_vgg16_features(kernel_size), num_classes=num_classes)
+        _fix_relu_inplace(base)  # base.classifier's ReLUs default to inplace=True
+
+        self.quant = tq.QuantStub()
+        self.features = base.features
+        self.avgpool = base.avgpool
+        self.classifier = base.classifier
+        self.dequant = tq.DeQuantStub()
+
+    def forward(self, x):
+        x = self.quant(x)
+        x = self.features(x)
+        x = self.avgpool(x)
+        x = torch.flatten(x, 1)
         x = self.classifier(x)
         x = self.dequant(x)
         return x

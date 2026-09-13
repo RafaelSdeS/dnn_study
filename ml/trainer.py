@@ -4,6 +4,7 @@ import time
 from pathlib import Path
 from typing import Callable, Optional
 
+import numpy as np
 import psutil
 import torch
 import torch.nn as nn
@@ -13,6 +14,7 @@ from tqdm.auto import tqdm
 from .checkpoint import save_checkpoint, load_resume_state
 from .config import TrainerConfig
 from .profiling import GpuSampler
+from .reporting import expected_calibration_error
 
 
 class BaseTrainer:
@@ -331,8 +333,14 @@ class Trainer(BaseTrainer):
         }
 
     @torch.no_grad()
-    def evaluate(self, loader: Optional[DataLoader] = None, topk: tuple = (1, 5)) -> dict:
-        """Val loop returning {top1, top5, loss} using torchmetrics."""
+    def evaluate(self, loader: Optional[DataLoader] = None, topk: tuple = (1, 5),
+                 save_logits: Optional[Path] = None) -> dict:
+        """Val loop returning {top1, top5, loss, ece} using torchmetrics.
+
+        save_logits, if given, writes {logits (float16), labels} to that .npz path -- so any
+        later accuracy metric (per-class, confusion matrix, cross-stage/cross-precision
+        agreement) is derivable from disk without rerunning inference.
+        """
         from torchmetrics.classification import MulticlassAccuracy
         from torchmetrics import MeanMetric
 
@@ -345,6 +353,7 @@ class Trainer(BaseTrainer):
             for k in topk
         }
         loss_m = MeanMetric().to(self.device)
+        all_logits, all_targets = [], []
 
         for data, target in loader:
             data, target = data.to(self.device), target.to(self.device)
@@ -352,22 +361,39 @@ class Trainer(BaseTrainer):
             loss_m.update(criterion(out, target))
             for acc in accs.values():
                 acc.update(out, target)
+            all_logits.append(out.detach().to("cpu", torch.float16))
+            all_targets.append(target.detach().cpu())
+
+        logits = torch.cat(all_logits)
+        targets = torch.cat(all_targets)
+        if save_logits is not None:
+            save_logits = Path(save_logits)
+            save_logits.parent.mkdir(parents=True, exist_ok=True)
+            np.savez_compressed(save_logits, logits=logits.numpy(), labels=targets.numpy())
 
         return {
             "loss": loss_m.compute().item(),
             **{f"top{k}": accs[k].compute().item() * 100 for k in topk},
+            "ece": expected_calibration_error(logits.float(), targets),
         }
 
     @torch.no_grad()
-    def benchmark(self, loader: Optional[DataLoader] = None, warmup: int = 100) -> dict:
-        """Time inference over val_loader; returns latency_ms_per_image and throughput_img_per_s."""
+    def benchmark(self, loader: Optional[DataLoader] = None, warmup: int = 100,
+                  device: Optional[torch.device] = None) -> dict:
+        """Time inference over val_loader; returns latency_ms_per_image and throughput_img_per_s.
+
+        device, if given, overrides self.device for this call only (e.g. an FP32-on-CPU number
+        alongside the normal FP32-on-GPU one) -- the model is moved back to self.device before
+        returning.
+        """
         loader = loader or self.val_loader
-        model = self.model.eval().to(self.device)
+        run_device = torch.device(device) if device is not None else self.device
+        model = self.model.eval().to(run_device)
         n_warmup = 0
 
         # warmup
         for data, _ in loader:
-            data = data.to(self.device)
+            data = data.to(run_device)
             model(data)
             n_warmup += data.size(0)
             if n_warmup >= warmup:
@@ -376,16 +402,22 @@ class Trainer(BaseTrainer):
         total_images = 0
         t0 = time.perf_counter()
         for data, _ in loader:
-            data = data.to(self.device)
+            data = data.to(run_device)
             model(data)
             total_images += data.size(0)
-        if self.device.type == "cuda":
+        if run_device.type == "cuda":
             torch.cuda.synchronize()
         elapsed = time.perf_counter() - t0
 
+        if device is not None:
+            model.to(self.device)
+
         latency_ms = elapsed / total_images * 1000
         throughput = total_images / elapsed
-        return {"latency_ms_per_image": latency_ms, "throughput_img_per_s": throughput, "device": str(self.device)}
+        return {
+            "latency_ms_per_image": latency_ms, "throughput_img_per_s": throughput,
+            "device": str(run_device), "num_threads": torch.get_num_threads(),
+        }
 
     def _train_one_epoch(self, model, optimizer, scaler, criterion) -> dict:
         model.train()

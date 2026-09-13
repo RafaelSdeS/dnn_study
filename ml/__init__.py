@@ -17,7 +17,10 @@ from .quantization import (
     make_qat_callback,
     exclude_attention_from_qat,
 )
-from .reporting import disk_mb, gzip_mb, build_comparison_table, create_results_summary, compute_flops, make_run_summary
+from .reporting import (
+    disk_mb, gzip_mb, build_comparison_table, create_results_summary, compute_flops, make_run_summary,
+    expected_calibration_error, prediction_agreement, layer_stats,
+)
 from .runtime import (
     set_global_seed, build_runtime_paths, resolve_dataset_train_path, expand_path, capture_provenance,
     load_runtime_root, RuntimePaths, load_profile, ensure_dataset_path, make_model_runs, save_resolved_config,

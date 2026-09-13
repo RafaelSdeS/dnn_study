@@ -1,0 +1,16 @@
+# Kernel-size comparison protocol: every model from scratch on the FULL budget -- no early
+# stopping, so epochs_used == epochs_budget for every run -- and the same lr/weight_decay for all
+# (uniform_hparams bypasses the registry's per-model lr), so kernel size is the only variable.
+# The QAT stage inherits early_stopping_patience from `training:` (scripts/train.py builds its
+# config with replace()). Used via `extends:` by phase_11_kernel_size_comparison.yaml.
+seed: 42
+uniform_hparams: true
+stages:
+  - fp32
+  - qat
+  - int8
+training:
+  epochs: 500
+  early_stopping_patience: null
+qat:
+  epochs: 100
