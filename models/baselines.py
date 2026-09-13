@@ -146,29 +146,32 @@ def _vgg16_stages(cfg: list) -> list[list[int]]:
 
 
 def _vgg16_features(kernel_size: int) -> nn.Sequential:
-    """VGG16 features (torchvision cfgs["D"]), no BatchNorm. kernel_size=3 is the original
-    architecture (all convs 3x3/s1/pad1). kernel_size=2 restarts a 1/0 padding alternation at
-    every stage, which keeps every stage's pre-pool spatial size -- and so every pooled size --
-    identical to the original (verified at 64x64: pools output 32,16,8,4,2 either way).
+    """VGG16 features (torchvision cfgs["D"]), from scratch, with BatchNorm -- a 13-layer plain
+    conv stack with no normalization does not train (measured on PCAD, jobs 821246/821247:
+    loss stuck at ln(200)=5.30 for 22 epochs). kernel_size=3 is the original architecture (all
+    convs 3x3/s1/pad1). kernel_size=2 restarts a 1/0 padding alternation at every stage, which
+    keeps every stage's pre-pool spatial size -- and so every pooled size -- identical to the
+    original (verified at 64x64: pools output 32,16,8,4,2 either way).
     """
     layers: list[nn.Module] = []
     in_ch = 3
     for stage in _vgg16_stages(VGG_CFGS["D"]):
         for i, out_ch in enumerate(stage):
             padding = 1 if kernel_size == 3 or i % 2 == 0 else 0
-            layers += [nn.Conv2d(in_ch, out_ch, kernel_size, padding=padding), nn.ReLU(inplace=False)]
+            layers += [nn.Conv2d(in_ch, out_ch, kernel_size, padding=padding, bias=False),
+                       nn.BatchNorm2d(out_ch), nn.ReLU(inplace=False)]
             in_ch = out_ch
         layers.append(nn.MaxPool2d(2, 2))
     return nn.Sequential(*layers)
 
 
 class VGG16(nn.Module):
-    """VGG16 (torchvision cfgs["D"]), from scratch -- no BatchNorm, no pretrained weights.
+    """VGG16 (torchvision cfgs["D"]), from scratch, with BatchNorm -- no pretrained weights.
 
     Architecture: 13 conv layers in 5 stages, FC head -- the original VGG16, which is already
     all-3x3 by design. kernel_size=2 keeps every pooled spatial size identical (see
     _vgg16_features) so both variants share one classifier head; only the kernel changes.
-    QAT: full — flat Sequential features, Conv-ReLU fuseable throughout.
+    QAT: full — flat Sequential features, Conv-BN-ReLU fuseable throughout.
     Trade-off: kernel-size restriction below VGG's own native size (Phase 11).
     """
 

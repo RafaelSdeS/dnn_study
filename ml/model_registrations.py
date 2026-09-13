@@ -89,16 +89,17 @@ register_model("alexnet_mixed", AlexNetMixed, fuse_map=FUSE_MAP_ALEXNET_TV, fuse
 # Phase 11 (configs/experiments/phase_11_kernel_size_comparison.yaml): original torchvision
 # AlexNet/VGG16, from scratch, only kernel_size changes -- see models/baselines.py.
 def _fuse_map_vgg16(cfg=VGG_CFGS["D"]):
-    """[[conv_idx, relu_idx], ...] for the Sequential models.baselines._vgg16_features builds,
-    computed from cfgs["D"] alone -- avoids instantiating VGG16 (134M params) just for this."""
-    pairs, idx = [], 0
+    """[[conv_idx, bn_idx, relu_idx], ...] for the Sequential models.baselines._vgg16_features
+    builds, computed from cfgs["D"] alone -- avoids instantiating VGG16 (134M params) just for
+    this."""
+    triples, idx = [], 0
     for v in cfg:
         if v == "M":
             idx += 1
         else:
-            pairs.append([str(idx), str(idx + 1)])
-            idx += 2
-    return pairs
+            triples.append([str(idx), str(idx + 1), str(idx + 2)])
+            idx += 3
+    return triples
 
 
 FUSE_MAP_VGG16 = _fuse_map_vgg16()
