@@ -64,7 +64,10 @@ ml/                       # Core package — notebooks and scripts import everyt
   checkpoint.py           # save/load_checkpoint, load_resume_state, auto_resume_path, compress_checkpoint (.pth.gz)
   registry.py             # MODEL_REGISTRY + register_model()
   model_registrations.py  # Populates MODEL_REGISTRY for standalone scripts (mirrors notebook registrations — keep in sync)
-  trainer.py              # Trainer: fit(), evaluate(), benchmark()
+  trainer.py              # Trainer: fit(), evaluate(save_logits=path) -> adds ece + writes {model}_{stage}_val_logits.npz
+                          #   (float16 logits + labels) so cross-stage/agreement/calibration questions never need a
+                          #   rerun, benchmark(device=...) -> override self.device for one call (e.g. CPU latency
+                          #   alongside GPU), both added 2026-09-13 for Phase 11's metrics-per-run requirement
   distillation_trainer.py # Phase 8 H4: DistillationTrainer (hard-label KD from a frozen teacher, deit_tiny only)
   quantization.py         # find_fuse_groups, build_qat, convert_to_int8, load_best_model, make_qat_callback;
                           #   Phase 8 D6: exclude_attention_from_qat (LayerNorm/ShiftedWindowAttention/MultiheadAttention
@@ -73,13 +76,20 @@ ml/                       # Core package — notebooks and scripts import everyt
                           #   compute_layer_sensitivity, assign_mixed_precision, apply_weight_ptq, theoretical_size_mb
   profiling.py            # Phase 6: GpuSampler (nvidia-smi power/util/temp/mem sampling), latency/throughput profiling
   pruning.py              # Phase 9: prune_model_channels — structured (whole-channel) pruning, stays Winograd-dense
-  runtime.py              # Shared CLI plumbing: set_global_seed, capture_provenance, load_profile (experiment/runtime
-                          #   yaml by name or path), ensure_dataset_path, make_model_runs (<root>/<exp>/<model>/...),
-                          #   save_resolved_config — scripts import these from `ml`, not from scripts/train.py's privates
+  runtime.py              # Shared CLI plumbing: set_global_seed, capture_provenance (also records torchvision/CUDA/
+                          #   cuDNN/Python versions, GPU name, cpu_count, SLURM_JOB_ID since 2026-09-13), load_profile
+                          #   (experiment/runtime yaml by name or path), ensure_dataset_path, make_model_runs
+                          #   (<root>/<exp>/<model>/...), save_resolved_config — scripts import these from `ml`, not
+                          #   from scripts/train.py's privates
   winograd_bridge.py      # The ONLY import path into the sibling Winograd-FPGA repo ($WINOGRAD_FPGA_ROOT): study-model
                           #   ctors (custom_model/torchvision_model — geometry owned there, so checkpoints load 1:1 in
                           #   its Fase 2.5), the qat_wino stage (load_qat_wino_model), bridge_provenance (its commit)
   reporting.py            # build_comparison_table, create_results_summary, disk_mb, compute_flops, make_run_summary
+                          #   (extra=dict merged in last, so callers add fields without inflating the signature);
+                          #   expected_calibration_error, prediction_agreement(logits_a, logits_b) -> top-1 agreement
+                          #   fraction from two save_logits .npz files, layer_stats(model, loader, device) -> per
+                          #   Conv/Linear geometry+MACs+weight range+activation percentiles (the calibration data
+                          #   Winograd-FPGA export needs), all added 2026-09-13
   plotting.py             # Figure style for report/ + notebooks/: palette, GROUP_COLORS/MODEL_GROUP, apply_report_style()
                           #   (presentation/make_figures.py keeps its own slide palette on purpose)
 models/                   # Architectures by phase (see Model Inventory)
@@ -108,16 +118,23 @@ configs/                  # YAML hyperparameters, loaded via configs/loader.py �
                           #   phase_8_efficient_vit(_convstem).yaml extend _protocols/phase_8_vit.yaml;
                           #   alexnet_3x3_fc/alexnet_3x3_gap/default/phase_9_bypass_ablation.yaml extend
                           #   _protocols/standard.yaml (just seed: 42 + stages: [fp32, qat, int8]);
-                          #   budget_unico.yaml extends _protocols/winograd_fpga.yaml
+                          #   budget_unico.yaml extends _protocols/winograd_fpga.yaml;
+                          #   phase_11_kernel_size_comparison.yaml extends _protocols/no_patience.yaml (seed 42,
+                          #   uniform_hparams, 500ep FP32/100ep QAT, early_stopping_patience: null — the QAT stage
+                          #   inherits null too, since scripts/train.py builds its cfg via replace() off the same base)
                           #   phase_7_detection.yaml/phase_7_segmentation.yaml are deliberately NOT this
                           #   schema (no models:/extends:) — consumed by scripts/train_det_seg.py, which reads
                           #   data.num_workers/trainer.epochs directly; different task, different loader
     _protocols/            # extends-only fragments (no models:/name: — not runnable, excluded from
                           #   _experiment_names()'s non-recursive glob): large_scale.yaml, phase_8_vit.yaml,
-                          #   standard.yaml, winograd_fpga.yaml
+                          #   standard.yaml, winograd_fpga.yaml, no_patience.yaml
 scripts/                  # CLI entry points (used instead of notebooks for PCAD/cluster runs)
   train.py                # `python -m scripts.train --experiment ... --runtime local|pcad` — classification FP32→QAT→INT8
-  cluster.py               # `python -m scripts.cluster submit|status|cancel|resume` — submits slurm/train.sbatch or profile.sbatch
+  cluster.py               # `python -m scripts.cluster submit|submit-sweep|status|cancel|resume` — submits
+                           #   slurm/train.sbatch or profile.sbatch; `submit --smoke` (2026-09-13) caps epochs to 1
+                           #   and discards output, for a fast real-cluster pipeline check before a full submission
+                           #   (catches env/bridge issues --smoke on scripts/train.py alone can't, since that only
+                           #   runs locally)
   train_det_seg.py         # Phase 7 detection/segmentation CLI, mirrors train.py; one run() for both tasks,
                            #   task-specific pieces (builders, loaders, trainer, int8 metrics) in its TASKS table
   profile_hardware.py      # Phase 6 hardware profiling CLI
@@ -159,8 +176,30 @@ scripts/                  # CLI entry points (used instead of notebooks for PCAD
                                 #   configs/experiments/budget_unico.yaml before burning a PCAD allocation (run it on
                                 #   PCAD too): bridge importable, every model builds, bridge commit recorded + clean.
                                 #   On PCAD the bridge is the tarball from Winograd-FPGA's
-                                #   scripts/package_avaliacao_bridge_for_pcad.sh (writes BRIDGE_COMMIT.json)
-  slurm/*.sbatch           # sbatch templates — train.sbatch/profile.sbatch submitted by cluster.py, det_seg.sbatch by the pcad/submit_phase_7_*.sh scripts, others called directly
+                                #   scripts/package_avaliacao_bridge_for_pcad.sh (writes BRIDGE_COMMIT.json). It was
+                                #   never synced there until 2026-09-13 (preflight caught all 14 *_fpga models
+                                #   failing to construct) — package + rsync it straight to PCAD with
+                                #   `scripts/package_avaliacao_bridge_for_pcad.sh user@host:winograd_bridge`, then
+                                #   `export WINOGRAD_FPGA_ROOT=~/winograd_bridge/avaliacao_redes` in the SAME shell
+                                #   you run `scripts.cluster submit(-sweep)` from (its `--export=ALL` is what
+                                #   propagates the var into the job) — re-sync whenever Winograd-FPGA's bridge files change.
+  winograd_fpga/            # `python -m scripts.winograd_fpga.<name>` (2026-09-13)
+    dump_layer_configs.py      # Emits scripts/avaliacao_redes/layer_configs/*.json in the sibling Winograd-FPGA
+                               #   repo, in its layer_configs.LAYER_CONFIGS schema, for every budget_unico *_fpga
+                               #   model + phase_11's alexnet_tv_3x3/vgg16, across f23/f43/f63 (via net_manifest.
+                               #   to_manifest + eligibility_wino.audit_net — geometry only, RTL sim always uses
+                               #   synthetic weights) — lets Winograd-FPGA's run_sim*.py throughput-sim ANY network
+                               #   trained here, not just its bundled VGG16. Asserts net_manifest.vgg16() still
+                               #   matches LAYER_CONFIGS before writing anything. See run_vu9p_redes.sh there
+                               #   (gates on reproducing the published VU9P GOPS before touching the 16 networks).
+  slurm/*.sbatch           # sbatch templates — train.sbatch/profile.sbatch submitted by cluster.py, det_seg.sbatch by the pcad/submit_phase_7_*.sh scripts, others called directly.
+                          # train.sbatch fixed 2026-09-13: conda never activates in a non-interactive Slurm batch
+                          #   shell (conda init lives in ~/.bashrc, which such shells don't source) — every real
+                          #   submission died in ~1s as "python: command not found" (jobs 821240/821241, on both
+                          #   beagle and tupi). Switched to `cd "$(git rev-parse --show-toplevel)" && source
+                          #   .venv/bin/activate`, the pattern det_seg.sbatch/prune_channels.sbatch already needed
+                          #   after hitting the identical failure. profile.sbatch/measure_compression.sbatch/
+                          #   notebook.sbatch still have the same latent bug, not yet fixed.
 tests/                    # pytest: test_registry, test_checkpoint, test_config, test_trainer_smoke,
                           #   test_quantization, test_profiling, test_train_cli, test_train_det_seg_cli,
                           #   test_train_pipeline (run_experiment end to end; a stop signal ends the run
@@ -279,7 +318,9 @@ QAT cfg is typically `replace(fp32_cfg, epochs=20, lr=1e-5, use_amp=False)`.
 
 **Reproducibility:** seed `random`/`numpy`/`torch`/`cuda` at notebook top; `cudnn.deterministic=True`; do **not** set `cudnn.benchmark`.
 
-**Reporting:** `make_run_summary(...)` builds a 30+ field dict per model → save one JSON each (crash-safe). `build_comparison_table` → `final_comparison.csv`; `create_results_summary` → `experiment_summary.json`. `compute_flops(model, input_size=(1,3,64,64))` → `{macs, flops}`. W&B: `wandb.init(project=..., config=asdict(cfg), mode="offline")`, sync later with `wandb sync --sync-all`; no auto-sync.
+**Reporting:** `make_run_summary(..., extra=dict)` builds a 30+ field dict per model → save one JSON each (crash-safe); `extra` merges in per-run additions without inflating the signature. `build_comparison_table` → `final_comparison.csv`; `create_results_summary` → `experiment_summary.json`. `compute_flops(model, input_size=(1,3,64,64))` → `{macs, flops}`. W&B: `wandb.init(project=..., config=asdict(cfg), mode="offline")`, sync later with `wandb sync --sync-all`; no auto-sync.
+
+**Metrics-per-run (2026-09-13, `scripts/train.py`):** every stage (FP32/QAT/INT8/`qat_wino`) saves `{model}_{stage}_val_logits.npz` via `Trainer.evaluate(save_logits=...)` and reports `ece`; QAT gets its own fake-quant accuracy on a **deepcopy** with observers/BN forced off (`tq.disable_observer` + `torch.nn.intrinsic.qat.freeze_bn_stats`) — evaluating the live QAT model directly would recalibrate its observers from val data and change what `convert_to_int8` produces next. FP32/INT8 also get bs1 and (when training was on GPU) CPU latency via `Trainer.benchmark(device=...)`. `ml.reporting.layer_stats(model, loader, device)` dumps per-Conv/Linear geometry/MACs/weight range/activation percentiles to `{model}_layer_stats.json` — the calibration data Winograd-FPGA's export needs, captured once from the saved checkpoint. `prediction_agreement` cross-stage. The point: an expensive run (PCAD, hours) should never need a rerun to answer a later accuracy/calibration question.
 
 ---
 
@@ -310,21 +351,27 @@ python3 -m venv .venv && source .venv/bin/activate && pip install -r requirement
 source .venv/bin/activate
 jupyter lab
 ```
-`requirements.txt` (pip freeze, tightly pinned) is the source of truth for `.venv` — it has drifted before (`docs/logs/PHASE7_LOG.md`); re-run the `pip install -r requirements.txt` line if notebook imports start failing. `environment.yml` is separate and only for the conda env below.
+`requirements.txt` (pip freeze, tightly pinned) is the source of truth for `.venv` — it has drifted before (`docs/logs/PHASE7_LOG.md`); re-run the `pip install -r requirements.txt` line if notebook imports start failing. `environment.yml` predates the switch to `.venv` below; `configs/runtime/*.yaml`'s `conda_env` field and `cluster.py`'s `CONDA_ENV_NAME` export are similarly vestigial for `train.sbatch` (fixed 2026-09-13) but still read by `profile.sbatch`/`measure_compression.sbatch`/`notebook.sbatch`, which still have the old (broken) conda-activation block.
 Tiny ImageNet-200 downloads via `kagglehub` on first run (cached in `~/.cache/kagglehub/`). Before INT8 convert/inference: `model.eval()` and move to CPU.
 
-**CLI / cluster runs** (Phases 6–8, reproducible local or PCAD SLURM runs):
+**CLI / cluster runs** (Phases 6–8, reproducible local or PCAD SLURM runs). Despite `environment.yml`'s
+name, actual practice — here and on PCAD — is a plain `.venv` (`python3 -m venv .venv && source
+.venv/bin/activate && pip install -r requirements.txt`); neither machine has `conda` installed, and
+`scripts/slurm/train.sbatch` was fixed 2026-09-13 to activate `.venv` directly instead of trying `conda`
+(see its file entry above):
 ```bash
-conda env create -f environment.yml && conda activate alexnet_rafael
 python -m scripts.train --experiment default --runtime local        # classification, local
 python -m scripts.cluster submit --experiment default --runtime pcad --slurm single_gpu
+python -m scripts.cluster submit --experiment phase_11_kernel_size_comparison --runtime pcad --slurm tupi_4090 --model vgg16 --smoke   # fast real-cluster check, one model, output discarded
+python -m scripts.cluster submit-sweep --experiment phase_11_kernel_size_comparison --runtime pcad --slurm tupi_4090   # one job per model, real budget (no --smoke)
 python -m scripts.cluster submit-sweep --experiment phase_8_efficient_vit --runtime pcad   # one job per model, Phase 8's 5 CLI-drivable models
-python -m scripts.cluster submit --experiment budget_unico --runtime pcad --slurm tupi_4090 --model wrn_16_4_fpga   # one model only
+python -m scripts.cluster submit --experiment budget_unico --runtime pcad --slurm tupi_4090 --model wrn_16_4_fpga   # one model only -- needs WINOGRAD_FPGA_ROOT exported first, see the preflight_budget_unico.py entry above
 python -m scripts.cluster submit-sweep --experiment budget_unico --runtime pcad --dry-run   # print the sbatch commands, submit nothing
 python -m scripts.cluster status <job_id>   # / cancel / resume
 python -m scripts.train_det_seg detection --model alexnet_bottleneck --dry-run   # Phase 7
 python -m scripts.profile_hardware --experiment phase_6_hardware_profiling --runtime local           # Phase 6
+python -m scripts.winograd_fpga.dump_layer_configs   # emit layer_configs JSONs for the sibling repo's VU9P throughput sim
 ```
-Edit `configs/runtime/pcad.yaml` (dataset root, conda env) and `configs/slurm/single_gpu.yaml` (partition/GPU/wall-time) for cluster settings; duplicate `configs/experiments/default.yaml` for a new reproducible run.
+Edit `configs/runtime/pcad.yaml` (dataset root) and `configs/slurm/single_gpu.yaml` (partition/GPU/wall-time) for cluster settings; duplicate `configs/experiments/default.yaml` for a new reproducible run.
 
 **Tests:** `pytest tests/`
