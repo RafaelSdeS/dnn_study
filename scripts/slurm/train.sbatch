@@ -1,17 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="${TRAIN_REPO_ROOT:-$PWD}"
-CONDA_ENV_NAME="${CONDA_ENV_NAME:-alexnet_rafael}"
-
-cd "$ROOT_DIR"
-
-if command -v conda >/dev/null 2>&1; then
-    source "$(conda info --base)/etc/profile.d/conda.sh"
-    conda activate "$CONDA_ENV_NAME"
-elif [[ -n "${CONDA_PREFIX:-}" && -f "$CONDA_PREFIX/bin/activate" ]]; then
-    source "$CONDA_PREFIX/bin/activate"
-fi
+# .venv (not conda) -- conda init lives in ~/.bashrc, which a non-interactive batch shell never
+# sources, so `command -v conda` always misses here. Same failure ("python: command not found")
+# and same fix as scripts/slurm/det_seg.sbatch/prune_channels.sbatch already needed (jobs
+# 812276-812278, and 821240/821241 on 2026-09-13). git rev-parse, not $TRAIN_REPO_ROOT/$PWD, for
+# the same reason: a bad TRAIN_REPO_ROOT doubles the repo path instead of failing loudly.
+cd "$(git rev-parse --show-toplevel)"
+source .venv/bin/activate
 
 export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
 export MKL_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
