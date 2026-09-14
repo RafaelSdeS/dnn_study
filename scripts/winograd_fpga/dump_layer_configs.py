@@ -113,7 +113,7 @@ def main() -> int:
                 "tile_eff": eligibility.net_tile_eff(net, variant),
                 "min_output_size": min((layer.out_w for layer in net.layers), default=0),
                 "ineligibility_reasons": "; ".join(reasons),
-                "json_path": str(json_path),
+                "json_path": json_path.name,  # relative -- always sits next to summary.csv, on any machine
             })
 
     summary_path = out_dir / "summary.csv"
