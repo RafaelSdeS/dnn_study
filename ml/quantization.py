@@ -240,14 +240,15 @@ def convert_to_int8(qat_model: nn.Module, inplace: bool = False) -> nn.Module:
     return torch.ao.quantization.convert(qat_model, inplace=inplace)
 
 
-def make_qat_callback(freeze_bn_epoch: int = 3, disable_observer_epoch: int = 5):
-    """Return an epoch_callback that freezes BN stats then disables observers."""
+def make_qat_callback(freeze_bn_epoch: int = 3, disable_observer_epoch: int | None = 5):
+    """Return an epoch_callback that freezes BN stats then disables observers (never, if
+    disable_observer_epoch is None)."""
     # >= (idempotent), not ==: a run resumed past either epoch must re-apply it -- freeze_bn is a
     # plain module attribute, not state_dict, so the resumed model would train with BN unfrozen
     def cb(epoch: int, model: nn.Module) -> None:
         if epoch >= freeze_bn_epoch:
             model.apply(torch.nn.intrinsic.qat.freeze_bn_stats)
-        if epoch >= disable_observer_epoch:
+        if disable_observer_epoch is not None and epoch >= disable_observer_epoch:
             model.apply(torch.ao.quantization.disable_observer)
     return cb
 

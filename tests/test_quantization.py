@@ -85,3 +85,16 @@ def test_qat_callback_still_applies_on_the_first_epoch_after_a_resume_past_it():
     assert qat[0].freeze_bn  # a module attribute, not state_dict -- lost on resume unless re-applied
     fake_quants = [m for m in qat.modules() if isinstance(m, torch.ao.quantization.FakeQuantizeBase)]
     assert fake_quants and all(int(m.observer_enabled[0]) == 0 for m in fake_quants)
+
+
+def test_qat_callback_with_no_observer_freeze_keeps_ranges_adapting():
+    """vgg16 registers qat_disable_observer_epoch=None (docs/logs/PHASE11_LOG.md, "Revisit 2"):
+    BN must still freeze, but observers must stay enabled no matter how late the epoch."""
+    qat = prepare_qat_model(nn.Sequential(nn.Conv2d(3, 4, 3), nn.BatchNorm2d(4), nn.ReLU(inplace=False)),
+                            [["0", "1", "2"]])
+    make_qat_callback(freeze_bn_epoch=3, disable_observer_epoch=None)(99, qat)
+    assert qat[0].freeze_bn
+    fake_quants = [m for m in qat.modules() if isinstance(m, torch.ao.quantization.FakeQuantizeBase)]
+    assert fake_quants and all(int(m.observer_enabled[0]) == 1 for m in fake_quants)
+    assert MODEL_REGISTRY["vgg16"]["qat_disable_observer_epoch"] is None
+    assert "qat_disable_observer_epoch" not in MODEL_REGISTRY["vgg16_2x2"]

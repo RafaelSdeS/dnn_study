@@ -72,7 +72,7 @@ as-is as a finding, (2) swap `MovingAverageMinMaxObserver` for
 untested here), (3) retrain FP32 with stronger weight decay / lower BN
 momentum to control activation variance, then redo QAT.
 
-## Revisit — actual root cause + fix (2026-09-15)
+## Revisit — classifier fusion, a partial fix (2026-09-15)
 
 Option (2) above was tried directly on PCAD (uncommitted `ml/quantization.py`
 + `ml/model_registrations.py` edit, `HistogramObserver` swap with
@@ -101,7 +101,7 @@ a latent gap in every model's classifier, but only vgg16's classifier.0
 output is extreme enough to actually collapse training; e.g. alexnet_tv's
 classifier is equally unfused and trains fine.
 
-**Fix** (`ml/quantization.py` `prepare_qat_model`/`build_qat_from_model`,
+**Fix, part 1 — necessary, not sufficient (see Revisit 2)** (`ml/quantization.py` `prepare_qat_model`/`build_qat_from_model`,
 `ml/model_registrations.py`): added an optional `classifier_fuse_map`
 registry field; when set, `classifier`'s Linear-ReLU pairs get fused
 (`nniqat.LinearReLU`) same as the conv stack, moving the observer to the
@@ -116,3 +116,54 @@ once the rerun lands. Every other registered model is untouched
 behavior as before). Regression test:
 `tests/test_quantization.py::test_vgg16_classifier_linear_relu_fusion_for_qat`.
 No FP32 retrain needed — both models reuse their existing FP32 checkpoints.
+
+## Revisit 2 — the observer-freeze trap (2026-09-15)
+
+Resubmitted with the classifier fusion as job 821691. It learned while
+observers were active — val_acc 0.66 → 0.82 → 0.86 → 1.32 → 1.53% over
+printed epochs 1-5 (the unfused original was flat at 0.50%) — then collapsed
+at printed epoch 6 (0.47%), with val_loss locked to 5.2983 = ln(200) from
+epoch 9. Cancelled at epoch 11.
+
+`Trainer.fit` calls `epoch_callback(epoch, model)` at the start of each epoch
+with a 0-based index, so `disable_observer_epoch: 5` takes effect exactly at
+printed epoch 6 — the collapse point in all three runs (821270, 821600,
+821691). The trigger is the observer freeze, not the observer type
+(MovingAverageMinMax and Histogram both collapsed) and not the BN freeze
+(`freeze_bn_epoch: 3` = printed epoch 4, where 821691 kept improving).
+
+What differs from vgg16_2x2 (FP32 `layer_stats`, `activation_in` p999 — the
+post-BN-ReLU value a fused layer's observer actually sees; the Conv2d
+`activation_out` figures, e.g. `features.40` max 55,422, are hooked on the raw
+conv *before* BN and are not):
+
+| layer | vgg16 | vgg16_2x2 |
+|---|---:|---:|
+| `features.37` | 3.37 | 2.47 |
+| `features.40` | 65.1 | 0.94 |
+| `classifier.0` | 250.3 | 0.015 |
+
+vgg16's last conv block feeds the classifier activations 70× to 16,000×
+hotter than vgg16_2x2's.
+
+Mechanism (consistent with the data, not directly measured): once scales
+freeze, a per-tensor scale sized for that range ends up coarser than the
+logits' spread as training shrinks it; every logit rounds to the same value,
+the output is uniform, loss is exactly ln(200), and no weight step smaller
+than one quant step changes the forward pass, so training never escapes.
+While observers are active the scale shrinks along with the signal.
+vgg16_2x2, whose ranges are small, instead *jumps* (6.47% → 31.70%) when its
+observers freeze.
+
+**Fix, part 2 (vgg16 only):** `qat_disable_observer_epoch=None` in its
+registry entry → `make_qat_callback` never disables observers (BN still
+freezes at epoch 3). **Protocol deviation, recorded on purpose:** vgg16's QAT
+keeps observers active for all 100 epochs, so activation ranges also update
+during validation passes (already true for the first 5 QAT epochs of every
+other model). vgg16_2x2 and the AlexNets keep the standard schedule.
+
+Gate for the resubmission: val_loss must not lock at 5.2983 past epoch 6, and
+val_acc must still be climbing (> ~3%) at epoch 15; otherwise cancel. Next
+options if it fails: learnable ranges (LSQ via `_LearnableFakeQuantize`,
+INT8-convert compatibility untested), report the collapse as a Phase 11
+finding, or retrain FP32 with stronger weight decay.

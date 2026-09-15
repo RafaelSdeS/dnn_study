@@ -345,7 +345,7 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
                     f"qat_{model_name}",
                     num_classes=data_cfg.num_classes,
                     wandb_run=wandb_run,
-                    epoch_callback=make_qat_callback(qat_cfg.freeze_bn_epoch, qat_cfg.disable_observer_epoch),
+                    epoch_callback=make_qat_callback(qat_cfg.freeze_bn_epoch, spec.get("qat_disable_observer_epoch", qat_cfg.disable_observer_epoch)),
                     metrics_callback=metrics_callback,
                     log_file=logs_dir / f"qat_{model_name}.log",
                 )

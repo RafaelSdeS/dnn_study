@@ -113,9 +113,11 @@ register_model("alexnet_tv_2x2", partial(AlexNetTV, pretrained=False, kernel_siz
 # logits). Fuse the two Linear-ReLU pairs (see prepare_qat_model's classifier_fuse_pairs docstring
 # for why vgg16 needs this); classifier.6 has no ReLU after it and stays a standalone quantized Linear.
 CLASSIFIER_FUSE_MAP_VGG16 = [["0", "1"], ["3", "4"]]
+# qat_disable_observer_epoch=None: freezing observers collapsed vgg16's QAT to ln(200) in 3/3 runs
+# (docs/logs/PHASE11_LOG.md, "Revisit 2"), so its fake-quant ranges keep adapting for all of QAT.
 register_model("vgg16", partial(VGG16, kernel_size=3),
                fuse_map=FUSE_MAP_VGG16, fuse_root_attr="features", lr=1e-3,
-               classifier_fuse_map=CLASSIFIER_FUSE_MAP_VGG16)
+               classifier_fuse_map=CLASSIFIER_FUSE_MAP_VGG16, qat_disable_observer_epoch=None)
 register_model("vgg16_2x2", partial(VGG16, kernel_size=2),
                fuse_map=FUSE_MAP_VGG16, fuse_root_attr="features", lr=1e-3,
                classifier_fuse_map=CLASSIFIER_FUSE_MAP_VGG16)
