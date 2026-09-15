@@ -109,10 +109,16 @@ register_model("alexnet_tv_3x3", partial(AlexNetTV, pretrained=False, kernel_siz
                fuse_map=FUSE_MAP_ALEXNET_TV, fuse_root_attr="features", lr=3e-4)
 register_model("alexnet_tv_2x2", partial(AlexNetTV, pretrained=False, kernel_size=2),
                fuse_map=FUSE_MAP_ALEXNET_TV, fuse_root_attr="features", lr=3e-4)
+# torchvision's VGG classifier: Linear(0)-ReLU(1)-Dropout(2)-Linear(3)-ReLU(4)-Dropout(5)-Linear(6,
+# logits). Fuse the two Linear-ReLU pairs (see prepare_qat_model's classifier_fuse_pairs docstring
+# for why vgg16 needs this); classifier.6 has no ReLU after it and stays a standalone quantized Linear.
+CLASSIFIER_FUSE_MAP_VGG16 = [["0", "1"], ["3", "4"]]
 register_model("vgg16", partial(VGG16, kernel_size=3),
-               fuse_map=FUSE_MAP_VGG16, fuse_root_attr="features", lr=1e-3)
+               fuse_map=FUSE_MAP_VGG16, fuse_root_attr="features", lr=1e-3,
+               classifier_fuse_map=CLASSIFIER_FUSE_MAP_VGG16)
 register_model("vgg16_2x2", partial(VGG16, kernel_size=2),
-               fuse_map=FUSE_MAP_VGG16, fuse_root_attr="features", lr=1e-3)
+               fuse_map=FUSE_MAP_VGG16, fuse_root_attr="features", lr=1e-3,
+               classifier_fuse_map=CLASSIFIER_FUSE_MAP_VGG16)
 
 # large-scale sweep (see configs/experiments/large_scale.yaml)
 FUSE_MAP_ALEXNET_SMALLKERNEL = [["0", "1"], ["3", "4"], ["6", "7"], ["8", "9"], ["10", "11"]]

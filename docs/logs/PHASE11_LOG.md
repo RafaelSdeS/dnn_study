@@ -71,3 +71,48 @@ as-is as a finding, (2) swap `MovingAverageMinMaxObserver` for
 `HistogramObserver` in `ml/quantization.py`'s qconfig (more outlier-robust,
 untested here), (3) retrain FP32 with stronger weight decay / lower BN
 momentum to control activation variance, then redo QAT.
+
+## Revisit — actual root cause + fix (2026-09-15)
+
+Option (2) above was tried directly on PCAD (uncommitted `ml/quantization.py`
++ `ml/model_registrations.py` edit, `HistogramObserver` swap with
+`quant_max=127`) and resubmitted as job 821600. It collapsed identically —
+val_acc pinned at 0.49% from epoch 1, loss locked to `ln(200)` from epoch 6.
+Cancelled. This ruled out the BN-running_var/observer-choice hypothesis:
+no per-tensor affine observer, however chosen, can fix what turned out to be
+a different layer entirely.
+
+**Real root cause** (`outputs/pcad/.../vgg16_original/results/vgg16_layer_stats.json`):
+`classifier.0` (`Linear(25088→4096)`, the first FC layer after the conv
+stack — **not** a conv layer, so outside the BN-variance hypothesis) has a
+genuinely heavy-tailed raw output: `p999 ≈ 27,153`, `p9999 ≈ 68,322`,
+`max ≈ 115,465`. But `classifier.3`'s *input* — i.e. what's left after
+`classifier.0 → ReLU → Dropout` — tops out at `0.49`. Nearly all of that
+huge magnitude sits on units ReLU zeroes; only a small positive remainder
+survives.
+
+The bug: `classifier`'s `Linear→ReLU` was never fused for QAT (true for
+*every* model in this codebase, `fuse_root_attr` only ever covers
+`features`) — unlike the conv stack, which is always Conv-BN-ReLU fused.
+So the fake-quant observer sat on the *raw pre-ReLU* Linear output, forced
+to size an INT8 range around ±115k to cover values ReLU discards anyway,
+crushing the real signal (~0–0.5 post-ReLU) into 0–1 quant levels. This is
+a latent gap in every model's classifier, but only vgg16's classifier.0
+output is extreme enough to actually collapse training; e.g. alexnet_tv's
+classifier is equally unfused and trains fine.
+
+**Fix** (`ml/quantization.py` `prepare_qat_model`/`build_qat_from_model`,
+`ml/model_registrations.py`): added an optional `classifier_fuse_map`
+registry field; when set, `classifier`'s Linear-ReLU pairs get fused
+(`nniqat.LinearReLU`) same as the conv stack, moving the observer to the
+post-ReLU value. Applied to both `vgg16` and `vgg16_2x2` (shared classifier
+head, `CLASSIFIER_FUSE_MAP_VGG16 = [["0","1"], ["3","4"]]`; `classifier.6`
+has no ReLU after it and stays a standalone quantized Linear) — re-running
+`vgg16_2x2`'s QAT stage too so both kernel sizes share the same graph for a
+fair comparison, even though `vgg16_2x2` trained fine under the old
+(unfused) graph; its 49.03%/69.09% QAT/INT8 numbers above are superseded
+once the rerun lands. Every other registered model is untouched
+(`classifier_fuse_map` defaults to `None` → identical qconfig/fuse
+behavior as before). Regression test:
+`tests/test_quantization.py::test_vgg16_classifier_linear_relu_fusion_for_qat`.
+No FP32 retrain needed — both models reuse their existing FP32 checkpoints.

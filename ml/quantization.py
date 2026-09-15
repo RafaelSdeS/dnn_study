@@ -168,8 +168,19 @@ def prepare_qat_model(
     fuse_pairs: list,
     fuse_root: nn.Module | None = None,
     qengine: str = "fbgemm",
+    classifier_fuse_pairs: list | None = None,
 ) -> nn.Module:
-    """Deep-copy model, fuse Conv-BN(-ReLU) pairs, insert fake-quant observers."""
+    """Deep-copy model, fuse Conv-BN(-ReLU) pairs, insert fake-quant observers.
+
+    classifier_fuse_pairs additionally fuses model.classifier's Linear-ReLU pairs. Needed for
+    vgg16/vgg16_2x2: their torchvision-style classifier head is otherwise left unfused (like
+    every other model here), so the fake-quant observer sits on the raw pre-ReLU Linear output.
+    For vgg16 that output is a genuinely heavy-tailed distribution (p999 ~27k, max ~115k per
+    results/phase_11_kernel_size_comparison layer_stats) that only ReLU's clipping brings back
+    to a sane range (~0.5) -- quantizing before it collapsed QAT to ln(num_classes) from epoch 1
+    (docs/logs/PHASE11_LOG.md). Fusing Linear+ReLU moves the observer to the post-ReLU value,
+    the same fix already in place for every Conv-BN-ReLU stage.
+    """
     model = copy.deepcopy(model)
     model.train()
     model.qconfig = tq.get_default_qat_qconfig(qengine)
@@ -177,6 +188,8 @@ def prepare_qat_model(
     root = model if fuse_root is None else fuse_root
     if fuse_pairs:
         tq.fuse_modules_qat(root, fuse_pairs, inplace=True)
+    if classifier_fuse_pairs:
+        tq.fuse_modules_qat(model.classifier, classifier_fuse_pairs, inplace=True)
     return tq.prepare_qat(model, inplace=False)
 
 
@@ -185,7 +198,10 @@ def build_qat_from_model(model: nn.Module, arch_name: str, device: torch.device)
     spec = MODEL_REGISTRY[arch_name]
     root_attr = spec.get("fuse_root_attr")
     fuse_root = getattr(model, root_attr) if root_attr else None
-    return prepare_qat_model(model, spec["fuse_map"], fuse_root=fuse_root).to(device)
+    return prepare_qat_model(
+        model, spec["fuse_map"], fuse_root=fuse_root,
+        classifier_fuse_pairs=spec.get("classifier_fuse_map"),
+    ).to(device)
 
 
 def load_best_model(
