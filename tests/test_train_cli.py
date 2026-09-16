@@ -2,7 +2,14 @@
 import pytest
 
 import ml.model_registrations  # noqa: F401 — populates MODEL_REGISTRY
-from scripts.train import _apply_smoke_override, _resolve_model_names, build_parser
+from scripts.train import (
+    _FP32_FIT_FIELDS,
+    _QAT_FIT_FIELDS,
+    _apply_smoke_override,
+    _recover_fit_from_prior_summary,
+    _resolve_model_names,
+    build_parser,
+)
 
 
 def test_model_flag_is_parsed():
@@ -57,3 +64,29 @@ def test_smoke_override_handles_missing_blocks():
     assert _apply_smoke_override({}) == {
         "training": {"epochs": 1, "warmup_epochs": 0}, "qat": {"epochs": 1}, "qat_wino": {"epochs": 1},
     }
+
+
+def test_recover_fit_from_prior_summary_pulls_fp32_and_qat_fields():
+    prior = {
+        "epochs": 473, "epochs_used": 500, "epochs_budget": 500,
+        "best_val_top1": 47.74, "best_val_top5": 70.14,
+        "final_val_top1": 47.47, "final_val_top5": 69.66, "best_val_loss": 2.93,
+        "qat_best_epoch": 98, "qat_epochs_used": 100, "qat_epochs_budget": 100,
+        "qat_best_val_top1": 44.65, "qat_best_val_top5": 68.0, "qat_total_training_time_s": 9000.0,
+    }
+    fp32_fit = _recover_fit_from_prior_summary(prior, _FP32_FIT_FIELDS)
+    assert fp32_fit == {
+        "best_epoch": 473, "epochs_used": 500, "epochs_budget": 500,
+        "best_val_top1": 47.74, "best_val_top5": 70.14,
+        "final_val_top1": 47.47, "final_val_top5": 69.66, "best_val_loss": 2.93,
+    }
+    qat_fit = _recover_fit_from_prior_summary(prior, _QAT_FIT_FIELDS)
+    assert qat_fit == {
+        "best_epoch": 98, "epochs_used": 100, "epochs_budget": 100,
+        "best_val_top1": 44.65, "best_val_top5": 68.0, "total_training_time_s": 9000.0,
+    }
+
+
+def test_recover_fit_from_prior_summary_missing_keys_become_none():
+    # an older summary.json written before some field existed shouldn't crash the recovery
+    assert _recover_fit_from_prior_summary({}, _FP32_FIT_FIELDS) == dict.fromkeys(_FP32_FIT_FIELDS, None)

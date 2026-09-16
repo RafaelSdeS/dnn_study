@@ -137,6 +137,30 @@ def _apply_smoke_override(experiment_cfg: dict[str, Any]) -> dict[str, Any]:
     return experiment_cfg
 
 
+def _recover_fit_from_prior_summary(prior: dict[str, Any], field_map: dict[str, str]) -> dict[str, Any]:
+    """Reconstruct a fit()-shaped dict from a previously-written {model}_summary.json, for a
+    stage this run is skipping because its checkpoint already exists -- otherwise fit_results
+    stays {} and this run's summary silently loses that stage's epoch/best-val provenance even
+    though it's sitting right there in the file this run is about to overwrite."""
+    return {target: prior.get(source) for target, source in field_map.items()}
+
+
+# left side: fit()-shaped keys make_run_summary reads off fit_results (ml/reporting.py:400-408).
+# right side: the matching field already in a written summary.json.
+_FP32_FIT_FIELDS = {
+    "best_epoch": "epochs", "epochs_used": "epochs_used", "epochs_budget": "epochs_budget",
+    "best_val_top1": "best_val_top1", "best_val_top5": "best_val_top5",
+    "final_val_top1": "final_val_top1", "final_val_top5": "final_val_top5",
+    "best_val_loss": "best_val_loss",
+}
+# right side: the qat_* fields written into the `extra` dict below (scripts/train.py:~484-491).
+_QAT_FIT_FIELDS = {
+    "best_epoch": "qat_best_epoch", "epochs_used": "qat_epochs_used",
+    "epochs_budget": "qat_epochs_budget", "best_val_top1": "qat_best_val_top1",
+    "best_val_top5": "qat_best_val_top5", "total_training_time_s": "qat_total_training_time_s",
+}
+
+
 def _stop_requested(trainer: Trainer, stage: str, model_name: str, writer, wandb_run) -> bool:
     """True if a stop signal cut this stage's fit() short -- SIGUSR1 is Slurm's pre-timeout
     warning (train.sbatch), SIGTERM/SIGINT the rest. Going on to the next stage would build
@@ -194,6 +218,8 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
         spec = MODEL_REGISTRY[model_name]
         model_run_name = f"{experiment_name}_{model_name}"
         run_root, checkpoints_dir, logs_dir, tb_dir, results_dir = make_model_runs(runtime_paths.root, experiment_name, model_name)
+        prior_summary_path = results_dir / f"{model_name}_summary.json"
+        prior_summary = json.loads(prior_summary_path.read_text()) if prior_summary_path.exists() else {}
 
         # uniform_hparams (Fase 2 do plano): o registry tem lr/weight_decay
         # por-modelo (register_model(lr=...), tunado para o melhor resultado de
@@ -288,6 +314,7 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
             resume_from = auto_resume_path(checkpoints_dir, model_name)
             if best_model_path.exists() and resume_from is None:
                 logger.info("Skipping FP32 stage for %s; best checkpoint exists.", model_name)
+                fp32_fit = _recover_fit_from_prior_summary(prior_summary, _FP32_FIT_FIELDS) if prior_summary else {}
                 cached_model = load_best_model(model_name, spec["ctor"], checkpoints_dir, device)
                 trainer = Trainer(
                     cached_model,
@@ -330,6 +357,7 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
             qat_best_path = checkpoints_dir / f"qat_{model_name}_best.pth"
             if qat_best_path.exists() and resume_from is None:
                 logger.info("Skipping QAT stage for %s; best checkpoint exists.", model_name)
+                qat_fit = _recover_fit_from_prior_summary(prior_summary, _QAT_FIT_FIELDS) if prior_summary else {}
                 # build_qat() started from the FP32 weights; without this the int8 stage would
                 # convert an untrained, uncalibrated QAT model
                 qat_best = torch.load(qat_best_path, map_location=str(device), weights_only=False)
