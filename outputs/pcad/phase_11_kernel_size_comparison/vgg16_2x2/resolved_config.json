@@ -78,17 +78,17 @@
     "int8"
   ],
   "provenance": {
-    "git_hash": "688bd0f62be5fdfb283605f6f978f8a07ab31dab",
+    "git_hash": "3ee4b9d09b80af26acdee5c195a9c62acfe37e8b",
     "git_dirty": true,
-    "hostname": "tupi1",
-    "timestamp_utc": "2026-09-14T08:39:38.440821+00:00",
+    "hostname": "tupi3",
+    "timestamp_utc": "2026-09-15T20:26:55.942371+00:00",
     "torch_version": "2.5.1+cu121",
     "torchvision_version": "0.20.1+cu121",
     "cuda_version": "12.1",
     "cudnn_version": 90100,
     "gpu_name": "NVIDIA GeForce RTX 4090",
     "python_version": "3.11.2",
-    "cpu_count": 16,
-    "slurm_job_id": "821271"
+    "cpu_count": 32,
+    "slurm_job_id": "821692"
   }
 }

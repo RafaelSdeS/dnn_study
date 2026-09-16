@@ -498,7 +498,11 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
         summary = make_run_summary(
             name=model_name,
             mode="/".join(stage_list),
-            fit_results=fp32_fit or qat_fit,
+            # fp32_fit stays {} when "fp32" is in stage_list but this run skipped it (checkpoint
+            # already existed, e.g. a resubmission that only redoes QAT) -- falling back to
+            # qat_fit there would mislabel QAT's epoch/best_val numbers as FP32's. Only fall back
+            # when fp32 was never requested at all (a genuine qat/int8-only run).
+            fit_results=fp32_fit if "fp32" in stage_list else qat_fit,
             fp32_eval=fp32_eval or {"top1": None, "top5": None, "loss": None},
             params_m=sum(p.numel() for p in fp32_model.parameters()) / 1e6,
             fp32_size_mb=fp32_size_mb or 0.0,

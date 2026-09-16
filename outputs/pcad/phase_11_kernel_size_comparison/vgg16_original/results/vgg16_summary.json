@@ -93,7 +93,7 @@
       "slurm_job_id": "821270"
     }
   },
-  "model_name": "vgg16",
+  "model_name": "vgg16_original",
   "mode": "fp32/qat/int8",
   "epochs": 473,
   "epochs_used": 500,

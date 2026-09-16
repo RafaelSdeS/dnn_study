@@ -167,3 +167,33 @@ val_acc must still be climbing (> ~3%) at epoch 15; otherwise cancel. Next
 options if it fails: learnable ranges (LSQ via `_LearnableFakeQuantize`,
 INT8-convert compatibility untested), report the collapse as a Phase 11
 finding, or retrain FP32 with stronger weight decay.
+
+## Revisit 3 — gate passed, final numbers (2026-09-15, job 821696)
+
+Gate cleared: no lock, val_acc climbing throughout, best epoch 99/100 (not an
+early-epoch fluke). Combined fix (classifier fusion + observers never frozen)
+holds through the full 100-epoch QAT budget:
+
+| Model | FP32 Top-1 | QAT Top-1 | INT8 Top-1 |
+|-------|-----------:|----------:|-----------:|
+| vgg16 (fixed) | 47.71% | 44.65% | 44.77% |
+| vgg16_2x2 (rerun, same graph) | 54.26% | 49.07% | 48.36% |
+
+`vgg16` and `vgg16_2x2` now both quantize like every other Phase 11 model —
+a normal few-point drop, not a collapse. `vgg16_original`'s checkpoint dir is
+kept (model_name field renamed to `vgg16_original` in its summary.json to
+stop it colliding with the fixed `vgg16` row in `aggregate_results.py`'s glob)
+purely as the pre-fix collapse's provenance; it's excluded from
+`results/phase_11_kernel_size_comparison/` and the cross-phase rollup.
+
+Separately found and fixed while syncing this run's data: `scripts/train.py`'s
+`make_run_summary(fit_results=fp32_fit or qat_fit, ...)` silently mislabeled
+QAT's epoch/best-val numbers as FP32's whenever the FP32 stage was skipped
+because a checkpoint already existed (exactly this resubmission's case) —
+`vgg16`'s and `vgg16_2x2`'s `results/*_summary.json` briefly reported
+`epochs_used: 100`/`best_val_top1: <QAT's value>` instead of FP32's real
+500/47.74 (54.29). Fixed to only fall back to `qat_fit` when FP32 was never
+in `stage_list` at all; the two affected summaries were corrected from their
+still-intact `checkpoints/*_meta.json` sidecars. Unrelated to the
+classifier-fusion/observer-freeze bug above — a reporting bug, not a training
+one.

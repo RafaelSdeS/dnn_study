@@ -28,6 +28,7 @@ PHASE_DIRS = [
     ("Phase 3 — Compensation", "phase_3_compensation_and_hybrids"),
     ("Phase 4 — Final Architecture", "phase_4_compression_and_final_architecture"),
     ("Phase 9 — PCAD Bypass Ablation", "phase_9_bypass_ablation"),
+    ("Phase 11 — Kernel Size Comparison", "phase_11_kernel_size_comparison"),
 ]
 
 PHASE_8_LABEL = "Phase 8 — Efficient ViT / Hybrid-Attention"
