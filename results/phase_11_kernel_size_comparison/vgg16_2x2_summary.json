@@ -95,7 +95,7 @@
   },
   "model_name": "vgg16_2x2",
   "mode": "fp32/qat/int8",
-  "epochs": null,
+  "epochs": 449,
   "epochs_used": 500,
   "epochs_budget": 500,
   "best_val_top1": 54.29,
