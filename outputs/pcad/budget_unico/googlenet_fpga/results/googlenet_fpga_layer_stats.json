@@ -1,0 +1,2143 @@
+{
+  "conv1.0": {
+    "type": "Conv2d",
+    "params": 864,
+    "macs": 3538944,
+    "weight_max_abs": 0.4037236273288727,
+    "weight_std": 0.1254916489124298,
+    "activation_in": {
+      "max": 2.640000104904175,
+      "p999": 2.640000104904175,
+      "p9999": 2.640000104904175
+    },
+    "activation_out": {
+      "max": 4.766594886779785,
+      "p999": 3.835200786590576,
+      "p9999": 4.488405704498291
+    },
+    "kernel_size": [
+      3,
+      3
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      1,
+      1
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 3,
+    "out_channels": 32
+  },
+  "conv1.3": {
+    "type": "Conv2d",
+    "params": 9216,
+    "macs": 37748736,
+    "weight_max_abs": 0.5921807885169983,
+    "weight_std": 0.07578170299530029,
+    "activation_in": {
+      "max": 9.543580055236816,
+      "p999": 4.183856010437012,
+      "p9999": 5.664153099060059
+    },
+    "activation_out": {
+      "max": 25.216629028320312,
+      "p999": 10.79275131225586,
+      "p9999": 16.231746673583984
+    },
+    "kernel_size": [
+      3,
+      3
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      1,
+      1
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 32,
+    "out_channels": 32
+  },
+  "conv1.6": {
+    "type": "Conv2d",
+    "params": 18432,
+    "macs": 75497472,
+    "weight_max_abs": 0.3552759885787964,
+    "weight_std": 0.0733051523566246,
+    "activation_in": {
+      "max": 8.451144218444824,
+      "p999": 3.007269859313965,
+      "p9999": 4.287618637084961
+    },
+    "activation_out": {
+      "max": 14.872223854064941,
+      "p999": 6.144360065460205,
+      "p9999": 8.085763931274414
+    },
+    "kernel_size": [
+      3,
+      3
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      1,
+      1
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 32,
+    "out_channels": 64
+  },
+  "conv2.conv": {
+    "type": "Conv2d",
+    "params": 4096,
+    "macs": 4194304,
+    "weight_max_abs": 0.29007819294929504,
+    "weight_std": 0.0646977573633194,
+    "activation_in": {
+      "max": 8.036831855773926,
+      "p999": 3.5590946674346924,
+      "p9999": 4.540323734283447
+    },
+    "activation_out": {
+      "max": 5.138147830963135,
+      "p999": 2.5259060859680176,
+      "p9999": 3.155534505844116
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 64,
+    "out_channels": 64
+  },
+  "conv3.conv": {
+    "type": "Conv2d",
+    "params": 110592,
+    "macs": 113246208,
+    "weight_max_abs": 0.46072423458099365,
+    "weight_std": 0.06389661133289337,
+    "activation_in": {
+      "max": 7.115403175354004,
+      "p999": 3.0839388370513916,
+      "p9999": 3.950681447982788
+    },
+    "activation_out": {
+      "max": 15.179309844970703,
+      "p999": 8.344895362854004,
+      "p9999": 9.905817031860352
+    },
+    "kernel_size": [
+      3,
+      3
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      1,
+      1
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 64,
+    "out_channels": 192
+  },
+  "inception3a.branch1.conv": {
+    "type": "Conv2d",
+    "params": 12288,
+    "macs": 3145728,
+    "weight_max_abs": 0.4003591239452362,
+    "weight_std": 0.06433328986167908,
+    "activation_in": {
+      "max": 7.934651851654053,
+      "p999": 3.851130962371826,
+      "p9999": 4.8395161628723145
+    },
+    "activation_out": {
+      "max": 12.339942932128906,
+      "p999": 6.408706188201904,
+      "p9999": 7.951192855834961
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 192,
+    "out_channels": 64
+  },
+  "inception3a.branch2.0.conv": {
+    "type": "Conv2d",
+    "params": 18432,
+    "macs": 4718592,
+    "weight_max_abs": 0.3315117359161377,
+    "weight_std": 0.06429585814476013,
+    "activation_in": {
+      "max": 7.934651851654053,
+      "p999": 3.842311143875122,
+      "p9999": 4.736245155334473
+    },
+    "activation_out": {
+      "max": 10.348163604736328,
+      "p999": 5.868961811065674,
+      "p9999": 7.139575004577637
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 192,
+    "out_channels": 96
+  },
+  "inception3a.branch2.1.conv": {
+    "type": "Conv2d",
+    "params": 110592,
+    "macs": 28311552,
+    "weight_max_abs": 0.42520013451576233,
+    "weight_std": 0.06399458646774292,
+    "activation_in": {
+      "max": 7.0855183601379395,
+      "p999": 3.259290933609009,
+      "p9999": 4.343740463256836
+    },
+    "activation_out": {
+      "max": 27.244516372680664,
+      "p999": 11.70540714263916,
+      "p9999": 15.16663646697998
+    },
+    "kernel_size": [
+      3,
+      3
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      1,
+      1
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 96,
+    "out_channels": 128
+  },
+  "inception3a.branch3.0.conv": {
+    "type": "Conv2d",
+    "params": 3072,
+    "macs": 786432,
+    "weight_max_abs": 0.29509130120277405,
+    "weight_std": 0.06444398313760757,
+    "activation_in": {
+      "max": 7.934651851654053,
+      "p999": 3.878889322280884,
+      "p9999": 4.800079822540283
+    },
+    "activation_out": {
+      "max": 9.836156845092773,
+      "p999": 6.453213691711426,
+      "p9999": 7.477689743041992
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 192,
+    "out_channels": 16
+  },
+  "inception3a.branch3.1.conv": {
+    "type": "Conv2d",
+    "params": 4608,
+    "macs": 1179648,
+    "weight_max_abs": 0.2781512439250946,
+    "weight_std": 0.06440751254558563,
+    "activation_in": {
+      "max": 6.7890543937683105,
+      "p999": 3.6909422874450684,
+      "p9999": 4.779199600219727
+    },
+    "activation_out": {
+      "max": 6.063353538513184,
+      "p999": 3.8297083377838135,
+      "p9999": 4.687912940979004
+    },
+    "kernel_size": [
+      3,
+      3
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      1,
+      1
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 16,
+    "out_channels": 32
+  },
+  "inception3a.branch4.1.conv": {
+    "type": "Conv2d",
+    "params": 6144,
+    "macs": 1572864,
+    "weight_max_abs": 0.40718549489974976,
+    "weight_std": 0.0648438110947609,
+    "activation_in": {
+      "max": 7.934651851654053,
+      "p999": 4.65506649017334,
+      "p9999": 5.525497913360596
+    },
+    "activation_out": {
+      "max": 14.362096786499023,
+      "p999": 11.585650444030762,
+      "p9999": 12.616802215576172
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 192,
+    "out_channels": 32
+  },
+  "inception3b.branch1.conv": {
+    "type": "Conv2d",
+    "params": 32768,
+    "macs": 8388608,
+    "weight_max_abs": 0.4199995994567871,
+    "weight_std": 0.0647072046995163,
+    "activation_in": {
+      "max": 6.319210052490234,
+      "p999": 3.1967241764068604,
+      "p9999": 4.114645004272461
+    },
+    "activation_out": {
+      "max": 8.937548637390137,
+      "p999": 4.568979263305664,
+      "p9999": 5.775491237640381
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 256,
+    "out_channels": 128
+  },
+  "inception3b.branch2.0.conv": {
+    "type": "Conv2d",
+    "params": 32768,
+    "macs": 8388608,
+    "weight_max_abs": 0.3596152663230896,
+    "weight_std": 0.0650164783000946,
+    "activation_in": {
+      "max": 6.319210052490234,
+      "p999": 3.215561628341675,
+      "p9999": 4.1276092529296875
+    },
+    "activation_out": {
+      "max": 8.541584014892578,
+      "p999": 4.4631571769714355,
+      "p9999": 5.398118019104004
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 256,
+    "out_channels": 128
+  },
+  "inception3b.branch2.1.conv": {
+    "type": "Conv2d",
+    "params": 221184,
+    "macs": 56623104,
+    "weight_max_abs": 0.3345645070075989,
+    "weight_std": 0.06388813257217407,
+    "activation_in": {
+      "max": 6.4575018882751465,
+      "p999": 3.0943949222564697,
+      "p9999": 3.977975845336914
+    },
+    "activation_out": {
+      "max": 23.304338455200195,
+      "p999": 14.433845520019531,
+      "p9999": 17.10053825378418
+    },
+    "kernel_size": [
+      3,
+      3
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      1,
+      1
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 128,
+    "out_channels": 192
+  },
+  "inception3b.branch3.0.conv": {
+    "type": "Conv2d",
+    "params": 8192,
+    "macs": 2097152,
+    "weight_max_abs": 0.42929843068122864,
+    "weight_std": 0.06601398438215256,
+    "activation_in": {
+      "max": 6.319210052490234,
+      "p999": 3.2000765800476074,
+      "p9999": 4.069447040557861
+    },
+    "activation_out": {
+      "max": 9.460845947265625,
+      "p999": 4.890432357788086,
+      "p9999": 6.2853312492370605
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 256,
+    "out_channels": 32
+  },
+  "inception3b.branch3.1.conv": {
+    "type": "Conv2d",
+    "params": 27648,
+    "macs": 7077888,
+    "weight_max_abs": 0.29072946310043335,
+    "weight_std": 0.06448599696159363,
+    "activation_in": {
+      "max": 6.955646514892578,
+      "p999": 3.4775891304016113,
+      "p9999": 4.467702865600586
+    },
+    "activation_out": {
+      "max": 9.175156593322754,
+      "p999": 5.052961826324463,
+      "p9999": 6.0084943771362305
+    },
+    "kernel_size": [
+      3,
+      3
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      1,
+      1
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 32,
+    "out_channels": 96
+  },
+  "inception3b.branch4.1.conv": {
+    "type": "Conv2d",
+    "params": 16384,
+    "macs": 4194304,
+    "weight_max_abs": 0.4999186098575592,
+    "weight_std": 0.06387173384428024,
+    "activation_in": {
+      "max": 6.319210052490234,
+      "p999": 3.9749927520751953,
+      "p9999": 4.884008407592773
+    },
+    "activation_out": {
+      "max": 13.183149337768555,
+      "p999": 9.401777267456055,
+      "p9999": 10.810606002807617
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 256,
+    "out_channels": 64
+  },
+  "inception4a.branch1.conv": {
+    "type": "Conv2d",
+    "params": 92160,
+    "macs": 5898240,
+    "weight_max_abs": 0.5467711687088013,
+    "weight_std": 0.06431252509355545,
+    "activation_in": {
+      "max": 7.717319965362549,
+      "p999": 3.6693336963653564,
+      "p9999": 4.561911582946777
+    },
+    "activation_out": {
+      "max": 23.222349166870117,
+      "p999": 12.016824722290039,
+      "p9999": 14.41345500946045
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 480,
+    "out_channels": 192
+  },
+  "inception4a.branch2.0.conv": {
+    "type": "Conv2d",
+    "params": 46080,
+    "macs": 2949120,
+    "weight_max_abs": 0.3613031804561615,
+    "weight_std": 0.06453939527273178,
+    "activation_in": {
+      "max": 7.717319965362549,
+      "p999": 3.685429334640503,
+      "p9999": 4.609331130981445
+    },
+    "activation_out": {
+      "max": 17.067272186279297,
+      "p999": 10.479153633117676,
+      "p9999": 12.240137100219727
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 480,
+    "out_channels": 96
+  },
+  "inception4a.branch2.1.conv": {
+    "type": "Conv2d",
+    "params": 179712,
+    "macs": 11501568,
+    "weight_max_abs": 0.309421569108963,
+    "weight_std": 0.06423486769199371,
+    "activation_in": {
+      "max": 9.172075271606445,
+      "p999": 3.6958751678466797,
+      "p9999": 4.850798606872559
+    },
+    "activation_out": {
+      "max": 21.342634201049805,
+      "p999": 10.785316467285156,
+      "p9999": 13.304971694946289
+    },
+    "kernel_size": [
+      3,
+      3
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      1,
+      1
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 96,
+    "out_channels": 208
+  },
+  "inception4a.branch3.0.conv": {
+    "type": "Conv2d",
+    "params": 7680,
+    "macs": 491520,
+    "weight_max_abs": 0.3620753884315491,
+    "weight_std": 0.06490252166986465,
+    "activation_in": {
+      "max": 7.717319965362549,
+      "p999": 3.6683297157287598,
+      "p9999": 4.619568347930908
+    },
+    "activation_out": {
+      "max": 15.603778839111328,
+      "p999": 11.693325996398926,
+      "p9999": 13.181982040405273
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 480,
+    "out_channels": 16
+  },
+  "inception4a.branch3.1.conv": {
+    "type": "Conv2d",
+    "params": 6912,
+    "macs": 442368,
+    "weight_max_abs": 0.2720976769924164,
+    "weight_std": 0.06445404142141342,
+    "activation_in": {
+      "max": 6.2672810554504395,
+      "p999": 3.781301259994507,
+      "p9999": 4.869259834289551
+    },
+    "activation_out": {
+      "max": 7.592170238494873,
+      "p999": 3.9682374000549316,
+      "p9999": 5.190348148345947
+    },
+    "kernel_size": [
+      3,
+      3
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      1,
+      1
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 16,
+    "out_channels": 48
+  },
+  "inception4a.branch4.1.conv": {
+    "type": "Conv2d",
+    "params": 30720,
+    "macs": 1966080,
+    "weight_max_abs": 0.4879037141799927,
+    "weight_std": 0.06502337008714676,
+    "activation_in": {
+      "max": 7.717319965362549,
+      "p999": 4.446213722229004,
+      "p9999": 5.385968208312988
+    },
+    "activation_out": {
+      "max": 28.07350730895996,
+      "p999": 22.08285140991211,
+      "p9999": 24.581066131591797
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 480,
+    "out_channels": 64
+  },
+  "inception4b.branch1.conv": {
+    "type": "Conv2d",
+    "params": 81920,
+    "macs": 5242880,
+    "weight_max_abs": 0.48196956515312195,
+    "weight_std": 0.06490404158830643,
+    "activation_in": {
+      "max": 8.336723327636719,
+      "p999": 3.215097188949585,
+      "p9999": 4.257106304168701
+    },
+    "activation_out": {
+      "max": 14.173582077026367,
+      "p999": 8.596672058105469,
+      "p9999": 10.471381187438965
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 512,
+    "out_channels": 160
+  },
+  "inception4b.branch2.0.conv": {
+    "type": "Conv2d",
+    "params": 57344,
+    "macs": 3670016,
+    "weight_max_abs": 0.39030006527900696,
+    "weight_std": 0.06461385637521744,
+    "activation_in": {
+      "max": 8.336723327636719,
+      "p999": 3.2252049446105957,
+      "p9999": 4.201287746429443
+    },
+    "activation_out": {
+      "max": 11.165008544921875,
+      "p999": 6.6438140869140625,
+      "p9999": 8.109153747558594
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 512,
+    "out_channels": 112
+  },
+  "inception4b.branch2.1.conv": {
+    "type": "Conv2d",
+    "params": 225792,
+    "macs": 14450688,
+    "weight_max_abs": 0.32377493381500244,
+    "weight_std": 0.06409961730241776,
+    "activation_in": {
+      "max": 7.840433120727539,
+      "p999": 3.465985059738159,
+      "p9999": 4.63954496383667
+    },
+    "activation_out": {
+      "max": 23.26345443725586,
+      "p999": 12.440459251403809,
+      "p9999": 14.940651893615723
+    },
+    "kernel_size": [
+      3,
+      3
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      1,
+      1
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 112,
+    "out_channels": 224
+  },
+  "inception4b.branch3.0.conv": {
+    "type": "Conv2d",
+    "params": 12288,
+    "macs": 786432,
+    "weight_max_abs": 0.357179194688797,
+    "weight_std": 0.06467423588037491,
+    "activation_in": {
+      "max": 8.336723327636719,
+      "p999": 3.22389817237854,
+      "p9999": 4.20591926574707
+    },
+    "activation_out": {
+      "max": 9.817485809326172,
+      "p999": 5.999178886413574,
+      "p9999": 7.238785266876221
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 512,
+    "out_channels": 24
+  },
+  "inception4b.branch3.1.conv": {
+    "type": "Conv2d",
+    "params": 13824,
+    "macs": 884736,
+    "weight_max_abs": 0.26159512996673584,
+    "weight_std": 0.06469478458166122,
+    "activation_in": {
+      "max": 7.042660236358643,
+      "p999": 3.541853666305542,
+      "p9999": 4.74030876159668
+    },
+    "activation_out": {
+      "max": 8.225869178771973,
+      "p999": 4.593020439147949,
+      "p9999": 5.7991743087768555
+    },
+    "kernel_size": [
+      3,
+      3
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      1,
+      1
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 24,
+    "out_channels": 64
+  },
+  "inception4b.branch4.1.conv": {
+    "type": "Conv2d",
+    "params": 32768,
+    "macs": 2097152,
+    "weight_max_abs": 0.45491963624954224,
+    "weight_std": 0.06404189020395279,
+    "activation_in": {
+      "max": 8.336723327636719,
+      "p999": 3.9590277671813965,
+      "p9999": 5.062040328979492
+    },
+    "activation_out": {
+      "max": 26.2235164642334,
+      "p999": 16.463045120239258,
+      "p9999": 19.143909454345703
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 512,
+    "out_channels": 64
+  },
+  "inception4c.branch1.conv": {
+    "type": "Conv2d",
+    "params": 65536,
+    "macs": 4194304,
+    "weight_max_abs": 0.4384109377861023,
+    "weight_std": 0.06534089148044586,
+    "activation_in": {
+      "max": 7.694079875946045,
+      "p999": 3.3171091079711914,
+      "p9999": 4.33701753616333
+    },
+    "activation_out": {
+      "max": 13.744083404541016,
+      "p999": 8.503873825073242,
+      "p9999": 9.899703025817871
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 512,
+    "out_channels": 128
+  },
+  "inception4c.branch2.0.conv": {
+    "type": "Conv2d",
+    "params": 65536,
+    "macs": 4194304,
+    "weight_max_abs": 0.3224087655544281,
+    "weight_std": 0.0652591809630394,
+    "activation_in": {
+      "max": 7.694079875946045,
+      "p999": 3.3007867336273193,
+      "p9999": 4.227961540222168
+    },
+    "activation_out": {
+      "max": 15.177350997924805,
+      "p999": 7.932311058044434,
+      "p9999": 10.253575325012207
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 512,
+    "out_channels": 128
+  },
+  "inception4c.branch2.1.conv": {
+    "type": "Conv2d",
+    "params": 294912,
+    "macs": 18874368,
+    "weight_max_abs": 0.348671019077301,
+    "weight_std": 0.06386679410934448,
+    "activation_in": {
+      "max": 8.514434814453125,
+      "p999": 3.4443862438201904,
+      "p9999": 4.471109390258789
+    },
+    "activation_out": {
+      "max": 44.293819427490234,
+      "p999": 19.111661911010742,
+      "p9999": 24.854177474975586
+    },
+    "kernel_size": [
+      3,
+      3
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      1,
+      1
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 128,
+    "out_channels": 256
+  },
+  "inception4c.branch3.0.conv": {
+    "type": "Conv2d",
+    "params": 12288,
+    "macs": 786432,
+    "weight_max_abs": 0.3232606053352356,
+    "weight_std": 0.06535744667053223,
+    "activation_in": {
+      "max": 7.694079875946045,
+      "p999": 3.3264756202697754,
+      "p9999": 4.15720272064209
+    },
+    "activation_out": {
+      "max": 11.972694396972656,
+      "p999": 7.589064121246338,
+      "p9999": 9.110443115234375
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 512,
+    "out_channels": 24
+  },
+  "inception4c.branch3.1.conv": {
+    "type": "Conv2d",
+    "params": 13824,
+    "macs": 884736,
+    "weight_max_abs": 0.25452739000320435,
+    "weight_std": 0.06508134305477142,
+    "activation_in": {
+      "max": 7.5693206787109375,
+      "p999": 3.7018821239471436,
+      "p9999": 4.970036506652832
+    },
+    "activation_out": {
+      "max": 10.745692253112793,
+      "p999": 5.768904685974121,
+      "p9999": 7.581814765930176
+    },
+    "kernel_size": [
+      3,
+      3
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      1,
+      1
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 24,
+    "out_channels": 64
+  },
+  "inception4c.branch4.1.conv": {
+    "type": "Conv2d",
+    "params": 32768,
+    "macs": 2097152,
+    "weight_max_abs": 0.3336959183216095,
+    "weight_std": 0.06546609848737717,
+    "activation_in": {
+      "max": 7.694079875946045,
+      "p999": 4.087677478790283,
+      "p9999": 5.173088073730469
+    },
+    "activation_out": {
+      "max": 18.71137046813965,
+      "p999": 13.310426712036133,
+      "p9999": 15.089849472045898
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 512,
+    "out_channels": 64
+  },
+  "inception4d.branch1.conv": {
+    "type": "Conv2d",
+    "params": 57344,
+    "macs": 3670016,
+    "weight_max_abs": 0.4590461254119873,
+    "weight_std": 0.06404200196266174,
+    "activation_in": {
+      "max": 8.441146850585938,
+      "p999": 3.3900413513183594,
+      "p9999": 4.481936931610107
+    },
+    "activation_out": {
+      "max": 12.781891822814941,
+      "p999": 7.968899250030518,
+      "p9999": 9.484445571899414
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 512,
+    "out_channels": 112
+  },
+  "inception4d.branch2.0.conv": {
+    "type": "Conv2d",
+    "params": 73728,
+    "macs": 4718592,
+    "weight_max_abs": 0.36610516905784607,
+    "weight_std": 0.06515318900346756,
+    "activation_in": {
+      "max": 8.441146850585938,
+      "p999": 3.4266486167907715,
+      "p9999": 4.395545482635498
+    },
+    "activation_out": {
+      "max": 14.88052749633789,
+      "p999": 7.999922275543213,
+      "p9999": 9.899213790893555
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 512,
+    "out_channels": 144
+  },
+  "inception4d.branch2.1.conv": {
+    "type": "Conv2d",
+    "params": 373248,
+    "macs": 23887872,
+    "weight_max_abs": 0.35825392603874207,
+    "weight_std": 0.06457124650478363,
+    "activation_in": {
+      "max": 9.39793586730957,
+      "p999": 3.551980495452881,
+      "p9999": 4.749039173126221
+    },
+    "activation_out": {
+      "max": 44.99351501464844,
+      "p999": 21.502710342407227,
+      "p9999": 27.490697860717773
+    },
+    "kernel_size": [
+      3,
+      3
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      1,
+      1
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 144,
+    "out_channels": 288
+  },
+  "inception4d.branch3.0.conv": {
+    "type": "Conv2d",
+    "params": 16384,
+    "macs": 1048576,
+    "weight_max_abs": 0.3083593547344208,
+    "weight_std": 0.06490474194288254,
+    "activation_in": {
+      "max": 8.441146850585938,
+      "p999": 3.4183731079101562,
+      "p9999": 4.448154926300049
+    },
+    "activation_out": {
+      "max": 14.763467788696289,
+      "p999": 8.021286964416504,
+      "p9999": 10.148262977600098
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 512,
+    "out_channels": 32
+  },
+  "inception4d.branch3.1.conv": {
+    "type": "Conv2d",
+    "params": 18432,
+    "macs": 1179648,
+    "weight_max_abs": 0.2983645796775818,
+    "weight_std": 0.06523865461349487,
+    "activation_in": {
+      "max": 7.615416049957275,
+      "p999": 3.752319812774658,
+      "p9999": 5.101754188537598
+    },
+    "activation_out": {
+      "max": 12.632932662963867,
+      "p999": 6.911407947540283,
+      "p9999": 8.842283248901367
+    },
+    "kernel_size": [
+      3,
+      3
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      1,
+      1
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 32,
+    "out_channels": 64
+  },
+  "inception4d.branch4.1.conv": {
+    "type": "Conv2d",
+    "params": 32768,
+    "macs": 2097152,
+    "weight_max_abs": 0.4531978666782379,
+    "weight_std": 0.06598678976297379,
+    "activation_in": {
+      "max": 8.441146850585938,
+      "p999": 4.223464012145996,
+      "p9999": 5.411262512207031
+    },
+    "activation_out": {
+      "max": 22.319847106933594,
+      "p999": 15.433475494384766,
+      "p9999": 17.321996688842773
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 512,
+    "out_channels": 64
+  },
+  "inception4e.branch1.conv": {
+    "type": "Conv2d",
+    "params": 135168,
+    "macs": 8650752,
+    "weight_max_abs": 0.3404465615749359,
+    "weight_std": 0.06577092409133911,
+    "activation_in": {
+      "max": 9.710721015930176,
+      "p999": 3.414931535720825,
+      "p9999": 4.4803466796875
+    },
+    "activation_out": {
+      "max": 15.16943645477295,
+      "p999": 8.184586524963379,
+      "p9999": 10.144327163696289
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 528,
+    "out_channels": 256
+  },
+  "inception4e.branch2.0.conv": {
+    "type": "Conv2d",
+    "params": 84480,
+    "macs": 5406720,
+    "weight_max_abs": 0.3048887550830841,
+    "weight_std": 0.06515715271234512,
+    "activation_in": {
+      "max": 9.710721015930176,
+      "p999": 3.4053428173065186,
+      "p9999": 4.4501190185546875
+    },
+    "activation_out": {
+      "max": 15.856684684753418,
+      "p999": 8.229265213012695,
+      "p9999": 10.506969451904297
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 528,
+    "out_channels": 160
+  },
+  "inception4e.branch2.1.conv": {
+    "type": "Conv2d",
+    "params": 460800,
+    "macs": 29491200,
+    "weight_max_abs": 0.3869570195674896,
+    "weight_std": 0.06577353179454803,
+    "activation_in": {
+      "max": 7.909897804260254,
+      "p999": 3.4140512943267822,
+      "p9999": 4.544681072235107
+    },
+    "activation_out": {
+      "max": 34.59988784790039,
+      "p999": 18.34520149230957,
+      "p9999": 22.00042724609375
+    },
+    "kernel_size": [
+      3,
+      3
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      1,
+      1
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 160,
+    "out_channels": 320
+  },
+  "inception4e.branch3.0.conv": {
+    "type": "Conv2d",
+    "params": 16896,
+    "macs": 1081344,
+    "weight_max_abs": 0.35857677459716797,
+    "weight_std": 0.06508441269397736,
+    "activation_in": {
+      "max": 9.710721015930176,
+      "p999": 3.3779866695404053,
+      "p9999": 4.4590935707092285
+    },
+    "activation_out": {
+      "max": 13.612935066223145,
+      "p999": 8.528582572937012,
+      "p9999": 10.15719223022461
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 528,
+    "out_channels": 32
+  },
+  "inception4e.branch3.1.conv": {
+    "type": "Conv2d",
+    "params": 36864,
+    "macs": 2359296,
+    "weight_max_abs": 0.28356245160102844,
+    "weight_std": 0.06642201542854309,
+    "activation_in": {
+      "max": 7.910133361816406,
+      "p999": 3.4272358417510986,
+      "p9999": 4.534090042114258
+    },
+    "activation_out": {
+      "max": 13.24967098236084,
+      "p999": 6.875040531158447,
+      "p9999": 8.546977043151855
+    },
+    "kernel_size": [
+      3,
+      3
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      1,
+      1
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 32,
+    "out_channels": 128
+  },
+  "inception4e.branch4.1.conv": {
+    "type": "Conv2d",
+    "params": 67584,
+    "macs": 4325376,
+    "weight_max_abs": 0.6581904888153076,
+    "weight_std": 0.06550101935863495,
+    "activation_in": {
+      "max": 9.710721015930176,
+      "p999": 4.255557537078857,
+      "p9999": 5.488181114196777
+    },
+    "activation_out": {
+      "max": 22.487688064575195,
+      "p999": 13.91731071472168,
+      "p9999": 16.50016975402832
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 528,
+    "out_channels": 128
+  },
+  "inception5a.branch1.conv": {
+    "type": "Conv2d",
+    "params": 212992,
+    "macs": 3407872,
+    "weight_max_abs": 0.4049510359764099,
+    "weight_std": 0.06517407298088074,
+    "activation_in": {
+      "max": 9.402400016784668,
+      "p999": 3.8356075286865234,
+      "p9999": 5.005161762237549
+    },
+    "activation_out": {
+      "max": 21.79827117919922,
+      "p999": 14.132725715637207,
+      "p9999": 16.735387802124023
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 832,
+    "out_channels": 256
+  },
+  "inception5a.branch2.0.conv": {
+    "type": "Conv2d",
+    "params": 133120,
+    "macs": 2129920,
+    "weight_max_abs": 0.3911035358905792,
+    "weight_std": 0.06569254398345947,
+    "activation_in": {
+      "max": 9.402400016784668,
+      "p999": 3.8256616592407227,
+      "p9999": 4.8524627685546875
+    },
+    "activation_out": {
+      "max": 25.434309005737305,
+      "p999": 16.915454864501953,
+      "p9999": 20.09660530090332
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 832,
+    "out_channels": 160
+  },
+  "inception5a.branch2.1.conv": {
+    "type": "Conv2d",
+    "params": 460800,
+    "macs": 7372800,
+    "weight_max_abs": 0.36783352494239807,
+    "weight_std": 0.06649374961853027,
+    "activation_in": {
+      "max": 7.005465984344482,
+      "p999": 3.324092149734497,
+      "p9999": 4.495635509490967
+    },
+    "activation_out": {
+      "max": 21.728395462036133,
+      "p999": 12.260416030883789,
+      "p9999": 15.400467872619629
+    },
+    "kernel_size": [
+      3,
+      3
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      1,
+      1
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 160,
+    "out_channels": 320
+  },
+  "inception5a.branch3.0.conv": {
+    "type": "Conv2d",
+    "params": 26624,
+    "macs": 425984,
+    "weight_max_abs": 0.34127819538116455,
+    "weight_std": 0.06540451943874359,
+    "activation_in": {
+      "max": 9.402400016784668,
+      "p999": 3.846993923187256,
+      "p9999": 5.008228778839111
+    },
+    "activation_out": {
+      "max": 24.797073364257812,
+      "p999": 19.58664894104004,
+      "p9999": 22.370084762573242
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 832,
+    "out_channels": 32
+  },
+  "inception5a.branch3.1.conv": {
+    "type": "Conv2d",
+    "params": 36864,
+    "macs": 589824,
+    "weight_max_abs": 0.2709881365299225,
+    "weight_std": 0.06687726825475693,
+    "activation_in": {
+      "max": 5.433048725128174,
+      "p999": 3.4291913509368896,
+      "p9999": 4.298723220825195
+    },
+    "activation_out": {
+      "max": 9.273581504821777,
+      "p999": 4.839107990264893,
+      "p9999": 6.6654791831970215
+    },
+    "kernel_size": [
+      3,
+      3
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      1,
+      1
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 32,
+    "out_channels": 128
+  },
+  "inception5a.branch4.1.conv": {
+    "type": "Conv2d",
+    "params": 106496,
+    "macs": 1703936,
+    "weight_max_abs": 0.49099022150039673,
+    "weight_std": 0.06705234199762344,
+    "activation_in": {
+      "max": 9.402400016784668,
+      "p999": 4.695751667022705,
+      "p9999": 5.799818992614746
+    },
+    "activation_out": {
+      "max": 23.871919631958008,
+      "p999": 17.354074478149414,
+      "p9999": 19.711149215698242
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 832,
+    "out_channels": 128
+  },
+  "inception5b.branch1.conv": {
+    "type": "Conv2d",
+    "params": 319488,
+    "macs": 5111808,
+    "weight_max_abs": 0.3577631115913391,
+    "weight_std": 0.06391503661870956,
+    "activation_in": {
+      "max": 6.135740280151367,
+      "p999": 2.9895823001861572,
+      "p9999": 3.948129653930664
+    },
+    "activation_out": {
+      "max": 9.200679779052734,
+      "p999": 4.634311676025391,
+      "p9999": 5.706243515014648
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 832,
+    "out_channels": 384
+  },
+  "inception5b.branch2.0.conv": {
+    "type": "Conv2d",
+    "params": 159744,
+    "macs": 2555904,
+    "weight_max_abs": 0.31471937894821167,
+    "weight_std": 0.06684447079896927,
+    "activation_in": {
+      "max": 6.135740280151367,
+      "p999": 2.9826362133026123,
+      "p9999": 3.976292848587036
+    },
+    "activation_out": {
+      "max": 11.479695320129395,
+      "p999": 6.81735897064209,
+      "p9999": 8.256980895996094
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 832,
+    "out_channels": 192
+  },
+  "inception5b.branch2.1.conv": {
+    "type": "Conv2d",
+    "params": 663552,
+    "macs": 10616832,
+    "weight_max_abs": 0.3159763813018799,
+    "weight_std": 0.06531921774148941,
+    "activation_in": {
+      "max": 6.132205963134766,
+      "p999": 2.9159622192382812,
+      "p9999": 3.8562941551208496
+    },
+    "activation_out": {
+      "max": 17.49817657470703,
+      "p999": 9.689800262451172,
+      "p9999": 12.18144416809082
+    },
+    "kernel_size": [
+      3,
+      3
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      1,
+      1
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 192,
+    "out_channels": 384
+  },
+  "inception5b.branch3.0.conv": {
+    "type": "Conv2d",
+    "params": 39936,
+    "macs": 638976,
+    "weight_max_abs": 0.28970372676849365,
+    "weight_std": 0.0673057958483696,
+    "activation_in": {
+      "max": 6.135740280151367,
+      "p999": 2.961024284362793,
+      "p9999": 3.9588394165039062
+    },
+    "activation_out": {
+      "max": 9.905821800231934,
+      "p999": 6.271830081939697,
+      "p9999": 7.652696132659912
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 832,
+    "out_channels": 48
+  },
+  "inception5b.branch3.1.conv": {
+    "type": "Conv2d",
+    "params": 55296,
+    "macs": 884736,
+    "weight_max_abs": 0.3060739040374756,
+    "weight_std": 0.06506524235010147,
+    "activation_in": {
+      "max": 5.512051582336426,
+      "p999": 3.094996690750122,
+      "p9999": 4.066036701202393
+    },
+    "activation_out": {
+      "max": 7.797454833984375,
+      "p999": 4.309134006500244,
+      "p9999": 5.504773139953613
+    },
+    "kernel_size": [
+      3,
+      3
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      1,
+      1
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 48,
+    "out_channels": 128
+  },
+  "inception5b.branch4.1.conv": {
+    "type": "Conv2d",
+    "params": 106496,
+    "macs": 1703936,
+    "weight_max_abs": 0.30251798033714294,
+    "weight_std": 0.06596151739358902,
+    "activation_in": {
+      "max": 6.135740280151367,
+      "p999": 3.6102654933929443,
+      "p9999": 4.601986885070801
+    },
+    "activation_out": {
+      "max": 8.91122055053711,
+      "p999": 5.531411170959473,
+      "p9999": 6.545876502990723
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 832,
+    "out_channels": 128
+  },
+  "fc": {
+    "type": "Linear",
+    "params": 205000,
+    "macs": 204800,
+    "weight_max_abs": 0.5195502638816833,
+    "weight_std": 0.07899052649736404,
+    "activation_in": {
+      "max": 4.145760536193848,
+      "p999": 2.283144235610962,
+      "p9999": 2.9458560943603516
+    },
+    "activation_out": {
+      "max": 15.3534517288208,
+      "p999": 13.547986030578613,
+      "p9999": 14.620622634887695
+    }
+  }
+}
