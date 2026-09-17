@@ -117,6 +117,38 @@ register_model("alexnet_tv_mixed_early3", partial(AlexNetTV, pretrained=False, k
                fuse_map=FUSE_MAP_ALEXNET_TV, fuse_root_attr="features", lr=3e-4)
 register_model("alexnet_tv_mixed_early2", partial(AlexNetTV, pretrained=False, kernel_size="mixed_early2"),
                fuse_map=FUSE_MAP_ALEXNET_TV, fuse_root_attr="features", lr=3e-4)
+
+# Phase 11 head/BN ablation (configs/experiments/phase_11_head_bn_ablation.yaml): does GAP vs FC
+# head, or BatchNorm vs none, explain the gap between the mixed-kernel/stacked-3x3 models above? A
+# head or BN swap only changes classifier/features cosmetically -- `features`' Conv-ReLU indices
+# are unchanged for a head-only swap, so those reuse the base model's own fuse_map; a BN swap
+# changes indices, so those use find_fuse_groups on a throwaway instance instead of hand-counting.
+register_model("alexnet_tv_mixed_alt_gap", partial(AlexNetTV, pretrained=False, kernel_size="mixed_alt", head="gap"),
+               fuse_map=FUSE_MAP_ALEXNET_TV, fuse_root_attr="features", lr=3e-4)
+register_model("alexnet_tv_mixed_early3_gap", partial(AlexNetTV, pretrained=False, kernel_size="mixed_early3", head="gap"),
+               fuse_map=FUSE_MAP_ALEXNET_TV, fuse_root_attr="features", lr=3e-4)
+register_model("alexnet_mixed_fc", partial(AlexNetMixed, head="fc"),
+               fuse_map=FUSE_MAP_ALEXNET_TV, fuse_root_attr="features", lr=3e-4)
+register_model("alexnet_mixed_bn", partial(AlexNetMixed, batch_norm=True),
+               fuse_map=find_fuse_groups(AlexNetMixed(batch_norm=True)), lr=3e-4)
+register_model("alexnet_mixed_fc_bn", partial(AlexNetMixed, head="fc", batch_norm=True),
+               fuse_map=find_fuse_groups(AlexNetMixed(head="fc", batch_norm=True)), lr=3e-4)
+register_model("alexnet_stacked_gap", partial(AlexNetStacked, head="gap"),
+               fuse_map=FUSE_MAP_STACKED, fuse_root_attr="features", lr=1e-3)
+# No BN -> features compresses to plain Conv-ReLU pairs (BN entries drop out, shifting every
+# index after them); hand-counted once here rather than reusing find_fuse_groups, which only
+# detects Conv-(BN-)ReLU and would return [] with batch_norm=False.
+FUSE_MAP_STACKED_NOBN = [
+    ["0", "1"], ["2", "3"],
+    ["5", "6"], ["7", "8"],
+    ["10", "11"], ["12", "13"],
+    ["14", "15"], ["16", "17"],
+    ["18", "19"], ["20", "21"],
+]
+register_model("alexnet_stacked_fc_nobn", partial(AlexNetStacked, batch_norm=False),
+               fuse_map=FUSE_MAP_STACKED_NOBN, fuse_root_attr="features", lr=1e-3)
+register_model("alexnet_stacked_gap_nobn", partial(AlexNetStacked, head="gap", batch_norm=False),
+               fuse_map=FUSE_MAP_STACKED_NOBN, fuse_root_attr="features", lr=1e-3)
 # torchvision's VGG classifier: Linear(0)-ReLU(1)-Dropout(2)-Linear(3)-ReLU(4)-Dropout(5)-Linear(6,
 # logits). Fuse the two Linear-ReLU pairs (see prepare_qat_model's classifier_fuse_pairs docstring
 # for why vgg16 needs this); classifier.6 has no ReLU after it and stays a standalone quantized Linear.
@@ -139,6 +171,10 @@ register_model(
     fuse_root_attr="features",
     lr=3e-4,
 )
+# Phase 11 head/BN ablation FC twin (configs/experiments/phase_11_head_bn_ablation.yaml) --
+# features indices are unchanged by the head swap, so this reuses the GAP variant's fuse_map.
+register_model("alexnet_smallkernel_fc", partial(AlexNetSmallKernel, head="fc"),
+               fuse_map=FUSE_MAP_ALEXNET_SMALLKERNEL, fuse_root_attr="features", lr=3e-4)
 # models/compensation.py — exists since the Phase 2 QAT-drop investigation, never
 # trained (Winograd-FPGA plano_avaliacao_redes_winograd.md Fase 1). No `features`
 # Sequential (named conv/bn/relu attrs instead), so find_fuse_groups like the

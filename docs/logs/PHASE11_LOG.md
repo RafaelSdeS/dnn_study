@@ -197,3 +197,121 @@ in `stage_list` at all; the two affected summaries were corrected from their
 still-intact `checkpoints/*_meta.json` sidecars. Unrelated to the
 classifier-fusion/observer-freeze bug above — a reporting bug, not a training
 one.
+
+## Finding — alexnet_tv_mixed_early2's FP32 stage collapses to random-guess (2026-09-17, job 822065)
+
+`phase_11_mixed_kernel_comparison.yaml`'s sweep (8 models, jobs 822062-822069)
+completed 7/8 cleanly. `alexnet_tv_mixed_early2` (2x2 kernels on the first 3
+conv layers, 3x3 on the last 2 — see `_ALEXNET_KERNEL_SPECS` in
+`models/baselines.py`) never learned: `val_loss` locked at `ln(200)=5.298` and
+`val_acc` at chance (~0.3%) from epoch 1 through the full 500-epoch FP32
+budget, LR decayed to 0, no recovery.
+
+This is the same "no-BN, from-scratch net stuck at ln(200)" pattern as
+`vgg16_original`'s QAT collapse above and the plain-VGG16 FP32 stall noted in
+CLAUDE.md — `AlexNetTV` has no BatchNorm and `alexnet_tv_mixed_early2` trains
+from scratch (`pretrained=False`), so a bad random init can saturate every
+ReLU from step 1 with nothing to rescale activations and let it escape.
+~~Seed-luck, not an architectural property.~~ **First diagnosis was wrong** —
+see the next section. The retry at `seed: 43` (job 822325) collapsed
+identically, which ruled seed luck out. The dead run's checkpoints were moved
+aside to `alexnet_tv_mixed_early2_dead_seed42/` (kept for provenance, same
+treatment as `vgg16_original` above) because `scripts/train.py` skips FP32
+training whenever `{model}_best.pth` already exists — resubmitting into the
+same directory without moving the dead checkpoint out would have skipped
+straight to QAT on the collapsed FP32 weights.
+
+## Root cause — torchvision's AlexNet ships no weight init (2026-09-17)
+
+Reproduced locally against the real data pipeline (Tiny ImageNet, same
+AMP/AdamW/label-smoothing/wd as the protocol). The result that broke the seed
+theory: **`mixed_early3` died locally at seed 42 while `mixed_early2` trained
+fine** — the exact inverse of PCAD. Which model dies is a coin flip, so it is
+a property of the family, not of a kernel layout.
+
+The mechanism, measured:
+
+1. `torchvision.models.AlexNet` defines **no weight initialization at all**
+   (verified by source inspection), so every conv falls back to PyTorch's
+   `nn.Conv2d` default, `kaiming_uniform_(a=sqrt(5))` → `std=sqrt(1/(3*fan_in))`.
+   That is `sqrt(6)` ≈ 2.45x smaller per layer than He, and it compounds: a
+   from-scratch `AlexNetTV` produces logits with std ≈ 0.01.
+2. Those near-zero logits put the net *on* the `loss = ln(200)` plateau from
+   step 0, where the gradient reaching conv0 is ~1e-4 (measured).
+3. Adam normalizes that tiny, noisy gradient into full-size `lr` steps — a
+   random walk. The dead-ReLU fraction then creeps up monotonically
+   (measured: 69% → 77% over one epoch).
+4. With no BatchNorm to rescale, 100% dead ReLUs is an **absorbing state**:
+   conv0's gradient hits *exactly* `0.00e+00` (measured), and from then on only
+   weight decay acts, so the loss stays pinned at `ln(200)` forever.
+
+Every run is therefore a race between escaping the plateau and ReLU death.
+`alexnet_tv_scratch/3x3/2x2/mixed_alt/mixed_early3` won that race on PCAD; the
+suspiciously flat 23.9–27.5% band they all landed in is consistent with having
+spent a long time on the plateau first. torchvision's **VGG** never hits any of
+this because its constructor *does* apply He init — which is exactly why
+`vgg16` trains from scratch here (47.71%) while the AlexNetTV family is a coin
+flip, and why CLAUDE.md's plain no-BN VGG16 note ("stuck at ln(200) for 22
+epochs") is the same phenomenon one notch weaker.
+
+**Fix:** `models/baselines.py:he_init`, applied when `pretrained=False` (never
+over pretrained weights — `alexnet_tv`'s conv0 was verified bit-identical to
+torchvision's after the change). Same for the hand-written no-BN CNNs in
+`models/alexnet_variants.py` (`AlexNetStacked`/`AlexNetMixed`/
+`AlexNetSmallKernel`), which had no init either. It is torchvision VGG's recipe
+verbatim: `kaiming_normal_(fan_out, relu)` on convs, `normal_(0, 0.01)` on
+Linears. (He on the Linears too was tried and reverted — it does not rescue the
+`alexnet_stacked_fc_nobn` case it was meant for, see below, and it inflates the
+initial logits from std 0.08 to 3.77.)
+
+Validated on the real data pipeline at seed 42 — `alexnet_tv_mixed_early2`, the
+model that died twice on PCAD, escapes the plateau by step ~600 and reaches
+loss 4.92 after 2 epochs (vs. pinned at 5.2989 before), with conv0's gradient at
+~1.3 instead of ~1e-4 and dead ReLUs flat at ~78% instead of climbing.
+`mixed_early3` likewise recovers.
+
+**Scope note:** BN variants are insensitive to this (BN normalizes the previous
+layer's scale away), so the fix changes only the no-BN cells — the broken ones.
+But every from-scratch `AlexNetTV`-family result already in
+`results/phase_11_kernel_size_comparison/` and
+`phase_11_mixed_kernel_comparison` predates it and carries the old init.
+
+## Finding — no-BN + 3-layer-FC head is a second, harder case (2026-09-17)
+
+`alexnet_stacked_fc_nobn` (a head/BN ablation cell added the same day: 10 convs,
+no BN, FC head) hit the identical `ln(200)` lock on PCAD — 27 epochs at 0.31%
+(job 822332, cancelled). He init on the convs alone does **not** rescue it: the
+forward signal is healthy (activation std ~0.22–0.30 through all 10 convs,
+measured) but the gradient dies on the way back through the FC head. Its
+siblings isolate the two causes exactly — `alexnet_stacked` (same convs, *with*
+BN) and `alexnet_stacked_gap_nobn` (same convs, no BN, but a *single* Linear)
+both train fine. So depth alone is fine and no-BN alone is fine; it is no-BN
+*and* a 3-layer FC head together that fails. Tried and rejected: He on the
+Linears as well (conv0's gradient still reaches exactly 0, by step 700, and it
+stays there for 4 full epochs — measured), and larger/Xavier classifier inits
+(same plateau). This looks like the head/BN ablation's actual answer rather than
+a bug to paper over: BN's role in this architecture family is what makes the
+deep FC variant trainable at all. Treat that cell as "does not train" unless
+the protocol itself changes (warmup, lower LR, or BN).
+
+## Rerun after the init fix (2026-09-17, jobs 822344-822360)
+
+Everything trained from scratch in the AlexNet family predates `he_init`, so it
+was resubmitted rather than kept. Old outputs are preserved under
+`outputs/pcad/archive_old_init/<experiment>/<model>/` — moved, not deleted,
+because `scripts/train.py` skips the FP32 stage whenever `{model}_best.pth`
+already exists and would otherwise have run QAT straight off the old weights.
+
+| What | Jobs | Note |
+|------|------|------|
+| `alexnet_tv_mixed_early2` | 822344 | the originally broken model |
+| `phase_11_head_bn_ablation`, all 11 cells | 822345-822355 | restarted from scratch; `alexnet_mixed`/`alexnet_stacked` added as reference cells so all 8 factorial cells share one init |
+| `alexnet_tv_scratch`/`_3x3`/`_2x2` | 822356-822358 | `phase_11_kernel_size_comparison` |
+| `alexnet_tv_mixed_alt`/`_early3` | 822359-822360 | `phase_11_mixed_kernel_comparison` |
+
+`vgg16`/`vgg16_2x2` are untouched: torchvision's VGG already applied He init, so
+they never had the bug — they are the control that made it visible.
+
+**Not yet updated:** the curated `results/phase_11_*` trees, the cross-phase
+rollup and `report/ic_report.tex` still carry the pre-fix numbers (the 23.9–27.5%
+band). Re-aggregate once these land.

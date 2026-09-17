@@ -1,0 +1,12 @@
+# Retry of alexnet_tv_mixed_early2 from phase_11_mixed_kernel_comparison.yaml, which died twice
+# (jobs 822065 seed 42, 822325 seed 43) with val_loss locked at ln(200) for the whole FP32 budget.
+# Root cause was never the seed: torchvision's AlexNet defines no weight init, so a from-scratch
+# AlexNetTV starts on the ln(num_classes) plateau and races ReLU death -- fixed in
+# models/baselines.py:he_init (docs/logs/PHASE11_LOG.md, 2026-09-17). Protocol is therefore
+# identical to the parent experiment, same seed 42; only the model list differs, and the same
+# `name:` files the result into that model's canonical slot.
+# Submit: python -m scripts.cluster submit --experiment phase_11_mixed_kernel_comparison_early2_retry --runtime pcad --slurm tupi_4090
+extends: _protocols/no_patience
+name: phase_11_mixed_kernel_comparison
+models:
+  - alexnet_tv_mixed_early2

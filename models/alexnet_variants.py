@@ -3,6 +3,35 @@
 import torch.nn as nn
 import torch.ao.quantization as tq
 
+from models.baselines import he_init
+
+
+def _conv_relu(in_c: int, out_c: int, k: int, batch_norm: bool, stride: int = 1, padding: int = 0) -> list:
+    """[Conv2d, (BatchNorm2d,) ReLU] -- shared by AlexNetMixed/AlexNetStacked's head/BN ablation
+    variants (Phase 11) so the two don't hand-duplicate this block with subtly different bias
+    handling."""
+    layers = [nn.Conv2d(in_c, out_c, k, stride=stride, padding=padding, bias=not batch_norm)]
+    if batch_norm:
+        layers.append(nn.BatchNorm2d(out_c))
+    layers.append(nn.ReLU(inplace=False))
+    return layers
+
+
+def _pool_and_classifier(head: str, channels: int, fc_spatial: int, num_classes: int) -> tuple:
+    """(pool_layer, classifier) for head="gap" (AdaptiveAvgPool(1) + single Linear) or "fc"
+    (AdaptiveAvgPool(fc_spatial) + the original 3-layer AlexNet FC head)."""
+    if head == "gap":
+        return nn.AdaptiveAvgPool2d(1), nn.Sequential(nn.Flatten(), nn.Linear(channels, num_classes))
+    classifier = nn.Sequential(
+        nn.Flatten(),
+        nn.Linear(channels * fc_spatial * fc_spatial, 4096),
+        nn.ReLU(inplace=False),
+        nn.Linear(4096, 4096),
+        nn.ReLU(inplace=False),
+        nn.Linear(4096, num_classes),
+    )
+    return nn.AdaptiveAvgPool2d((fc_spatial, fc_spatial)), classifier
+
 
 # ─── AlexNet3x3FC ─────────────────────────────────────────────────────────────
 
@@ -224,51 +253,33 @@ class AlexNetStacked(nn.Module):
     Training speed: slow (double convolutions + large FC head).
     QAT: full — Conv-BN-ReLU triples fuseable throughout.
     Trade-off: depth (stacking) vs width; compares receptive field recovery strategies.
+    head="gap"/batch_norm=False (Phase 11 head/BN ablation, phase_11_head_bn_ablation.yaml)
+    swap the GAP head in and/or drop BatchNorm, holding the stacked-3x3 backbone fixed.
     """
 
-    def __init__(self, num_classes: int = 200):
+    def __init__(self, num_classes: int = 200, head: str = "fc", batch_norm: bool = True):
         super().__init__()
         self.quant = tq.QuantStub()
         self.dequant = tq.DeQuantStub()
 
-        self.features = nn.Sequential(
-            # Stage 1 — 2× 3×3 stacked
-            nn.Conv2d(3, 64, 3, stride=2, padding=1, bias=False),
-            nn.BatchNorm2d(64), nn.ReLU(inplace=False),
-            nn.Conv2d(64, 64, 3, padding=1, bias=False),
-            nn.BatchNorm2d(64), nn.ReLU(inplace=False),
-            nn.MaxPool2d(2),
-            # Stage 2
-            nn.Conv2d(64, 192, 3, padding=1, bias=False),
-            nn.BatchNorm2d(192), nn.ReLU(inplace=False),
-            nn.Conv2d(192, 192, 3, padding=1, bias=False),
-            nn.BatchNorm2d(192), nn.ReLU(inplace=False),
-            nn.MaxPool2d(2),
-            # Stage 3
-            nn.Conv2d(192, 384, 3, padding=1, bias=False),
-            nn.BatchNorm2d(384), nn.ReLU(inplace=False),
-            nn.Conv2d(384, 384, 3, padding=1, bias=False),
-            nn.BatchNorm2d(384), nn.ReLU(inplace=False),
-            # Stage 4
-            nn.Conv2d(384, 256, 3, padding=1, bias=False),
-            nn.BatchNorm2d(256), nn.ReLU(inplace=False),
-            nn.Conv2d(256, 256, 3, padding=1, bias=False),
-            nn.BatchNorm2d(256), nn.ReLU(inplace=False),
-            # Stage 5
-            nn.Conv2d(256, 256, 3, padding=1, bias=False),
-            nn.BatchNorm2d(256), nn.ReLU(inplace=False),
-            nn.Conv2d(256, 256, 3, padding=1, bias=False),
-            nn.BatchNorm2d(256), nn.ReLU(inplace=False),
-            nn.AdaptiveAvgPool2d((6, 6)),
-        )
-        self.classifier = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(256 * 36, 4096),
-            nn.ReLU(inplace=False),
-            nn.Linear(4096, 4096),
-            nn.ReLU(inplace=False),
-            nn.Linear(4096, num_classes),
-        )
+        layers = []
+        layers += _conv_relu(3, 64, 3, batch_norm, stride=2, padding=1)
+        layers += _conv_relu(64, 64, 3, batch_norm, padding=1)
+        layers.append(nn.MaxPool2d(2))
+        layers += _conv_relu(64, 192, 3, batch_norm, padding=1)
+        layers += _conv_relu(192, 192, 3, batch_norm, padding=1)
+        layers.append(nn.MaxPool2d(2))
+        layers += _conv_relu(192, 384, 3, batch_norm, padding=1)
+        layers += _conv_relu(384, 384, 3, batch_norm, padding=1)
+        layers += _conv_relu(384, 256, 3, batch_norm, padding=1)
+        layers += _conv_relu(256, 256, 3, batch_norm, padding=1)
+        layers += _conv_relu(256, 256, 3, batch_norm, padding=1)
+        layers += _conv_relu(256, 256, 3, batch_norm, padding=1)
+        pool, classifier = _pool_and_classifier(head, 256, 6, num_classes)
+        layers.append(pool)
+        self.features = nn.Sequential(*layers)
+        self.classifier = classifier
+        he_init(self)
 
     def forward(self, x):
         x = self.quant(x)
@@ -293,33 +304,29 @@ class AlexNetMixed(nn.Module):
     Training speed: fast (GAP head; alternating kernel sizes have similar cost to 3×3).
     QAT: full — flat Sequential, Conv-ReLU pairs fuseable; both 2×2 and 3×3 fbgemm-supported.
     Trade-off: kernel diversity within a single model vs the uniform-restriction baselines.
+    head="fc"/batch_norm=True (Phase 11 head/BN ablation, phase_11_head_bn_ablation.yaml)
+    swap in a 3-layer FC head and/or add BatchNorm, holding the alternating-kernel backbone fixed.
     """
 
-    def __init__(self, num_classes: int = 200):
+    def __init__(self, num_classes: int = 200, head: str = "gap", batch_norm: bool = False):
         super().__init__()
         self.quant = tq.QuantStub()
         self.dequant = tq.DeQuantStub()
 
-        # Spatial dims: 64 → 32 → 16 → 15 → 7 → 7 → 6 → 6 → AdaptiveAvgPool(1)
-        self.features = nn.Sequential(
-            nn.Conv2d(3, 64, 3, stride=2, padding=1),     # 3×3  64→32
-            nn.ReLU(inplace=False),
-            nn.MaxPool2d(2),                               # 32→16
-            nn.Conv2d(64, 192, 2),                         # 2×2  16→15
-            nn.ReLU(inplace=False),
-            nn.MaxPool2d(2),                               # 15→7 (floor)
-            nn.Conv2d(192, 384, 3, padding=1),             # 3×3  7→7
-            nn.ReLU(inplace=False),
-            nn.Conv2d(384, 256, 2),                        # 2×2  7→6
-            nn.ReLU(inplace=False),
-            nn.Conv2d(256, 256, 3, padding=1),             # 3×3  6→6
-            nn.ReLU(inplace=False),
-            nn.AdaptiveAvgPool2d(1),
-        )
-        self.classifier = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(256, num_classes),
-        )
+        # Spatial dims: 64 → 32 → 16 → 15 → 7 → 7 → 6 → 6 → head pool
+        layers = []
+        layers += _conv_relu(3, 64, 3, batch_norm, stride=2, padding=1)      # 3×3  64→32
+        layers.append(nn.MaxPool2d(2))                                        # 32→16
+        layers += _conv_relu(64, 192, 2, batch_norm)                         # 2×2  16→15
+        layers.append(nn.MaxPool2d(2))                                        # 15→7 (floor)
+        layers += _conv_relu(192, 384, 3, batch_norm, padding=1)             # 3×3  7→7
+        layers += _conv_relu(384, 256, 2, batch_norm)                        # 2×2  7→6
+        layers += _conv_relu(256, 256, 3, batch_norm, padding=1)             # 3×3  6→6
+        pool, classifier = _pool_and_classifier(head, 256, 6, num_classes)
+        layers.append(pool)
+        self.features = nn.Sequential(*layers)
+        self.classifier = classifier
+        he_init(self)
 
     def forward(self, x):
         x = self.quant(x)
@@ -341,14 +348,17 @@ class AlexNetSmallKernel(nn.Module):
     QAT: full — flat Sequential, Conv-ReLU pairs fuseable.
     Trade-off: narrow channels + GAP vs wide channels + FC; measures head and width contributions.
     Note: no BatchNorm (matches AlexNet3x3FC for controlled comparison).
+    head="fc" (Phase 11 head/BN ablation, phase_11_head_bn_ablation.yaml) swaps in the 3-layer
+    FC head, holding the narrow-channel backbone fixed -- features indices 0-11 are unchanged
+    either way, so the existing Conv-ReLU fuse_map still applies.
     """
 
-    def __init__(self, num_classes: int = 200):
+    def __init__(self, num_classes: int = 200, head: str = "gap"):
         super().__init__()
         self.quant = tq.QuantStub()
         self.dequant = tq.DeQuantStub()
 
-        self.features = nn.Sequential(
+        layers = [
             nn.Conv2d(3, 64, 3, stride=1, padding=1),     # 0
             nn.ReLU(inplace=False),                         # 1
             nn.MaxPool2d(2),                                # 2
@@ -361,12 +371,12 @@ class AlexNetSmallKernel(nn.Module):
             nn.ReLU(inplace=False),                         # 9
             nn.Conv2d(256, 256, 3, padding=1),              # 10
             nn.ReLU(inplace=False),                         # 11
-            nn.AdaptiveAvgPool2d((1, 1)),                   # 12
-        )
-        self.classifier = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(256, num_classes),
-        )
+        ]
+        pool, classifier = _pool_and_classifier(head, 256, 6, num_classes)
+        layers.append(pool)                                 # 12
+        self.features = nn.Sequential(*layers)
+        self.classifier = classifier
+        he_init(self)
 
     def forward(self, x):
         x = self.quant(x)

@@ -1,0 +1,33 @@
+# Does GAP vs FC head, or BatchNorm vs none, explain the gap between the mixed-kernel/stacked-3x3
+# models in phase_11_mixed_kernel_comparison.yaml (models/alexnet_variants.py, models/baselines.py)?
+# Two 2x2 factorials (head x batch_norm), each holding one kernel backbone fixed, reusing an
+# already-trained reference model as one cell instead of re-running it:
+#   alternating-kernel backbone: alexnet_mixed (ref, GAP/no-BN) + alexnet_mixed_fc/_bn/_fc_bn
+#   stacked-3x3 backbone:        alexnet_stacked (ref, FC/BN) + alexnet_stacked_gap/_fc_nobn/_gap_nobn
+# Plus the FC/GAP pairs that were still missing a twin (no BN change): alexnet_smallkernel_fc,
+# alexnet_tv_mixed_alt_gap, alexnet_tv_mixed_early3_gap. alexnet_tv_mixed_early2's GAP twin is
+# deliberately excluded until its seed-43 retry (phase_11_mixed_kernel_comparison_early2_retry.yaml)
+# confirms the kernel geometry itself isn't dead at this seed.
+# The two reference cells (alexnet_mixed, alexnet_stacked) are re-run here rather than read from
+# phase_11_mixed_kernel_comparison: every model in this file is trained under models/baselines.py's
+# he_init (added 2026-09-17, docs/logs/PHASE11_LOG.md), and that sweep's copies predate it. Without
+# it the no-BN cells sit on the ln(200) plateau and can die outright, so mixing the two inits would
+# confound exactly the head/BN effect this experiment is measuring.
+# Expect alexnet_stacked_fc_nobn to report chance level: no-BN + a 3-layer FC head at this depth
+# does not train under this protocol (measured, and he_init does not rescue it) -- that is this
+# cell's result, not a failed run.
+# Submit: python -m scripts.cluster submit-sweep --experiment phase_11_head_bn_ablation --runtime pcad
+extends: _protocols/no_patience
+name: phase_11_head_bn_ablation
+models:
+  - alexnet_mixed
+  - alexnet_stacked
+  - alexnet_mixed_fc
+  - alexnet_mixed_bn
+  - alexnet_mixed_fc_bn
+  - alexnet_stacked_gap
+  - alexnet_stacked_fc_nobn
+  - alexnet_stacked_gap_nobn
+  - alexnet_smallkernel_fc
+  - alexnet_tv_mixed_alt_gap
+  - alexnet_tv_mixed_early3_gap

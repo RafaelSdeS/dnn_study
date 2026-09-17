@@ -38,6 +38,37 @@ _ALEXNET_KERNEL_SPECS = {
 _ALEXNET_CONV_INDICES = [0, 3, 6, 8, 10]
 
 
+def he_init(module: nn.Module) -> None:
+    """torchvision VGG's from-scratch init, for the nets in this study that have none.
+
+    Neither torchvision's AlexNet nor the hand-written CNNs in models/alexnet_variants.py define
+    any weight init, so every conv falls back to PyTorch's nn.Conv2d default (kaiming_uniform_
+    with a=sqrt(5), i.e. std=sqrt(1/(3*fan_in))) -- sqrt(6) smaller per layer than He. That
+    compounds across layers until the logits come out at std ~0.01, i.e. the net starts *on* the
+    loss=ln(num_classes) plateau, where the gradient is ~1e-4 and Adam's normalized update
+    becomes a random walk that kills ReLUs monotonically. Without BatchNorm to rescale, a run
+    either escapes the plateau or reaches 100% dead ReLUs -- an absorbing state (zero gradient,
+    loss pinned at ln(num_classes) forever). Which one happens is luck: alexnet_tv_mixed_early2
+    died on PCAD at two different seeds while mixed_alt/_early3 escaped, and mixed_early3 died
+    locally while mixed_early2 escaped; alexnet_stacked_fc_nobn (10 convs + FC head, the deepest
+    no-BN case) died too (docs/logs/PHASE11_LOG.md, 2026-09-17). torchvision's VGG never hits
+    this because its constructor applies exactly the init below -- which is why vgg16 trains
+    from scratch here while the no-BN AlexNets are a coin flip.
+
+    BatchNorm variants are insensitive to it (BN normalizes the preceding layer's scale away),
+    so applying this uniformly across a BN ablation changes only the no-BN cells -- the ones
+    that were broken. Never call it on pretrained weights: it would overwrite them.
+    """
+    for m in module.modules():
+        if isinstance(m, nn.Conv2d):
+            nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
+            if m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.Linear):
+            nn.init.normal_(m.weight, 0, 0.01)
+            nn.init.constant_(m.bias, 0)
+
+
 class AlexNetTV(nn.Module):
     """Torchvision AlexNet, fine-tuned for 200 classes.
 
@@ -50,10 +81,18 @@ class AlexNetTV(nn.Module):
     kernel_size=3 or 2 replaces all 5 convs with that kernel; kernel_size="mixed_alt"/
     "mixed_early3"/"mixed_early2" replaces them with a per-layer 3x3/2x2 mix (see
     _ALEXNET_KERNEL_SPECS), keeping channels/pool structure -- for the kernel-restriction
-    comparison (Phase 11).
+    comparison (Phase 11). head="gap" (Phase 11 head/BN ablation,
+    phase_11_head_bn_ablation.yaml) replaces the 3-layer FC head with AdaptiveAvgPool(1) +
+    a single Linear(256, num_classes), holding `features` (and its fuse_map) unchanged.
     """
 
-    def __init__(self, num_classes: int = 200, pretrained: bool = True, kernel_size: int | str | None = None):
+    def __init__(
+        self,
+        num_classes: int = 200,
+        pretrained: bool = True,
+        kernel_size: int | str | None = None,
+        head: str = "fc",
+    ):
         super().__init__()
         base = alexnet(weights="IMAGENET1K_V1" if pretrained else None)
         base.classifier[6] = nn.Linear(4096, num_classes)
@@ -66,10 +105,17 @@ class AlexNetTV(nn.Module):
                 old_conv = base.features[idx]
                 base.features[idx] = nn.Conv2d(old_conv.in_channels, old_conv.out_channels, k, stride=s, padding=p)
 
+        if not pretrained:
+            he_init(base)
+
         self.quant = tq.QuantStub()
         self.features = base.features
-        self.avgpool = base.avgpool
-        self.classifier = base.classifier
+        if head == "gap":
+            self.avgpool = nn.AdaptiveAvgPool2d(1)
+            self.classifier = nn.Linear(256, num_classes)
+        else:
+            self.avgpool = base.avgpool
+            self.classifier = base.classifier
         self.dequant = tq.DeQuantStub()
 
     def forward(self, x):
