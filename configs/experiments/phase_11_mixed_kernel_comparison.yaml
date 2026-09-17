@@ -1,0 +1,22 @@
+# Mixed 3x3/2x2 kernel models -- do heterogeneous kernel-size backbones beat the uniform
+# restrictions from phase_11_kernel_size_comparison.yaml (alexnet_tv_3x3/2x2)? alexnet_mixed is
+# the existing Phase 2 alternating-kernel model (models/alexnet_variants.py); the alexnet_tv_mixed_*
+# models are new per-layer 3x3/2x2 mixes on the same AlexNetTV backbone as alexnet_tv_3x3/2x2
+# (models/baselines.py, _ALEXNET_KERNEL_SPECS), so both are directly comparable to that sweep.
+# Also carries the rest of Phase 2's kernel-restriction roster (alexnet_stacked/3x3_gap/2x2_gap/
+# smallkernel) through the same full-budget no-patience protocol as everything else here -- a
+# different protocol from their original Phase 2 runs, so a fresh slug/run tree per the "one
+# canonical result per model+phase+protocol" rule (CLAUDE.md), not a resume of the old checkpoints.
+# alexnet_3x3_fc/alexnet_2x2_fc deliberately excluded -- already re-run recently under this budget.
+# Submit: python -m scripts.cluster submit-sweep --experiment phase_11_mixed_kernel_comparison --runtime pcad
+extends: _protocols/no_patience
+name: phase_11_mixed_kernel_comparison
+models:
+  - alexnet_mixed
+  - alexnet_tv_mixed_alt
+  - alexnet_tv_mixed_early3
+  - alexnet_tv_mixed_early2
+  - alexnet_stacked
+  - alexnet_3x3_gap
+  - alexnet_2x2_gap
+  - alexnet_smallkernel

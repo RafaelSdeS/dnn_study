@@ -22,9 +22,18 @@ def _fix_relu_inplace(module: nn.Module) -> None:
 # features[0, 3, 6, 8, 10] -> (kernel, stride, padding), for kernel_size={3,2} below. Chosen so
 # every pool's output size matches the original 11x11/5x5/3x3 network's exactly (verified at
 # 64x64: pool outputs 7, 3, 1 for both variants, same as the original).
+_ALEXNET_SPEC_3 = [(3, 4, 1), (3, 1, 1), (3, 1, 1), (3, 1, 1), (3, 1, 1)]
+_ALEXNET_SPEC_2 = [(2, 4, 0), (2, 1, 1), (2, 1, 1), (2, 1, 0), (2, 1, 1)]
+# Per-layer 3x3/2x2 mixes for the Phase 11 mixed-kernel comparison: each entry picks, per conv
+# position, the matching tuple from _ALEXNET_SPEC_3/_ALEXNET_SPEC_2 above (no new padding/stride
+# geometry). Only 26/30 non-uniform 3/2 combos survive the fixed MaxPool2d(3, stride=2) layers at
+# 64x64 input without collapsing to a non-positive spatial size -- these 3 were verified to.
 _ALEXNET_KERNEL_SPECS = {
-    3: [(3, 4, 1), (3, 1, 1), (3, 1, 1), (3, 1, 1), (3, 1, 1)],
-    2: [(2, 4, 0), (2, 1, 1), (2, 1, 1), (2, 1, 0), (2, 1, 1)],
+    3: _ALEXNET_SPEC_3,
+    2: _ALEXNET_SPEC_2,
+    "mixed_alt": [_ALEXNET_SPEC_2[0], _ALEXNET_SPEC_3[1], _ALEXNET_SPEC_2[2], _ALEXNET_SPEC_3[3], _ALEXNET_SPEC_2[4]],
+    "mixed_early3": [_ALEXNET_SPEC_3[0], _ALEXNET_SPEC_3[1], _ALEXNET_SPEC_3[2], _ALEXNET_SPEC_2[3], _ALEXNET_SPEC_2[4]],
+    "mixed_early2": [_ALEXNET_SPEC_2[0], _ALEXNET_SPEC_2[1], _ALEXNET_SPEC_2[2], _ALEXNET_SPEC_3[3], _ALEXNET_SPEC_3[4]],
 }
 _ALEXNET_CONV_INDICES = [0, 3, 6, 8, 10]
 
@@ -38,11 +47,13 @@ class AlexNetTV(nn.Module):
     Training speed: medium (large FC head dominates memory).
     QAT: full — flat Sequential features, easy Conv-BN-ReLU fusion via fuse_map.
     Trade-off: large kernel sizes vs accuracy; classical vs modern architecture.
-    kernel_size=3 or 2 replaces all 5 convs with that kernel (see _ALEXNET_KERNEL_SPECS),
-    keeping channels/pool structure -- for the kernel-restriction comparison (Phase 11).
+    kernel_size=3 or 2 replaces all 5 convs with that kernel; kernel_size="mixed_alt"/
+    "mixed_early3"/"mixed_early2" replaces them with a per-layer 3x3/2x2 mix (see
+    _ALEXNET_KERNEL_SPECS), keeping channels/pool structure -- for the kernel-restriction
+    comparison (Phase 11).
     """
 
-    def __init__(self, num_classes: int = 200, pretrained: bool = True, kernel_size: int | None = None):
+    def __init__(self, num_classes: int = 200, pretrained: bool = True, kernel_size: int | str | None = None):
         super().__init__()
         base = alexnet(weights="IMAGENET1K_V1" if pretrained else None)
         base.classifier[6] = nn.Linear(4096, num_classes)

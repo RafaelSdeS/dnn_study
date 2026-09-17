@@ -109,6 +109,14 @@ register_model("alexnet_tv_3x3", partial(AlexNetTV, pretrained=False, kernel_siz
                fuse_map=FUSE_MAP_ALEXNET_TV, fuse_root_attr="features", lr=3e-4)
 register_model("alexnet_tv_2x2", partial(AlexNetTV, pretrained=False, kernel_size=2),
                fuse_map=FUSE_MAP_ALEXNET_TV, fuse_root_attr="features", lr=3e-4)
+# Mixed 3x3/2x2 per-layer kernels (configs/experiments/phase_11_mixed_kernel_comparison.yaml) --
+# same family/fuse_map as alexnet_tv_3x3/2x2 above, see _ALEXNET_KERNEL_SPECS for the patterns.
+register_model("alexnet_tv_mixed_alt", partial(AlexNetTV, pretrained=False, kernel_size="mixed_alt"),
+               fuse_map=FUSE_MAP_ALEXNET_TV, fuse_root_attr="features", lr=3e-4)
+register_model("alexnet_tv_mixed_early3", partial(AlexNetTV, pretrained=False, kernel_size="mixed_early3"),
+               fuse_map=FUSE_MAP_ALEXNET_TV, fuse_root_attr="features", lr=3e-4)
+register_model("alexnet_tv_mixed_early2", partial(AlexNetTV, pretrained=False, kernel_size="mixed_early2"),
+               fuse_map=FUSE_MAP_ALEXNET_TV, fuse_root_attr="features", lr=3e-4)
 # torchvision's VGG classifier: Linear(0)-ReLU(1)-Dropout(2)-Linear(3)-ReLU(4)-Dropout(5)-Linear(6,
 # logits). Fuse the two Linear-ReLU pairs (see prepare_qat_model's classifier_fuse_pairs docstring
 # for why vgg16 needs this); classifier.6 has no ReLU after it and stays a standalone quantized Linear.
