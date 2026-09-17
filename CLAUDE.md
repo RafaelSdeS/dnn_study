@@ -27,6 +27,11 @@ gitignored; provenance records (`metrics.json`, `config.yaml`, `git_hash.txt`,
 the analysis notebooks read them. The word "results" never appears at the top of an `outputs/`
 runtime — that roll-up dir is `outputs/<runtime>/aggregates/`.
 
+**The laptop keeps no gitignored artifacts (since 2026-09-16).** PCAD is the only copy of every
+`*.pth`/log from all three runtimes, at the same relative path under `~/dnn_study`. Fetch one when
+needed: `rsync -avP rsdsouza@gppd-hpc.inf.ufrgs.br:dnn_study/<relpath> <relpath>`. Before deleting
+a checkpoint on either side, compare by md5, not size — same-model checkpoints have identical sizes.
+
 **One slug per phase**, `phase_N_description`, used identically in `notebooks/`, `results/`,
 `results/figures_generated/`, `outputs/*/` **and `configs/experiments/`**. The experiment name
 *is* the output directory name (`outputs/<runtime>/<experiment>/<model>/`), so keeping the
