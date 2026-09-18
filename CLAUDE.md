@@ -204,7 +204,7 @@ scripts/                  # CLI entry points (used instead of notebooks for PCAD
                           #   beagle and tupi). Switched to `cd "$(git rev-parse --show-toplevel)" && source
                           #   .venv/bin/activate`, the pattern det_seg.sbatch/prune_channels.sbatch already needed
                           #   after hitting the identical failure. profile.sbatch/measure_compression.sbatch/
-                          #   notebook.sbatch still have the same latent bug, not yet fixed.
+                          #   notebook.sbatch got the same fix 2026-09-18 -- no sbatch script still has the bug.
 tests/                    # pytest: test_registry, test_checkpoint, test_config, test_trainer_smoke,
                           #   test_quantization, test_profiling, test_train_cli, test_train_det_seg_cli,
                           #   test_train_pipeline (run_experiment end to end; a stop signal ends the run
@@ -356,7 +356,7 @@ python3 -m venv .venv && source .venv/bin/activate && pip install -r requirement
 source .venv/bin/activate
 jupyter lab
 ```
-`requirements.txt` (pip freeze, tightly pinned) is the source of truth for `.venv` — it has drifted before (`docs/logs/PHASE7_LOG.md`); re-run the `pip install -r requirements.txt` line if notebook imports start failing. `environment.yml` predates the switch to `.venv` below; `configs/runtime/*.yaml`'s `conda_env` field and `cluster.py`'s `CONDA_ENV_NAME` export are similarly vestigial for `train.sbatch` (fixed 2026-09-13) but still read by `profile.sbatch`/`measure_compression.sbatch`/`notebook.sbatch`, which still have the old (broken) conda-activation block.
+`requirements.txt` (pip freeze, tightly pinned) is the source of truth for `.venv` — it has drifted before (`docs/logs/PHASE7_LOG.md`); re-run the `pip install -r requirements.txt` line if notebook imports start failing. `environment.yml` predates the switch to `.venv` below; `configs/runtime/*.yaml`'s `conda_env` field and `cluster.py`'s `CONDA_ENV_NAME` export are now fully vestigial — every `scripts/slurm/*.sbatch` activates `.venv` directly (fixed 2026-09-13 for `train.sbatch`, 2026-09-18 for `profile.sbatch`/`measure_compression.sbatch`/`notebook.sbatch`), none of them read `CONDA_ENV_NAME`/`conda_env` anymore.
 Tiny ImageNet-200 downloads via `kagglehub` on first run (cached in `~/.cache/kagglehub/`). Before INT8 convert/inference: `model.eval()` and move to CPU.
 
 **CLI / cluster runs** (Phases 6–8, reproducible local or PCAD SLURM runs). Despite `environment.yml`'s
