@@ -94,17 +94,41 @@ def bridge_provenance() -> dict[str, Any]:
     return {"root": str(root), "git_hash": git_hash, "git_dirty": git_dirty}
 
 
-def load_qat_wino_model(model_name: str, spec: dict[str, Any], checkpoints_dir: Path, device):
+def load_qat_wino_model(model_name: str, spec: dict[str, Any], checkpoints_dir: Path, device,
+                        cfg=None):
     """FP32 best checkpoint -> qat_wino.convert() in place.
 
     A fresh instance built this way every time (rather than caching) so its
     state_dict keys always match a qat_wino checkpoint saved from a model
     built the same way -- convert() adds buffers (act_absmax, post_shift,
     sat_frac, BT/AT/G) that a plain ctor() instance doesn't have.
+
+    `cfg` is a QATWinoConfig and says WHICH accelerator line to train against
+    (`variant`) and whether it packs 2 multiplications per DSP (`pack`). Until
+    2026-09-18 this called `convert(model)` bare, which pinned F(4,3) without
+    packing -- that is why every accuracy number in the study so far is that one
+    combination. `cfg=None` keeps that old behaviour, so a caller that has not
+    been updated reproduces the old runs instead of silently changing numerics.
     """
     qat_wino = import_bridge_module("qat_wino")
     model = load_best_model(model_name, spec["ctor"], checkpoints_dir, device, eval_mode=False)
-    trocadas = qat_wino.convert(model)
+    kw: dict[str, Any] = {}
+    if cfg is not None:
+        kw["variant"] = cfg.variant
+        # `pack` default no convert() e' True (o hardware empacota); aqui o valor
+        # e' SEMPRE explicito, para que o que roda seja o que o YAML declara.
+        kw["pack"] = bool(cfg.pack)
+        if cfg.pack:
+            kw.update(u_w=cfg.u_w, v_w=cfg.v_w, k_dsp=cfg.k_dsp)
+    else:
+        kw["pack"] = False
+    # Logger NOMEADO, igual ao resto deste arquivo: `logging.info` no logger raiz
+    # e' filtrado pela configuracao do runner e a linha some. E ela nao e'
+    # decorativa — e' o unico registro, no log da corrida, de CONTRA QUAL
+    # hardware aquele treino foi feito.
+    logging.getLogger(f"pcad_runner.{model_name}").info(
+        "qat_wino.convert(%s)", ", ".join(f"{k}={v!r}" for k, v in kw.items()))
+    trocadas = qat_wino.convert(model, **kw)
     if not trocadas:
         raise RuntimeError(f"{model_name}: qat_wino.convert() found no eligible 3x3 conv to replace")
     # Safety net for the class of bug this stage almost shipped with: convert()

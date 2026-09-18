@@ -1,0 +1,32 @@
+# Marco M7: medir o custo em top-1 de LIGAR O PACKING (2 mult/DSP) e, junto com
+# os irmaos wino_f23_pack/wino_f63_pack, o custo de TROCAR DE TRANSFORMADA.
+#
+# Por que isso existe: as 14 corridas de acuracia do estudo sao todas F(4,3) e
+# todas SEM packing, enquanto o bitstream de deploy roda `--pack 1`. Por isso a
+# coluna de acuracia sai marcada `≠HW` nas tabelas do artigo. Este experimento e'
+# o braco que casa a numerica com o hardware.
+#
+# So' o estagio `qat_wino`: o FP32 e' REAPROVEITADO do budget_unico (mesmo peso,
+# mesma seed), entao o que varia entre os tres bracos e' so' a numerica — nao
+# variacao de treino. Antes de rodar, traga o checkpoint do PCAD:
+#   outputs/local/wino_f43_pack/<model>/checkpoints/<model>_best.pth
+#   outputs/local/wino_f43_pack/<model>/results/<model>_fp32_val_logits.npz
+#   outputs/local/wino_f43_pack/<model>/results/<model>_summary.json
+#
+# (9,8) nao e' escolha de gosto: o orcamento da porta A do DSP48E2 e'
+# u_w + 2*v_w + ceil(log2 K) + 1 <= 27, e com K=2 isso da' u_w + 2*v_w <= 25.
+# 9 + 16 = 25 e' o teto — o mesmo para as tres variantes, que e' o que torna a
+# comparacao iso-orcamento.
+extends: _protocols/winograd_fpga
+name: wino_f43_pack
+stages:
+  - qat_wino
+qat_wino:
+  variant: f43
+  pack: true
+  u_w: 9
+  v_w: 8
+  k_dsp: 2
+models:
+  - alexnet_fire_bypass_fpga
+  - vgg_style_fpga

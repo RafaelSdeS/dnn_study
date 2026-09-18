@@ -22,6 +22,7 @@ from ml import (
     DataConfig,
     TrainerConfig,
     QATConfig,
+    QATWinoConfig,
     Trainer,
     auto_resume_path,
     build_qat,
@@ -122,8 +123,11 @@ def _build_qat_config(base_cfg: dict[str, Any], experiment_cfg: dict[str, Any]) 
     return replace(qat_cfg, **overrides)
 
 
-def _build_qat_wino_config(base_cfg: dict[str, Any], experiment_cfg: dict[str, Any]) -> QATConfig:
-    qat_wino_cfg = QATConfig(**base_cfg)
+def _build_qat_wino_config(base_cfg: dict[str, Any], experiment_cfg: dict[str, Any]) -> QATWinoConfig:
+    # QATWinoConfig (nao QATConfig): carrega tambem variant/pack/u_w/v_w/k_dsp,
+    # que dizem CONTRA QUAL acelerador se treina. Sem isso `replace(cfg,
+    # variant=...)` levantaria TypeError e a variante nunca sairia do default.
+    qat_wino_cfg = QATWinoConfig(**base_cfg)
     overrides = experiment_cfg.get("qat_wino", {}) or {}
     return replace(qat_wino_cfg, **overrides)
 
@@ -405,7 +409,8 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
             # the fbgemm path, WinoQuantConv2d.forward() already simulates the
             # quantized pipeline in eval mode, so evaluating this checkpoint directly
             # *is* the accelerator-numeric accuracy (top1_int8_accel proxy).
-            qat_wino_model = load_qat_wino_model(model_name, spec, checkpoints_dir, device)
+            qat_wino_model = load_qat_wino_model(model_name, spec, checkpoints_dir, device,
+                                                 qat_wino_cfg)
             qat_wino_cfg_run = replace(
                 model_cfg, epochs=qat_wino_cfg.epochs, lr=qat_wino_cfg.lr,
                 weight_decay=qat_wino_cfg.weight_decay, use_amp=False,

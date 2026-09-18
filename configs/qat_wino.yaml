@@ -8,3 +8,12 @@ lr: 5.0e-5
 weight_decay: 5.0e-4
 freeze_bn_epoch: 999
 disable_observer_epoch: 999
+# Contra QUAL acelerador se treina. Os defaults reproduzem as 14 corridas
+# existentes (F(4,3), sem packing) -- e' por isso que elas saem marcadas `≠HW`
+# nas tabelas: o bitstream de deploy roda com packing. Sobrescreva pelo bloco
+# `qat_wino:` do YAML do experimento, nao aqui.
+variant: f43        # f23 | f43 | f63
+pack: false         # 2 mult/DSP com requantizacao por posicao
+u_w: 9
+v_w: 8
+k_dsp: 2

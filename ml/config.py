@@ -49,6 +49,31 @@ class QATConfig:
 
 
 @dataclass
+class QATWinoConfig(QATConfig):
+    """QATConfig + o que descreve CONTRA QUAL acelerador se treina.
+
+    O estágio `qat_wino` não é "QAT genérico": ele troca as convs 3x3 pela
+    numérica exata de uma linha de hardware do repo irmão Winograd-FPGA. Qual
+    linha (`variant`) e se ela roda com 2 multiplicações por DSP (`pack`) mudam
+    o resultado, então são CONFIG — não constante escondida na ponte.
+
+    Até 2026-09-18 o bridge chamava `convert(model)` sem argumento nenhum, o que
+    fixava F(4,3) sem packing; por isso as 14 medições de acurácia existentes são
+    todas dessa combinação, e saem marcadas `≠HW` nas tabelas do artigo (o
+    bitstream de deploy roda `--pack 1`).
+
+    Os defaults abaixo reproduzem aquelas corridas. Mude-os pelo bloco
+    `qat_wino:` do YAML do experimento, que é o mecanismo que o resto do repo já
+    usa.
+    """
+    variant: str = "f43"      # f23 | f43 | f63
+    pack: bool = False        # 2 mult/DSP, com requantização por posição
+    u_w: int = 9              # largura do campo de U dentro do DSP
+    v_w: int = 8              # largura do campo de V
+    k_dsp: int = 2            # acumulações dentro do DSP (não muda a aritmética)
+
+
+@dataclass
 class DetSegDataConfig:
     img_size: int = 256
     voc_root: str = ""  # set at runtime, e.g. ~/.cache/torchvision/datasets/voc

@@ -1,4 +1,5 @@
-from .config import DataConfig, TrainerConfig, QATConfig, DetSegDataConfig
+from .config import (DataConfig, TrainerConfig, QATConfig, QATWinoConfig,
+                     DetSegDataConfig)
 from .data import create_imagenet_loaders
 from .det_seg_data import create_voc_detection_loaders, create_voc_segmentation_loaders
 from .det_seg_models import build_ssd_detector, build_deeplabv3_segmenter, compute_anchor_recall
