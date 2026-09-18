@@ -6,10 +6,19 @@ manifesto arbitrario, via net_manifest.py").
 
 Geometry only, no checkpoint needed: the RTL sim always runs synthetic weights (its own
 docs/plano_avaliacao_redes_winograd.md Sec 1.2/5.1), so a freshly-constructed model gives the
-exact same layer shapes a trained one would. Run: python -m scripts.winograd_fpga.dump_layer_configs
+exact same layer shapes a trained one would.
+
+Run:
+    python -m scripts.winograd_fpga.dump_layer_configs                    # 64 px (treino)
+    python -m scripts.winograd_fpga.dump_layer_configs --input-size 224   # -> layer_configs_224/
+
+224 px is the resolution the literature compares at, and it is what decides the F(2,3) vs
+F(4,3) question: the accelerator steps NUM_CORES*m px in X, so on an output of <= 8 px the
+F(4,3) tile is mostly wasted and it "loses" on resolution, not on the transform.
 """
 from __future__ import annotations
 
+import argparse
 import csv
 import json
 import sys
@@ -35,6 +44,14 @@ NETWORKS = [
 ]
 
 OUT_DIR_NAME = "layer_configs"
+
+# Resolucao de entrada das redes. 64 e' a do treino (tiny-imagenet); 224 e' a com
+# que a literatura compara, e a que muda a conclusao: o passo em X do acelerador e'
+# NUM_CORES*m px, entao numa saida <= 8 px o F(4,3) desperdica a maior parte do
+# tile e "perde" para o F(2,3) por resolucao, nao por transformada. Um dump de 224
+# vai para um diretorio PROPRIO -- sobrescrever o de 64 apagaria a base de
+# comparacao sem deixar rastro.
+DEFAULT_INPUT_SIZE = 64
 
 
 def _sanitize(name: str) -> str:
@@ -68,6 +85,16 @@ def _check_schema_matches_vgg16(net_manifest, layer_configs_mod) -> None:
 
 
 def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--input-size", type=int, default=DEFAULT_INPUT_SIZE,
+                    help="resolucao de entrada das redes (default: %(default)s). "
+                         "Qualquer valor != %(default)s escreve num diretorio proprio "
+                         f"(`{OUT_DIR_NAME}_<N>`), nunca por cima do dump de "
+                         f"{DEFAULT_INPUT_SIZE} px")
+    ap.add_argument("--out-dir", type=Path, default=None,
+                    help="destino explicito (sobrepoe a regra de nome acima)")
+    a = ap.parse_args()
+
     layer_configs_mod = _import_layer_configs()
     net_manifest = import_bridge_module("net_manifest")
     eligibility = import_bridge_module("eligibility_wino")
@@ -75,14 +102,20 @@ def main() -> int:
 
     _check_schema_matches_vgg16(net_manifest, layer_configs_mod)
 
-    out_dir = bridge_root() / OUT_DIR_NAME
+    # ⚠️ A elegibilidade MUDA com a resolucao (o eixo "saida >= OUT_TILE" do §1.2):
+    # a 224 px camadas que reprovavam a 64 px passam, entao o conjunto de camadas
+    # de cada celula nao e' o mesmo. Isso e' resultado, nao erro — mas comparar
+    # celulas de resolucoes diferentes como se fossem a mesma coisa seria.
+    suffix = "" if a.input_size == DEFAULT_INPUT_SIZE else f"_{a.input_size}"
+    out_dir = a.out_dir or (bridge_root() / f"{OUT_DIR_NAME}{suffix}")
     out_dir.mkdir(parents=True, exist_ok=True)
     summary_rows = []
 
     for reg_name in NETWORKS:
         model = MODEL_REGISTRY[reg_name]["ctor"]()
-        net = models_torchvision_wino.to_manifest(model, reg_name, input_size=64)
-        total_macs = compute_flops(model, input_size=(1, 3, 64, 64))["macs"]
+        net = models_torchvision_wino.to_manifest(model, reg_name, input_size=a.input_size)
+        total_macs = compute_flops(
+            model, input_size=(1, 3, a.input_size, a.input_size))["macs"]
 
         for variant in VARIANTS:
             verdicts = eligibility.audit_net(net, variant)
@@ -104,6 +137,9 @@ def main() -> int:
             summary_rows.append({
                 "network": reg_name,
                 "variant": variant,
+                # Sem esta coluna, dois summary.csv de resolucoes diferentes sao
+                # indistinguiveis depois de copiados para fora do diretorio.
+                "input_size": a.input_size,
                 "layers_eligible": len(eligible),
                 "layers_3x3_s1_total": len(net.layers),
                 "macs_eligible": eligible_macs,
@@ -123,7 +159,11 @@ def main() -> int:
         writer.writerows(summary_rows)
 
     print(f"Wrote {len(NETWORKS)} x {len(VARIANTS)} = {len(summary_rows)} layer-config JSONs "
-          f"+ {summary_path} under {out_dir}")
+          f"+ {summary_path} under {out_dir} (input_size={a.input_size})")
+    if a.input_size != DEFAULT_INPUT_SIZE:
+        print(f"  -> rode a varredura com --cfg-dir avaliacao_redes/{out_dir.name} "
+              "(ou WINO_CFG_DIR); nao misture com as celulas de "
+              f"{DEFAULT_INPUT_SIZE} px na mesma tabela")
     return 0
 
 
