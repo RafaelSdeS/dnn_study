@@ -24,8 +24,11 @@ venv/
 *.pth.done
 *.pt
 *.ckpt
-# VGG16's qat_*.pth.gz breaks the "small qat_*.pth.gz is tracked" assumption (105.78 MB,
-# over GitHub's 100 MB hard limit and blocked the push) -- gitignored as a one-off exception.
+# FP32 best-checkpoint gzip (carries AdamW optimizer state, ~3x weights -- can be
+# hundreds of MB, too large to push). The small qat_*.pth.gz INT8 artifact is still tracked.
+*_best.pth.gz
+# VGG16's qat_*.pth.gz breaks the "small" assumption above (105.78 MB, over GitHub's
+# 100 MB hard limit and blocked the push) -- gitignored as a one-off exception.
 outputs/pcad/phase_11_kernel_size_comparison/vgg16/checkpoints/qat_vgg16.pth.gz
 
 # =========================
