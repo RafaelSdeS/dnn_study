@@ -1,0 +1,103 @@
+{
+  "experiment": {
+    "seed": 42,
+    "uniform_hparams": true,
+    "stages": [
+      "qat_wino"
+    ],
+    "training": {
+      "early_stopping_patience": 10
+    },
+    "name": "wino_f23_pack",
+    "qat_wino": {
+      "variant": "f23",
+      "pack": true,
+      "u_w": 9,
+      "v_w": 8,
+      "k_dsp": 2
+    },
+    "models": [
+      "alexnet_fire_bypass_fpga"
+    ]
+  },
+  "runtime": {
+    "name": "local",
+    "root": "outputs/local",
+    "dataset_root": null,
+    "device": "cuda",
+    "conda_env": "alexnet_rafael",
+    "wandb": true,
+    "wandb_mode": "offline",
+    "tensorboard": true,
+    "distributed": false,
+    "devices": 1,
+    "launcher": "single",
+    "use_kagglehub_fallback": true,
+    "persistent_workers": false,
+    "benchmark_warmup": 100,
+    "quantized_engine": "fbgemm"
+  },
+  "data": {
+    "dataset_path": "/home/rafael/.cache/kagglehub/datasets/akash2sharma/tiny-imagenet/versions/1/tiny-imagenet-200/train",
+    "img_size": 64,
+    "num_classes": 200,
+    "batch_size": 64,
+    "num_workers": 4,
+    "pin_memory": true,
+    "train_val_split": 0.9,
+    "seed": 42
+  },
+  "training": {
+    "epochs": 100,
+    "lr": 0.0003,
+    "weight_decay": 0.0005,
+    "label_smoothing": 0.1,
+    "grad_clip_norm": null,
+    "use_amp": true,
+    "early_stopping_patience": 10,
+    "warmup_epochs": 0,
+    "reset_scheduler_on_resume": false
+  },
+  "qat": {
+    "epochs": 20,
+    "lr": 1e-05,
+    "weight_decay": 0.0005,
+    "freeze_bn_epoch": 3,
+    "disable_observer_epoch": 5
+  },
+  "qat_wino": {
+    "epochs": 15,
+    "lr": 5e-05,
+    "weight_decay": 0.0005,
+    "freeze_bn_epoch": 999,
+    "disable_observer_epoch": 999,
+    "variant": "f23",
+    "pack": true,
+    "u_w": 9,
+    "v_w": 8,
+    "k_dsp": 2
+  },
+  "selected_model": "alexnet_fire_bypass_fpga",
+  "stage_list": [
+    "qat_wino"
+  ],
+  "provenance": {
+    "git_hash": "0a71fcea1f228225761ea764f59f4dab36e213a4",
+    "git_dirty": true,
+    "hostname": "rafael-Predator-PHN16-71",
+    "timestamp_utc": "2026-09-18T18:31:02.313899+00:00",
+    "torch_version": "2.5.1+cu121",
+    "torchvision_version": "0.20.1+cu121",
+    "cuda_version": "12.1",
+    "cudnn_version": 90100,
+    "gpu_name": "NVIDIA GeForce RTX 4060 Laptop GPU",
+    "python_version": "3.12.3",
+    "cpu_count": 20,
+    "slurm_job_id": null,
+    "winograd_fpga": {
+      "root": "/home/rafael/Documents/Winograd-FPGA/scripts/avaliacao_redes",
+      "git_hash": "e0fa9853ed4cf16dfac527d58fd0b1e763a31a34",
+      "git_dirty": true
+    }
+  }
+}
