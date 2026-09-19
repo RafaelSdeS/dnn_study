@@ -127,6 +127,8 @@ register_model("alexnet_tv_mixed_alt_gap", partial(AlexNetTV, pretrained=False, 
                fuse_map=FUSE_MAP_ALEXNET_TV, fuse_root_attr="features", lr=3e-4)
 register_model("alexnet_tv_mixed_early3_gap", partial(AlexNetTV, pretrained=False, kernel_size="mixed_early3", head="gap"),
                fuse_map=FUSE_MAP_ALEXNET_TV, fuse_root_attr="features", lr=3e-4)
+register_model("alexnet_tv_mixed_early2_gap", partial(AlexNetTV, pretrained=False, kernel_size="mixed_early2", head="gap"),
+               fuse_map=FUSE_MAP_ALEXNET_TV, fuse_root_attr="features", lr=3e-4)
 register_model("alexnet_mixed_fc", partial(AlexNetMixed, head="fc"),
                fuse_map=FUSE_MAP_ALEXNET_TV, fuse_root_attr="features", lr=3e-4)
 register_model("alexnet_mixed_bn", partial(AlexNetMixed, batch_norm=True),

@@ -5,9 +5,10 @@
 #   alternating-kernel backbone: alexnet_mixed (ref, GAP/no-BN) + alexnet_mixed_fc/_bn/_fc_bn
 #   stacked-3x3 backbone:        alexnet_stacked (ref, FC/BN) + alexnet_stacked_gap/_fc_nobn/_gap_nobn
 # Plus the FC/GAP pairs that were still missing a twin (no BN change): alexnet_smallkernel_fc,
-# alexnet_tv_mixed_alt_gap, alexnet_tv_mixed_early3_gap. alexnet_tv_mixed_early2's GAP twin is
-# deliberately excluded until its seed-43 retry (phase_11_mixed_kernel_comparison_early2_retry.yaml)
-# confirms the kernel geometry itself isn't dead at this seed.
+# alexnet_tv_mixed_alt_gap, alexnet_tv_mixed_early3_gap, alexnet_tv_mixed_early2_gap.
+# alexnet_tv_mixed_early2's GAP twin was held back until the kernel geometry itself was confirmed
+# not dead at this seed -- the seed-43 retry died too, but the he_init fix (2026-09-17,
+# docs/logs/PHASE11_LOG.md) resolved it at seed 42 (job 822344, 24.57% FP32), so it's added here.
 # The two reference cells (alexnet_mixed, alexnet_stacked) are re-run here rather than read from
 # phase_11_mixed_kernel_comparison: every model in this file is trained under models/baselines.py's
 # he_init (added 2026-09-17, docs/logs/PHASE11_LOG.md), and that sweep's copies predate it. Without
@@ -31,3 +32,4 @@ models:
   - alexnet_smallkernel_fc
   - alexnet_tv_mixed_alt_gap
   - alexnet_tv_mixed_early3_gap
+  - alexnet_tv_mixed_early2_gap

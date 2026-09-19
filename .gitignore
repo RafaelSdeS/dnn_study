@@ -24,6 +24,9 @@ venv/
 *.pth.done
 *.pt
 *.ckpt
+# VGG16's qat_*.pth.gz breaks the "small qat_*.pth.gz is tracked" assumption (105.78 MB,
+# over GitHub's 100 MB hard limit and blocked the push) -- gitignored as a one-off exception.
+outputs/pcad/phase_11_kernel_size_comparison/vgg16/checkpoints/qat_vgg16.pth.gz
 
 # =========================
 # Weights & Biases (local cache only)

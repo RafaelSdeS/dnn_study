@@ -1,0 +1,94 @@
+{
+  "experiment": {
+    "seed": 42,
+    "uniform_hparams": true,
+    "stages": [
+      "fp32",
+      "qat",
+      "int8"
+    ],
+    "training": {
+      "epochs": 500,
+      "early_stopping_patience": null
+    },
+    "qat": {
+      "epochs": 100
+    },
+    "name": "phase_11_head_bn_ablation",
+    "models": [
+      "alexnet_tv_mixed_early3_gap"
+    ]
+  },
+  "runtime": {
+    "name": "pcad",
+    "root": "outputs/pcad",
+    "dataset_root": "${PCAD_DATASET_ROOT}",
+    "device": "cuda",
+    "conda_env": "alexnet_rafael",
+    "wandb": true,
+    "wandb_mode": "offline",
+    "tensorboard": true,
+    "distributed": false,
+    "devices": 1,
+    "launcher": "single",
+    "use_kagglehub_fallback": true,
+    "persistent_workers": true,
+    "benchmark_warmup": 100,
+    "quantized_engine": "fbgemm"
+  },
+  "data": {
+    "dataset_path": "/home/users/rsdsouza/.cache/kagglehub/datasets/akash2sharma/tiny-imagenet/versions/1/tiny-imagenet-200/train",
+    "img_size": 64,
+    "num_classes": 200,
+    "batch_size": 64,
+    "num_workers": 4,
+    "pin_memory": true,
+    "train_val_split": 0.9,
+    "seed": 42
+  },
+  "training": {
+    "epochs": 500,
+    "lr": 0.0003,
+    "weight_decay": 0.0005,
+    "label_smoothing": 0.1,
+    "grad_clip_norm": null,
+    "use_amp": true,
+    "early_stopping_patience": null,
+    "warmup_epochs": 0,
+    "reset_scheduler_on_resume": false
+  },
+  "qat": {
+    "epochs": 100,
+    "lr": 1e-05,
+    "weight_decay": 0.0005,
+    "freeze_bn_epoch": 3,
+    "disable_observer_epoch": 5
+  },
+  "qat_wino": {
+    "epochs": 15,
+    "lr": 5e-05,
+    "weight_decay": 0.0005,
+    "freeze_bn_epoch": 999,
+    "disable_observer_epoch": 999
+  },
+  "selected_model": "alexnet_tv_mixed_early3_gap",
+  "stage_list": [
+    "fp32",
+    "qat",
+    "int8"
+  ],
+  "provenance": {
+    "git_hash": "120c5dad6da3c59731e465479392acb9bad9fe2f",
+    "git_dirty": true,
+    "hostname": "tupi5",
+    "timestamp_utc": "2026-09-18T14:58:24.824890+00:00",
+    "torch_version": "2.5.1+cu121",
+    "torchvision_version": "0.20.1+cu121",
+    "cuda_version": "12.1",
+    "cudnn_version": 90100,
+    "gpu_name": "NVIDIA GeForce RTX 4090",
+    "python_version": "3.11.2",
+    "cpu_count": 32,
+    "slurm_job_id": "822355"
+  }
+}
