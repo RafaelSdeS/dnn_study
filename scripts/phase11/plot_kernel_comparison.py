@@ -108,7 +108,11 @@ def fig_overview(models):
     ax.set_xscale("log")
     ax.set_xlabel("Tamanho do modelo (MB, escala log)")
     ax.set_ylabel("Top-1 (%)")
-    ax.set_title("Visão geral — todos os modelos do Phase 11 (○ FP32  □ INT8, \"G\" = head GAP)")
+    ax.set_title(
+        "Visão geral — todos os modelos do Phase 11 (○ FP32  □ INT8, \"G\" = classificador final enxuto/GAP)\n"
+        "\"AlexNet\" = versão enxuta (classificador final de 1 camada)   "
+        "\"TV\"/\"VGG16\" = classificador final grande (3 camadas)",
+        fontsize=12)
     bar_group_legend(ax, outside=True)
     savefig(fig, "01_overview_accuracy_vs_size.png")
 
@@ -142,14 +146,16 @@ def fig_family_bar(models, family, filename, title):
 def fig_2x2_vs_3x3(models):
     families = ["AlexNet compacto (Phase 2)", "AlexNetTV", "VGG16"]
     # Each x-tick spells out exactly which network + head this bar pair is, so the
-    # chart stands on its own without needing charts 02-04 open alongside it.
+    # chart stands on its own without needing charts 02-04 open alongside it. Positions
+    # are spread out (not 0,1,2) so the 2-line descriptions have room, not overlap.
     family_desc = {
-        "AlexNet compacto (Phase 2)": "AlexNet compacto (Phase 2)\nCNN própria do projeto\n(models/alexnet_variants.py)\nhead GAP, 5 convs",
-        "AlexNetTV": "AlexNetTV\ntorchvision, treinado do zero\n(models/baselines.py)\nhead FC grande, 5 convs",
-        "VGG16": "VGG16\ntorchvision, treinado do zero\n(models/baselines.py)\nhead FC, 13 convs",
+        "AlexNet compacto (Phase 2)": "AlexNet compacto (Phase 2)\nclassificador final ENXUTO (1 camada)\n-> modelo pequeno, poucos MB",
+        "AlexNetTV": "AlexNetTV\nclassificador final GRANDE\n(3 camadas, 4096 neurônios) -> ~220 MB",
+        "VGG16": "VGG16 (rede mais profunda, 13 convs)\nclassificador final GRANDE\n(3 camadas) -> ~500 MB",
     }
-    fig, ax = plt.subplots(figsize=(9.5, 7))
-    width = 0.18
+    xpos = [0, 2.1, 4.2]
+    fig, ax = plt.subplots(figsize=(13, 7))
+    width = 0.35
     for i, pattern in enumerate(["2x2", "3x3"]):
         fp32 = []
         for fam in families:
@@ -157,13 +163,13 @@ def fig_2x2_vs_3x3(models):
             # each (family, pattern) pair here has exactly one entry regardless of head.
             cands = [m for m in models if m["family"] == fam and m["pattern"] == pattern]
             fp32.append(cands[0]["fp32_top1"] if cands else float("nan"))
-        offset = (i - 0.5) * width * 2
-        ax.bar([j + offset for j in range(len(families))], fp32, width * 1.8,
+        offset = (i - 0.5) * width
+        ax.bar([x + offset for x in xpos], fp32, width * 0.95,
                color=PATTERN_COLOR[pattern], label=pattern, edgecolor="white", lw=0.6)
-    ax.set_xticks(range(len(families)))
-    ax.set_xticklabels([family_desc[f] for f in families], fontsize=8.5)
+    ax.set_xticks(xpos)
+    ax.set_xticklabels([family_desc[f] for f in families], fontsize=9.5)
     ax.set_ylabel("Top-1 FP32 (%)")
-    ax.set_title("2x2 vs 3x3 uniforme (todas as camadas) — 3 arquiteturas treinadas do zero,\ncada uma com seu próprio head (GAP ou FC)")
+    ax.set_title("2x2 vs 3x3 uniforme (todas as camadas) — 3 arquiteturas treinadas do zero,\ncada uma com seu próprio classificador final (enxuto ou grande)")
     ax.legend(title="Kernel", fontsize=9)
     savefig(fig, "05_2x2_vs_3x3_by_family.png")
 
@@ -256,16 +262,18 @@ def main():
 
     fig_overview(models)
     fig_family_bar(models, "AlexNet compacto (Phase 2)", "02_kernel_pattern_alexnet_gap.png",
-                    "AlexNet compacto (Phase 2) — CNN própria do projeto\n"
-                    "(models/alexnet_variants.py, NÃO é o AlexNet original), head GAP\n"
-                    "rótulos = kernel de conv1→conv5")
+                    "AlexNet compacto (Phase 2) — NÃO é o AlexNet original\n"
+                    "Mesmas 5 convoluções do AlexNet, mas com classificador final ENXUTO\n"
+                    "(1 camada, em vez das 3 camadas de 4096 neurônios do original) -> modelo pequeno\n"
+                    "rótulos das barras = kernel usado em cada uma das 5 camadas, na ordem (1ª -> 5ª)")
     fig_family_bar([m for m in models if m["family"] == "AlexNetTV" and m["head"] == "FC"],
                     "AlexNetTV", "03_kernel_pattern_alexnettv_fc.png",
-                    "AlexNetTV — implementação torchvision do AlexNet clássico,\n"
-                    "treinada do zero, head FC grande  |  rótulos = kernel de conv1→conv5")
+                    "AlexNetTV — o AlexNet clássico (torchvision), treinado do zero\n"
+                    "5 convoluções + classificador final GRANDE original (3 camadas, 4096 neurônios)\n"
+                    "rótulos das barras = kernel usado em cada uma das 5 camadas, na ordem (1ª -> 5ª)")
     fig_family_bar(models, "VGG16", "04_kernel_pattern_vgg16.png",
-                    "VGG16 — torchvision, treinada do zero, head FC\n"
-                    "kernel uniforme nas 13 convs (não há uma versão \"mista\" testada)")
+                    "VGG16 (torchvision), treinada do zero — rede mais profunda, 13 convoluções\n"
+                    "kernel igual em todas as 13 camadas (não existe uma versão \"mista\" desta rede)")
     fig_2x2_vs_3x3(models)
     fig_head_accuracy(models)
     fig_head_size(models)
