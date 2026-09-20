@@ -23,21 +23,26 @@ PATTERN_COLOR = {"2x2": BLUE, "3x3": GREEN, "original": AMBER, "misto": RED}
 # One row per trained model. `key` = output directory name (unique, unlike the json's
 # internal model_name -- two dead/retry runs share a model_name with their surviving twin).
 # `variant` pairs the three mixed-kernel patterns across their FC/GAP head twins.
+# `label` is always the literal conv1->conv5 kernel sequence (VGG16's 13 conv layers are
+# uniform, so its label just says so instead of spelling out 13 numbers).
 MODELS = [
-    dict(key="alexnet_2x2_gap", family="AlexNet compacto (Phase 2)", head="GAP", pattern="2x2", label="2x2"),
-    dict(key="alexnet_3x3_gap", family="AlexNet compacto (Phase 2)", head="GAP", pattern="3x3", label="3x3"),
-    dict(key="alexnet_mixed_preheinit", family="AlexNet compacto (Phase 2)", head="GAP", pattern="misto", label="alternado"),
+    dict(key="alexnet_2x2_gap", family="AlexNet compacto (Phase 2)", head="GAP", pattern="2x2", label="2-2-2-2-2"),
+    dict(key="alexnet_3x3_gap", family="AlexNet compacto (Phase 2)", head="GAP", pattern="3x3", label="3-3-3-3-3"),
+    # AlexNetMixed (models/alexnet_variants.py): conv1=3x3, conv2=2x2, conv3=3x3, conv4=2x2,
+    # conv5=3x3 -- the *inverse* alternation from AlexNetTV's "mixed_alt" (2-3-2-3-2) below,
+    # and a different architecture entirely (own channel widths, not AlexNetTV's).
+    dict(key="alexnet_mixed_preheinit", family="AlexNet compacto (Phase 2)", head="GAP", pattern="misto", label="3-2-3-2-3"),
     dict(key="alexnet_tv_mixed_alt_gap", family="AlexNetTV", head="GAP", pattern="misto", variant="alt", label="2-3-2-3-2"),
     dict(key="alexnet_tv_mixed_early3_gap", family="AlexNetTV", head="GAP", pattern="misto", variant="early3", label="3-3-3-2-2"),
     dict(key="alexnet_tv_mixed_early2_gap", family="AlexNetTV", head="GAP", pattern="misto", variant="early2", label="2-2-2-3-3"),
-    dict(key="alexnet_tv_2x2", family="AlexNetTV", head="FC", pattern="2x2", label="2x2"),
-    dict(key="alexnet_tv_3x3", family="AlexNetTV", head="FC", pattern="3x3", label="3x3"),
-    dict(key="alexnet_tv_scratch", family="AlexNetTV", head="FC", pattern="original", label="original\n11-5-3-3-3"),
+    dict(key="alexnet_tv_2x2", family="AlexNetTV", head="FC", pattern="2x2", label="2-2-2-2-2"),
+    dict(key="alexnet_tv_3x3", family="AlexNetTV", head="FC", pattern="3x3", label="3-3-3-3-3"),
+    dict(key="alexnet_tv_scratch", family="AlexNetTV", head="FC", pattern="original", label="11-5-3-3-3\n(original)"),
     dict(key="alexnet_tv_mixed_alt", family="AlexNetTV", head="FC", pattern="misto", variant="alt", label="2-3-2-3-2"),
     dict(key="alexnet_tv_mixed_early3", family="AlexNetTV", head="FC", pattern="misto", variant="early3", label="3-3-3-2-2"),
     dict(key="alexnet_tv_mixed_early2", family="AlexNetTV", head="FC", pattern="misto", variant="early2", label="2-2-2-3-3"),
-    dict(key="vgg16", family="VGG16", head="FC", pattern="3x3", label="3x3 (nativo)"),
-    dict(key="vgg16_2x2", family="VGG16", head="FC", pattern="2x2", label="2x2"),
+    dict(key="vgg16", family="VGG16", head="FC", pattern="3x3", label="3x3 nativo\n(13 convs, uniforme)"),
+    dict(key="vgg16_2x2", family="VGG16", head="FC", pattern="2x2", label="2x2\n(13 convs, uniforme)"),
 ]
 
 
@@ -78,6 +83,9 @@ def fig_overview(models):
     dense_fc_skip = {"alexnet_tv_2x2", "alexnet_tv_3x3", "alexnet_tv_mixed_alt",
                       "alexnet_tv_mixed_early3", "alexnet_tv_mixed_early2"}
     manual_dy = {"alexnet_3x3_gap": 10, "alexnet_mixed_preheinit": -13}
+    # Full "(13 convs, uniforme)"/"(original)" detail belongs to charts 03/04 -- here it
+    # only needs to disambiguate from the AlexNetTV/AlexNet points sharing this cluster.
+    short_label = {"vgg16": "3x3 nativo", "vgg16_2x2": "2x2", "alexnet_tv_scratch": "11-5-3-3-3 (original)"}
     fig, ax = plt.subplots(figsize=(12, 7.5))
     for i, m in enumerate(models):
         color = PATTERN_COLOR[m["pattern"]]
@@ -88,7 +96,8 @@ def fig_overview(models):
         ax.scatter(int8_size, int8_top1, color=color, marker="s", s=100, edgecolors="white", lw=0.6, zorder=3)
         if m["key"] in dense_fc_skip:
             continue
-        tag = f"{short_family[m['family']]} {m['label']}".replace("\n", " ") + (" G" if m["head"] == "GAP" else "")
+        label = short_label.get(m["key"], m["label"])
+        tag = f"{short_family[m['family']]} {label}".replace("\n", " ") + (" G" if m["head"] == "GAP" else "")
         dy = manual_dy.get(m["key"], 6 if i % 2 == 0 else -11)
         ax.annotate(tag, (fp32_size, fp32_top1), xytext=(5, dy), textcoords="offset points",
                     fontsize=7.5, color=color)
@@ -114,7 +123,7 @@ def fig_family_bar(models, family, filename, title):
     fp32 = [m["fp32_top1"] for m in sub]
     int8 = [m["int8_top1"] for m in sub]
 
-    fig, ax = plt.subplots(figsize=(1.4 * len(sub) + 2, 6))
+    fig, ax = plt.subplots(figsize=(1.8 * len(sub) + 2.5, 6.5))
     x = range(len(sub))
     width = 0.36
     ax.bar([i - width / 2 for i in x], fp32, width, color=colors, edgecolor="white", lw=0.6)
@@ -122,7 +131,7 @@ def fig_family_bar(models, family, filename, title):
     ax.set_xticks(list(x))
     ax.set_xticklabels(labels, rotation=20, ha="right", fontsize=9)
     ax.set_ylabel("Top-1 (%)")
-    ax.set_title(title)
+    ax.set_title(title, fontsize=11.5)
     fp32_patch = plt.Rectangle((0, 0), 1, 1, facecolor="gray", label="FP32")
     int8_patch = plt.Rectangle((0, 0), 1, 1, facecolor="gray", alpha=0.45, label="INT8")
     ax.legend(handles=[fp32_patch, int8_patch], loc="upper right", fontsize=9)
@@ -132,7 +141,14 @@ def fig_family_bar(models, family, filename, title):
 # ── 5. 2x2 vs 3x3, head-to-head across every family that has both ──
 def fig_2x2_vs_3x3(models):
     families = ["AlexNet compacto (Phase 2)", "AlexNetTV", "VGG16"]
-    fig, ax = plt.subplots(figsize=(8, 6))
+    # Each x-tick spells out exactly which network + head this bar pair is, so the
+    # chart stands on its own without needing charts 02-04 open alongside it.
+    family_desc = {
+        "AlexNet compacto (Phase 2)": "AlexNet compacto (Phase 2)\nCNN própria do projeto\n(models/alexnet_variants.py)\nhead GAP, 5 convs",
+        "AlexNetTV": "AlexNetTV\ntorchvision, treinado do zero\n(models/baselines.py)\nhead FC grande, 5 convs",
+        "VGG16": "VGG16\ntorchvision, treinado do zero\n(models/baselines.py)\nhead FC, 13 convs",
+    }
+    fig, ax = plt.subplots(figsize=(9.5, 7))
     width = 0.18
     for i, pattern in enumerate(["2x2", "3x3"]):
         fp32 = []
@@ -145,9 +161,9 @@ def fig_2x2_vs_3x3(models):
         ax.bar([j + offset for j in range(len(families))], fp32, width * 1.8,
                color=PATTERN_COLOR[pattern], label=pattern, edgecolor="white", lw=0.6)
     ax.set_xticks(range(len(families)))
-    ax.set_xticklabels(families, fontsize=10)
+    ax.set_xticklabels([family_desc[f] for f in families], fontsize=8.5)
     ax.set_ylabel("Top-1 FP32 (%)")
-    ax.set_title("2x2 vs 3x3 — mesma família, kernel uniforme (FC salvo AlexNet=GAP)")
+    ax.set_title("2x2 vs 3x3 uniforme (todas as camadas) — 3 arquiteturas treinadas do zero,\ncada uma com seu próprio head (GAP ou FC)")
     ax.legend(title="Kernel", fontsize=9)
     savefig(fig, "05_2x2_vs_3x3_by_family.png")
 
@@ -240,11 +256,16 @@ def main():
 
     fig_overview(models)
     fig_family_bar(models, "AlexNet compacto (Phase 2)", "02_kernel_pattern_alexnet_gap.png",
-                    "AlexNet compacto (Phase 2) — CNN própria do projeto, head GAP")
+                    "AlexNet compacto (Phase 2) — CNN própria do projeto\n"
+                    "(models/alexnet_variants.py, NÃO é o AlexNet original), head GAP\n"
+                    "rótulos = kernel de conv1→conv5")
     fig_family_bar([m for m in models if m["family"] == "AlexNetTV" and m["head"] == "FC"],
                     "AlexNetTV", "03_kernel_pattern_alexnettv_fc.png",
-                    "AlexNetTV (head FC grande)")
-    fig_family_bar(models, "VGG16", "04_kernel_pattern_vgg16.png", "VGG16 (head FC)")
+                    "AlexNetTV — implementação torchvision do AlexNet clássico,\n"
+                    "treinada do zero, head FC grande  |  rótulos = kernel de conv1→conv5")
+    fig_family_bar(models, "VGG16", "04_kernel_pattern_vgg16.png",
+                    "VGG16 — torchvision, treinada do zero, head FC\n"
+                    "kernel uniforme nas 13 convs (não há uma versão \"mista\" testada)")
     fig_2x2_vs_3x3(models)
     fig_head_accuracy(models)
     fig_head_size(models)
