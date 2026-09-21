@@ -153,7 +153,7 @@ def fig_2x2_vs_3x3(models):
     # chart stands on its own without needing charts 02-04 open alongside it. Positions
     # are spread out (not 0,1,2) so the 2-line descriptions have room, not overlap.
     family_desc = {
-        "AlexNet compacto": "AlexNet compacto (backbone próprio,\nnão é o AlexNet clássico/torchvision)\nclassificador GAP (Global Average Pooling) -> poucos MB",
+        "AlexNet compacto": "AlexNet compacto (código próprio deste projeto,\nnão usa o módulo torchvision.models.alexnet)\nclassificador GAP (Global Average Pooling) -> poucos MB",
         "AlexNetTV": "AlexNetTV (torchvision, clássico)\nclassificador FC (Fully Connected,\n3 camadas, 4096 neurônios) -> ~220 MB",
         "VGG16": "VGG16 (torchvision, 13 convoluções)\nclassificador FC (Fully Connected,\n3 camadas) -> ~500 MB",
     }
@@ -248,6 +248,8 @@ def fig_all_mixed(models):
     ax.set_ylabel("Top-1 (%)")
     ax.set_title(
         "Todas as 7 redes de kernel misto (2x2/3x3 alternado) -- todo backbone e classificador testados\n"
+        "\"AlexNet compacto\" = código próprio deste projeto (não usa torchvision.models.alexnet)\n"
+        "\"AlexNetTV\" = o AlexNet real do torchvision, só com o kernel trocado\n"
         "rótulos das barras = kernel usado em cada uma das 5 camadas, na ordem (1ª -> 5ª)", fontsize=11.5)
     ax.margins(y=0.2)
     fp32_patch = plt.Rectangle((0, 0), 1, 1, facecolor="gray", label="FP32")
@@ -303,10 +305,10 @@ def main():
 
     fig_overview(models)
     fig_family_bar(models, "AlexNet compacto", "02_kernel_pattern_alexnet_gap.png",
-                    "AlexNet compacta — arquitetura própria, NÃO é o AlexNet original/torchvision\n"
-                    "5 convoluções estilo AlexNet + classificador GAP (Global Average Pooling, 1 camada)\n"
-                    "GAP = poucos parâmetros -> modelo pequeno, ao contrário do FC (Fully Connected, 3 camadas\n"
-                    "de 4096 neurônios) do AlexNet clássico -- rótulos das barras = kernel de cada camada (1ª -> 5ª)")
+                    "AlexNet compacto — código próprio deste projeto, NÃO usa o módulo torchvision.models.alexnet\n"
+                    "(diferente do AlexNetTV, que usa esse módulo e só troca o kernel)\n"
+                    "5 convoluções estilo AlexNet + classificador GAP (Global Average Pooling, 1 camada) -> modelo pequeno\n"
+                    "rótulos das barras = kernel usado em cada uma das 5 camadas, na ordem (1ª -> 5ª)")
     fig_family_bar([m for m in models if m["family"] == "AlexNetTV" and m["head"] == "FC"],
                     "AlexNetTV", "03_kernel_pattern_alexnettv_fc.png",
                     "AlexNetTV — o AlexNet clássico (torchvision), treinado do zero\n"
