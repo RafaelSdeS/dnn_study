@@ -66,8 +66,9 @@ def savefig(fig, name):
     print(f"wrote {out}")
 
 
-def bar_group_legend(ax, title="Padrão de kernel", loc="upper right", outside=False):
-    handles = [plt.Rectangle((0, 0), 1, 1, facecolor=c, label=p) for p, c in PATTERN_COLOR.items()]
+def bar_group_legend(ax, title="Padrão de kernel", loc="upper right", outside=False, patterns=None):
+    patterns = patterns if patterns is not None else list(PATTERN_COLOR)
+    handles = [plt.Rectangle((0, 0), 1, 1, facecolor=PATTERN_COLOR[p], label=p) for p in patterns]
     kwargs = dict(bbox_to_anchor=(1.02, 1), loc="upper left") if outside else dict(loc=loc)
     ax.legend(handles=handles, title=title, fontsize=9, **kwargs)
 
@@ -139,7 +140,10 @@ def fig_family_bar(models, family, filename, title):
     ax.set_title(title, fontsize=11.5)
     fp32_patch = plt.Rectangle((0, 0), 1, 1, facecolor="gray", label="FP32")
     int8_patch = plt.Rectangle((0, 0), 1, 1, facecolor="gray", alpha=0.45, label="INT8")
-    ax.legend(handles=[fp32_patch, int8_patch], loc="upper right", fontsize=9)
+    precision_legend = ax.legend(handles=[fp32_patch, int8_patch], title="Precisão", loc="upper right", fontsize=9)
+    ax.add_artist(precision_legend)  # kept alive so the pattern-color legend below doesn't replace it
+    present_patterns = [p for p in PATTERN_COLOR if p in {m["pattern"] for m in sub}]
+    bar_group_legend(ax, outside=True, patterns=present_patterns)
     savefig(fig, filename)
 
 
