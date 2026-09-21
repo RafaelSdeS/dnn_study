@@ -103,7 +103,7 @@ def fig_overview(models):
         ax.annotate(tag, (fp32_size, fp32_top1), xytext=(5, dy), textcoords="offset points",
                     fontsize=7.5, color=color)
     ax.annotate("+ 5 variantes TV-FC 2x2/3x3/misto\n(quase mesmo tamanho e acurácia --\nver gráfico 03)",
-                xy=(218, 24.5), xycoords="data", xytext=(11, 33), textcoords="data",
+                xy=(200, 29.3), xycoords="data", xytext=(11, 33), textcoords="data",
                 fontsize=7.5, color="#4d4d4d", ha="left",
                 arrowprops=dict(arrowstyle="-", color="#9e9e9e", lw=0.7))
     ax.set_xscale("log")
