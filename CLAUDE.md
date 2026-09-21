@@ -61,7 +61,12 @@ directory, for exactly this reason.
 
 ```
 ml/                       # Core package — notebooks and scripts import everything from here
-  config.py               # DataConfig, TrainerConfig, QATConfig dataclasses (defaults explicit)
+  config.py               # DataConfig, TrainerConfig, QATConfig dataclasses (defaults explicit);
+                          #   QATWinoConfig(QATConfig) (2026-09-19) adds variant/pack/u_w/v_w/k_dsp --
+                          #   WHICH Winograd-FPGA accelerator line the qat_wino stage trains against.
+                          #   Until 2026-09-18 that stage always trained F(4,3) with no packing, so
+                          #   the 14 budget_unico accuracy runs are that one combination (≠HW: the
+                          #   deploy bitstream packs) -- see the M7 note on the Winograd-FPGA study row
   data.py                 # create_imagenet_loaders(cfg)
   det_seg_data.py         # Phase 7: create_voc_detection_loaders / create_voc_segmentation_loaders
   det_seg_models.py       # Phase 7: build_ssd_detector, build_qat_ssd_detector, convert_ssd_to_int8, compute_anchor_recall
@@ -88,7 +93,9 @@ ml/                       # Core package — notebooks and scripts import everyt
                           #   from scripts/train.py's privates
   winograd_bridge.py      # The ONLY import path into the sibling Winograd-FPGA repo ($WINOGRAD_FPGA_ROOT): study-model
                           #   ctors (custom_model/torchvision_model — geometry owned there, so checkpoints load 1:1 in
-                          #   its Fase 2.5), the qat_wino stage (load_qat_wino_model), bridge_provenance (its commit)
+                          #   its Fase 2.5), the qat_wino stage (load_qat_wino_model(..., cfg=QATWinoConfig)
+                          #   passes variant/pack/u_w/v_w/k_dsp through to qat_wino.convert(); cfg=None keeps the
+                          #   old F(4,3)-no-pack behavior), bridge_provenance (its commit)
   reporting.py            # build_comparison_table, create_results_summary, disk_mb, compute_flops, make_run_summary
                           #   (extra=dict merged in last, so callers add fields without inflating the signature);
                           #   expected_calibration_error, prediction_agreement(logits_a, logits_b) -> top-1 agreement
@@ -127,6 +134,13 @@ configs/                  # YAML hyperparameters, loaded via configs/loader.py �
                           #   phase_11_kernel_size_comparison.yaml extends _protocols/no_patience.yaml (seed 42,
                           #   uniform_hparams, 500ep FP32/100ep QAT, early_stopping_patience: null — the QAT stage
                           #   inherits null too, since scripts/train.py builds its cfg via replace() off the same base)
+                          #   wino_f23_pack.yaml/wino_f43_pack.yaml/wino_f63_pack.yaml (2026-09-19, M7) extend
+                          #   _protocols/winograd_fpga.yaml, stages: [qat_wino] only (FP32 reused from budget_unico's
+                          #   checkpoint), one `qat_wino:` override each (variant: f23|f43|f63, pack: true,
+                          #   u_w=9/v_w=8/k_dsp=2 -- the iso-DSP-budget point, u_w+2*v_w<=25 for K=2 on a DSP48E2) --
+                          #   measures the accuracy cost of matching the deploy bitstream's packing + each transform;
+                          #   results (alexnet_fire_bypass_fpga, vgg_style_fpga): F23 ~unchanged (+0.09/-0.14pp),
+                          #   F43 moderate loss (-3.93/-8.28pp), F63 severe (-15.65/-30.55pp) vs FP32
                           #   phase_7_detection.yaml/phase_7_segmentation.yaml are deliberately NOT this
                           #   schema (no models:/extends:) — consumed by scripts/train_det_seg.py, which reads
                           #   data.num_workers/trainer.epochs directly; different task, different loader
@@ -170,6 +184,11 @@ scripts/                  # CLI entry points (used instead of notebooks for PCAD
                            #   --evaluate actually clusters the weights and measures real accuracy vs. FP32
     prune_channels.py      # Task 2: structured (channel) pruning CLI;
                            #   --finetune-epochs fine-tunes the pruned model then runs it through QAT->INT8
+  phase11/                 # `python -m scripts.phase11.<name>`
+    plot_kernel_comparison.py  # 10 single-question PNGs (kernel pattern 2x2/3x3/original/misto x
+                               #   head GAP/FC x family AlexNet-compacto/AlexNetTV/VGG16) straight from the
+                               #   3 curated phase_11_* result trees, into
+                               #   results/figures_generated/phase_11_kernel_size_comparison/
   oneoff/                  # Retired one-shot fixups, kept for provenance (`python -m scripts.oneoff.<name>`)
     backfill_model_size.py / backfill_best_epoch_eval.py / dilated_gap_local.py
   pcad/                    # PCAD submission wrappers
@@ -197,6 +216,11 @@ scripts/                  # CLI entry points (used instead of notebooks for PCAD
                                #   trained here, not just its bundled VGG16. Asserts net_manifest.vgg16() still
                                #   matches LAYER_CONFIGS before writing anything. See run_vu9p_redes.sh there
                                #   (gates on reproducing the published VU9P GOPS before touching the 16 networks).
+                               #   --input-size 224 (2026-09-19) dumps a second, separate layer_configs_224/ at the
+                               #   resolution the literature compares at -- eligibility changes with resolution
+                               #   (the accelerator steps NUM_CORES*m px in X, so on <=8px output F(4,3) wastes
+                               #   most of the tile and "loses" to F(2,3) on resolution, not on the transform),
+                               #   so never mix its cells with the 64px dump's in one table.
   slurm/*.sbatch           # sbatch templates — train.sbatch/profile.sbatch submitted by cluster.py, det_seg.sbatch by the pcad/submit_phase_7_*.sh scripts, others called directly.
                           # train.sbatch fixed 2026-09-13: conda never activates in a non-interactive Slurm batch
                           #   shell (conda init lives in ~/.bashrc, which such shells don't source) — every real
@@ -263,6 +287,11 @@ writes the latter).
 
 Runtime artifacts (git-ignored): `{arch}_best.pth`, `qat_{arch}_best.pth`, `{arch}.pth` (INT8 —
 the `.pth.gz` compressed copy from `ml/checkpoint.py` *is* tracked); logs `{arch}.log`, `qat_{arch}.log`.
+`*_best.pth.gz` (2026-09-19) is now git-ignored too — it carries AdamW optimizer state (~3× the
+weights) and can run hundreds of MB; only the small `qat_*.pth.gz` INT8 artifact stays tracked.
+One-off exception, gitignored explicitly rather than by pattern: vgg16's QAT artifact
+(`outputs/pcad/phase_11_kernel_size_comparison/vgg16/checkpoints/qat_vgg16.pth.gz`, 105.78 MB)
+is over GitHub's 100 MB hard limit.
 
 After a `git pull` on a machine that still has artifacts under old folder names, run
 `scripts/pcad/migrate_pcad_gitignored.sh` — it is idempotent and covers every rename to date.
@@ -341,8 +370,8 @@ QAT cfg is typically `replace(fp32_cfg, epochs=20, lr=1e-5, use_amp=False)`.
 | 6 — Hardware profiling | (reuses Phase 1–4 models) | `ml/profiling.py` + `scripts/profile_hardware.py`; dilated variants added to test whether dilated 3×3 retains Winograd acceleration |
 | 7 — Detection/segmentation | `ml/det_seg_models.py` | Bottleneck/Fire/AlexNetTV backbones + SSD head on PASCAL VOC, via `scripts/train_det_seg.py` |
 | 8 — Efficient ViT / hybrid-attention | `models/vit_variants.py` | vit_tiny, deit_tiny (H4 distillation), swin_pico_{w2,w4,w8} (H1 window sweep), swin_pico_poolmixer (H5 cross-check), hybrid_bottleneck_swin (H2) — 5 of 7 train via `scripts/train.py --experiment phase_8_efficient_vit`; vit_tiny/deit_tiny need `notebooks/phase_8_efficient_vit/vit_qat_phase8.ipynb` (deit_tiny's `DistillationTrainer` stage; see D6 for why their QAT stage no longer needs anything special) |
-| Winograd-FPGA study (`budget_unico`) | none here — `ml/winograd_bridge.py` builds them from the sibling repo | 15 `*_fpga` models registered in `ml/model_registrations.py`: vgg_style, alexnet_{3x3_fc, stacked, fire, fire_bypass, bottleneck, final_fire_residual, final_bottleneck_residual}, repvgg_a0 (trained raw), wrn_{16_4, 28_2}, googlenet, resnet18, vgg13 — plus squeezenet1_1, registered but out of budget_unico (qat_wino breaks on its 15×15 maps). Add a study model in the sibling repo, then one `register_model(..., custom_model/torchvision_model(...))` line here |
-| 11 — Kernel size comparison | `models/baselines.py` | `AlexNetTV(kernel_size=None\|3\|2)` (original 11×11/5×5/3×3, 3×3, 2×2, no BN) and `VGG16(kernel_size=3\|2)` (torchvision cfgs["D"] + BatchNorm -- plain (no-BN) VGG16 from scratch measured stuck at ln(200) loss for 22 epochs on PCAD, 2026-09-13; kernel_size=3 is VGG's own native design) — all 5 trained from scratch, no early stopping, via `configs/experiments/phase_11_kernel_size_comparison.yaml` (`_protocols/no_patience.yaml`: 500ep FP32 / 100ep QAT) |
+| Winograd-FPGA study (`budget_unico`) | none here — `ml/winograd_bridge.py` builds them from the sibling repo | 15 `*_fpga` models registered in `ml/model_registrations.py`: vgg_style, alexnet_{3x3_fc, stacked, fire, fire_bypass, bottleneck, final_fire_residual, final_bottleneck_residual}, repvgg_a0 (trained raw), wrn_{16_4, 28_2}, googlenet, resnet18, vgg13 — plus squeezenet1_1, registered but out of budget_unico (qat_wino breaks on its 15×15 maps). Add a study model in the sibling repo, then one `register_model(..., custom_model/torchvision_model(...))` line here. **M7 (2026-09-19):** the 14-model budget_unico accuracy sweep trains F(4,3) with no packing; the deploy bitstream packs, so those numbers are marked `≠HW`. `wino_f{23,43,63}_pack.yaml` re-run `qat_wino` at the iso-DSP-budget packed point on 2 models (alexnet_fire_bypass_fpga, vgg_style_fpga) to measure the real cost: F23 ~unchanged, F43 moderate loss, F63 severe — see the `configs/experiments/` entry above and the sibling repo's `achados_varredura.md §6` for the full write-up |
+| 11 — Kernel size comparison | `models/baselines.py` | `AlexNetTV(kernel_size=None\|3\|2)` (original 11×11/5×5/3×3, 3×3, 2×2, no BN) and `VGG16(kernel_size=3\|2)` (torchvision cfgs["D"] + BatchNorm -- plain (no-BN) VGG16 from scratch measured stuck at ln(200) loss for 22 epochs on PCAD, 2026-09-13; kernel_size=3 is VGG's own native design) — all 5 trained from scratch, no early stopping, via `configs/experiments/phase_11_kernel_size_comparison.yaml` (`_protocols/no_patience.yaml`: 500ep FP32 / 100ep QAT). **Mixed-kernel + head/BN ablation extension:** `alexnet_variants.py`'s `AlexNetMixed`/`AlexNetStacked`/`AlexNetSmallKernel` and `AlexNetTV(kernel_size="mixed_alt"\|"mixed_early2"\|"mixed_early3")` cross kernel pattern × GAP/FC head × BN on/off, via `phase_11_mixed_kernel_comparison.yaml` and `phase_11_head_bn_ablation.yaml`. `models/baselines.py:he_init` (2026-09-17, `docs/logs/PHASE11_LOG.md`) fixes a from-scratch dead-ReLU plateau that killed several no-BN cells (`alexnet_stacked_fc_nobn` still doesn't train — BN turns out load-bearing for that depth+FC-head combination, treated as a finding not a bug). `alexnet_tv_mixed_early2_gap` (added 2026-09-19) closes the last FC/GAP pairing gap, 26.51% FP32 on PCAD — not yet folded into the curated `results/phase_11_head_bn_ablation_final_comparison.csv`. `scripts/phase11/plot_kernel_comparison.py` renders the 10-figure comparison across all three configs |
 
 **Results & rankings:** see `docs/plans/BEST_MODELS.md` (Pareto tiers, recommendations, now covering Phases 1–4/6/7/8/9) and `results/results_aggregate/results_cross_phase.csv` / `results/results_aggregate/model_details_cross_phase.csv`. Headlines: MobileNetV2 best overall (~58% top-1) among Phase 1–3 models, though Phase 4's AlexNetFinalFireResidual (49.79%) and Phase 9's AlexNetFireBypass (50.57%) close most of the gap — the latter now *exceeds* the full hybrid's FP32 gain outright (+6.59pp vs. +5.81pp over AlexNetFire) — at a fraction of the size; AlexNetBottleneck/AlexNetFire remain Pareto-optimal on efficiency (43–44%, 1.5–2 MB, quantization-stable). A size-reporting bug (fixed 2026-09-02, `ml/reporting.py`) had `disk_mb()`/`gzip_mb()` measuring the raw `{model}_best.pth`, which carries AdamW optimizer state (~3× the weights), while the INT8 artifact was already weights-only — so every FP32 size and FP32-vs-INT8 compression ratio was inflated ~3× (~11.9× recorded vs. the true ~4×). Both sides now measure `model_state_dict`; summaries and CSVs backfilled via `scripts/oneoff/backfill_model_size.py`. Accuracies, params, MACs and all rankings are unaffected; the analysis notebooks were re-run on 2026-09-12, so only `phase9_ablation_analysis.ipynb` (its PCAD summary inputs are gone) and the training notebooks' output cells still show pre-fix sizes. Known issues: AlexNetSmallKernel severe QAT drop (~–10pp), AlexNetSE training failure. A `Trainer.fit()` bug (fixed 2026-08-29, `ml/trainer.py`) returned the last epoch's model instead of reloading the best checkpoint, so FP32 was evaluated on different weights than INT8 — spurious INT8 "gains" of up to +6.5pp for runs with a long post-peak tail; backfilled via `scripts/oneoff/backfill_best_epoch_eval.py` for the 5 CLI-trained Phase 8 models plus AlexNetFireBypass (FP32 corrected for all 6; INT8 only rebuilt where a full-precision QAT-best checkpoint survived — FireBypass and `vit_tiny`/`deit_tiny` were otherwise unaffected). See `report/ic_report.tex` Eixo 4/7 for the corrected findings. Phase 7 detection: anchor-recall root cause fixed and A4 retrain complete on PCAD — all 3 backbones (bottleneck/fire/tv) × FP32/QAT/INT8 × plain/pretrained now have valid mAP (see `docs/plans/BEST_MODELS.md`). Phase 7 segmentation: PCAD runs now complete for all 3 backbones × FP32/QAT/INT8 (`outputs/pcad/phase_7_detection_segmentation/seg_*`); not yet folded into the H1–H4 analysis notebook. Phase 7 hypotheses (H1–H4, does compensation transfer to dense prediction) and progress: `docs/plans/PHASE7_PLAN.md`, `docs/logs/PHASE7_LOG.md`. Phase 8: all 7 models trained on PCAD, results in — H1 (window-size sweep) and H4 (DeiT distillation) confirmed, H3 (quantization robustness) inverted (5 of 7 models gain accuracy under INT8), H5 (Winograd-eligibility) confirmed but not attention-specific (no model has a stride-1 3×3 conv). D6's QAT-for-attention revision (swap_quantizable_mha can't drive this codebase's eager-mode `prepare_qat()`, so attention stays FP32-excluded like Swin's fallback) and full H1–H5 detail are in `docs/plans/PHASE8_PLAN.md` and `docs/logs/PHASE8_LOG.md`.
 

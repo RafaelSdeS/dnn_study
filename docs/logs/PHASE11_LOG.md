@@ -315,3 +315,61 @@ they never had the bug — they are the control that made it visible.
 **Not yet updated:** the curated `results/phase_11_*` trees, the cross-phase
 rollup and `report/ic_report.tex` still carry the pre-fix numbers (the 23.9–27.5%
 band). Re-aggregate once these land.
+
+## Post-fix results land + mixed-kernel/head-BN comparison figures (2026-09-19 to 2026-09-21)
+
+`results/phase_11_kernel_size_comparison_final_comparison.csv` and
+`phase_11_mixed_kernel_comparison_final_comparison.csv` re-synced from the
+he_init reruns above (jobs 822531-822533 range). `alexnet_tv_scratch_dead_heinit`
+is kept as a row (0.5% top-1) — a second seed-42 retry that still died despite
+the fix, alongside the surviving `alexnet_tv_scratch` (27.51% FP32); both are
+preserved rather than overwritten so the plateau's non-determinism stays visible
+in the data, not just in prose.
+
+**Still not updated:** `results/results_aggregate/` (cross-phase rollup) and
+`report/ic_report.tex` — neither has a commit since 45e8ba9, which predates this
+resync. Re-run `scripts/build_cross_phase_results.py` and regenerate the report
+figures before citing Phase 11 numbers from either.
+
+`alexnet_tv_mixed_early2_gap` registered (`ml/model_registrations.py`) and added
+to `phase_11_head_bn_ablation.yaml`, closing the last FC/GAP pairing gap in the
+mixed-kernel sweep (the seed-43 retry for its non-GAP twin had been held back
+pending exactly this confirmation — see the finding above). PCAD result landed
+(26.51% FP32, 26.48% INT8) at
+`outputs/pcad/phase_11_head_bn_ablation/alexnet_tv_mixed_early2_gap/` but has
+**not** been folded into `phase_11_head_bn_ablation_final_comparison.csv` yet —
+run `scripts/aggregate_results.py` for that experiment to pick it up.
+
+New `scripts/phase11/plot_kernel_comparison.py` renders 10 single-question PNGs
+(kernel pattern × head × architecture family) straight from the three curated
+Phase 11 result trees into
+`results/figures_generated/phase_11_kernel_size_comparison/`, since the FC/GAP
+pairing for the mixed-kernel models spans two separate experiment configs and
+no single `models:` list covers it.
+
+## M7 — Winograd variant/packing accuracy cost (2026-09-19)
+
+Added `QATWinoConfig` (`ml/config.py`) on top of `QATConfig`: `variant`
+(`f23`/`f43`/`f63`) and `pack`/`u_w`/`v_w`/`k_dsp`, threaded through
+`load_qat_wino_model(..., cfg=)` into `qat_wino.convert()`. Until this point the
+bridge called `convert(model)` bare, which silently pinned F(4,3) with **no**
+packing — every one of budget_unico's 14 accuracy runs is that one combination,
+while the deploy bitstream packs (2 mult/DSP). `cfg=None` keeps that old
+behavior so existing callers are unaffected.
+
+Three new experiments, `configs/experiments/wino_f{23,43,63}_pack.yaml`, rerun
+just the `qat_wino` stage (FP32 checkpoint reused from budget_unico, same
+weights/seed) at the iso-DSP-budget packed point (`u_w=9, v_w=8, k_dsp=2` —
+`u_w + 2*v_w <= 25` is the shared ceiling across all three, per the DSP48E2 port-A
+budget) on 2 models (`alexnet_fire_bypass_fpga`, `vgg_style_fpga`). Results
+(best val top-1 vs. the existing un-packed-F43 FP32 numbers):
+
+| Variant | alexnet_fire_bypass_fpga | vgg_style_fpga |
+|---------|--------------------------|-----------------|
+| F23, packed | +0.09pp | -0.14pp (~unchanged) |
+| F43, packed | -3.93pp | -8.28pp (moderate) |
+| F63, packed | -15.65pp | -30.55pp (severe) |
+
+This resolves budget_unico's `≠HW` caveat for these two models: packing itself
+costs little, F(6,3) is the expensive choice. Full analysis in the sibling
+Winograd-FPGA repo's `achados_varredura.md §6`.
