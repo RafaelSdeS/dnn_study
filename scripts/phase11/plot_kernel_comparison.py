@@ -26,12 +26,12 @@ PATTERN_COLOR = {"2x2": BLUE, "3x3": GREEN, "original": AMBER, "misto": RED}
 # `label` is always the literal conv1->conv5 kernel sequence (VGG16's 13 conv layers are
 # uniform, so its label just says so instead of spelling out 13 numbers).
 MODELS = [
-    dict(key="alexnet_2x2_gap", family="AlexNet compacto (Phase 2)", head="GAP", pattern="2x2", label="2-2-2-2-2"),
-    dict(key="alexnet_3x3_gap", family="AlexNet compacto (Phase 2)", head="GAP", pattern="3x3", label="3-3-3-3-3"),
+    dict(key="alexnet_2x2_gap", family="AlexNet compacto", head="GAP", pattern="2x2", label="2-2-2-2-2"),
+    dict(key="alexnet_3x3_gap", family="AlexNet compacto", head="GAP", pattern="3x3", label="3-3-3-3-3"),
     # AlexNetMixed (models/alexnet_variants.py): conv1=3x3, conv2=2x2, conv3=3x3, conv4=2x2,
     # conv5=3x3 -- the *inverse* alternation from AlexNetTV's "mixed_alt" (2-3-2-3-2) below,
     # and a different architecture entirely (own channel widths, not AlexNetTV's).
-    dict(key="alexnet_mixed_preheinit", family="AlexNet compacto (Phase 2)", head="GAP", pattern="misto", label="3-2-3-2-3"),
+    dict(key="alexnet_mixed_preheinit", family="AlexNet compacto", head="GAP", pattern="misto", label="3-2-3-2-3"),
     dict(key="alexnet_tv_mixed_alt_gap", family="AlexNetTV", head="GAP", pattern="misto", variant="alt", label="2-3-2-3-2"),
     dict(key="alexnet_tv_mixed_early3_gap", family="AlexNetTV", head="GAP", pattern="misto", variant="early3", label="3-3-3-2-2"),
     dict(key="alexnet_tv_mixed_early2_gap", family="AlexNetTV", head="GAP", pattern="misto", variant="early2", label="2-2-2-3-3"),
@@ -76,7 +76,7 @@ def bar_group_legend(ax, title="Padrão de kernel", loc="upper right", outside=F
 def fig_overview(models):
     # short_family: color already carries kernel pattern; keep the tag to just
     # family+head, short enough that 6-way clusters (same size, ~3pp apart) stay legible.
-    short_family = {"AlexNet compacto (Phase 2)": "AlexNet", "AlexNetTV": "TV", "VGG16": "VGG16"}
+    short_family = {"AlexNet compacto": "AlexNet", "AlexNetTV": "TV", "VGG16": "VGG16"}
     # The 6 AlexNetTV-FC points sit within ~3pp of each other at nearly the same size --
     # no offset declutters that honestly, so only the outlier (original kernel) gets a
     # label here; the full breakdown is chart 03. Two more manual bumps for close pairs.
@@ -97,21 +97,22 @@ def fig_overview(models):
         if m["key"] in dense_fc_skip:
             continue
         label = short_label.get(m["key"], m["label"])
-        tag = f"{short_family[m['family']]} {label}".replace("\n", " ") + (" G" if m["head"] == "GAP" else "")
+        tag = f"{short_family[m['family']]} {label}".replace("\n", " ") + (" GAP" if m["head"] == "GAP" else "")
         dy = manual_dy.get(m["key"], 6 if i % 2 == 0 else -11)
         ax.annotate(tag, (fp32_size, fp32_top1), xytext=(5, dy), textcoords="offset points",
                     fontsize=7.5, color=color)
     ax.annotate("+ 5 variantes TV-FC 2x2/3x3/misto\n(quase mesmo tamanho e acurácia --\nver gráfico 03)",
-                (218, 24.5), xytext=(-150, -55), textcoords="offset points", fontsize=7.5,
+                (218, 24.5), xytext=(-140, 55), textcoords="offset points", fontsize=7.5,
                 color="#4d4d4d", ha="left",
                 arrowprops=dict(arrowstyle="-", color="#9e9e9e", lw=0.7))
     ax.set_xscale("log")
+    ax.margins(x=0.06, y=0.14)  # keep every marker/annotation clear of the axes edges
     ax.set_xlabel("Tamanho do modelo (MB, escala log)")
     ax.set_ylabel("Top-1 (%)")
     ax.set_title(
-        "Visão geral — todos os modelos do Phase 11 (○ FP32  □ INT8, \"G\" = classificador final enxuto/GAP)\n"
-        "\"AlexNet\" = versão enxuta (classificador final de 1 camada)   "
-        "\"TV\"/\"VGG16\" = classificador final grande (3 camadas)",
+        "Visão geral — comparação de kernel em 3 arquiteturas (○ FP32  □ INT8, \"GAP\" no rótulo = classificador final GAP)\n"
+        "\"AlexNet\" = classificador final GAP (1 camada)   "
+        "\"TV\"/\"VGG16\" = classificador final FC (3 camadas)",
         fontsize=12)
     bar_group_legend(ax, outside=True)
     savefig(fig, "01_overview_accuracy_vs_size.png")
@@ -144,14 +145,14 @@ def fig_family_bar(models, family, filename, title):
 
 # ── 5. 2x2 vs 3x3, head-to-head across every family that has both ──
 def fig_2x2_vs_3x3(models):
-    families = ["AlexNet compacto (Phase 2)", "AlexNetTV", "VGG16"]
+    families = ["AlexNet compacto", "AlexNetTV", "VGG16"]
     # Each x-tick spells out exactly which network + head this bar pair is, so the
     # chart stands on its own without needing charts 02-04 open alongside it. Positions
     # are spread out (not 0,1,2) so the 2-line descriptions have room, not overlap.
     family_desc = {
-        "AlexNet compacto (Phase 2)": "AlexNet compacto (Phase 2)\nclassificador final ENXUTO (1 camada)\n-> modelo pequeno, poucos MB",
-        "AlexNetTV": "AlexNetTV\nclassificador final GRANDE\n(3 camadas, 4096 neurônios) -> ~220 MB",
-        "VGG16": "VGG16 (rede mais profunda, 13 convs)\nclassificador final GRANDE\n(3 camadas) -> ~500 MB",
+        "AlexNet compacto": "AlexNet compacta (arquitetura própria)\nclassificador GAP (Global Average Pooling, 1 camada)\n-> modelo pequeno, poucos MB",
+        "AlexNetTV": "AlexNetTV (torchvision, clássico)\nclassificador FC (Fully Connected,\n3 camadas, 4096 neurônios) -> ~220 MB",
+        "VGG16": "VGG16 (torchvision, 13 convoluções)\nclassificador FC (Fully Connected,\n3 camadas) -> ~500 MB",
     }
     xpos = [0, 2.1, 4.2]
     fig, ax = plt.subplots(figsize=(13, 7))
@@ -169,7 +170,7 @@ def fig_2x2_vs_3x3(models):
     ax.set_xticks(xpos)
     ax.set_xticklabels([family_desc[f] for f in families], fontsize=9.5)
     ax.set_ylabel("Top-1 FP32 (%)")
-    ax.set_title("2x2 vs 3x3 uniforme (todas as camadas) — 3 arquiteturas treinadas do zero,\ncada uma com seu próprio classificador final (enxuto ou grande)")
+    ax.set_title("2x2 vs 3x3 uniforme (todas as camadas) — 3 arquiteturas treinadas do zero,\ncada uma com seu próprio classificador final (GAP ou FC)")
     ax.legend(title="Kernel", fontsize=9)
     savefig(fig, "05_2x2_vs_3x3_by_family.png")
 
@@ -185,9 +186,9 @@ def fig_head_accuracy(models):
     x = range(len(variants))
     width = 0.36
     ax.bar([i - width / 2 for i in x], [fc[v]["fp32_top1"] for v in variants], width,
-           color=RED, edgecolor="white", lw=0.6, label="FC (head grande)")
+           color=RED, edgecolor="white", lw=0.6, label="FC (Fully Connected)")
     ax.bar([i + width / 2 for i in x], [gap[v]["fp32_top1"] for v in variants], width,
-           color=RED, alpha=0.45, edgecolor="white", lw=0.6, label="GAP (head compacto)")
+           color=RED, alpha=0.45, edgecolor="white", lw=0.6, label="GAP (Global Average Pooling)")
     ax.set_xticks(list(x))
     ax.set_xticklabels([variant_label[v] for v in variants], fontsize=10)
     ax.set_ylabel("Top-1 FP32 (%)")
@@ -206,9 +207,9 @@ def fig_head_size(models):
     x = range(len(variants))
     width = 0.36
     ax.bar([i - width / 2 for i in x], [fc[v]["fp32_size_mb"] for v in variants], width,
-           color=RED, edgecolor="white", lw=0.6, label="FC (head grande)")
+           color=RED, edgecolor="white", lw=0.6, label="FC (Fully Connected)")
     ax.bar([i + width / 2 for i in x], [gap[v]["fp32_size_mb"] for v in variants], width,
-           color=RED, alpha=0.45, edgecolor="white", lw=0.6, label="GAP (head compacto)")
+           color=RED, alpha=0.45, edgecolor="white", lw=0.6, label="GAP (Global Average Pooling)")
     ax.set_yscale("log")
     ax.set_xticks(list(x))
     ax.set_xticklabels([variant_label[v] for v in variants], fontsize=10)
@@ -261,15 +262,15 @@ def main():
     load_rows()
 
     fig_overview(models)
-    fig_family_bar(models, "AlexNet compacto (Phase 2)", "02_kernel_pattern_alexnet_gap.png",
-                    "AlexNet compacto (Phase 2) — NÃO é o AlexNet original\n"
-                    "Mesmas 5 convoluções do AlexNet, mas com classificador final ENXUTO\n"
-                    "(1 camada, em vez das 3 camadas de 4096 neurônios do original) -> modelo pequeno\n"
-                    "rótulos das barras = kernel usado em cada uma das 5 camadas, na ordem (1ª -> 5ª)")
+    fig_family_bar(models, "AlexNet compacto", "02_kernel_pattern_alexnet_gap.png",
+                    "AlexNet compacta — arquitetura própria, NÃO é o AlexNet original/torchvision\n"
+                    "5 convoluções estilo AlexNet + classificador GAP (Global Average Pooling, 1 camada)\n"
+                    "GAP = poucos parâmetros -> modelo pequeno, ao contrário do FC (Fully Connected, 3 camadas\n"
+                    "de 4096 neurônios) do AlexNet clássico -- rótulos das barras = kernel de cada camada (1ª -> 5ª)")
     fig_family_bar([m for m in models if m["family"] == "AlexNetTV" and m["head"] == "FC"],
                     "AlexNetTV", "03_kernel_pattern_alexnettv_fc.png",
                     "AlexNetTV — o AlexNet clássico (torchvision), treinado do zero\n"
-                    "5 convoluções + classificador final GRANDE original (3 camadas, 4096 neurônios)\n"
+                    "5 convoluções + classificador final FC original (3 camadas, 4096 neurônios)\n"
                     "rótulos das barras = kernel usado em cada uma das 5 camadas, na ordem (1ª -> 5ª)")
     fig_family_bar(models, "VGG16", "04_kernel_pattern_vgg16.png",
                     "VGG16 (torchvision), treinada do zero — rede mais profunda, 13 convoluções\n"
