@@ -138,12 +138,13 @@ def fig_family_bar(models, family, filename, title):
     ax.set_xticklabels(labels, rotation=20, ha="right", fontsize=9)
     ax.set_ylabel("Top-1 (%)")
     ax.set_title(title, fontsize=11.5)
+    ax.margins(y=0.2)  # headroom so both legends sit inside the axes instead of widening the figure
     fp32_patch = plt.Rectangle((0, 0), 1, 1, facecolor="gray", label="FP32")
     int8_patch = plt.Rectangle((0, 0), 1, 1, facecolor="gray", alpha=0.45, label="INT8")
-    precision_legend = ax.legend(handles=[fp32_patch, int8_patch], title="Precisão", loc="upper right", fontsize=9)
+    precision_legend = ax.legend(handles=[fp32_patch, int8_patch], title="Precisão", loc="upper left", fontsize=9)
     ax.add_artist(precision_legend)  # kept alive so the pattern-color legend below doesn't replace it
     present_patterns = [p for p in PATTERN_COLOR if p in {m["pattern"] for m in sub}]
-    bar_group_legend(ax, outside=True, patterns=present_patterns)
+    bar_group_legend(ax, loc="upper right", patterns=present_patterns)
     savefig(fig, filename)
 
 
