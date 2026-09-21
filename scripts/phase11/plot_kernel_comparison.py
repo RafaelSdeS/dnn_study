@@ -102,7 +102,7 @@ def fig_overview(models):
         dy = manual_dy.get(m["key"], 6 if i % 2 == 0 else -11)
         ax.annotate(tag, (fp32_size, fp32_top1), xytext=(5, dy), textcoords="offset points",
                     fontsize=7.5, color=color)
-    ax.text(11, 33, "+ 5 variantes TV-FC 2x2/3x3/misto\n(quase mesmo tamanho e acurácia --\nver gráfico 03)",
+    ax.text(60, 30, "+ 5 variantes TV-FC 2x2/3x3/misto\n(quase mesmo tamanho e acurácia --\nver gráfico 03)",
             fontsize=7.5, color="#4d4d4d", ha="left")
     ax.set_xscale("log")
     ax.margins(x=0.06, y=0.14)  # keep every marker/annotation clear of the axes edges
@@ -153,7 +153,7 @@ def fig_2x2_vs_3x3(models):
     # chart stands on its own without needing charts 02-04 open alongside it. Positions
     # are spread out (not 0,1,2) so the 2-line descriptions have room, not overlap.
     family_desc = {
-        "AlexNet compacto": "AlexNet compacta (arquitetura própria)\nclassificador GAP (Global Average Pooling, 1 camada)\n-> modelo pequeno, poucos MB",
+        "AlexNet compacto": "AlexNet compacto (backbone próprio,\nnão é o AlexNet clássico/torchvision)\nclassificador GAP (Global Average Pooling) -> poucos MB",
         "AlexNetTV": "AlexNetTV (torchvision, clássico)\nclassificador FC (Fully Connected,\n3 camadas, 4096 neurônios) -> ~220 MB",
         "VGG16": "VGG16 (torchvision, 13 convoluções)\nclassificador FC (Fully Connected,\n3 camadas) -> ~500 MB",
     }
