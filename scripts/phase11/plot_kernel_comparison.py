@@ -222,6 +222,43 @@ def fig_head_size(models):
     savefig(fig, "07_head_fc_vs_gap_size.png")
 
 
+# ── 8b. All 7 mixed-kernel (misto) models, across every backbone/head combo ──
+def fig_all_mixed(models):
+    sub = [m for m in models if m["pattern"] == "misto"]
+    group_order = [("AlexNet compacto", "GAP"), ("AlexNetTV", "GAP"), ("AlexNetTV", "FC")]
+    group_color = {("AlexNet compacto", "GAP"): GREEN, ("AlexNetTV", "GAP"): BLUE, ("AlexNetTV", "FC"): RED}
+    group_label = {
+        ("AlexNet compacto", "GAP"): "AlexNet compacto (backbone próprio) + GAP",
+        ("AlexNetTV", "GAP"): "AlexNetTV (torchvision) + GAP",
+        ("AlexNetTV", "FC"): "AlexNetTV (torchvision) + FC",
+    }
+    sub.sort(key=lambda m: (group_order.index((m["family"], m["head"])), m["label"]))
+    labels = [f"{m['label']}\n({m['head']})" for m in sub]
+    colors = [group_color[(m["family"], m["head"])] for m in sub]
+    fp32 = [m["fp32_top1"] for m in sub]
+    int8 = [m["int8_top1"] for m in sub]
+
+    fig, ax = plt.subplots(figsize=(1.8 * len(sub) + 2.5, 7))
+    x = range(len(sub))
+    width = 0.36
+    ax.bar([i - width / 2 for i in x], fp32, width, color=colors, edgecolor="white", lw=0.6)
+    ax.bar([i + width / 2 for i in x], int8, width, color=colors, alpha=0.45, edgecolor="white", lw=0.6)
+    ax.set_xticks(list(x))
+    ax.set_xticklabels(labels, fontsize=9)
+    ax.set_ylabel("Top-1 (%)")
+    ax.set_title(
+        "Todas as 7 redes de kernel misto (2x2/3x3 alternado) -- todo backbone e classificador testados\n"
+        "rótulos das barras = kernel usado em cada uma das 5 camadas, na ordem (1ª -> 5ª)", fontsize=11.5)
+    ax.margins(y=0.2)
+    fp32_patch = plt.Rectangle((0, 0), 1, 1, facecolor="gray", label="FP32")
+    int8_patch = plt.Rectangle((0, 0), 1, 1, facecolor="gray", alpha=0.45, label="INT8")
+    precision_legend = ax.legend(handles=[fp32_patch, int8_patch], title="Precisão", loc="upper left", fontsize=9)
+    ax.add_artist(precision_legend)
+    group_handles = [plt.Rectangle((0, 0), 1, 1, facecolor=group_color[g], label=group_label[g]) for g in group_order]
+    ax.legend(handles=group_handles, title="Arquitetura + classificador final", fontsize=8.5, loc="upper right")
+    savefig(fig, "10_all_mixed_kernel_variants.png")
+
+
 # ── 8. Quantization drop, every model, sorted ──
 def fig_quant_drop(models):
     sub = sorted(models, key=lambda m: m["fp32_top1"] - m["int8_top1"])
@@ -281,6 +318,7 @@ def main():
     fig_2x2_vs_3x3(models)
     fig_head_accuracy(models)
     fig_head_size(models)
+    fig_all_mixed(models)
     fig_quant_drop(models)
     fig_efficiency(models)
 
