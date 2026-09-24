@@ -1367,8 +1367,8 @@ usam \textit{BatchNorm} em todas as convoluções e lr $10^{-3}$, enquanto \text
 não usa BN e treinou com lr $3\times10^{-4}$; na ablação suplementar da Fase 11 (protocolo
 distinto), BN sozinho valeu $+$2,8 a $+$4,6 p.p., da ordem dos $+$4,3 p.p. atribuídos ao
 \textit{bottleneck}, de modo que o ganho da compensação estrutural não está separado do efeito de BN
-e de lr (a vantagem em parâmetros e MACs independe disso). Controles de mesmo lr, com BN e em três
-sementes (\texttt{phase\_11\_geometry\_controls}) não constam deste relatório. Além disso, os
+e de lr (a vantagem em parâmetros e MACs independe disso). Controles com mesmo lr, com BN e no protocolo de
+500 épocas da Fase 11 (\texttt{phase\_11\_geometry\_controls}) não constam deste relatório. Além disso, os
 valores absolutos são de 64$\times$64 e não se
 extrapolam para 224$\times$224. (ii) O modelo \texttt{AlexNetTV} foi treinado de forma
 independente em dois momentos do projeto (79 e 67 épocas), com resultados diferentes,

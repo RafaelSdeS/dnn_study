@@ -38,6 +38,27 @@ def test_every_registration_has_a_constructor_and_fuse_map():
         assert isinstance(spec["fuse_map"], list), f"{name} has a non-list fuse_map"
 
 
+CONTROL_MODELS = ["alexnet_adapted_orig_fc", "alexnet_adapted_orig_gap", "alexnet_adapted_2x2_fc",
+                  "alexnet_adapted_2x2_gap", "alexnet_3x3_gap_bn"]
+
+
+def test_geometry_control_models_survive_the_qat_to_int8_path():
+    """The controls run FP32 -> QAT -> INT8 (Phase 11 protocol), so the hand-written fuse maps must
+    fuse every conv and the 2x2 ZeroPad2d must survive a real INT8 convert (quantized input)."""
+    from ml.quantization import build_qat_from_model, convert_to_int8
+
+    for name in CONTROL_MODELS:
+        spec, model = MODEL_REGISTRY[name], MODEL_REGISTRY[name]["ctor"]()
+        root = getattr(model, spec["fuse_root_attr"]) if spec.get("fuse_root_attr") else model
+        assert len(spec["fuse_map"]) == sum(isinstance(m, torch.nn.Conv2d) for m in model.features), name
+        for group in spec["fuse_map"]:  # every group must be Conv -> (BN ->) ReLU, in the padded layout too
+            kinds = [type(root.get_submodule(i)) for i in group]
+            assert kinds[0] is torch.nn.Conv2d and kinds[-1] is torch.nn.ReLU, f"{name}: {group} -> {kinds}"
+        qat_model = build_qat_from_model(model, name, torch.device("cpu"))
+        out = convert_to_int8(qat_model.eval())(torch.randn(2, 3, 64, 64))
+        assert out.shape == (2, 200), name
+
+
 def test_alexnet_adapted_is_3x3_family_layer_for_layer_at_3x3_and_keeps_geometry_for_other_kernels():
     """The geometry/BN controls are only controls if AlexNetAdapted(3x3) IS AlexNet3x3FC/GAP and the
     11-5-3-3-3 default keeps the same 8x8 map -- else the kernel sweep silently changes geometry."""
@@ -48,7 +69,7 @@ def test_alexnet_adapted_is_3x3_family_layer_for_layer_at_3x3_and_keeps_geometry
         assert shapes(AlexNetAdapted(kernels=(3,) * 5, head=head)) == shapes(ref()), head
 
     x = torch.randn(1, 3, 64, 64)
-    for name in ["alexnet_adapted_orig_fc", "alexnet_adapted_orig_gap", "alexnet_3x3_gap_bn"]:
+    for name in CONTROL_MODELS:
         model = MODEL_REGISTRY[name]["ctor"]().eval()
         assert tuple(model.features[:-1](x).shape) == (1, 256, 8, 8), name
         assert model(x).shape == (1, 200), name

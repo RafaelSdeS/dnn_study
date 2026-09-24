@@ -1,0 +1,29 @@
+# Controls for the kernel/geometry/BN confounds found in the report (docs/logs/PHASE11_LOG.md,
+# "Geometry confound"), under the Phase 11 protocol so they pair with the alexnet_tv_* trio, the
+# mixed-kernel and head/BN runs: 500 ep FP32 / 100 ep QAT / INT8, no early stopping, seed 42, one
+# uniform lr (_protocols/no_patience.yaml). All default init (no he_init): a no-BN 11x11 net may
+# collapse to the ln(200) plateau -- that is a result ("did not train"), don't drop it.
+#   kernel sweep at the ADAPTED geometry (all end on an 8x8 map), FC head:
+#     alexnet_adapted_orig_fc (11-5-3-3-3) vs alexnet_3x3_fc vs alexnet_adapted_2x2_fc
+#   same, GAP head: alexnet_adapted_orig_gap vs alexnet_3x3_gap (already run, phase_11_mixed_kernel_
+#     comparison, same protocol -- not repeated here) vs alexnet_adapted_2x2_gap
+#   BN control:  alexnet_3x3_gap vs alexnet_3x3_gap_bn;  block: alexnet_3x3_gap_bn vs bottleneck / fire
+#     (fire has a stride-1 stem -> 16x16 maps, so it is BN + block + geometry, not block alone)
+#   geometry pairs with the original-geometry trio (same kernels): alexnet_adapted_orig_fc vs
+#     alexnet_tv_scratch (differ in geometry + Dropout only; both default init), alexnet_3x3_fc vs
+#     alexnet_tv_3x3 (geometry + Dropout + init: he_init in alexnet_tv_3x3)
+# Seed 42 only for now; a second seed needs its own experiment name (outputs/<rt>/<exp>/<model>/
+# has no seed in its path). One job per model (a 500-ep run is ~5-10 h; nine in one job would
+# overrun the 24 h wall):
+# Submit: python -m scripts.cluster submit-sweep --experiment phase_11_geometry_controls --runtime pcad --slurm tupi_4090
+extends: _protocols/no_patience
+name: phase_11_geometry_controls
+models:
+  - alexnet_adapted_orig_fc
+  - alexnet_adapted_orig_gap
+  - alexnet_3x3_fc
+  - alexnet_adapted_2x2_fc
+  - alexnet_adapted_2x2_gap
+  - alexnet_3x3_gap_bn
+  - alexnet_bottleneck
+  - alexnet_fire

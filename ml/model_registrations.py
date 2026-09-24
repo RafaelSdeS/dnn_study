@@ -144,6 +144,13 @@ register_model("alexnet_adapted_orig_fc", partial(AlexNetAdapted, kernels=(11, 5
                fuse_map=FUSE_MAP_ALEXNET_TV, fuse_root_attr="features", lr=3e-4)
 register_model("alexnet_adapted_orig_gap", partial(AlexNetAdapted, kernels=(11, 5, 3, 3, 3), head="gap"),
                fuse_map=FUSE_MAP_ALEXNET_TV, fuse_root_attr="features", lr=3e-4)
+# 2x2 at the same 8x8 maps (ZeroPad2d before conv2-5 shifts every index after conv1: features is
+# conv0 relu1 pool2 | pad3 conv4 relu5 pool6 | pad7 conv8 relu9 | pad10 conv11 relu12 | pad13 conv14 relu15).
+FUSE_MAP_ADAPTED_2X2 = [["0", "1"], ["4", "5"], ["8", "9"], ["11", "12"], ["14", "15"]]
+register_model("alexnet_adapted_2x2_fc", partial(AlexNetAdapted, kernels=(2,) * 5, head="fc"),
+               fuse_map=FUSE_MAP_ADAPTED_2X2, fuse_root_attr="features", lr=3e-4)
+register_model("alexnet_adapted_2x2_gap", partial(AlexNetAdapted, kernels=(2,) * 5, head="gap"),
+               fuse_map=FUSE_MAP_ADAPTED_2X2, fuse_root_attr="features", lr=3e-4)
 register_model("alexnet_3x3_gap_bn", partial(AlexNetAdapted, kernels=(3,) * 5, head="gap", batch_norm=True),
                fuse_map=find_fuse_groups(AlexNetAdapted(kernels=(3,) * 5, head="gap", batch_norm=True)), lr=3e-4)
 register_model("alexnet_stacked_gap", partial(AlexNetStacked, head="gap"),

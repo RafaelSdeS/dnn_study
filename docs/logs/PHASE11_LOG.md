@@ -423,30 +423,46 @@ paragraph, kernel-cost discussion, Limitações (i)), `docs/plans/MODELS.md`, `d
 `TODO.md`, `CLAUDE.md`. `report/ic_report.pdf` and the Phase 11 figures were not rebuilt. Still open: the
 missing controls listed in `TODO.md` (Phase 2 section) — none run.
 
-## Controls submitted — geometry / kernel / BN (2026-09-24, PCAD jobs 824444-824447)
+## Controls submitted — geometry / kernel / BN (2026-09-24, PCAD jobs 824460-824467)
 
-New `models/alexnet_variants.py:AlexNetAdapted(kernels, head, batch_norm)` — the adapted 64×64 geometry of
-`AlexNet3x3FC/GAP` with free odd kernels (`tests/test_registry.py` checks that `kernels=(3,)*5` is
-`AlexNet3x3FC/GAP` layer for layer and that every new model still ends on an 8×8 map). Registered as
-`alexnet_adapted_orig_fc` / `_gap` (kernels 11-5-3-3-3, the missing large-kernel control) and
-`alexnet_3x3_gap_bn` (3x3-GAP + BN, the BN control for Bottleneck/Fire). **Default init** (no `he_init`), as the
-rest of the 3x3 family; a no-BN 11×11 net collapsing to the ln(200) plateau is reported as "did not train (k of
-3 seeds)", not dropped — but with early stopping (patience 5) check `epochs_used` before calling it final.
+**Design history.** A first submission (jobs 824444-824447: 3 seeds × 9 models under the report's protocol — 100 ep,
+early stopping patience 5, FP32 only) was cancelled while still pending, after checking "is the lr the same and how
+many epochs?": the lr is only the *initial* lr — `ml/trainer.py` uses `CosineAnnealingLR(T_max=epochs)`, so
+early-stopped runs stop at different points of the decay (stop at ep 37 of 100 → lr ≈ 2.1e-4; at 76 → ≈ 0.4e-4),
+which makes epochs and lr-at-stop per-model variables. It also probably explains most of the ~+7pp "protocol" effect
+in item 4 above (a schedule that finishes annealing), though that is inference, not measured. The controls therefore
+use the Phase 11 protocol itself, so they pair with `alexnet_tv_*`, the mixed-kernel and head/BN runs.
 
-| Experiment | Job | What |
-|------------|-----|------|
-| `phase_11_geometry_controls_s42` / `_s43` / `_s44` | 824444 / 824445 / 824446 | 9 models each, one job per seed (models run in sequence; the user already had 41 jobs queued and Slurm's `normal` QoS caps submissions at 50, so 27 single-model jobs would not fit): `alexnet_adapted_orig_{fc,gap}`, `alexnet_3x3_{fc,gap}`, `alexnet_2x2_{fc,gap}`, `alexnet_3x3_gap_bn`, `alexnet_bottleneck`, `alexnet_fire` |
-| `phase_11_geometry_controls_500ep` | 824447 | `alexnet_3x3_fc` at 500 ep / no early stopping — protocol-matched pair for `alexnet_tv_3x3` |
+**Models** (`models/alexnet_variants.py:AlexNetAdapted`, default init — no `he_init`): `alexnet_adapted_orig_{fc,gap}`
+(kernels 11-5-3-3-3, the missing large-kernel control), `alexnet_adapted_2x2_{fc,gap}` (2×2 at the *same* 8×8 maps —
+asymmetric `ZeroPad2d` before conv2-5, unlike the legacy `AlexNet2x2FC/GAP` whose maps shrink to 4×4), and
+`alexnet_3x3_gap_bn` (3x3-GAP + BN). `tests/test_registry.py` checks that `kernels=(3,)*5` is `AlexNet3x3FC/GAP` layer
+for layer, that every control ends on an 8×8 map, that each hand-written `fuse_map` points at Conv→(BN→)ReLU and
+covers all 5 convs, and that FP32 → QAT → INT8 convert runs (the padded 2×2 net included). Side note: in this torch
+build a no-BN Conv-ReLU `fuse_map` leaves `qat.Conv2d` + `ReLU` after `prepare_qat` — identical to the existing
+`alexnet_3x3_fc`, so that is the pipeline's existing behavior, not something these models changed.
 
-Protocol (`_protocols/geometry_controls.yaml`): the report's own (100 ep, patience 5), **uniform lr 3e-4** for
-every model (Bottleneck/Fire were 1e-3 in the report), FP32 only. Seed also re-draws the 90/10 split, so compare
-models within a seed and read the spread across seeds as noise. All 9 models are re-run in all 3 seeds (not
-just the 3 new ones) so every comparison is same-code/same-protocol rather than mixing in the notebook-era
-Phase 2 runs. Still differing in the 500ep pair: Dropout (2× vs. 0) and init (`he_init` vs. default).
+**Experiment** `phase_11_geometry_controls` (`extends: _protocols/no_patience`): 500 ep FP32 / 100 ep QAT (lr 1e-5,
+`freeze_bn_epoch` 3, `disable_observer_epoch` 5 — every other Phase 11 run used all 100 QAT epochs with the same
+settings) / INT8, no early stopping, seed 42, uniform lr 3e-4, weight decay 5e-4, batch 64. One job per model:
 
-Read-outs once they land: kernel effect at fixed geometry = adapted_orig vs. 3x3 vs. 2x2 (FC and GAP);
-BN effect = 3x3_gap vs. 3x3_gap_bn; block effect = 3x3_gap_bn vs. bottleneck/fire (same lr, same BN);
-protocol-matched geometry(+Dropout+init) effect = 500ep `alexnet_3x3_fc` vs. `alexnet_tv_3x3` (26.50%).
-Code reached PCAD by rsync of 7 files (its tree was already dirty at 120c5da, and had no line the local
-HEAD lacked), so the runs' `git_hash` is 120c5da with `git_dirty: true`; commit + push and `git pull` there
-before relying on the hash.
+| Job | Model | Job | Model |
+|-----|-------|-----|-------|
+| 824460 | `alexnet_adapted_orig_fc` | 824464 | `alexnet_adapted_2x2_gap` |
+| 824461 | `alexnet_adapted_orig_gap` | 824465 | `alexnet_3x3_gap_bn` |
+| 824462 | `alexnet_3x3_fc` | 824466 | `alexnet_bottleneck` |
+| 824463 | `alexnet_adapted_2x2_fc` | 824467 | `alexnet_fire` |
+
+`alexnet_3x3_gap` is *not* re-run: it already exists at 500 ep / seed 42 / default init
+(`phase_11_mixed_kernel_comparison`, 46.82%). Cost, from Phase 11's measured `avg_epoch_time_s`: ≈ 5–6 h per GAP
+model and ≈ 9–10 h per FC model for the 500 FP32 epochs (Bottleneck/Fire not measured), plus QAT; ~65 GPU-h in all.
+
+Read-outs once they land: kernel effect at fixed geometry = adapted_orig vs. 3x3 vs. adapted_2x2 (FC: `alexnet_3x3_fc`;
+GAP: existing `alexnet_3x3_gap`); BN effect = `alexnet_3x3_gap` vs. `alexnet_3x3_gap_bn`; block effect =
+`alexnet_3x3_gap_bn` vs. bottleneck/fire; geometry(+Dropout) effect at 11-5-3 kernels = `alexnet_adapted_orig_fc` vs.
+`alexnet_tv_scratch` (both default init), at 3×3 = `alexnet_3x3_fc` vs. `alexnet_tv_3x3` (+ init: `he_init` there).
+Variables that remain, by design or cost: `alexnet_fire` has a stride-1 stem (16×16 maps), so vs. `alexnet_3x3_gap_bn` it
+is BN + block + geometry; seed 42 only, so no noise estimate — a second seed needs its own experiment name
+(`outputs/<runtime>/<experiment>/<model>/` has no seed in its path).
+Code reached PCAD by rsync (its tree was already dirty at 120c5da and had no line the local HEAD lacked), so the runs'
+`git_hash` is 120c5da with `git_dirty: true`; commit + push and `git pull` there before relying on the hash.

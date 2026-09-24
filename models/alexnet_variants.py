@@ -252,7 +252,10 @@ class AlexNetAdapted(nn.Module):
     """AlexNet3x3FC/GAP's 64x64-adapted geometry with free per-conv kernels, head and BN.
 
     Same maps as AlexNet3x3FC (stem stride 2, two MaxPool2d(2), no Dropout: 64→32→16→16→8→8), same
-    channels, odd kernels with 'same' padding (k // 2). With kernels=(3,)*5, batch_norm=False it is
+    channels, odd kernels with 'same' padding (k // 2), or k=2 with an asymmetric right/bottom
+    ZeroPad2d before every conv but the stride-2 stem (nn.Conv2d(padding=int) can't pad asymmetrically,
+    and the string 'same' can't be quantized) -- so a 2x2 net ends on the same 8x8 map, unlike
+    AlexNet2x2FC/GAP (no padding, maps shrink to 4x4). With kernels=(3,)*5, batch_norm=False it is
     AlexNet3x3FC/GAP layer for layer (identical Conv-ReLU indices, so FUSE_MAP_ALEXNET_TV applies).
     Two controls the report lacked (docs/logs/PHASE11_LOG.md, "Geometry confound"):
       - kernels=(11, 5, 3, 3, 3) (default): the original AlexNet kernels at the adapted geometry, to
@@ -272,8 +275,15 @@ class AlexNetAdapted(nn.Module):
         channels = (3, 64, 192, 384, 256, 256)
         layers = []
         for i, k in enumerate(kernels):
+            if k % 2:
+                padding = k // 2
+            else:
+                assert k == 2, "even kernels: only k=2 (its stride-2 stem needs no padding: 64 -> 32)"
+                padding = 0
+                if i > 0:
+                    layers.append(nn.ZeroPad2d((0, 1, 0, 1)))
             layers += _conv_relu(channels[i], channels[i + 1], k, batch_norm,
-                                 stride=2 if i == 0 else 1, padding=k // 2)
+                                 stride=2 if i == 0 else 1, padding=padding)
             if i < 2:
                 layers.append(nn.MaxPool2d(2))
         pool, classifier = _pool_and_classifier(head, 256, 6, num_classes)
