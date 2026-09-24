@@ -388,11 +388,11 @@ def make_run_summary(
     param_efficiency = best_top1 / params_m if (best_top1 and params_m) else None
     top1_top5_gap = (
         fp32_eval.get("top5", 0) - fp32_eval.get("top1", 0)
-        if "top1" in fp32_eval else None
+        if fp32_eval.get("top1") is not None and fp32_eval.get("top5") is not None else None
     )
     int8_top1_top5_gap = (
         int8_eval.get("top5", 0) - int8_eval.get("top1", 0)
-        if int8_eval and "top1" in int8_eval else None
+        if int8_eval and int8_eval.get("top1") is not None and int8_eval.get("top5") is not None else None
     )
 
     summary = {

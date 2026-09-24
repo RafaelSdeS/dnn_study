@@ -163,6 +163,9 @@ _QAT_FIT_FIELDS = {
     "epochs_budget": "qat_epochs_budget", "best_val_top1": "qat_best_val_top1",
     "best_val_top5": "qat_best_val_top5", "total_training_time_s": "qat_total_training_time_s",
 }
+# A run without the fp32 stage (e.g. qat_wino on a reused FP32 checkpoint) rewrites
+# {model}_summary.json; without this its fp32_* fields would be overwritten with None.
+_FP32_EVAL_FIELDS = {"top1": "fp32_top1", "top5": "fp32_top5", "loss": "fp32_loss", "ece": "fp32_ece"}
 
 
 def _stop_requested(trainer: Trainer, stage: str, model_name: str, writer, wandb_run) -> bool:
@@ -282,6 +285,8 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
 
         fp32_fit = {}
         fp32_eval = {}
+        if "fp32" not in stage_list and prior_summary:
+            fp32_eval = _recover_fit_from_prior_summary(prior_summary, _FP32_EVAL_FIELDS)
         qat_fit = {}
         qat_eval = None
         int8_eval = None
