@@ -1,6 +1,10 @@
-# Original torchvision AlexNet / VGG16 topologies, from scratch, only the kernel size changes
+# Original torchvision AlexNet / VGG16 topologies, from scratch; kernel size is what this config varies
 # (models/baselines.py: AlexNetTV(kernel_size=...), VGG16(kernel_size=...)). VGG16 is 3x3 by design,
 # so vgg16 is both its "original" and its "3x3" point.
+# Not a pure kernel ablation for AlexNetTV: it keeps the 224x224 stride/pool layout (1x1 map before the
+# classifier at 64x64), its stride-4 conv1 reads only 56%/25% of the pixels at k=3/2, and
+# alexnet_tv_scratch is the pre-he_init run (job 821243) while _3x3/_2x2 are he_init reruns (jobs
+# 822532/822533; scratch's he_init retry died). See docs/logs/PHASE11_LOG.md, "Geometry confound".
 # Submit: python -m scripts.cluster submit-sweep --experiment phase_11_kernel_size_comparison --runtime pcad
 extends: _protocols/no_patience
 name: phase_11_kernel_size_comparison

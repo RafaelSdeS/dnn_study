@@ -137,10 +137,12 @@ tanto para o modelo FP32 quanto para o modelo INT8 final, e a diferença entre a
 drop}) como medida de robustez à quantização.
 
 \subsection{Arquiteturas comparadas}
-Sete variantes permitem isolar o efeito da restrição de kernel, o efeito do \textit{head} GAP, o
-efeito de diferentes mecanismos de compensação, e o efeito de cada componente dentro de uma
-arquitetura híbrida. Todas são treinadas do zero sob o mesmo protocolo (Seção~\ref{sec:dados}),
-com exceção da baseline irrestrita, que é pré-treinada (ver abaixo):
+\label{sec:arquiteturas}
+Sete variantes permitem contrastar o efeito da restrição de kernel (com as ressalvas de geometria
+descritas após a lista), o efeito do \textit{head} GAP, o efeito de diferentes mecanismos de
+compensação, e o efeito de cada componente dentro de uma arquitetura híbrida. Todas são treinadas
+do zero sob o mesmo protocolo (Seção~\ref{sec:dados}), com exceção da baseline irrestrita, que é
+pré-treinada (ver abaixo):
 
 \begin{itemize}
 \item \textbf{AlexNet (irrestrita)} — arquitetura AlexNet padrão, kernels de até 11$\times$11,
@@ -148,13 +150,15 @@ com exceção da baseline irrestrita, que é pré-treinada (ver abaixo):
 referência interna do experimento. Diferentemente de todas as demais variantes abaixo — treinadas
 do zero — essa baseline parte de pesos pré-treinados; comparações diretas de acurácia com ela
 confundem o efeito da restrição de kernel com o efeito do pré-treino (ver Seção~\ref{sec:discussao}).
-\item \textbf{AlexNet3x3-FC} — mesma arquitetura irrestrita, mas com todos os kernels
-convolucionais restritos a 3$\times$3 e treinada do zero, mantendo a \textit{head} totalmente
-conectada original. Serve de controle para isolar o efeito da restrição de kernel isoladamente do
-\textit{head} GAP (usado apenas no próximo item) e do pré-treino.
-\item \textbf{AlexNet3x3-GAP} — mesma arquitetura, todos os kernels convolucionais restritos a
-3$\times$3, com \textit{head} de \textit{global average pooling} (GAP) \cite{lin2014network} no
-lugar de camadas totalmente conectadas.
+\item \textbf{AlexNet3x3-FC} — mesmos canais da AlexNet irrestrita, todos os kernels
+convolucionais restritos a 3$\times$3, treinada do zero, mantendo a \textit{head} totalmente
+conectada original. Difere da baseline não só no kernel, mas também em pré-treino, geometria de
+\textit{stride}/\textit{pooling} (adaptada a 64$\times$64, ver abaixo), ausência de \textit{dropout}
+e duração de treino; portanto não é uma ablação pura de kernel. O par \texttt{AlexNet3x3-FC}
+vs.\ \texttt{AlexNet3x3-GAP} isola o efeito do \textit{head}.
+\item \textbf{AlexNet3x3-GAP} — mesmo \textit{backbone} da \texttt{AlexNet3x3-FC}, com \textit{head}
+de \textit{global average pooling} (GAP) \cite{lin2014network} no lugar de camadas totalmente
+conectadas.
 \item \textbf{AlexNetBottleneck} — kernels igualmente restritos a 3$\times$3, mas cada estágio é
 substituído por um bloco \textit{bottleneck} (1$\times$1 $\rightarrow$ 3$\times$3 $\rightarrow$
 1$\times$1, razão de redução 4$\times$) seguido de GAP.
@@ -170,6 +174,25 @@ por identidade em cada estágio, sem nenhum parâmetro extra em relação ao \te
 Isola o efeito do atalho residual isoladamente do \textit{stem} novo do
 \texttt{AlexNetFinalFireResidual}.
 \end{itemize}
+
+\textbf{Geometria a 64$\times$64.} A AlexNet original (e a baseline pré-treinada) foi desenhada
+para entradas de 224$\times$224: \textit{stem} 11$\times$11 com \textit{stride} 4 e três
+\textit{max-pool} 3$\times$3 de \textit{stride} 2 levam o mapa espacial a 6$\times$6 antes do
+classificador. A 64$\times$64 essa mesma geometria produz mapas de 15$\to$7$\to$3$\to$1: o
+classificador recebe um mapa 1$\times$1, que o \textit{AdaptiveAvgPool} 6$\times$6 apenas replica.
+As variantes treinadas do zero usam por isso uma geometria adaptada: \textit{stem} com
+\textit{stride} 2 e dois \textit{max-pool} 2$\times$2 (64$\to$32$\to$16$\to$8), sem o terceiro
+\textit{pool} e sem \textit{dropout}. \texttt{AlexNetFire}, \texttt{AlexNetFireBypass} e
+\texttt{AlexNetSmallKernel} omitem o \textit{stride} do \textit{stem} e chegam a mapas de
+16$\times$16 antes do GAP, o que contribui para seus MACs mais altos. A diferença importa: num
+experimento suplementar (Fase 11; 500 épocas sem \textit{early stopping}, inicialização He,
+\textit{head} GAP, sem BN, mesmos canais, semente única), a geometria adaptada
+(\texttt{AlexNetMixed}, kernels 3-2-3-2-3) atinge 45,28\% de acurácia FP32, contra 27,90\% com a
+geometria original (kernels 2-3-2-3-2), $\approx$17 p.p. a menos. Duas consequências:
+(i) a baseline irrestrita e as variantes restritas diferem em geometria, \textit{dropout},
+pré-treino e duração de treino, e não apenas no tamanho do kernel; (ii) os valores absolutos deste
+estudo são de 64$\times$64 e não se extrapolam para AlexNets de 224$\times$224 — o objeto de
+conclusão são as tendências qualitativas, não os números.
 
 O bloco \textit{bottleneck} e o módulo \textit{Fire} preservam o campo receptivo efetivo da
 convolução 3$\times$3 central, mas usam convoluções 1$\times$1 para comprimir e depois expandir (ou
@@ -281,9 +304,9 @@ A Tabela~\ref{tab:kernel_restriction_cost} resume o custo de restringir kernels 
 e a efetividade de dois mecanismos de compensação: blocos \textit{bottleneck} e módulos
 \textit{Fire}. Params e MACs medem eficiência de armazenamento e de computação separadamente —
 como o Eixo 3 mostra, eles nem sempre concordam sobre qual arquitetura é "mais eficiente".
-\texttt{AlexNet3x3-FC} isola o efeito da restrição de kernel isoladamente do \textit{head} GAP: mantém a
-\textit{head} totalmente conectada da baseline, mas restringe kernels a 3$\times$3 e treina do zero
-(diferente da baseline irrestrita, pré-treinada). Note que, apesar do kernel menor,
+\texttt{AlexNet3x3-FC} mantém a \textit{head} totalmente conectada da baseline e restringe kernels a
+3$\times$3, mas também treina do zero (a baseline é pré-treinada) e usa a geometria adaptada a
+64$\times$64 (Seção~\ref{sec:arquiteturas}), portanto não isola o efeito do kernel. Note que, apesar do kernel menor,
 \texttt{AlexNet3x3-FC} tem mais MACs que a baseline (222,3M vs. 94,9M): o \textit{stem} 3$\times$3
 usa \textit{stride} 2 em vez do \textit{stride} 4 do \textit{stem} 11$\times$11 original, então os
 mapas de ativação permanecem maiores por mais camadas — um kernel menor por aplicação, mas
@@ -308,13 +331,22 @@ AlexNetFire & 0,52 & 177,7 & 2,01 & 0,55 & 43,98 & 44,30 & $+$0,33 \\
 \end{tabular}
 \end{table*}
 
-Restringir kernels a 3$\times$3 não custa acurácia neste protocolo — o oposto da hipótese
-inicial. Isolando a restrição de kernel da troca de \textit{head} e do pré-treino
-(\texttt{AlexNet3x3-FC} vs. baseline irrestrita, ambas com \textit{head} totalmente conectada), a
-restrição \emph{ganha} 2,9 p.p. (32,89\%$\to$35,79\%). Uma explicação plausível é que a
-\textit{head} totalmente conectada de 57M parâmetros da baseline overfita mais facilmente num
-dataset de imagens 64$\times$64. Como só a baseline é pré-treinada, porém, o resultado não separa
-"custo da restrição de kernel" de "efeito do pré-treino": é sugestivo, não conclusivo.
+A \texttt{AlexNet3x3-FC} (35,79\%) supera a baseline irrestrita (32,89\%) em 2,9 p.p., ambas com
+\textit{head} totalmente conectada. Esse resultado \emph{não} pode ser lido como um ganho causado
+pela restrição de kernel: as duas diferem também em pré-treino, em geometria (a baseline preserva o
+\textit{stride} 4 e os \textit{pools} 3$\times$3 de 224$\times$224, que a 64$\times$64 reduzem o
+mapa a 1$\times$1 antes do classificador; Seção~\ref{sec:arquiteturas}), em \textit{dropout} (só a
+baseline o usa) e em duração de treino (79 vs.\ 37 épocas). O que os dados sustentam é mais fraco:
+uma AlexNet de kernels 3$\times$3, treinada do zero com geometria adaptada, iguala ou supera a
+baseline pré-treinada em 64$\times$64. O estudo não contém a variante que isolaria o kernel — a
+mesma geometria adaptada com kernels 11$\times$11/5$\times$5/3$\times$3. O único controle de kernel a
+geometria constante (Fase 11: AlexNetTV do zero, geometria original, 500 épocas, semente única) deu
+$-$1,0 p.p. ao restringir a 3$\times$3 e $-$2,5 p.p. a 2$\times$2 (27,51\%$\to$26,50\%$\to$25,03\%),
+com ressalvas: o modelo de kernels originais usou outra inicialização, e com \textit{stride} 4 o
+\textit{stem} 3$\times$3 (2$\times$2) lê apenas 56\% (25\%) dos pixels de entrada, contra 100\% do
+11$\times$11. Uma explicação plausível, entre outras, para a diferença residual é o
+\textit{overfitting} da \textit{head} FC de 57M parâmetros da baseline num dataset 64$\times$64;
+isso também não foi testado.
 
 A mudança de efeito isolado mais claro é a troca de \textit{head} para GAP
 (\texttt{AlexNet3x3-GAP}): mais 4,5 p.p. (35,79\%$\to$40,32\%) com $25\times$ menos parâmetros
@@ -323,7 +355,9 @@ reduzida do dataset.
 
 A compensação estrutural acrescenta ganhos além da troca de \textit{head}. O bloco
 \textit{bottleneck} soma mais 4,3 p.p.
-sobre a variante GAP com $6\times$ menos parâmetros, e praticamente elimina a perda sob INT8. O
+sobre a variante GAP com $6\times$ menos parâmetros (ressalva: o \textit{bottleneck} usa
+\textit{BatchNorm} em todas as convoluções e a variante GAP não; ver Limitações), e praticamente
+elimina a perda sob INT8. O
 módulo \textit{Fire} é um mecanismo alternativo: 0,52M parâmetros, 43,98\% em FP32 e um \emph{ganho}
 sob quantização (INT8 44,30\%, $+$0,33 p.p.) — propriedade rara neste estudo, compatível com a
 hipótese de que a compressão \textit{squeeze-expand} facilita a calibração de quantização, embora o
@@ -1321,10 +1355,19 @@ diferentes daquelas propostas aqui, sem que isso implique incompatibilidade mate
 Winograd e convoluções \textit{depthwise} em geral.
 
 \textbf{Limitações.} (i) A comparação com a baseline irrestrita (Tabela~\ref{tab:kernel_restriction_cost})
-mistura três fatores — tamanho de kernel, \textit{head} FC/GAP e pré-treino ImageNet — que não são
-completamente separáveis com os controles deste estudo. \texttt{AlexNet3x3-FC} isola o primeiro dos
-dois últimos, mas nenhuma variante restrita é pré-treinada, então o efeito do pré-treino
-especificamente permanece confundido. (ii) O modelo \texttt{AlexNetTV} foi treinado de forma
+mistura vários fatores — tamanho de kernel, pré-treino ImageNet, geometria de
+\textit{stride}/\textit{pooling} (original vs.\ adaptada a 64$\times$64), \textit{dropout} e duração
+de treino (79 vs.\ 37 épocas) — que não são separáveis com os controles deste estudo.
+\texttt{AlexNet3x3-FC} iguala a \textit{head} FC da baseline, mas nenhuma variante restrita é
+pré-treinada, usa a geometria original ou tem \textit{dropout}, e o estudo não inclui uma AlexNet de
+kernels grandes na geometria adaptada; o efeito puro do kernel permanece confundido
+(Seção~\ref{sec:arquiteturas}). Da mesma forma, \texttt{AlexNetBottleneck} e \texttt{AlexNetFire}
+usam \textit{BatchNorm} em todas as convoluções e \texttt{AlexNet3x3-GAP} não; na ablação
+suplementar da Fase 11 (protocolo distinto), BN sozinho valeu $+$2,8 a $+$4,6 p.p., da ordem dos
+$+$4,3 p.p. atribuídos ao \textit{bottleneck}, de modo que o ganho da compensação estrutural não
+está separado do efeito de BN (a vantagem em parâmetros e MACs independe disso). Além disso, os
+valores absolutos são de 64$\times$64 e não se
+extrapolam para 224$\times$224. (ii) O modelo \texttt{AlexNetTV} foi treinado de forma
 independente em dois momentos do projeto (79 e 67 épocas), com resultados diferentes,
 especialmente em INT8 (31,90\% vs. 26,28\%). Este relatório padroniza na execução de 79 épocas
 (a mesma usada no perfilamento de hardware) em todas as tabelas, mas a diferença entre execuções

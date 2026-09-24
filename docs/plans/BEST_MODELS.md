@@ -115,6 +115,9 @@ further down instead.
 
 **Verdict:** 
 - Pure 3×3 or 2×2 restrictions are costly without compensation.
+- **Caveat (2026-09-24):** these Phase 2 models use a 64×64-adapted stride/pool layout and no Dropout, unlike the
+  AlexNetTV baseline (original 224×224 layout, 1×1 map before the classifier at 64×64, pretrained, Dropout),
+  so a gap to that baseline is not a pure kernel-size effect. See the geometry note in `docs/plans/MODELS.md`.
 - **Head type matters:** AlexNet3x3GAP (8.79 MB) vs AlexNet3x3FC (219.75 MB) shows GAP's 25× compression benefit.
 - **AlexNetSmallKernel** (custom small-kernel design) recovers well and reaches 45.84% at tiny size.
 - Stacking small kernels helps but requires more params.
@@ -164,7 +167,7 @@ further down instead.
 
 ### **Not Recommended**
 - **AlexNetSE** — Training failure; do not pursue without debugging.
-- **AlexNet3x3FC / AlexNet2x2GAP** — Poor accuracy (30–35%) from naive kernel restriction without compensation.
+- **AlexNet3x3FC / AlexNet2x2GAP** — Poor accuracy (30–35%) without compensation; not a clean kernel-restriction effect (see the caveat under "Kernel Restriction Impact": geometry, Dropout, pretraining and protocol also differ from the AlexNetTV baseline).
 - **AlexNetGroupConv** — Negligible benefit, poor QAT.
 
 ---

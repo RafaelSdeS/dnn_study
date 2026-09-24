@@ -39,13 +39,19 @@ class AlexNet3x3FC(nn.Module):
     """All-3×3 AlexNet, FC head — uniform small kernel baseline for the restriction study.
 
     Architecture: 5 conv stages (all 3×3, same channels as AlexNetTV), AdaptiveAvgPool(6×6),
-    3-layer FC head. Identical structure to AlexNetTV but with 3×3 kernels everywhere.
+    3-layer FC head. NOT identical to AlexNetTV apart from the kernels -- geometry is adapted to
+    64x64 input: stem stride 2 (AlexNetTV: 4), two MaxPool2d(2) (AlexNetTV: three MaxPool2d(3, 2)),
+    64→32→16→16→8→8 feature maps (AlexNetTV at 64x64 collapses to 1x1 before the classifier), and
+    no Dropout in the FC head (AlexNetTV keeps torchvision's two Dropout(0.5)).
     Paired with AlexNet3x3GAP (same backbone, GAP head) to isolate head type as a variable.
     Expected top-1: ~8-12% (from scratch; 3×3 alone insufficient without residuals).
     Size: ~220 MB FP32 / ~55 MB INT8 (large FC head dominates).
     Training speed: slow (same large FC head as original AlexNet).
     QAT: full — flat Sequential, hand-written fuse_map for Conv-ReLU pairs.
-    Trade-off: kernel size is the single variable; proves large kernels matter for AlexNet.
+    Trade-off: 3×3 vs AlexNetTV's large kernels, but kernel size is NOT the single variable here
+    (geometry, dropout, init, and -- in the Phase 2 runs -- protocol also differ from AlexNetTV);
+    do not read a gap to AlexNetTV as a pure kernel-size effect. See docs/logs/PHASE11_LOG.md
+    ("Geometry confound", 2026-09-24).
     Note: no BatchNorm (matches original AlexNet design for clean kernel-size comparison).
     """
 

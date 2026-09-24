@@ -150,6 +150,13 @@ For each variant:
 
 Results in `results/phase_2_kernel_restriction/` (57 epochs, full QAT + INT8).
 
+Open follow-up (2026-09-24, see `docs/logs/PHASE11_LOG.md` "Geometry confound"): the adapted-geometry
+AlexNet family has no large-kernel control, so its kernel effect is unmeasured. Cheapest fixes, none run yet:
+- an adapted-geometry AlexNet with 11×11/5×5/3×3 kernels (the missing control), under the Phase 11 protocol;
+- `alexnet_3x3_fc` under the Phase 11 protocol (500 ep, no early stopping) to pair with `alexnet_tv_3x3` —
+  `phase_11_mixed_kernel_comparison.yaml` says it was "already re-run", but no such run dir was found locally;
+- an `AlexNetTV` variant with the adapted stride/pool layout (and no Dropout) to price the geometry alone.
+
 ---
 
 ## Phase 3 — Compensation Mechanisms ✅

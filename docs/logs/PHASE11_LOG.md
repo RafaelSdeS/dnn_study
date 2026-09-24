@@ -373,3 +373,51 @@ budget) on 2 models (`alexnet_fire_bypass_fpga`, `vgg_style_fpga`). Results
 This resolves budget_unico's `≠HW` caveat for these two models: packing itself
 costs little, F(6,3) is the expensive choice. Full analysis in the sibling
 Winograd-FPGA repo's `achados_varredura.md §6`.
+
+## Finding — geometry confound: AlexNetTV vs. the adapted AlexNet family (2026-09-24)
+
+Shape-traced every AlexNet-family model at 64×64 (forward pass on a zero tensor, no training).
+"Kernel size is the only variable" is **false** both for Phase 11's `alexnet_tv_*` trio and for the
+report's `AlexNet3x3-FC` vs. the pretrained baseline:
+
+| Model | conv1 | pools | map into classifier | Dropout |
+|-------|-------|-------|---------------------|---------|
+| torchvision AlexNet @224 | 11×11 s4 | 3× MaxPool(3, s2) | 6×6 (55→27→13→6) | 2 |
+| `AlexNetTV` @64 (orig / k=3 / k=2) | s4 | 3× MaxPool(3, s2) | **1×1** (15\|16→7→3→1), AAP(6,6) replicates it | 2 |
+| `AlexNet3x3FC/GAP`, `Mixed`, `Stacked`, `Bottleneck`, `FinalFireResidual` | s2 | 2× MaxPool(2) | 8×8 (`Mixed` 6×6) | 0 |
+| `AlexNetSmallKernel`, `Fire`, `FireBypass` | s1 | 2× MaxPool(2) | 16×16 (→ higher MACs) | 0 |
+| `VGG16` k=3 / k=2 | s1 | 5× MaxPool(2) | 2×2 → AAP(7,7) upsample | 2 |
+
+1. **Geometry is worth ~17pp, at matched conditions.** `alexnet_mixed` (adapted, GAP, no BN, 3-2-3-2-3) 45.28%
+   vs. `alexnet_tv_mixed_alt_gap` (original geometry, GAP, no BN, 2-3-2-3-2) 27.90% FP32 — both in
+   `phase_11_head_bn_ablation`, so same protocol and `he_init`; single seed, kernel order differs (the other
+   two TV-GAP patterns land at 26.5–28.3%, so order barely matters). The original geometry is not broken
+   (27.5% vs. 0.5% chance) but far below the adapted layout.
+2. **`AlexNetTV(kernel_size=3/2)` is not overlap-preserving.** conv1 keeps stride 4, so it reads 3 of every 4
+   input columns (k=3) or 2 of 4 (k=2): 56% / 25% of the pixels, vs. 100% for the original 11×11. Part of the
+   27.51→26.50→25.03% trend is pixel loss, not kernel size.
+3. **The trio mixes inits.** `alexnet_tv_scratch` is the pre-`he_init` run (job 821243, git 4e91e77; its
+   `he_init` retry died — `alexnet_tv_scratch_dead_heinit`), while `_3x3`/`_2x2` are the `he_init` reruns (jobs
+   822532/822533; the recorded git hash 120c5da predates `he_init` but `git_dirty: true`, and both accuracies
+   moved vs. the pre-fix table at the top: 24.84→26.50, 23.93→25.03).
+4. **The report's 35.79% vs. 26.50% (`AlexNet3x3-FC` vs. `alexnet_tv_3x3`, 9.3pp) is not "only stride/pool".**
+   Dropout (2× vs. 0), init (`he_init` vs. PyTorch default) and protocol (Phase 2: early stopping, patience 5,
+   37 ep; Phase 11: 500 ep) also differ. Protocol alone is worth ~+7pp on the same model: `alexnet_3x3_gap`
+   40.32→46.82, `alexnet_2x2_gap` 33.15→40.27, `alexnet_mixed` 38.74→45.46 (Phase 2 vs. Phase 11 runs).
+5. **The report's "3×3 gains 2.9pp over the baseline" (32.89→35.79) is confounded** by pretraining, geometry,
+   Dropout and epochs (79 vs. 37); there is no adapted-geometry AlexNet with 11×11/5×5/3×3 kernels to isolate
+   the kernel. The only same-geometry kernel evidence is item 2's trio (−1.0pp / −2.5pp), with items 2–3 caveats.
+6. **BN confounds the compensation claim in the report.** `AlexNet3x3-GAP` has no BatchNorm; `AlexNetBottleneck`
+   and `AlexNetFire` have 15 BN layers (shape trace). The report's "bottleneck adds +4.3pp over 3x3-GAP" therefore
+   mixes the block with BN, and BN alone is worth +2.8 to +4.6pp in `phase_11_head_bn_ablation`
+   (`alexnet_mixed` 45.28→`_bn` 48.37, `_fc` 37.20→`_fc_bn` 40.00, `alexnet_stacked_gap_nobn` 48.95→`_gap` 53.52;
+   different protocol from the report's, same direction). The params/MACs advantage (0.39M / 39.5M vs.
+   2.30M / 167.0M) is measured fact and unaffected.
+7. `VGG16` here is torchvision cfg D **plus BatchNorm** (the original has none) and its 2×2 features are
+   upsampled to 7×7 by AAP(7,7) at 64×64 — degenerate too, but milder than AlexNetTV's 1×1.
+
+Corrected in this pass (nothing committed): `report/ic_report.tex` (architectures list, new "Geometria a 64×64"
+paragraph, kernel-cost discussion, Limitações (i)), `docs/plans/MODELS.md`, `docs/plans/BEST_MODELS.md`,
+`models/alexnet_variants.py`/`models/baselines.py` docstrings, `configs/experiments/phase_11_kernel_size_comparison.yaml`,
+`TODO.md`, `CLAUDE.md`. `report/ic_report.pdf` and the Phase 11 figures were not rebuilt. Still open: the
+missing controls listed in `TODO.md` (Phase 2 section) — none run.

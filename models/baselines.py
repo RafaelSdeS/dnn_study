@@ -78,6 +78,13 @@ class AlexNetTV(nn.Module):
     Training speed: medium (large FC head dominates memory).
     QAT: full — flat Sequential features, easy Conv-BN-ReLU fusion via fuse_map.
     Trade-off: large kernel sizes vs accuracy; classical vs modern architecture.
+    Geometry caveat: designed for 224x224. At this study's 64x64 the feature maps go 15→7→3→1
+    (conv1 s4 + three MaxPool2d(3, 2)), so the classifier sees a 1x1 map that AdaptiveAvgPool(6, 6)
+    merely replicates; the from-scratch AlexNet3x3FC family uses an adapted stride/pool layout
+    instead (models/alexnet_variants.py): e.g. AlexNetMixed 45.28% vs alexnet_tv_mixed_alt_gap
+    27.90% FP32, same Phase 11 protocol/init/GAP head, single seed. Also, with
+    kernel_size=3/2 the s4 conv1 no longer overlaps -- it reads only 56%/25% of the input pixels
+    (100% for the original 11x11) -- so this is not a pure kernel ablation.
     kernel_size=3 or 2 replaces all 5 convs with that kernel; kernel_size="mixed_alt"/
     "mixed_early3"/"mixed_early2" replaces them with a per-layer 3x3/2x2 mix (see
     _ALEXNET_KERNEL_SPECS), keeping channels/pool structure -- for the kernel-restriction

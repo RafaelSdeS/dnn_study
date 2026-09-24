@@ -6,6 +6,11 @@ Pulls fp32/int8 top-1 + size directly from the curated Phase 11 result trees
 phase_11_head_bn_ablation) instead of a models: list, since the FC/GAP head pairing
 for the mixed-kernel models spans two experiment configs.
 
+Read across families with care: "AlexNet compacto" (adapted stride/pool, no Dropout) and AlexNetTV
+(original 224x224 stride/pool, 1x1 map before the classifier at 64x64) differ in far more than kernels
+(~17pp at matched protocol), so a cross-family gap is not a kernel effect; only the within-family
+kernel-pattern comparisons are. See docs/logs/PHASE11_LOG.md, "Geometry confound".
+
     python -m scripts.phase11.plot_kernel_comparison
 """
 import json

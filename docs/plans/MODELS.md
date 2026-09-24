@@ -129,7 +129,37 @@ These classical and modern architectures establish performance baselines for the
 
 ## Phase 2: Kernel Restriction Study
 
-These models isolate kernel size as the experimental variable, all based on AlexNet architecture.
+These models restrict kernel size on an AlexNet-style backbone, **but kernel size is not the only
+variable** relative to `AlexNetTV` — see the geometry note below before reading any gap to
+`AlexNetTV` as a kernel effect.
+
+### Geometry note — AlexNetTV vs. the adapted AlexNet family (verified 2026-09-24)
+
+Shape trace at 64×64 input (`AAP` = AdaptiveAvgPool into the classifier):
+
+| | torchvision AlexNet @224 | `AlexNetTV` @64 | `AlexNet3x3FC`/`3x3GAP` @64 |
+|---|---|---|---|
+| conv1 | 11×11 s4 p2 | same; with `kernel_size=3/2`: 3×3/2×2 **s4** | 3×3 **s2** p1 |
+| pools | 3× MaxPool(3, s2) | 3× MaxPool(3, s2) | **2× MaxPool(2)**, no 3rd pool |
+| feature map | 55→27→13→**6** | 15→7→3→**1** (k=3/2: 16→7→3→1) | 32→16→8 (convs 32,16,16,8,8,8,8) |
+| into classifier | 6×6 native | 1×1 replicated ×36 by AAP(6,6) | 8×8 → AAP(6,6) real pooling |
+| Dropout | 2× 0.5 | 2× 0.5 (FC head) | none |
+| from-scratch init | — | He (`he_init`, since 2026-09-17) | PyTorch default |
+
+Consequences:
+- At 64×64 the original geometry collapses to 1×1 before the classifier, so the FC head sees no spatial
+  structure and conv3–5 run on 3×3 maps. Trained from scratch it still learns (27.5% top-1) but is far
+  below the adapted layout at matched protocol: `alexnet_mixed` (adapted, GAP, no BN) 45.28% vs.
+  `alexnet_tv_mixed_alt_gap` (original geometry, GAP, no BN) 27.90% FP32 — same
+  `phase_11_head_bn_ablation` protocol/init, different kernel order, single seed (~17pp).
+- With `AlexNetTV(kernel_size=3/2)`, conv1 keeps stride 4, so it stops overlapping: it reads only 56% (3×3)
+  / 25% (2×2) of the input pixels, vs. 100% for the original 11×11. `alexnet_tv_*` is therefore not a pure
+  kernel ablation either, and its kernel-only trend (27.51→26.50→25.03%) also mixes inits
+  (`alexnet_tv_scratch` is the pre-`he_init` run, `_3x3`/`_2x2` are `he_init` reruns).
+- Do not read `AlexNet3x3FC` (Phase 2, early stopping) vs. `alexnet_tv_3x3` (Phase 11, 500 ep, no early
+  stopping) as a stride/pool effect either: Dropout, init, and protocol differ too (the protocol alone
+  moved `alexnet_3x3_gap` 40.32→46.82%).
+- Absolute numbers are 64×64 results, not predictions for 224×224 AlexNets.
 
 ### AlexNet3x3FC
 
@@ -138,18 +168,19 @@ These models isolate kernel size as the experimental variable, all based on Alex
 **Architecture:**
 - 5 convolutional stages, all 3×3 kernels
 - Identical channel widths to AlexNetTV: 64→192→384→256→256
-- No BatchNorm (matches AlexNetTV for clean kernel-size comparison)
-- First conv: stride=2, padding=1
+- No BatchNorm (as AlexNetTV)
+- First conv: stride=2, padding=1 (AlexNetTV: stride 4)
 - Subsequent convs: stride=1, padding=1
-- AdaptiveAvgPool(6×6) + 3-layer FC (4096→4096→200)
+- MaxPool(2)×2 after conv1 and conv2 (AlexNetTV: MaxPool(3, s2)×3)
+- AdaptiveAvgPool(6×6) + 3-layer FC (4096→4096→200), **no Dropout** (AlexNetTV keeps two)
 
 **Inspiration:**
-- AlexNet architecture with kernel sizes uniformly reduced to 3×3
-- Controlled experiment isolating kernel size as single variable
-- Enables direct comparison with AlexNetTV
+- AlexNet architecture with kernel sizes uniformly reduced to 3×3, geometry adapted to 64×64
+- Not a single-variable experiment vs. AlexNetTV (see geometry note above)
 
 **Why Chosen:**
-- Pure kernel-size ablation: everything identical to AlexNetTV except kernel sizes
+- Kernel-restricted, 64×64-adapted AlexNet baseline; the head-type contrast (vs. `AlexNet3x3GAP`, same
+  backbone) is the clean comparison it supports, not a pure kernel-size ablation vs. AlexNetTV
 - Tests whether classical AlexNet can work with only 3×3 kernels
 - Establishes the lower bound of receptive field while maintaining other design choices
 - Winograd-compatible kernel size (3×3 is a standard Winograd size)
@@ -256,7 +287,10 @@ These models isolate kernel size as the experimental variable, all based on Alex
 
 ## Phase 3a: Compensation Mechanisms
 
-These models add exactly one architectural mechanism to AlexNet3x3FC, isolating each technique's impact.
+These models each add one headline mechanism to the AlexNet3x3FC backbone, but are not strictly
+one-variable: several also add BatchNorm and/or replace the FC head with GAP (e.g. Bottleneck, Fire),
+and Fire/FireBypass use a stride-1 stem (16×16 maps before GAP vs. 8×8 for the stride-2 family), which
+raises their MACs. Verified by shape trace at 64×64 (2026-09-24); see the geometry note in Phase 2.
 
 ### AlexNetBottleneck
 
