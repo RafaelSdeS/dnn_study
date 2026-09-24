@@ -38,6 +38,24 @@ def test_every_registration_has_a_constructor_and_fuse_map():
         assert isinstance(spec["fuse_map"], list), f"{name} has a non-list fuse_map"
 
 
+def test_alexnet_adapted_is_3x3_family_layer_for_layer_at_3x3_and_keeps_geometry_for_other_kernels():
+    """The geometry/BN controls are only controls if AlexNetAdapted(3x3) IS AlexNet3x3FC/GAP and the
+    11-5-3-3-3 default keeps the same 8x8 map -- else the kernel sweep silently changes geometry."""
+    from models import AlexNet3x3FC, AlexNet3x3GAP, AlexNetAdapted
+
+    for ref, head in [(AlexNet3x3FC, "fc"), (AlexNet3x3GAP, "gap")]:
+        shapes = lambda m: {k: tuple(v.shape) for k, v in m.state_dict().items()}
+        assert shapes(AlexNetAdapted(kernels=(3,) * 5, head=head)) == shapes(ref()), head
+
+    x = torch.randn(1, 3, 64, 64)
+    for name in ["alexnet_adapted_orig_fc", "alexnet_adapted_orig_gap", "alexnet_3x3_gap_bn"]:
+        model = MODEL_REGISTRY[name]["ctor"]().eval()
+        assert tuple(model.features[:-1](x).shape) == (1, 256, 8, 8), name
+        assert model(x).shape == (1, 200), name
+    assert not any(isinstance(m, torch.nn.BatchNorm2d) for m in MODEL_REGISTRY["alexnet_adapted_orig_fc"]["ctor"]().modules())
+    assert any(isinstance(m, torch.nn.BatchNorm2d) for m in MODEL_REGISTRY["alexnet_3x3_gap_bn"]["ctor"]().modules())
+
+
 def test_phase_11_kernel_swap_only_changes_the_kernel():
     """AlexNetTV/VGG16(kernel_size=...): every variant of a family must reach the same feature
     map size at 64x64 -- proves the kernel swap left channels/pool structure alone -- while

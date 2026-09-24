@@ -1,7 +1,7 @@
 from .baselines import AlexNetTV, VGG16, VGGStyleCNN, ResNet18TV, MobileNetV2TV
 from .alexnet_variants import (
     AlexNet3x3FC, AlexNet3x3GAP, AlexNet2x2GAP, AlexNet2x2FC,
-    AlexNetStacked, AlexNetMixed, AlexNetSmallKernel,
+    AlexNetStacked, AlexNetMixed, AlexNetSmallKernel, AlexNetAdapted,
 )
 from .compensation import (
     AlexNetBottleneck, AlexNetFactorized, AlexNetGroupConv, AlexNetDepthwiseSep,

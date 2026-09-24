@@ -246,6 +246,49 @@ class AlexNet3x3GAP(nn.Module):
         return x
 
 
+# ─── AlexNetAdapted ───────────────────────────────────────────────────────────
+
+class AlexNetAdapted(nn.Module):
+    """AlexNet3x3FC/GAP's 64x64-adapted geometry with free per-conv kernels, head and BN.
+
+    Same maps as AlexNet3x3FC (stem stride 2, two MaxPool2d(2), no Dropout: 64→32→16→16→8→8), same
+    channels, odd kernels with 'same' padding (k // 2). With kernels=(3,)*5, batch_norm=False it is
+    AlexNet3x3FC/GAP layer for layer (identical Conv-ReLU indices, so FUSE_MAP_ALEXNET_TV applies).
+    Two controls the report lacked (docs/logs/PHASE11_LOG.md, "Geometry confound"):
+      - kernels=(11, 5, 3, 3, 3) (default): the original AlexNet kernels at the adapted geometry, to
+        price the kernel effect without the stride/pool/Dropout confound of AlexNetTV.
+      - batch_norm=True, kernels=(3,)*5, head="gap": AlexNet3x3GAP + BN, to separate the BN in
+        Bottleneck/Fire (every conv) from their block structure.
+    Default PyTorch init (no he_init), like AlexNet3x3FC/GAP: a no-BN large-kernel net may stay on the
+    ln(num_classes) plateau (see models.baselines.he_init) -- that is a result, not a bug to patch.
+    """
+
+    def __init__(self, num_classes: int = 200, kernels: tuple = (11, 5, 3, 3, 3), head: str = "fc",
+                 batch_norm: bool = False):
+        super().__init__()
+        self.quant = tq.QuantStub()
+        self.dequant = tq.DeQuantStub()
+
+        channels = (3, 64, 192, 384, 256, 256)
+        layers = []
+        for i, k in enumerate(kernels):
+            layers += _conv_relu(channels[i], channels[i + 1], k, batch_norm,
+                                 stride=2 if i == 0 else 1, padding=k // 2)
+            if i < 2:
+                layers.append(nn.MaxPool2d(2))
+        pool, classifier = _pool_and_classifier(head, 256, 6, num_classes)
+        layers.append(pool)
+        self.features = nn.Sequential(*layers)
+        self.classifier = classifier
+
+    def forward(self, x):
+        x = self.quant(x)
+        x = self.features(x)
+        x = self.classifier(x)
+        x = self.dequant(x)
+        return x
+
+
 # ─── AlexNetStacked ───────────────────────────────────────────────────────────
 
 class AlexNetStacked(nn.Module):

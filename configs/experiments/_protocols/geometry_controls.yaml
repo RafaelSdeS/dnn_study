@@ -1,0 +1,9 @@
+# Phase 11 geometry/BN controls: the report's own protocol (configs/training.yaml: 100 ep, early
+# stopping patience 5) so the numbers pair with its Phase 2/3 tables, but ONE lr for every model
+# (uniform_hparams) -- the report ran Bottleneck/Fire at lr 1e-3 and 3x3-GAP at 3e-4, an lr
+# confound the BN control (alexnet_3x3_gap_bn) would otherwise inherit -- and FP32 only: the
+# question is accuracy, not INT8. `seed:` is set per file (3 seeds, one experiment name each,
+# since outputs/<runtime>/<experiment>/<model>/ has no seed in its path). Used via `extends:`.
+uniform_hparams: true
+stages:
+  - fp32

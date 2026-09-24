@@ -1,0 +1,14 @@
+# Seed 44 twin of phase_11_geometry_controls_s42.yaml (see its header).
+extends: _protocols/geometry_controls
+name: phase_11_geometry_controls_s44
+seed: 44
+models:
+  - alexnet_adapted_orig_fc
+  - alexnet_adapted_orig_gap
+  - alexnet_3x3_fc
+  - alexnet_3x3_gap
+  - alexnet_2x2_fc
+  - alexnet_2x2_gap
+  - alexnet_3x3_gap_bn
+  - alexnet_bottleneck
+  - alexnet_fire

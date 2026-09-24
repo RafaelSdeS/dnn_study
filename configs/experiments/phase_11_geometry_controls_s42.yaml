@@ -1,0 +1,25 @@
+# Controls for the kernel/geometry/BN confounds found in the report (docs/logs/PHASE11_LOG.md,
+# "Geometry confound"), one seed per file (s42/s43/s44) -- seed also re-draws the 90/10 split, so
+# compare models within a seed and read the spread across seeds as noise.
+#   kernel sweep at the adapted geometry:  alexnet_adapted_orig_{fc,gap} (11-5-3-3-3) vs
+#                                          alexnet_3x3_{fc,gap} vs alexnet_2x2_{fc,gap}
+#                                          (2x2 has no padding: its maps end at 4x4, not 8x8)
+#   BN control for the compensation claim: alexnet_3x3_gap vs alexnet_3x3_gap_bn vs
+#                                          alexnet_bottleneck / alexnet_fire (BN + block)
+# All default init (no he_init): a no-BN 11x11 net may collapse to the ln(200) plateau -- report
+# that as "did not train (k of 3 seeds)", don't drop it. Early stopping (patience 5) could end a
+# plateau run before it escapes; compare epochs_used before calling a collapse final.
+# Submit: python -m scripts.cluster submit-sweep --experiment phase_11_geometry_controls_s42 --runtime pcad --slurm tupi_4090
+extends: _protocols/geometry_controls
+name: phase_11_geometry_controls_s42
+seed: 42
+models:
+  - alexnet_adapted_orig_fc
+  - alexnet_adapted_orig_gap
+  - alexnet_3x3_fc
+  - alexnet_3x3_gap
+  - alexnet_2x2_fc
+  - alexnet_2x2_gap
+  - alexnet_3x3_gap_bn
+  - alexnet_bottleneck
+  - alexnet_fire

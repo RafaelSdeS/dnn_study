@@ -356,7 +356,8 @@ reduzida do dataset.
 A compensação estrutural acrescenta ganhos além da troca de \textit{head}. O bloco
 \textit{bottleneck} soma mais 4,3 p.p.
 sobre a variante GAP com $6\times$ menos parâmetros (ressalva: o \textit{bottleneck} usa
-\textit{BatchNorm} em todas as convoluções e a variante GAP não; ver Limitações), e praticamente
+\textit{BatchNorm} em todas as convoluções e lr $10^{-3}$; a variante GAP não usa BN e treinou com
+$3\times10^{-4}$; ver Limitações), e praticamente
 elimina a perda sob INT8. O
 módulo \textit{Fire} é um mecanismo alternativo: 0,52M parâmetros, 43,98\% em FP32 e um \emph{ganho}
 sob quantização (INT8 44,30\%, $+$0,33 p.p.) — propriedade rara neste estudo, compatível com a
@@ -1362,10 +1363,12 @@ de treino (79 vs.\ 37 épocas) — que não são separáveis com os controles de
 pré-treinada, usa a geometria original ou tem \textit{dropout}, e o estudo não inclui uma AlexNet de
 kernels grandes na geometria adaptada; o efeito puro do kernel permanece confundido
 (Seção~\ref{sec:arquiteturas}). Da mesma forma, \texttt{AlexNetBottleneck} e \texttt{AlexNetFire}
-usam \textit{BatchNorm} em todas as convoluções e \texttt{AlexNet3x3-GAP} não; na ablação
-suplementar da Fase 11 (protocolo distinto), BN sozinho valeu $+$2,8 a $+$4,6 p.p., da ordem dos
-$+$4,3 p.p. atribuídos ao \textit{bottleneck}, de modo que o ganho da compensação estrutural não
-está separado do efeito de BN (a vantagem em parâmetros e MACs independe disso). Além disso, os
+usam \textit{BatchNorm} em todas as convoluções e lr $10^{-3}$, enquanto \texttt{AlexNet3x3-GAP}
+não usa BN e treinou com lr $3\times10^{-4}$; na ablação suplementar da Fase 11 (protocolo
+distinto), BN sozinho valeu $+$2,8 a $+$4,6 p.p., da ordem dos $+$4,3 p.p. atribuídos ao
+\textit{bottleneck}, de modo que o ganho da compensação estrutural não está separado do efeito de BN
+e de lr (a vantagem em parâmetros e MACs independe disso). Controles de mesmo lr, com BN e em três
+sementes (\texttt{phase\_11\_geometry\_controls}) não constam deste relatório. Além disso, os
 valores absolutos são de 64$\times$64 e não se
 extrapolam para 224$\times$224. (ii) O modelo \texttt{AlexNetTV} foi treinado de forma
 independente em dois momentos do projeto (79 e 67 épocas), com resultados diferentes,

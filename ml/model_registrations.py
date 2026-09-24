@@ -26,6 +26,7 @@ from models import (
     AlexNet2x2FC,
     AlexNetStacked,
     AlexNetMixed,
+    AlexNetAdapted,
     AlexNetBottleneck,
     AlexNetFactorized,
     AlexNetGroupConv,
@@ -135,6 +136,16 @@ register_model("alexnet_mixed_bn", partial(AlexNetMixed, batch_norm=True),
                fuse_map=find_fuse_groups(AlexNetMixed(batch_norm=True)), lr=3e-4)
 register_model("alexnet_mixed_fc_bn", partial(AlexNetMixed, head="fc", batch_norm=True),
                fuse_map=find_fuse_groups(AlexNetMixed(head="fc", batch_norm=True)), lr=3e-4)
+
+# Phase 11 geometry/BN controls (configs/experiments/phase_11_geometry_controls_s*.yaml): the
+# original 11/5/3/3/3 kernels at AlexNet3x3FC/GAP's adapted geometry (Conv-ReLU only -> same
+# hand-written fuse_map as 3x3FC/GAP), and 3x3-GAP + BN as the BN control for Bottleneck/Fire.
+register_model("alexnet_adapted_orig_fc", partial(AlexNetAdapted, kernels=(11, 5, 3, 3, 3), head="fc"),
+               fuse_map=FUSE_MAP_ALEXNET_TV, fuse_root_attr="features", lr=3e-4)
+register_model("alexnet_adapted_orig_gap", partial(AlexNetAdapted, kernels=(11, 5, 3, 3, 3), head="gap"),
+               fuse_map=FUSE_MAP_ALEXNET_TV, fuse_root_attr="features", lr=3e-4)
+register_model("alexnet_3x3_gap_bn", partial(AlexNetAdapted, kernels=(3,) * 5, head="gap", batch_norm=True),
+               fuse_map=find_fuse_groups(AlexNetAdapted(kernels=(3,) * 5, head="gap", batch_norm=True)), lr=3e-4)
 register_model("alexnet_stacked_gap", partial(AlexNetStacked, head="gap"),
                fuse_map=FUSE_MAP_STACKED, fuse_root_attr="features", lr=1e-3)
 # No BN -> features compresses to plain Conv-ReLU pairs (BN entries drop out, shifting every

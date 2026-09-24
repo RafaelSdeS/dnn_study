@@ -411,7 +411,8 @@ report's `AlexNet3x3-FC` vs. the pretrained baseline:
    and `AlexNetFire` have 15 BN layers (shape trace). The report's "bottleneck adds +4.3pp over 3x3-GAP" therefore
    mixes the block with BN, and BN alone is worth +2.8 to +4.6pp in `phase_11_head_bn_ablation`
    (`alexnet_mixed` 45.28→`_bn` 48.37, `_fc` 37.20→`_fc_bn` 40.00, `alexnet_stacked_gap_nobn` 48.95→`_gap` 53.52;
-   different protocol from the report's, same direction). The params/MACs advantage (0.39M / 39.5M vs.
+   different protocol from the report's, same direction). Learning rate is a second confound: the report ran
+   Bottleneck/Fire at 1e-3 (registry lr) and 3x3-GAP at 3e-4. The params/MACs advantage (0.39M / 39.5M vs.
    2.30M / 167.0M) is measured fact and unaffected.
 7. `VGG16` here is torchvision cfg D **plus BatchNorm** (the original has none) and its 2×2 features are
    upsampled to 7×7 by AAP(7,7) at 64×64 — degenerate too, but milder than AlexNetTV's 1×1.
@@ -421,3 +422,31 @@ paragraph, kernel-cost discussion, Limitações (i)), `docs/plans/MODELS.md`, `d
 `models/alexnet_variants.py`/`models/baselines.py` docstrings, `configs/experiments/phase_11_kernel_size_comparison.yaml`,
 `TODO.md`, `CLAUDE.md`. `report/ic_report.pdf` and the Phase 11 figures were not rebuilt. Still open: the
 missing controls listed in `TODO.md` (Phase 2 section) — none run.
+
+## Controls submitted — geometry / kernel / BN (2026-09-24, PCAD jobs 824444-824447)
+
+New `models/alexnet_variants.py:AlexNetAdapted(kernels, head, batch_norm)` — the adapted 64×64 geometry of
+`AlexNet3x3FC/GAP` with free odd kernels (`tests/test_registry.py` checks that `kernels=(3,)*5` is
+`AlexNet3x3FC/GAP` layer for layer and that every new model still ends on an 8×8 map). Registered as
+`alexnet_adapted_orig_fc` / `_gap` (kernels 11-5-3-3-3, the missing large-kernel control) and
+`alexnet_3x3_gap_bn` (3x3-GAP + BN, the BN control for Bottleneck/Fire). **Default init** (no `he_init`), as the
+rest of the 3x3 family; a no-BN 11×11 net collapsing to the ln(200) plateau is reported as "did not train (k of
+3 seeds)", not dropped — but with early stopping (patience 5) check `epochs_used` before calling it final.
+
+| Experiment | Job | What |
+|------------|-----|------|
+| `phase_11_geometry_controls_s42` / `_s43` / `_s44` | 824444 / 824445 / 824446 | 9 models each, one job per seed (models run in sequence; the user already had 41 jobs queued and Slurm's `normal` QoS caps submissions at 50, so 27 single-model jobs would not fit): `alexnet_adapted_orig_{fc,gap}`, `alexnet_3x3_{fc,gap}`, `alexnet_2x2_{fc,gap}`, `alexnet_3x3_gap_bn`, `alexnet_bottleneck`, `alexnet_fire` |
+| `phase_11_geometry_controls_500ep` | 824447 | `alexnet_3x3_fc` at 500 ep / no early stopping — protocol-matched pair for `alexnet_tv_3x3` |
+
+Protocol (`_protocols/geometry_controls.yaml`): the report's own (100 ep, patience 5), **uniform lr 3e-4** for
+every model (Bottleneck/Fire were 1e-3 in the report), FP32 only. Seed also re-draws the 90/10 split, so compare
+models within a seed and read the spread across seeds as noise. All 9 models are re-run in all 3 seeds (not
+just the 3 new ones) so every comparison is same-code/same-protocol rather than mixing in the notebook-era
+Phase 2 runs. Still differing in the 500ep pair: Dropout (2× vs. 0) and init (`he_init` vs. default).
+
+Read-outs once they land: kernel effect at fixed geometry = adapted_orig vs. 3x3 vs. 2x2 (FC and GAP);
+BN effect = 3x3_gap vs. 3x3_gap_bn; block effect = 3x3_gap_bn vs. bottleneck/fire (same lr, same BN);
+protocol-matched geometry(+Dropout+init) effect = 500ep `alexnet_3x3_fc` vs. `alexnet_tv_3x3` (26.50%).
+Code reached PCAD by rsync of 7 files (its tree was already dirty at 120c5da, and had no line the local
+HEAD lacked), so the runs' `git_hash` is 120c5da with `git_dirty: true`; commit + push and `git pull` there
+before relying on the hash.
