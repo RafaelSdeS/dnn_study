@@ -358,3 +358,17 @@ register_model("googlenet_fpga", torchvision_model("googlenet"))
 register_model("resnet18_fpga", torchvision_model("resnet18"))
 register_model("vgg13_fpga", torchvision_model("vgg13"))
 register_model("squeezenet1_1_fpga", torchvision_model("squeezenet1_1"))  # out of budget_unico: qat_wino breaks on it
+
+# Originais das redes que a adaptacao ao acelerador MUDA (Winograd-FPGA
+# scripts/avaliacao_redes/diff_adaptacao.py, 2026-09-25): a MESMA rede antes da conversao,
+# para medir o custo da adaptacao com o mesmo protocolo (configs/experiments/budget_unico_orig.yaml).
+# Custom: o builder da ponte sem convert_stride2_and_pools. Torchvision: so' a cabeca de 200
+# classes (o `par()` do diff_adaptacao.py e' a mesma definicao). As outras 7 do budget_unico
+# nao mudam (custo 0 por construcao) e nao tem _orig.
+for _n in ("alexnet_stacked", "alexnet_bottleneck", "wrn_16_4", "wrn_28_2"):
+    register_model(f"{_n}_orig", custom_model(_n, convert=False))
+from torchvision import models as _tvm  # noqa: E402
+register_model("resnet18_orig", partial(_tvm.resnet18, weights=None, num_classes=200))
+register_model("googlenet_orig", partial(_tvm.googlenet, weights=None, num_classes=200,
+                                         aux_logits=False, init_weights=True))
+register_model("vgg13_orig", partial(_tvm.vgg13_bn, weights=None, num_classes=200))  # vgg13_fpga = vgg13_bn

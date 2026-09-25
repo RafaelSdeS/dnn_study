@@ -1,0 +1,19 @@
+# Custo da adaptacao ao acelerador (plano de 2026-09-25 do Winograd-FPGA, Fase 3): as redes
+# ORIGINAIS das 7 que a conversao muda (diff_adaptacao.py), treinadas com o MESMO protocolo
+# do budget_unico (do zero, _protocols/winograd_fpga, seed 42), so' o FP32. O custo e'
+# top-1(<rede>_orig) - top-1(<rede>_fpga do budget_unico). Onde |custo| < 2 pp, repete-se a
+# seed 43 das DUAS versoes (experimento proprio) para separar efeito de ruido.
+# Submit (limite de 50 jobs do QOS): ssh gppd-hpc 'bash -s budget_unico_orig' \
+#   < Winograd-FPGA/scripts/avaliacao_redes/pcad_submit_pendentes.sh
+extends: _protocols/winograd_fpga
+name: budget_unico_orig
+stages:
+  - fp32
+models:
+  - alexnet_stacked_orig
+  - alexnet_bottleneck_orig
+  - wrn_16_4_orig
+  - wrn_28_2_orig
+  - resnet18_orig
+  - googlenet_orig
+  - vgg13_orig
