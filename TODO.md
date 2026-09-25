@@ -150,11 +150,12 @@ For each variant:
 
 Results in `results/phase_2_kernel_restriction/` (57 epochs, full QAT + INT8).
 
-Open follow-up (2026-09-24, see `docs/logs/PHASE11_LOG.md` "Geometry confound"): the adapted-geometry
-AlexNet family had no large-kernel control, and Bottleneck/Fire were confounded with BN and lr. Submitted to PCAD as
-`phase_11_geometry_controls` (Phase 11 protocol: 500 ep / QAT 100 ep, seed 42, jobs 824460-824467) — pending; when they
-land, aggregate, fill the read-outs listed in the log, and revisit the report's abstract/kernel-cost discussion. Not
-planned yet: a second seed (own experiment name), `alexnet_2x2_fc`-style 500 ep repeats for the legacy geometry.
+Open follow-up (2026-09-24/25, see `docs/logs/PHASE11_LOG.md` "Geometry confound" and "Geometry factorial + seed replicates"): the
+adapted-geometry AlexNet family had no large-kernel control, and Bottleneck/Fire were confounded with BN and lr. Submitted to PCAD under the
+Phase 11 protocol (500 ep / QAT 100): `phase_11_geometry_controls` (8 models, jobs 824460-824467; 4 done, 4 running as of 2026-09-25),
+`phase_11_geometry_factorial` (10 models: stride x pooling split, Dropout, head x geometry, pretraining at both geometries, 3x3 pair;
+824667-824676) and `phase_11_geometry_seeds_s43/_s44` (4 kernel-pair models each; 824677-824684). When they land: aggregate, fill the
+read-outs in the yaml headers/log, then rewrite the report's abstract/kernel-cost discussion with them.
 
 ---
 

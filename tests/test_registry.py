@@ -40,6 +40,56 @@ def test_every_registration_has_a_constructor_and_fuse_map():
 
 CONTROL_MODELS = ["alexnet_adapted_orig_fc", "alexnet_adapted_orig_gap", "alexnet_adapted_2x2_fc",
                   "alexnet_adapted_2x2_gap", "alexnet_3x3_gap_bn"]
+# Phase 11 geometry factorial: final map before the classifier's AdaptiveAvgPool at 64x64 input
+# (alexnet_adapted_orig_fc_pt is checked separately -- it needs the ImageNet weights).
+GEO_MAPS = {
+    "alexnet_geo_s4_p3_fc": 1, "alexnet_geo_s4_p3_gap": 1, "alexnet_geo_s4_p3_fc_k3": 1,
+    "alexnet_geo_s2_p3_fc": 3, "alexnet_geo_s4_p2_fc": 3,
+    "alexnet_geo_s2_pk3n2_fc": 7, "alexnet_geo_s2_pk2n3_fc": 4, "alexnet_geo_s2_p2_drop_fc": 8,
+}
+
+
+def test_geometry_factorial_models_hit_their_documented_maps_and_dropout_counts():
+    x = torch.randn(1, 3, 64, 64)
+    for name, size in GEO_MAPS.items():
+        model = MODEL_REGISTRY[name]["ctor"]().eval()
+        assert tuple(model.features[:-1](x).shape) == (1, 256, size, size), name
+        assert sum(isinstance(m, torch.nn.Dropout) for m in model.modules()) == (2 if name.endswith("_drop_fc") else 0), name
+
+
+def test_geometry_factorial_original_corner_is_torchvision_alexnet_geometry():
+    """alexnet_geo_s4_p3_fc + Dropout must BE AlexNetTV(pretrained=False)'s layout (conv/pool
+    kernel-stride-padding, Linear shapes, parameter count) -- else the 'walk back to torchvision'
+    ends somewhere else and the Dropout/stride/pooling read-outs compare the wrong thing."""
+    from functools import partial
+    from ml.model_registrations import _S4P3
+    from models import AlexNetAdapted, AlexNetTV
+
+    def layout(m):
+        feats = [(type(l).__name__, getattr(l, "kernel_size", None), getattr(l, "stride", None), getattr(l, "padding", None))
+                 for l in m.features if isinstance(l, (torch.nn.Conv2d, torch.nn.MaxPool2d))]
+        linears = [tuple(l.weight.shape) for l in m.classifier if isinstance(l, torch.nn.Linear)]
+        return feats, linears, sum(p.numel() for p in m.parameters())
+
+    assert layout(partial(AlexNetAdapted, dropout=0.5, **_S4P3)()) == layout(AlexNetTV(pretrained=False))
+
+
+def test_pretrained_adapted_model_loads_the_imagenet_convs_and_first_two_linears():
+    import pytest
+    from torchvision.models import alexnet
+
+    try:
+        tv = alexnet(weights="IMAGENET1K_V1")
+    except Exception as e:  # no cached weights and no network
+        pytest.skip(f"ImageNet weights unavailable: {e}")
+    model = MODEL_REGISTRY["alexnet_adapted_orig_fc_pt"]["ctor"]().eval()
+    for i in (0, 3, 6, 8, 10):
+        assert torch.equal(model.features[i].weight, tv.features[i].weight), i
+    mine = [m for m in model.classifier if isinstance(m, torch.nn.Linear)]
+    theirs = [m for m in tv.classifier if isinstance(m, torch.nn.Linear)]
+    assert torch.equal(mine[0].weight, theirs[0].weight) and torch.equal(mine[1].weight, theirs[1].weight)
+    assert tuple(mine[2].weight.shape) == (200, 4096)  # fresh head, not the 1000-class one
+    assert tuple(model.features[:-1](torch.randn(1, 3, 64, 64)).shape) == (1, 256, 8, 8)
 
 
 def test_geometry_control_models_survive_the_qat_to_int8_path():
@@ -47,7 +97,7 @@ def test_geometry_control_models_survive_the_qat_to_int8_path():
     fuse every conv and the 2x2 ZeroPad2d must survive a real INT8 convert (quantized input)."""
     from ml.quantization import build_qat_from_model, convert_to_int8
 
-    for name in CONTROL_MODELS:
+    for name in CONTROL_MODELS + list(GEO_MAPS):
         spec, model = MODEL_REGISTRY[name], MODEL_REGISTRY[name]["ctor"]()
         root = getattr(model, spec["fuse_root_attr"]) if spec.get("fuse_root_attr") else model
         assert len(spec["fuse_map"]) == sum(isinstance(m, torch.nn.Conv2d) for m in model.features), name

@@ -153,6 +153,26 @@ register_model("alexnet_adapted_2x2_gap", partial(AlexNetAdapted, kernels=(2,) *
                fuse_map=FUSE_MAP_ADAPTED_2X2, fuse_root_attr="features", lr=3e-4)
 register_model("alexnet_3x3_gap_bn", partial(AlexNetAdapted, kernels=(3,) * 5, head="gap", batch_norm=True),
                fuse_map=find_fuse_groups(AlexNetAdapted(kernels=(3,) * 5, head="gap", batch_norm=True)), lr=3e-4)
+
+# Phase 11 geometry factorial (configs/experiments/phase_11_geometry_factorial.yaml and
+# phase_11_geometry_seeds_s*.yaml): walks from the adapted layout (alexnet_adapted_orig_fc) back to
+# torchvision's AlexNet one factor at a time. alexnet_geo_<stem>_<pool>_<head>[_drop|_k3]:
+# s2/s4 = stem stride; p3 = 3x MaxPool(3, 2) (torchvision), p2 = 2x MaxPool(2) (adapted),
+# pk3n2 / pk2n3 = pool kernel 3 with 2 pools / kernel 2 with 3 pools; _drop = Dropout(0.5) in the FC
+# head; _k3 = all-3x3 kernels. Everything else 11-5-3-3-3, FC, no BN, default init. Conv/ReLU indices
+# are the same as FUSE_MAP_ALEXNET_TV's for every pool_count (a 3rd pool sits after the last ReLU).
+_GEO = dict(fuse_map=FUSE_MAP_ALEXNET_TV, fuse_root_attr="features", lr=3e-4)
+_S4P3 = dict(stem_stride=4, stem_padding=2, pool_kernel=3, pool_count=3)  # torchvision's own conv1/pools
+register_model("alexnet_geo_s4_p3_fc", partial(AlexNetAdapted, **_S4P3), **_GEO)
+register_model("alexnet_geo_s2_p3_fc", partial(AlexNetAdapted, pool_kernel=3, pool_count=3), **_GEO)
+register_model("alexnet_geo_s4_p2_fc", partial(AlexNetAdapted, stem_stride=4, stem_padding=2), **_GEO)
+register_model("alexnet_geo_s4_p3_gap", partial(AlexNetAdapted, head="gap", **_S4P3), **_GEO)
+register_model("alexnet_geo_s2_p2_drop_fc", partial(AlexNetAdapted, dropout=0.5), **_GEO)
+register_model("alexnet_geo_s2_pk3n2_fc", partial(AlexNetAdapted, pool_kernel=3), **_GEO)
+register_model("alexnet_geo_s2_pk2n3_fc", partial(AlexNetAdapted, pool_count=3), **_GEO)
+register_model("alexnet_geo_s4_p3_fc_k3", partial(AlexNetAdapted, kernels=(3,) * 5, stem_stride=4,
+                                                  pool_kernel=3, pool_count=3), **_GEO)
+register_model("alexnet_adapted_orig_fc_pt", partial(AlexNetAdapted, pretrained=True), **_GEO)
 register_model("alexnet_stacked_gap", partial(AlexNetStacked, head="gap"),
                fuse_map=FUSE_MAP_STACKED, fuse_root_attr="features", lr=1e-3)
 # No BN -> features compresses to plain Conv-ReLU pairs (BN entries drop out, shifting every

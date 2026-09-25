@@ -1,0 +1,34 @@
+# Closes what phase_11_geometry_controls left open: WHY the original AlexNet geometry is ~9-11pp worse
+# at 64x64 (stride? pooling? Dropout? head?), and whether pretraining / the 3x3 pair's init change that.
+# Same protocol as every Phase 11 run (_protocols/no_patience.yaml: 500 ep FP32 / 100 ep QAT / INT8,
+# no early stopping, seed 42, uniform lr 3e-4) -- nothing but the model differs. All default init,
+# 11-5-3-3-3 kernels, no BN unless the name says otherwise. Reference points that already exist:
+#   alexnet_tv_scratch (torchvision geometry + Dropout, default init) 27.51   -- s4/p3 + Dropout
+#   alexnet_adapted_orig_fc (adapted geometry, no Dropout)            36.16   -- s2/p2
+#   alexnet_adapted_orig_gap 45.49 ; alexnet_3x3_fc 37.60 ; alexnet_3x3_gap 46.82
+# Read-outs (models in this file, vs those references):
+#   Dropout at the original geometry     alexnet_geo_s4_p3_fc            vs alexnet_tv_scratch
+#   stride x pooling 2x2 (no Dropout)    s4_p3 (above), s2_p3, s4_p2, and alexnet_adapted_orig_fc (s2/p2)
+#   pooling split at stride 2            alexnet_geo_s2_pk3n2_fc (kernel 3, 2 pools -> 7x7 map) and
+#                                        alexnet_geo_s2_pk2n3_fc (kernel 2, 3 pools -> 4x4) vs s2_p3 / adapted
+#   head x geometry                      alexnet_geo_s4_p3_gap           vs alexnet_geo_s4_p3_fc / adapted gap-fc
+#   Dropout at the adapted geometry      alexnet_geo_s2_p2_drop_fc       vs alexnet_adapted_orig_fc
+#   3x3 pair without the init confound   alexnet_geo_s4_p3_fc_k3         vs alexnet_3x3_fc (geometry only)
+#   pretraining, original geometry       alexnet_tv (pretrained)         vs alexnet_tv_scratch
+#   pretraining, adapted geometry        alexnet_adapted_orig_fc_pt      vs alexnet_adapted_orig_fc
+# Final map before the classifier: s4/p3 1x1, s2/p3 3x3, s4/p2 3x3, s2/pk3n2 7x7, s2/pk2n3 4x4, adapted 8x8.
+# Seed 42 only here; the noise estimate is phase_11_geometry_seeds_s43/_s44. One job per model:
+# Submit: python -m scripts.cluster submit-sweep --experiment phase_11_geometry_factorial --runtime pcad --slurm tupi_4090
+extends: _protocols/no_patience
+name: phase_11_geometry_factorial
+models:
+  - alexnet_geo_s4_p3_fc
+  - alexnet_geo_s2_p3_fc
+  - alexnet_geo_s4_p2_fc
+  - alexnet_geo_s2_pk3n2_fc
+  - alexnet_geo_s2_pk2n3_fc
+  - alexnet_geo_s4_p3_gap
+  - alexnet_geo_s2_p2_drop_fc
+  - alexnet_geo_s4_p3_fc_k3
+  - alexnet_tv
+  - alexnet_adapted_orig_fc_pt

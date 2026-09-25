@@ -89,6 +89,25 @@ def test_extends_merges_parent_and_child_fields():
     assert "extends" not in child
 
 
+def test_geometry_experiments_share_the_phase_11_protocol_exactly():
+    """The geometry controls/factorial/seed runs are only comparable to the earlier Phase 11 runs if
+    nothing but name/models/seed differs: epochs, early stopping, QAT budget, lr policy, stages."""
+    reference = load_config("experiments/phase_11_kernel_size_comparison.yaml")
+    for key in ("name", "models", "seed"):
+        reference.pop(key, None)
+    assert reference["training"] == {"epochs": 500, "early_stopping_patience": None}
+    assert reference["qat"] == {"epochs": 100} and reference["uniform_hparams"] is True
+    assert reference["stages"] == ["fp32", "qat", "int8"]
+
+    expected_seed = {"phase_11_geometry_controls": 42, "phase_11_geometry_factorial": 42,
+                     "phase_11_geometry_seeds_s43": 43, "phase_11_geometry_seeds_s44": 44}
+    for name, seed in expected_seed.items():
+        cfg = load_config(f"experiments/{name}.yaml")
+        assert cfg.pop("seed") == seed, name
+        cfg.pop("name"), cfg.pop("models")
+        assert cfg == reference, f"{name} differs from the Phase 11 protocol: {cfg} vs {reference}"
+
+
 def test_protocol_fragments_are_not_treated_as_experiments():
     """configs/experiments/_protocols/*.yaml are merge fragments, not runnable experiments --
     _experiment_names()'s non-recursive glob must not pick them up.

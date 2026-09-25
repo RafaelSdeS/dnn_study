@@ -2,6 +2,7 @@
 
 import torch.nn as nn
 import torch.ao.quantization as tq
+from torchvision.models import alexnet
 
 from models.baselines import he_init
 
@@ -17,16 +18,20 @@ def _conv_relu(in_c: int, out_c: int, k: int, batch_norm: bool, stride: int = 1,
     return layers
 
 
-def _pool_and_classifier(head: str, channels: int, fc_spatial: int, num_classes: int) -> tuple:
+def _pool_and_classifier(head: str, channels: int, fc_spatial: int, num_classes: int,
+                         dropout: float = 0.0) -> tuple:
     """(pool_layer, classifier) for head="gap" (AdaptiveAvgPool(1) + single Linear) or "fc"
-    (AdaptiveAvgPool(fc_spatial) + the original 3-layer AlexNet FC head)."""
+    (AdaptiveAvgPool(fc_spatial) + the original 3-layer AlexNet FC head). dropout > 0 puts a
+    Dropout before the first two Linears, as torchvision's AlexNet does; 0 adds no module at all, so
+    every existing caller's state_dict is unchanged. The GAP head never has Dropout."""
     if head == "gap":
         return nn.AdaptiveAvgPool2d(1), nn.Sequential(nn.Flatten(), nn.Linear(channels, num_classes))
+    drop = lambda: [nn.Dropout(dropout)] if dropout > 0 else []  # noqa: E731 -- two distinct modules
     classifier = nn.Sequential(
         nn.Flatten(),
-        nn.Linear(channels * fc_spatial * fc_spatial, 4096),
+        *drop(), nn.Linear(channels * fc_spatial * fc_spatial, 4096),
         nn.ReLU(inplace=False),
-        nn.Linear(4096, 4096),
+        *drop(), nn.Linear(4096, 4096),
         nn.ReLU(inplace=False),
         nn.Linear(4096, num_classes),
     )
@@ -264,32 +269,56 @@ class AlexNetAdapted(nn.Module):
         Bottleneck/Fire (every conv) from their block structure.
     Default PyTorch init (no he_init), like AlexNet3x3FC/GAP: a no-BN large-kernel net may stay on the
     ln(num_classes) plateau (see models.baselines.he_init) -- that is a result, not a bug to patch.
+
+    Geometry knobs for the factorial that walks from this layout back to torchvision's (all default to
+    the adapted layout, so every model above is unchanged): stem_stride (2 adapted / 4 original) and
+    stem_padding (default k // 2; 2 reproduces torchvision's conv1 exactly), pool_kernel (2 adapted /
+    3 original: MaxPool2d(k, stride 2)) and pool_count (2 adapted: after conv1, conv2 / 3 original: also
+    after conv5), dropout (0 adapted / 0.5 original, FC head only). stem_stride=4, pool_kernel=3,
+    pool_count=3, stem_padding=2, dropout=0.5 (11-5-3 kernels) is AlexNetTV(pretrained=False) at 64x64
+    (1x1 map into the classifier). Final map before the classifier at 64x64: adapted 8x8; s2+pool(3,3)
+    3x3; s4+pool(2,2) 3x3; s2+pool(3,2) 7x7; s2+pool(2,3) 4x4; original 1x1.
+    pretrained=True loads torchvision's ImageNet AlexNet convs and first two Linears (shapes match
+    kernels=(11,5,3,3,3), head="fc", no BN; the last Linear stays fresh, 200 classes) -- the "does
+    pretraining still help at the adapted geometry" control.
     """
 
     def __init__(self, num_classes: int = 200, kernels: tuple = (11, 5, 3, 3, 3), head: str = "fc",
-                 batch_norm: bool = False):
+                 batch_norm: bool = False, stem_stride: int = 2, stem_padding: int | None = None,
+                 pool_kernel: int = 2, pool_count: int = 2, dropout: float = 0.0, pretrained: bool = False):
         super().__init__()
         self.quant = tq.QuantStub()
         self.dequant = tq.DeQuantStub()
+        assert pool_count in (2, 3), pool_count
 
         channels = (3, 64, 192, 384, 256, 256)
         layers = []
         for i, k in enumerate(kernels):
             if k % 2:
-                padding = k // 2
+                padding = k // 2 if (i or stem_padding is None) else stem_padding
             else:
-                assert k == 2, "even kernels: only k=2 (its stride-2 stem needs no padding: 64 -> 32)"
+                assert k == 2 and stem_stride == 2, "even kernels: only k=2 on the stride-2 stem (64 -> 32, no padding)"
                 padding = 0
                 if i > 0:
                     layers.append(nn.ZeroPad2d((0, 1, 0, 1)))
             layers += _conv_relu(channels[i], channels[i + 1], k, batch_norm,
-                                 stride=2 if i == 0 else 1, padding=padding)
-            if i < 2:
-                layers.append(nn.MaxPool2d(2))
-        pool, classifier = _pool_and_classifier(head, 256, 6, num_classes)
+                                 stride=stem_stride if i == 0 else 1, padding=padding)
+            if i < 2 or (i == 4 and pool_count == 3):
+                layers.append(nn.MaxPool2d(pool_kernel, 2))
+        pool, classifier = _pool_and_classifier(head, 256, 6, num_classes, dropout=dropout)
         layers.append(pool)
         self.features = nn.Sequential(*layers)
         self.classifier = classifier
+        if pretrained:
+            assert tuple(kernels) == (11, 5, 3, 3, 3) and head == "fc" and not batch_norm, \
+                "pretrained weights only fit the original 11-5-3-3-3 FC net"
+            tv = alexnet(weights="IMAGENET1K_V1")
+            for i in (0, 3, 6, 8, 10):  # torchvision's conv indices == this net's (no BN, same layer order)
+                self.features[i].load_state_dict(tv.features[i].state_dict())
+            mine = [m for m in self.classifier if isinstance(m, nn.Linear)]
+            theirs = [m for m in tv.classifier if isinstance(m, nn.Linear)]
+            for a, b in zip(mine[:2], theirs[:2]):
+                a.load_state_dict(b.state_dict())
 
     def forward(self, x):
         x = self.quant(x)

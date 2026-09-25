@@ -1,0 +1,13 @@
+# Seed 43 replicate of the kernel-effect pairs at the adapted geometry, to put a noise bar on the
+# 1-3pp differences of phase_11_geometry_controls (seed 42; alexnet_3x3_gap's seed-42 run is in
+# phase_11_mixed_kernel_comparison). Seed also re-draws the 90/10 split, so compare within a seed.
+# Same protocol as every Phase 11 run (_protocols/no_patience.yaml) -- only seed and name differ.
+# Submit: python -m scripts.cluster submit-sweep --experiment phase_11_geometry_seeds_s43 --runtime pcad --slurm tupi_4090
+extends: _protocols/no_patience
+name: phase_11_geometry_seeds_s43
+seed: 43
+models:
+  - alexnet_3x3_fc
+  - alexnet_adapted_orig_fc
+  - alexnet_3x3_gap
+  - alexnet_adapted_orig_gap

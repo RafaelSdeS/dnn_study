@@ -429,8 +429,7 @@ missing controls listed in `TODO.md` (Phase 2 section) — none run.
 early stopping patience 5, FP32 only) was cancelled while still pending, after checking "is the lr the same and how
 many epochs?": the lr is only the *initial* lr — `ml/trainer.py` uses `CosineAnnealingLR(T_max=epochs)`, so
 early-stopped runs stop at different points of the decay (stop at ep 37 of 100 → lr ≈ 2.1e-4; at 76 → ≈ 0.4e-4),
-which makes epochs and lr-at-stop per-model variables. It also probably explains most of the ~+7pp "protocol" effect
-in item 4 above (a schedule that finishes annealing), though that is inference, not measured. The controls therefore
+which makes epochs and lr-at-stop per-model variables. The ~+7pp "protocol" effect of item 4 holds for the GAP models (+6.5-7pp); the first finished control shows only +1.8pp for an FC model (`alexnet_3x3_fc` 35.79% with early stopping -> 37.60% at 500 ep), so "a schedule that finishes annealing" is at most part of the story and is not established. The controls therefore
 use the Phase 11 protocol itself, so they pair with `alexnet_tv_*`, the mixed-kernel and head/BN runs.
 
 **Models** (`models/alexnet_variants.py:AlexNetAdapted`, default init — no `he_init`): `alexnet_adapted_orig_{fc,gap}`
@@ -466,3 +465,45 @@ is BN + block + geometry; seed 42 only, so no noise estimate — a second seed n
 (`outputs/<runtime>/<experiment>/<model>/` has no seed in its path).
 Code reached PCAD by rsync (its tree was already dirty at 120c5da and had no line the local HEAD lacked), so the runs'
 `git_hash` is 120c5da with `git_dirty: true`; commit + push and `git pull` there before relying on the hash.
+
+## Geometry factorial + seed replicates submitted (2026-09-25, PCAD jobs 824667-824684)
+
+First read of `phase_11_geometry_controls` (4 of 8 finished, seed 42, top-1 FP32): kernel effect at the adapted geometry is small
+and points the other way from the report's story — FC 3x3 37.60 vs 11-5-3 36.16; GAP 3x3 46.82 vs 11-5-3 45.49 vs 2x2 44.00 — and
+the protocol-matched geometry gap is 8.65pp at 11-5-3 (`alexnet_adapted_orig_fc` 36.16 vs `alexnet_tv_scratch` 27.51, geometry + Dropout
+only) and 11.10pp at 3x3 (`alexnet_3x3_fc` 37.60 vs `alexnet_tv_3x3` 26.50, + init). Not yet decomposed, and the report's pretrained
+baseline row was still on a different regime. This submission closes those:
+
+`models/alexnet_variants.py:AlexNetAdapted` gained `stem_stride`, `stem_padding`, `pool_kernel`, `pool_count`, `dropout`, `pretrained`
+(defaults = the adapted layout, so every earlier model is unchanged — `tests/test_registry.py` still asserts `kernels=(3,)*5` is
+`AlexNet3x3FC/GAP` layer for layer; and that `alexnet_geo_s4_p3_fc` + Dropout is `AlexNetTV(pretrained=False)`'s exact layout: conv/pool
+kernel-stride-padding, Linear shapes, 57.82M params). All default init, 11-5-3-3-3 kernels, FC, no BN unless the name says so.
+
+| Experiment (seed 42) | Job | Model | Isolates (vs) |
+|---|---|---|---|
+| `phase_11_geometry_factorial` | 824667 | `alexnet_geo_s4_p3_fc` (torchvision geometry, no Dropout; 1x1 map) | Dropout (`alexnet_tv_scratch`) + corner of stride x pooling |
+| | 824668 | `alexnet_geo_s2_p3_fc` (stride 2, torchvision pools; 3x3 map) | stride alone |
+| | 824669 | `alexnet_geo_s4_p2_fc` (stride 4, adapted pools; 3x3 map) | pooling alone |
+| | 824670 | `alexnet_geo_s2_pk3n2_fc` (pool kernel 3, 2 pools; 7x7) | pool kernel |
+| | 824671 | `alexnet_geo_s2_pk2n3_fc` (pool kernel 2, 3 pools; 4x4) | pool count |
+| | 824672 | `alexnet_geo_s4_p3_gap` | head x geometry (vs s4_p3_fc, adapted fc/gap) |
+| | 824673 | `alexnet_geo_s2_p2_drop_fc` (adapted + Dropout 0.5) | Dropout x geometry interaction (`alexnet_adapted_orig_fc`) |
+| | 824674 | `alexnet_geo_s4_p3_fc_k3` (3x3 kernels, torchvision geometry) | geometry at 3x3 without the init/Dropout confound (`alexnet_3x3_fc`) |
+| | 824675 | `alexnet_tv` (ImageNet-pretrained) | pretraining at the original geometry (`alexnet_tv_scratch`) |
+| | 824676 | `alexnet_adapted_orig_fc_pt` (pretrained convs + first 2 Linears, adapted geometry) | pretraining at the adapted geometry (`alexnet_adapted_orig_fc`) |
+| `phase_11_geometry_seeds_s43` / `_s44` | 824677-80 / 824681-84 | `alexnet_3x3_fc`, `alexnet_adapted_orig_fc`, `alexnet_3x3_gap`, `alexnet_adapted_orig_gap` | noise bar on the 1-3pp kernel effect (seed 42 = `phase_11_geometry_controls` / `phase_11_mixed_kernel_comparison`) |
+
+**Same protocol as every earlier Phase 11 run, checked, not assumed:** all three files `extends: _protocols/no_patience` and
+`tests/test_config.py::test_geometry_experiments_share_the_phase_11_protocol_exactly` asserts that, once name/models/seed are removed, they
+equal `phase_11_kernel_size_comparison`'s resolved config (500 ep FP32, `early_stopping_patience: null`, 100 ep QAT, `uniform_hparams`,
+stages fp32/qat/int8; lr 3e-4, wd 5e-4, batch 64, label smoothing 0.1, AMP, QAT lr 1e-5 / `freeze_bn_epoch` 3 / `disable_observer_epoch` 5 come
+from the unchanged `training.yaml`/`qat.yaml`/`data.yaml`, md5-identical on PCAD). The training/QAT code path for these families did not change
+since the reference runs: `git log` for `ml/trainer.py`, `ml/quantization.py`, `ml/data.py`, `scripts/train.py`, the configs since 2026-09-13 shows only
+vgg16-specific QAT fixes (a registry-only `qat_disable_observer_epoch`, default unchanged), reporting/resume fixes, and the `qat_wino`-only change.
+Seeds 43/44 also re-draw the 90/10 split, so compare within a seed.
+
+Remaining limits: seed 42 only for everything except the four kernel-pair models; "pooling" is split into kernel vs count but not finer;
+pretraining at the adapted geometry reuses weights learned at stride 4, so a gain there is "transfer despite mismatch"; a run that stays on the
+ln(200) plateau is a result. Cost ≈ 170-200 GPU-h for the 18 runs (FC ~8-15 h each incl. QAT, GAP ~6-8 h, from Phase 11's measured epoch times),
+~2 days wall if the 6 shared 4090s are free. Read-outs are listed in each yaml header.
+Code reached PCAD by rsync (md5-checked); runs record `git_dirty: true` on a stale HEAD until the tree is reconciled.
