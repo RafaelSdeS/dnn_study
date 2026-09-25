@@ -157,6 +157,11 @@ Phase 11 protocol (500 ep / QAT 100): `phase_11_geometry_controls` (8 models, jo
 824667-824676) and `phase_11_geometry_seeds_s43/_s44` (4 kernel-pair models each; 824677-824684). When they land: aggregate, fill the
 read-outs in the yaml headers/log, then rewrite the report's abstract/kernel-cost discussion with them.
 
+Open (2026-09-25, M7 extension — `docs/logs/PHASE11_LOG.md` "M7 extension"): PCAD's `~/dnn_study_m7` holds a commit not on `origin`
+(`c9750c0`, qat_wino-only run-summary fix in `ml/reporting.py`/`scripts/train.py`) and uncommitted 14-model `wino_f{23,43,63}_pack.yaml` lists;
+bring both into this repo (or push from PCAD), otherwise the 42 packed-`qat_wino` results cannot be reproduced from `main`. Then update the
+`wino_f*_pack` mentions that still say "2 models" and the `budget_unico` `≠HW` tables with the F43 packed numbers.
+
 ---
 
 ## Phase 3 — Compensation Mechanisms ✅

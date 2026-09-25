@@ -507,3 +507,49 @@ pretraining at the adapted geometry reuses weights learned at stride 4, so a gai
 ln(200) plateau is a result. Cost ≈ 170-200 GPU-h for the 18 runs (FC ~8-15 h each incl. QAT, GAP ~6-8 h, from Phase 11's measured epoch times),
 ~2 days wall if the 6 shared 4090s are free. Read-outs are listed in each yaml header.
 Code reached PCAD by rsync (md5-checked); runs record `git_dirty: true` on a stale HEAD until the tree is reconciled.
+
+## M7 extension — packed `qat_wino` on the other 14 networks (2026-09-24; results synced 2026-09-25)
+
+M7 (above) measured what matching the deploy bitstream costs on 2 models. The same experiments were then run for **14 further
+networks** — the 12 other `budget_unico` models plus Phase 11's `alexnet_tv_3x3` and `vgg16` (with `alexnet_fire_bypass_fpga` and
+`vgg_style_fpga` that is the 16 networks `scripts/winograd_fpga/dump_layer_configs.py` covers): `wino_f{23,43,63}_pack`, `qat_wino` only,
+`pack: true`, `u_w=9, v_w=8, k_dsp=2`, 15 ep at lr 5e-5, seed 42, FP32 reused from `budget_unico` (12 models) / Phase 11 (the other two).
+Data: `outputs/pcad/wino_f{23,43,63}_pack/<model>/results/`, 42 summaries (3 variants x 14 models). Top-1 change vs. FP32, in pp (the last
+column is `budget_unico`'s original F(4,3) **without** packing, same models, for contrast):
+
+| Model | FP32 | F23 pack | F43 pack | F63 pack | F43 no-pack |
+|-------|-----:|---------:|---------:|---------:|------------:|
+| alexnet_3x3_fc_fpga | 36.13 | +0.62 | -10.35 | -24.29 | +0.08 |
+| alexnet_bottleneck_fpga | 42.78 | -0.03 | -4.69 | -17.88 | +0.21 |
+| alexnet_final_bottleneck_residual_fpga | 43.14 | +0.12 | -4.31 | -16.37 | +0.15 |
+| alexnet_final_fire_residual_fpga | 44.30 | -0.02 | -3.65 | -13.20 | +0.32 |
+| alexnet_fire_fpga | 44.76 | -0.23 | -3.83 | -17.14 | +0.05 |
+| alexnet_stacked_fpga | 44.88 | +0.11 | -8.15 | -25.21 | +0.08 |
+| googlenet_fpga | 56.68 | +1.32 | -1.61 | -9.96 | +1.36 |
+| repvgg_a0_fpga | 55.06 | +0.27 | -2.69 | -10.54 | +0.52 |
+| resnet18_fpga | 54.91 | +0.64 | -2.73 | -17.38 | +0.61 |
+| vgg13_fpga | 50.60 | -0.53 | -5.55 | -19.93 | -0.28 |
+| wrn_16_4_fpga | 56.13 | +0.14 | -6.02 | -29.61 | -0.31 |
+| wrn_28_2_fpga | 53.87 | -0.05 | -5.96 | -27.09 | +0.32 |
+| alexnet_tv_3x3 (Phase 11) | 26.50 | -1.06 | -16.41 | -26.00 | — |
+| vgg16 (Phase 11) | 47.71 | -3.03 | -16.00 | -47.08 | — |
+
+- **F23 ~ free:** median +0.05pp, 11 of 14 within +-1pp, worst `vgg16` -3.03. **F43 packed is a real loss:** median -5.12pp, range -1.61
+  (`googlenet_fpga`) to -16.41 (`alexnet_tv_3x3`); **F63 packed is severe:** median -18.90pp, range -9.96 to -47.08, and the two plain
+  no-BN-style Phase 11 nets collapse (`alexnet_tv_3x3` 0.50%, `vgg16` 0.63% top-1). Same ordering as the 2-model M7 pair; the spread across
+  architectures is large, BN-carrying / residual nets (googlenet, repvgg, resnet18) lose least.
+- **The `≠HW` caveat is now quantified:** `budget_unico`'s F(4,3) numbers (no packing) sit within ~+-1.4pp of FP32 for all 12 of its models, but
+  matching the deploy bitstream's packing costs 3.9-10.4pp at F43 on those same models — so those `budget_unico` accuracies overstate what the
+  bitstream delivers, model by model (`alexnet_3x3_fc_fpga` -10.4, `alexnet_stacked_fpga` -8.2, `wrn_28_2_fpga` -6.3 ... `alexnet_fire_fpga` -3.9).
+- Caveats: one seed, val-split accuracy, 15-epoch fine-tune; the ranking of close models is not established.
+- `vgg13_fpga` is usable now: the 2026-09-14 memory note had its FP32 at chance (0.50%, plain VGG13 without BN); `budget_unico` now holds
+  50.60% FP32 / 50.32% F43 no-pack, i.e. it was retrained.
+
+**Provenance / reproducibility gap (open).** These runs did not come from the `~/dnn_study` checkout: PCAD has a second one,
+`~/dnn_study_m7` (main @ `c9750c0`, bridge `~/winograd_bridge_m7`, Winograd-FPGA `fde71c7`, clean). That checkout holds **one commit that is not
+on `origin`** — `c9750c0`, "qat_wino-only runs crashed in the run summary and would clobber fp32_top1" (`ml/reporting.py` None-safe gap guards +
+`scripts/train.py` recovering `fp32_eval` from the prior summary) — plus **uncommitted** edits to `wino_f{23,43,63}_pack.yaml` (the 14-model
+`models:` lists). This repo's `wino_f*_pack.yaml` still list only the original 2 models, and its `scripts/train.py` lacks the fix. The first
+attempt (13 jobs, 824390-824402) died on exactly that crash; the 42 jobs 824403-824443 (one per model per variant, via `--model`) completed.
+Until that commit and the yaml lists are brought into this repo (or at least pushed from PCAD), these results are not reproducible from `main`.
+The two F23 `wrn_*` summaries were missing from the first local sync and were fetched from `~/dnn_study_m7` on 2026-09-25.

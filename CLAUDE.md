@@ -141,6 +141,11 @@ configs/                  # YAML hyperparameters, loaded via configs/loader.py â
                           #   measures the accuracy cost of matching the deploy bitstream's packing + each transform;
                           #   results (alexnet_fire_bypass_fpga, vgg_style_fpga): F23 ~unchanged (+0.09/-0.14pp),
                           #   F43 moderate loss (-3.93/-8.28pp), F63 severe (-15.65/-30.55pp) vs FP32
+                          #   2026-09-24: extended to the 14 other networks (12 budget_unico + phase_11's alexnet_tv_3x3/vgg16) from a
+                          #   SEPARATE PCAD checkout ~/dnn_study_m7 (main @ c9750c0: 1 commit NOT on origin + uncommitted 14-model
+                          #   `models:` lists) -- median vs FP32: F23 +0.05, F43 -5.1, F63 -18.9pp; budget_unico's no-packing F43
+                          #   numbers overstate the bitstream by 3.9-10.4pp (docs/logs/PHASE11_LOG.md "M7 extension"). The yaml files
+                          #   HERE still list only alexnet_fire_bypass_fpga/vgg_style_fpga and scripts/train.py lacks that fix
                           #   phase_7_detection.yaml/phase_7_segmentation.yaml are deliberately NOT this
                           #   schema (no models:/extends:) â€” consumed by scripts/train_det_seg.py, which reads
                           #   data.num_workers/trainer.epochs directly; different task, different loader
