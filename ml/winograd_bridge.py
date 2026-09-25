@@ -120,6 +120,8 @@ def load_qat_wino_model(model_name: str, spec: dict[str, Any], checkpoints_dir: 
         kw["pack"] = bool(cfg.pack)
         if cfg.pack:
             kw.update(u_w=cfg.u_w, v_w=cfg.v_w, k_dsp=cfg.k_dsp)
+        if getattr(cfg, "hw_params", None):
+            kw["hw_params"] = cfg.hw_params   # escalas do netlist, nao as da camada
     else:
         kw["pack"] = False
     # Logger NOMEADO, igual ao resto deste arquivo: `logging.info` no logger raiz

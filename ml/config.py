@@ -71,6 +71,10 @@ class QATWinoConfig(QATConfig):
     u_w: int = 9              # largura do campo de U dentro do DSP
     v_w: int = 8              # largura do campo de V
     k_dsp: int = 2            # acumulações dentro do DSP (não muda a aritmética)
+    # Linha de hardware cujas escalas de packing (sv/ALIGN_BASE) ficam FIXAS, como no
+    # netlist sintetizado (RT_SH=0): f23 | f23mf | f43 | f63 | f63ab18. None = sv
+    # escolhido pelo V de cada camada (o M7 de 2026-09-24), um limite SUPERIOR.
+    hw_params: Optional[str] = None
 
 
 @dataclass

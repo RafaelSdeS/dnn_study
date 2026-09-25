@@ -1,0 +1,21 @@
+# Plano de 2026-09-25, hipotese X3: o F(6,3) colapsou ao acaso em vgg16 e alexnet_tv_3x3
+# no M7 (melhor epoca 0 e 3 de 15). Numerica (limite do F63) ou protocolo (lr)? Mesma
+# numerica do wino_f63_hw (escalas fixas do netlist f63ab18), lr 5x menor e o dobro de
+# epocas. Se continuar no acaso, o limite e' da numerica; se recuperar, era o protocolo.
+# FP32: o mesmo do wino_f63_pack (copie como no wino_f63_hw).
+extends: _protocols/winograd_fpga
+name: wino_f63_hw_lr
+stages:
+  - qat_wino
+qat_wino:
+  variant: f63
+  pack: true
+  u_w: 9
+  v_w: 8
+  k_dsp: 2
+  hw_params: f63ab18
+  epochs: 30
+  lr: 1.0e-5
+models:
+  - alexnet_tv_3x3
+  - vgg16

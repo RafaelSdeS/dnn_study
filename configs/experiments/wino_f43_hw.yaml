@@ -1,0 +1,37 @@
+# Plano de 2026-09-25 (Winograd-FPGA): o M7 (wino_f43_pack) escolhia sv pelo V de cada
+# camada; o netlist das linhas de entrega do Thomas tem sv/ALIGN_BASE FIXOS (RT_SH=0), ate'
+# 2-3 bits de V a menos. Aqui o qat_wino usa as escalas do netlist (hw_params ->
+# scripts/avaliacao_redes/gate_flags/params_f43.txt, os generics da sintese medida).
+# O forward e' bit-exato contra o gerador da branch de entrega (verifica_escala_hw.py, 24/24).
+# Mesmo protocolo e mesmo FP32 do M7: antes de submeter, copie de wino_f43_pack/<modelo>/
+#   checkpoints/<modelo>_best.pth, results/<modelo>_fp32_val_logits.npz, results/<modelo>_summary.json
+# Submit: WINOGRAD_FPGA_ROOT=~/winograd_bridge_m7/avaliacao_redes \
+#   python -m scripts.cluster submit-sweep --experiment wino_f43_hw --runtime pcad --slurm tupi_4090
+extends: _protocols/winograd_fpga
+name: wino_f43_hw
+stages:
+  - qat_wino
+qat_wino:
+  variant: f43
+  pack: true
+  u_w: 9
+  v_w: 8
+  k_dsp: 2
+  hw_params: f43
+models:
+  - alexnet_3x3_fc_fpga
+  - alexnet_bottleneck_fpga
+  - alexnet_final_bottleneck_residual_fpga
+  - alexnet_final_fire_residual_fpga
+  - alexnet_fire_bypass_fpga
+  - alexnet_fire_fpga
+  - alexnet_stacked_fpga
+  - googlenet_fpga
+  - repvgg_a0_fpga
+  - resnet18_fpga
+  - vgg13_fpga
+  - vgg_style_fpga
+  - wrn_16_4_fpga
+  - wrn_28_2_fpga
+  - alexnet_tv_3x3
+  - vgg16
