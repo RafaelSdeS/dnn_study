@@ -1,13 +1,26 @@
 """YOLOv2-VOC (416 px) em PyTorch: modelo, pesos Darknet, decodificacao e mAP VOC2007.
 
-Serve ao artigo ISCAS (Winograd-FPGA): a YOLOv2 roda no acelerador com as 3x3 no FPGA, as 1x1 no
-host e leaky ReLU trocada por ReLU (o netlist so' faz ReLU). `act="leaky"` + pesos do pjreddie
-reproduz o original (sanidade: ~76,8 mAP@0,5 no VOC2007 test); `act="relu"` e' a rede convertida.
+Serve ao artigo ISCAS (Winograd-FPGA): as 3x3 com N_IC <= 512 rodam no acelerador
+(`yolov2_cfg.no_acelerador`), o resto no host. A leaky ReLU fica no host: o netlist roda essas
+convs com `relu_en=0` (saida com sinal) e o maxpool comuta com a leaky, entao os ciclos nao mudam.
+`act="leaky"` + pesos do pjreddie reproduz o original (sanidade: ~76,8 mAP@0,5 no VOC2007 test).
+
+`--numerics`:
+  fp32   BN fundida na conv (a mesma fusao que vira o bias do netlist), sem quantizacao
+  int8   INT8 padrao em TODA conv: ativacao por tensor, peso por canal (o custo so' da conversao)
+  f23/f43/f63  o int8 com as convs do acelerador trocadas pela numerica empacotada da ordem
+         (qat_wino.make_wino_conv, pack=True, escalas FIXAS do netlist: hw_params)
+A calibracao passa `--calib` imagens do trainval (sem gradiente, em train()) e depois avalia.
 
     python ml/yolov2.py --weights ~/.cache/yolov2/yolov2-voc.weights --limit 200   # rapido
-    python ml/yolov2.py --weights ~/.cache/yolov2/yolov2-voc.weights               # 4952 imagens
+    python ml/yolov2.py --weights ~/.cache/yolov2/yolov2-voc.weights --numerics f43 --out-json m.json
 """
 import argparse
+import importlib
+import json
+import os
+import subprocess
+import sys
 import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -15,7 +28,9 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from PIL import Image
+from torch.nn.utils.fusion import fuse_conv_bn_eval
 from torchvision.ops import batched_nms
 
 VOC_CLASSES = ["aeroplane", "bicycle", "bird", "boat", "bottle", "bus", "car", "cat", "chair", "cow",
@@ -168,16 +183,140 @@ def voc07_map(dets: dict, gts: dict) -> tuple[float, list[float]]:
     return float(np.mean(aps)), aps
 
 
+def _batch(voc2007: Path, chunk: list[str]):
+    ims = [Image.open(voc2007 / "JPEGImages" / f"{i}.jpg").convert("RGB") for i in chunk]
+    x = torch.stack([torch.from_numpy(np.array(im.resize((SIZE, SIZE), Image.BILINEAR))).permute(2, 0, 1)
+                     for im in ims]).float() / 255
+    return ims, x
+
+
+class Int8Conv(nn.Module):
+    """INT8 padrao (o do fbgemm): ativacao simetrica por tensor (max da calibracao), peso simetrico
+    por canal de saida, acumulacao exata, bias em float. E' a numerica do host e a da linha `int8`."""
+
+    def __init__(self, conv: nn.Conv2d):
+        super().__init__()
+        self.conv = conv
+        self.register_buffer("act_absmax", torch.zeros(()))
+
+    def forward(self, x):
+        if self.training:
+            self.act_absmax.copy_(torch.maximum(self.act_absmax, x.detach().abs().amax()))
+        s = self.act_absmax.clamp(min=1e-8) / 127
+        xq = torch.clamp(torch.round(x / s), -128, 127) * s
+        w = self.conv.weight
+        sw = w.abs().amax(dim=(1, 2, 3), keepdim=True).clamp(min=1e-8) / 127
+        wq = torch.clamp(torch.round(w / sw), -127, 127) * sw
+        return F.conv2d(xq, wq, self.conv.bias, self.conv.stride, self.conv.padding)
+
+
+HW_PARAMS = {"f23": "f23", "f43": "f43", "f63": "f63ab18"}   # os mesmos do `_hw` do AlexNet
+# ponytail: a mesma raiz do ml.winograd_bridge, sem importar o pacote `ml` (puxa torchmetrics)
+BRIDGE = Path(os.environ.get("WINOGRAD_FPGA_ROOT",
+                             Path.home() / "Documents/Winograd-FPGA/scripts/avaliacao_redes")).expanduser()
+
+
+def _bridge(name: str):
+    if str(BRIDGE) not in sys.path:
+        sys.path.insert(0, str(BRIDGE))
+    return importlib.import_module(name)
+
+
+class F64(nn.Module):
+    """Roda a conv do acelerador em float64: la' a aritmetica inteira e' EXATA (acumuladores de ate'
+    52 b cabem em 53). Em float32 o acumulador passa de 2^24 e 0,004% das saidas da c13 do F(4,3)
+    sairam 1 LSB fora (medido contra float64 com o bias zerado)."""
+
+    def __init__(self, m: nn.Module):
+        super().__init__()
+        self.m = m.double()
+
+    def forward(self, x):
+        return self.m(x.double()).float()
+
+
+def quantize(model: YOLOv2, numerics: str, pack: str = "hw") -> list[str]:
+    """Funde BN e troca as convs pela numerica pedida. Devolve as convs que foram para o acelerador.
+    `pack`: hw = packing com as escalas FIXAS do netlist (o que roda); adaptive = packing com `sv`
+    do V real de cada camada (limite superior, exige mudar o RTL); off = Winograd INT8 sem packing."""
+    for s in model.convs():
+        if isinstance(s, nn.Sequential) and isinstance(s[1], nn.BatchNorm2d):
+            s[0] = fuse_conv_bn_eval(s[0].eval(), s[1].eval())
+            s[1] = nn.Identity()
+    if numerics == "fp32":
+        return []
+    cfg = _bridge("yolov2_cfg")
+    W = None
+    if numerics != "int8":
+        W = _bridge("qat_wino").make_wino_conv(numerics, pack=pack != "off",
+                                               hw_params=HW_PARAMS[numerics] if pack == "hw" else None)
+    no_accel = []
+    for (name, _, cin, cout, k), s in zip(cfg.LAYERS, model.convs(), strict=True):
+        conv = s[0] if isinstance(s, nn.Sequential) else s
+        assert (conv.in_channels, conv.out_channels, conv.kernel_size[0]) == (cin, cout, k), name
+        if W is not None and cfg.no_acelerador((name, None, cin, cout, k)):
+            assert conv.stride[0] == 1 and conv.groups == 1 and conv.padding[0] == 1, name
+            w = W(cin, cout, bias=True)             # relu=False: piso -128, a leaky vem depois
+            w.weight.data.copy_(conv.weight.data)
+            w.bias.data.copy_(conv.bias.data)
+            novo = F64(w)
+            no_accel.append(name)
+        else:
+            novo = Int8Conv(conv)
+        if isinstance(s, nn.Sequential):
+            s[0] = novo
+        else:
+            model.out = novo
+    return no_accel
+
+
 @torch.no_grad()
-def evaluate(model: nn.Module, voc2007: Path, limit: int | None = None, batch: int = 16) -> float:
+def calibrate(model: nn.Module, voc2007: Path, n: int, batch: int) -> None:
+    """Enche act_absmax (host e acelerador) e o post_shift do acelerador. Semente fixa: o
+    percentil do post_shift amostra quando o acumulador passa de 1M valores."""
+    torch.manual_seed(0)
+    ids = (voc2007 / "ImageSets/Main/trainval.txt").read_text().split()[:n]
+    model.train()
+    for s in range(0, len(ids), batch):
+        model(_batch(voc2007, ids[s:s + batch])[1])
+    model.eval()
+    bias_inteiro(model)
+
+
+def bias_inteiro(model: nn.Module) -> None:
+    """Escalas do netlist: o bias tem de ser o INTEIRO do bias.mem (escala do acumulador, BIAS_W=26).
+    O qat_wino soma `bias/(s_x*s_w)*2^(PS-ab)` em float; com o bias cru isso cai entre inteiros e
+    0,2% das saidas saem 1 LSB fora do RTL (medido na c09 real). Nem todo inteiro e' atingivel por
+    essa conta em float32, mas nao precisa: o requant e' floor((Y + meio + bias) / 2^s) com Y
+    inteiro, e somar um delta em [0, 1) a um inteiro nunca muda esse floor. Entao o bias float e'
+    empurrado, ulp a ulp, ate' a MESMA conta do forward dar inteiro + delta, com 0 <= delta < 0,5."""
+    for m in model.modules():
+        if getattr(m, "ab_hw", None) is None or m.bias is None:
+            continue
+        k = 2.0 ** (_bridge("qat_wino").variant_consts(m.variant)["POST_SHIFT"] - m.ab_hw)
+        P = m._act_scale(None) * m._w_scale()
+        alvo = torch.clamp(torch.round(m.bias.data / P * k), -(2 ** 25), 2 ** 25 - 1)
+        b = alvo / k * P
+        inf = torch.full_like(b, float("inf"))
+        for _ in range(64):
+            baixo = b / P * k < alvo
+            if not baixo.any():
+                break
+            b = torch.where(baixo, torch.nextafter(b, inf), b)
+        d = b / P * k - alvo
+        assert bool(((d >= 0) & (d < 0.5)).all()), "bias nao ficou em [inteiro, inteiro+0,5)"
+        m.bias.data.copy_(b)
+
+
+@torch.no_grad()
+def evaluate(model: nn.Module, voc2007: Path, limit: int | None = None,
+             batch: int = 16) -> tuple[float, list[float]]:
     ids = (voc2007 / "ImageSets/Main/test.txt").read_text().split()[:limit]
     model.eval()
     dets, gts, t0 = {}, {}, time.time()
     for s in range(0, len(ids), batch):
         chunk = ids[s:s + batch]
-        ims = [Image.open(voc2007 / "JPEGImages" / f"{i}.jpg").convert("RGB") for i in chunk]
-        x = torch.stack([torch.from_numpy(np.asarray(im.resize((SIZE, SIZE), Image.BILINEAR))).permute(2, 0, 1)
-                         for im in ims]).float() / 255
+        ims, x = _batch(voc2007, chunk)
         for iid, im, (bb, sc, cl) in zip(chunk, ims, decode(model(x))):
             gts[iid] = voc_gt(voc2007, iid)
             scale = torch.tensor([im.width, im.height, im.width, im.height])
@@ -185,7 +324,7 @@ def evaluate(model: nn.Module, voc2007: Path, limit: int | None = None, batch: i
                 dets.setdefault(c, []).append((iid, p, b))
         print(f"\r[{s + len(chunk)}/{len(ids)}] {time.time() - t0:.0f}s", end="", flush=True)
     print()
-    return voc07_map(dets, gts)[0]
+    return voc07_map(dets, gts)
 
 
 def _selftest() -> None:
@@ -200,18 +339,57 @@ def _selftest() -> None:
     assert torch.equal(reorg(x).flatten(), ref)
     assert YOLOv2()(torch.zeros(1, 3, SIZE, SIZE)).shape == (1, 125, 13, 13)
     assert abs(voc07_ap(np.array([0.5, 1.0]), np.array([1.0, 0.5])) - (6 * 1.0 + 5 * 0.5) / 11) < 1e-9
+    torch.manual_seed(0)                                   # fundir a BN nao muda a saida
+    m, x = YOLOv2(), torch.rand(1, 3, SIZE, SIZE)
+    for s in m.convs():
+        if isinstance(s, nn.Sequential):
+            s[1].running_mean.uniform_(-0.1, 0.1), s[1].running_var.uniform_(0.5, 2), s[1].weight.data.uniform_(0.5, 2)
+    y0 = m.eval()(x)
+    quantize(m, "fp32")
+    assert torch.allclose(m(x), y0, rtol=1e-3, atol=1e-3), (m(x) - y0).abs().max()
     print("yolov2: selftest OK")
+
+
+def _git(path: Path) -> str | None:
+    r = subprocess.run(["git", "-C", str(path), "rev-parse", "--short", "HEAD"], capture_output=True, text=True)
+    return r.stdout.strip() or None
 
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--weights")
     ap.add_argument("--act", default="leaky", choices=("leaky", "relu"))
+    ap.add_argument("--numerics", choices=("orig", "fp32", "int8", "f23", "f43", "f63"), default="orig",
+                    help="orig = o modelo cru, sem fundir a BN (o comportamento antigo)")
+    ap.add_argument("--pack", choices=("hw", "adaptive", "off"), default="hw",
+                    help="so' f23/f43/f63: escalas do netlist (o que roda), adaptativas, ou sem packing")
+    ap.add_argument("--calib", type=int, default=200, help="imagens do trainval para calibrar")
+    ap.add_argument("--batch", type=int, default=8)
     ap.add_argument("--voc", default=str(Path.home() / ".cache/torchvision/datasets/VOCdevkit/VOC2007"))
     ap.add_argument("--limit", type=int)
+    ap.add_argument("--out-json", type=Path)
     a = ap.parse_args()
     _selftest()
     if a.weights:
+        t0 = time.time()
         m = YOLOv2(a.act)
         load_darknet(m, a.weights)
-        print(f"mAP@0.5 (VOC07, 11 pontos, act={a.act}): {100 * evaluate(m, Path(a.voc), a.limit):.2f}")
+        no_accel = [] if a.numerics == "orig" else quantize(m, a.numerics, a.pack)
+        if a.numerics not in ("orig", "fp32"):
+            calibrate(m, Path(a.voc), a.calib, a.batch)
+        mp, aps = evaluate(m, Path(a.voc), a.limit, a.batch)
+        print(f"mAP@0.5 (VOC07, 11 pontos, act={a.act}, numerics={a.numerics}, pack={a.pack}): {100 * mp:.2f}")
+        if a.out_json:
+            wino = {n: dict(act_absmax=float(c.act_absmax), post_shift=int(round(float(c.post_shift))),
+                            sat_frac=float(c.sat_frac))
+                    for n, c in m.named_modules() if hasattr(c, "post_shift")}
+            rec = dict(net="yolov2_voc_416", weights=a.weights, act=a.act, numerics=a.numerics,
+                       pack=a.pack if no_accel else None,
+                       hw_params=HW_PARAMS.get(a.numerics) if a.pack == "hw" else None, calib=a.calib, batch=a.batch,
+                       limit=a.limit, n_test=a.limit or 4952, dataset="VOC2007 test", metric="mAP@0.5 VOC07 11-pt",
+                       map=round(100 * mp, 2), ap_per_class=dict(zip(VOC_CLASSES, (round(100 * v, 2) for v in aps))),
+                       no_acelerador=no_accel, dnn_study=_git(Path(__file__).parent),
+                       bridge=_git(BRIDGE), wino_calib=wino or None,
+                       seconds=round(time.time() - t0), date=time.strftime("%Y-%m-%dT%H:%M:%S%z"))
+            a.out_json.parent.mkdir(parents=True, exist_ok=True)
+            a.out_json.write_text(json.dumps(rec, indent=1, default=str))
