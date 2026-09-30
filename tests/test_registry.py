@@ -109,6 +109,62 @@ def test_geometry_control_models_survive_the_qat_to_int8_path():
         assert out.shape == (2, 200), name
 
 
+def _layout(m):
+    """Every module that shapes the computation, in order -- two nets with equal layouts are the same net."""
+    out = []
+    for x in m.modules():
+        if isinstance(x, torch.nn.Conv2d):
+            out.append(("conv", x.in_channels, x.out_channels, x.kernel_size, x.stride, x.padding))
+        elif isinstance(x, (torch.nn.MaxPool2d, torch.nn.AdaptiveAvgPool2d, torch.nn.ZeroPad2d)):
+            out.append((type(x).__name__, getattr(x, "kernel_size", None), getattr(x, "stride", None),
+                        getattr(x, "output_size", None), getattr(x, "padding", None)))
+        elif isinstance(x, torch.nn.Linear):
+            out.append(("linear", x.in_features, x.out_features))
+        elif isinstance(x, (torch.nn.Dropout, torch.nn.BatchNorm2d)):
+            out.append((type(x).__name__, getattr(x, "p", None)))
+    return out
+
+
+def test_factorial_grid_is_complete_and_every_gap_cell_runs():
+    """208 cells = 4 kernels x 2 strides x 2 pool kernels x 2 pool counts x (FC x BN x Dropout + GAP x BN)
+    + 16 pretrained; each GAP cell (cheap to build) runs and has one Conv-(BN-)ReLU fuse group per conv."""
+    fx = [n for n in MODEL_REGISTRY if n.startswith("alexnet_fx_")]
+    assert len(fx) == 208 and sum(n.endswith("_pt") for n in fx) == 16
+    x = torch.randn(1, 3, 64, 64)
+    for name in (n for n in fx if "_gap" in n):
+        spec, model = MODEL_REGISTRY[name], MODEL_REGISTRY[name]["ctor"]().eval()
+        assert model(x).shape == (1, 200), name
+        for group in spec["fuse_map"]:
+            kinds = [type(model.features.get_submodule(i)) for i in group]
+            assert kinds[0] is torch.nn.Conv2d and kinds[-1] is torch.nn.ReLU, f"{name}: {group} -> {kinds}"
+        assert len(spec["fuse_map"]) == 5, name
+
+
+def test_factorial_cells_already_trained_elsewhere_are_the_same_net():
+    """FX_EXISTING reuses 19 runs as factorial cells -- only valid if each is layer for layer that cell
+    (the *_pt cells share their non-pt twin's layout; the ImageNet load is tested above)."""
+    from ml.model_registrations import FX_EXISTING
+    from models import AlexNetTV
+
+    for cell, run in FX_EXISTING.items():
+        if cell.endswith("_pt"):
+            continue
+        model = run.split("/")[1]
+        ref = AlexNetTV(pretrained=False, kernel_size=3) if model == "alexnet_tv_3x3" else MODEL_REGISTRY[model]["ctor"]()
+        assert _layout(MODEL_REGISTRY[cell]["ctor"]()) == _layout(ref), (cell, run)
+
+
+def test_factorial_cells_survive_the_qat_to_int8_path():
+    """One GAP cell per kernel x BN (the fuse map depends on nothing else) through the real QAT->INT8 path."""
+    from ml.quantization import build_qat_from_model, convert_to_int8
+
+    for kernel in ("orig", "k3", "k2", "mix"):
+        for bn in ("", "_bn"):
+            name = f"alexnet_fx_{kernel}_s4_pk3n2_gap{bn}"  # a stride-4 2x2 stem and a crossed pool: the newest paths
+            qat_model = build_qat_from_model(MODEL_REGISTRY[name]["ctor"](), name, torch.device("cpu"))
+            assert convert_to_int8(qat_model.eval())(torch.randn(2, 3, 64, 64)).shape == (2, 200), name
+
+
 def test_alexnet_adapted_is_3x3_family_layer_for_layer_at_3x3_and_keeps_geometry_for_other_kernels():
     """The geometry/BN controls are only controls if AlexNetAdapted(3x3) IS AlexNet3x3FC/GAP and the
     11-5-3-3-3 default keeps the same 8x8 map -- else the kernel sweep silently changes geometry."""

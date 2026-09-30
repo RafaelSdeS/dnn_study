@@ -1,0 +1,10 @@
+# The default-init (pre-he_init) alexnet_tv_3x3 run, 500 ep complete (FP32 24.84%), kept in
+# outputs/pcad/archive_old_init/phase_11_kernel_size_comparison/ and copied to
+# outputs/pcad/phase_11_reuse_old_init/alexnet_tv_3x3/ so its QAT can be rerun with the fusion fix: it is
+# layer for layer the factorial cell alexnet_fx_k3_s4_pk3n3_fc_d (FX_EXISTING). The class now applies he_init,
+# which doesn't matter here -- FP32 is skipped (checkpoint exists) and QAT starts from the saved weights.
+# Same protocol as every Phase 11 run, enforced by tests/test_config.py.
+extends: _protocols/no_patience
+name: phase_11_reuse_old_init
+models:
+  - alexnet_tv_3x3

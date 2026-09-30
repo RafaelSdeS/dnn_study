@@ -78,6 +78,17 @@ def test_vgg16_classifier_linear_relu_fusion_for_qat():
     assert not isinstance(alexnet_qat.classifier[0], nniqat.LinearReLU)
 
 
+def test_fuse_root_models_are_fused_in_the_qat_copy_not_the_input():
+    """Regression test for the 2026-09-30 QAT fusion bug: prepare_qat_model deep-copied the model but fused
+    the caller's fuse_root (a submodule of the *original*), so all 43 fuse_root_attr models trained QAT
+    unfused -- observer before the ReLU, BN left unfolded -- and the input model was mutated."""
+    for name, fused_type in [("alexnet_3x3_gap", nniqat.ConvReLU2d), ("vgg16_2x2", nniqat.ConvBnReLU2d)]:
+        model = MODEL_REGISTRY[name]["ctor"]()
+        qat_model = build_qat_from_model(model, name, torch.device("cpu"))
+        assert isinstance(qat_model.features[0], fused_type), (name, type(qat_model.features[0]))
+        assert type(model.features[0]) is nn.Conv2d, f"{name}: the input model was fused in place"
+
+
 def test_qat_callback_still_applies_on_the_first_epoch_after_a_resume_past_it():
     qat = prepare_qat_model(nn.Sequential(nn.Conv2d(3, 4, 3), nn.BatchNorm2d(4), nn.ReLU(inplace=False)),
                             [["0", "1", "2"]])
@@ -88,7 +99,7 @@ def test_qat_callback_still_applies_on_the_first_epoch_after_a_resume_past_it():
 
 
 def test_qat_callback_with_no_observer_freeze_keeps_ranges_adapting():
-    """vgg16 registers qat_disable_observer_epoch=None (docs/logs/PHASE11_LOG.md, "Revisit 2"):
+    """A registry qat_disable_observer_epoch=None (vgg16's pre-fusion-fix override, docs/logs/PHASE11_LOG.md):
     BN must still freeze, but observers must stay enabled no matter how late the epoch."""
     qat = prepare_qat_model(nn.Sequential(nn.Conv2d(3, 4, 3), nn.BatchNorm2d(4), nn.ReLU(inplace=False)),
                             [["0", "1", "2"]])
@@ -96,5 +107,3 @@ def test_qat_callback_with_no_observer_freeze_keeps_ranges_adapting():
     assert qat[0].freeze_bn
     fake_quants = [m for m in qat.modules() if isinstance(m, torch.ao.quantization.FakeQuantizeBase)]
     assert fake_quants and all(int(m.observer_enabled[0]) == 1 for m in fake_quants)
-    assert MODEL_REGISTRY["vgg16"]["qat_disable_observer_epoch"] is None
-    assert "qat_disable_observer_epoch" not in MODEL_REGISTRY["vgg16_2x2"]

@@ -1,0 +1,45 @@
+# Phase 11 full factorial, wave 2 (core): kernel {11-5-3-3-3, 3x3, 2x2} x stem stride {2, 4} x pooling
+# {2x MaxPool(2) adapted, 3x MaxPool(3, 2) torchvision} x head {FC, GAP} x BN {no, yes} on AlexNetAdapted --
+# 48 cells, the 12 already trained under other names are mapped by ml/model_registrations.py:FX_EXISTING and
+# left out. Wave 3 (the rest: crossed pools, mixed kernel, Dropout, pretraining) is phase_11_factorial_ext.
+# Same protocol as every Phase 11 run (_protocols/no_patience.yaml), enforced by tests/test_config.py.
+# Submit (clean tree, pulled): python -m scripts.cluster submit-sweep --experiment phase_11_factorial_core --runtime pcad --slurm tupi_4090
+extends: _protocols/no_patience
+name: phase_11_factorial_core
+models:
+  - alexnet_fx_orig_s2_pk2n2_fc_bn
+  - alexnet_fx_orig_s2_pk2n2_gap_bn
+  - alexnet_fx_orig_s2_pk3n3_fc_bn
+  - alexnet_fx_orig_s2_pk3n3_gap
+  - alexnet_fx_orig_s2_pk3n3_gap_bn
+  - alexnet_fx_orig_s4_pk2n2_fc_bn
+  - alexnet_fx_orig_s4_pk2n2_gap
+  - alexnet_fx_orig_s4_pk2n2_gap_bn
+  - alexnet_fx_orig_s4_pk3n3_fc_bn
+  - alexnet_fx_orig_s4_pk3n3_gap_bn
+  - alexnet_fx_k3_s2_pk2n2_fc_bn
+  - alexnet_fx_k3_s2_pk3n3_fc
+  - alexnet_fx_k3_s2_pk3n3_fc_bn
+  - alexnet_fx_k3_s2_pk3n3_gap
+  - alexnet_fx_k3_s2_pk3n3_gap_bn
+  - alexnet_fx_k3_s4_pk2n2_fc
+  - alexnet_fx_k3_s4_pk2n2_fc_bn
+  - alexnet_fx_k3_s4_pk2n2_gap
+  - alexnet_fx_k3_s4_pk2n2_gap_bn
+  - alexnet_fx_k3_s4_pk3n3_fc_bn
+  - alexnet_fx_k3_s4_pk3n3_gap
+  - alexnet_fx_k3_s4_pk3n3_gap_bn
+  - alexnet_fx_k2_s2_pk2n2_fc_bn
+  - alexnet_fx_k2_s2_pk2n2_gap_bn
+  - alexnet_fx_k2_s2_pk3n3_fc
+  - alexnet_fx_k2_s2_pk3n3_fc_bn
+  - alexnet_fx_k2_s2_pk3n3_gap
+  - alexnet_fx_k2_s2_pk3n3_gap_bn
+  - alexnet_fx_k2_s4_pk2n2_fc
+  - alexnet_fx_k2_s4_pk2n2_fc_bn
+  - alexnet_fx_k2_s4_pk2n2_gap
+  - alexnet_fx_k2_s4_pk2n2_gap_bn
+  - alexnet_fx_k2_s4_pk3n3_fc
+  - alexnet_fx_k2_s4_pk3n3_fc_bn
+  - alexnet_fx_k2_s4_pk3n3_gap
+  - alexnet_fx_k2_s4_pk3n3_gap_bn

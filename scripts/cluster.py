@@ -89,6 +89,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
     dry = argparse.ArgumentParser(add_help=False)
     dry.add_argument("--dry-run", action="store_true", help="Print the sbatch command(s) instead of submitting")
+    dry.add_argument("--allow-dirty", action="store_true",
+                     help="Submit even with modified tracked files (the run's git_hash then doesn't reproduce it)")
 
     submit = sub.add_parser("submit", parents=[dry], help="Submit a new training job")
     submit.add_argument("--experiment", default="default")
@@ -135,6 +137,14 @@ def main() -> int:
     if args.command == "cancel":
         subprocess.run(["scancel", str(args.job_id)], check=False)
         return 0
+
+    # A job records the checkout's git_hash (ml/runtime.py:capture_provenance) -- only unchanged code makes that
+    # hash reproduce the run; code rsynced over a stale HEAD is how the git_dirty runs happened before.
+    if not (args.dry_run or args.allow_dirty or getattr(args, "smoke", False)):
+        from ml.runtime import code_changes
+
+        if dirty := code_changes():
+            raise SystemExit(f"Refusing to submit: uncommitted code/config (commit + push + pull first, or --allow-dirty):\n{dirty}")
 
     if args.command == "submit":
         runtime_cfg = _load_yaml(args.runtime, "runtime")

@@ -297,7 +297,9 @@ class AlexNetAdapted(nn.Module):
             if k % 2:
                 padding = k // 2 if (i or stem_padding is None) else stem_padding
             else:
-                assert k == 2 and stem_stride == 2, "even kernels: only k=2 on the stride-2 stem (64 -> 32, no padding)"
+                # stem: no padding (64 -> 32 at stride 2, -> 16 at stride 4, like AlexNetTV(kernel_size=2)'s
+                # stride-4 stem); later convs: asymmetric ZeroPad2d keeps the map size
+                assert k == 2, "even kernels: only k=2"
                 padding = 0
                 if i > 0:
                     layers.append(nn.ZeroPad2d((0, 1, 0, 1)))

@@ -89,9 +89,10 @@ def test_extends_merges_parent_and_child_fields():
     assert "extends" not in child
 
 
-def test_geometry_experiments_share_the_phase_11_protocol_exactly():
-    """The geometry controls/factorial/seed runs are only comparable to the earlier Phase 11 runs if
-    nothing but name/models/seed differs: epochs, early stopping, QAT budget, lr policy, stages."""
+def test_every_phase_11_experiment_shares_the_protocol_exactly():
+    """Every Phase 11 run (the report's single protocol) is only comparable to the others if nothing but
+    name/models/seed differs: epochs, early stopping, QAT budget, lr policy, stages. Globbed, so a new
+    phase_11_*.yaml can't drift without failing here."""
     reference = load_config("experiments/phase_11_kernel_size_comparison.yaml")
     for key in ("name", "models", "seed"):
         reference.pop(key, None)
@@ -99,13 +100,26 @@ def test_geometry_experiments_share_the_phase_11_protocol_exactly():
     assert reference["qat"] == {"epochs": 100} and reference["uniform_hparams"] is True
     assert reference["stages"] == ["fp32", "qat", "int8"]
 
-    expected_seed = {"phase_11_geometry_controls": 42, "phase_11_geometry_factorial": 42,
-                     "phase_11_geometry_seeds_s43": 43, "phase_11_geometry_seeds_s44": 44}
-    for name, seed in expected_seed.items():
+    names = [n for n in _experiment_names() if n.startswith("phase_11_")]
+    assert len(names) >= 12, names
+    for name in names:
         cfg = load_config(f"experiments/{name}.yaml")
-        assert cfg.pop("seed") == seed, name
+        seed = cfg.pop("seed")
+        assert seed == {"phase_11_geometry_seeds_s43": 43, "phase_11_geometry_seeds_s44": 44}.get(name, 42), name
         cfg.pop("name"), cfg.pop("models")
         assert cfg == reference, f"{name} differs from the Phase 11 protocol: {cfg} vs {reference}"
+
+
+def test_no_phase_11_model_overrides_the_uniform_protocol():
+    """uniform_hparams drops the registry's lr/weight_decay, but a registry key scripts/train.py still reads
+    per model would quietly give one net different training (vgg16's observer-freeze override was the last one,
+    dropped with the QAT fusion fix -- docs/logs/PHASE11_LOG.md)."""
+    from ml import model_registrations  # noqa: F401 -- populates the registry
+    from ml.registry import MODEL_REGISTRY
+
+    for name in (n for n in _experiment_names() if n.startswith("phase_11_")):
+        for model in load_config(f"experiments/{name}.yaml")["models"]:
+            assert "qat_disable_observer_epoch" not in MODEL_REGISTRY[model], (name, model)
 
 
 def test_protocol_fragments_are_not_treated_as_experiments():

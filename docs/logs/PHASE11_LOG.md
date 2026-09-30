@@ -553,3 +553,54 @@ on `origin`** — `c9750c0`, "qat_wino-only runs crashed in the run summary and 
 attempt (13 jobs, 824390-824402) died on exactly that crash; the 42 jobs 824403-824443 (one per model per variant, via `--model`) completed.
 Until that commit and the yaml lists are brought into this repo (or at least pushed from PCAD), these results are not reproducible from `main`.
 The two F23 `wrn_*` summaries were missing from the first local sync and were fetched from `~/dnn_study_m7` on 2026-09-25.
+
+## QAT fusion bug + single protocol / full factorial (2026-09-30)
+
+**Bug.** `ml/quantization.py:prepare_qat_model` deep-copied the model and then fused `fuse_root` -- a submodule of the
+*original* (`build_qat_from_model` passes `getattr(model, "features")`). Every registry entry with `fuse_root_attr` (43
+models: `alexnet_3x3_*`, `adapted_*`, `geo_*`, `stacked*`, `mixed`/`mixed_fc`, `smallkernel*`, `alexnet_tv*`, `vgg16*`,
+`vgg_style`, `depthwisesep`, `factorized`, `groupconv`, `dilated_*`) therefore trained QAT with **no fusion at all**:
+the activation observer sat on the pre-ReLU conv output and BN stayed unfolded. The `find_fuse_groups` models
+(`bottleneck`, `fire`, `fire_bypass`, `residual`, `final_*`, `*_bn` controls) were fused correctly. Present since
+ebe7c60 (2026-06-28); `prepare_sim` (`ml/quantization_advanced.py`) had the same pattern. Confirmed by building the QAT
+model: `alexnet_3x3_gap` -> `Conv2d, ReLU` (unfused) vs `alexnet_3x3_gap_bn` -> `ConvBnReLU2d`.
+Consequences: FP32 is untouched (every 500-ep FP32 checkpoint stays valid), but every INT8/ΔQAT number of those 43
+models is suspect. The report's Eixo 5 split "compensation robust vs naive fragile" coincides exactly with the
+fused/unfused split, the 8-25pp *conversion* loss of the no-BN GAP models (fig. 13) is unexplained until re-measured,
+and vgg16's QAT collapse (BN unfolded while observers froze -- see "Revisit 2") is the likely same root cause.
+**Fix:** both functions re-locate `fuse_root` inside the copy by name; `tests/test_quantization.py::
+test_fuse_root_models_are_fused_in_the_qat_copy_not_the_input` fails on the old code.
+`scripts/phase11/analyze_geometry.py:load` masks qat/int8 to NaN for runs made before the fix whose model needed it.
+
+**Provenance.** `git_dirty` used `git status --porcelain` on the whole tree, so every PCAD run was "dirty" from its own
+sibling runs' outputs -- the flag carried no information. Now `ml/runtime.py:code_changes()` limits it to
+`ml/ models/ scripts/ configs/ requirements.txt` and the summary also records `git_dirty_files`; `scripts/cluster.py`
+refuses to submit with uncommitted code/config (`--allow-dirty` to override; `--smoke`/`--dry-run` exempt). A run made
+with this commit is recognisable by `git_dirty_files` in its provenance, and the analysis asserts none of those is dirty.
+
+**Single protocol for the report.** Every classification CNN of the report on `_protocols/no_patience` (500 ep FP32 /
+100 ep QAT, no early stopping, uniform lr 3e-4, seed 42). `tests/test_config.py` now globs every `phase_11_*.yaml`
+against that protocol and forbids any per-model training override: vgg16's `qat_disable_observer_epoch=None` (its QAT
+collapse workaround) is dropped -- the gate reruns vgg16's QAT with the default schedule, and it comes back only if that
+still collapses. `configs/runtime/pcad.yaml` gets `persistent_workers: false`: every Phase 11 run used it (edited on PCAD,
+never committed; origin said `true`), and the loader must stay identical.
+
+**Full factorial** (`ml/model_registrations.py`, `alexnet_fx_<kernel>_s<stride>_pk<k>n<n>_<head>[_bn][_d][_pt]`):
+AlexNetAdapted, kernel {11-5-3-3-3, 3x3, 2x2, 3-2-3-2-3} x stem stride {2, 4} x pool kernel {2, 3} x pool count {2, 3}
+x head {FC, GAP} x BN, + Dropout(0.5) on FC, + ImageNet pretraining on the 11-5-3 FC no-BN net = 208 cells. 19 already
+exist under other names (`FX_EXISTING`, checked layer for layer by `tests/test_registry.py`), incl. `alexnet_tv_scratch`
+and the default-init `alexnet_tv_3x3` from `archive_old_init` (AlexNetTV(pretrained=False) == those cells). `AlexNetAdapted`
+now allows a 2x2 stride-4 stem (64 -> 16, like `AlexNetTV(kernel_size=2)`). Fuse maps are derived from the module list
+(`_conv_groups`), not hand-counted.
+
+**Reuse search** (all of PCAD `$HOME` + laptop `outputs/`, 316 checkpoints): wandb holds only symlinks (263 live, 53 dead);
+`archive_legacy_phases`, `fire_bypass_large_scale` (T_max 1000), `outputs/notebooks` (100 ep), `budget_unico*` (100 ep,
+patience 10) are other protocols; only the two AlexNetTV runs above are new factorial reuse. Free side contrasts
+(FP32 only): he_init vs default init on 6 identical architectures. `alexnet_se` is out: its SE block can't convert to INT8.
+
+**Waves** (tupi only): 0 = gate (`scripts/pcad/rerun_qat_fused.sh` on `alexnet_3x3_gap`, `alexnet_adapted_orig_gap`,
+vgg16 without its observer override: pass if QAT->INT8 conversion loses < 1pp and FP32 fields are unchanged);
+1 = the 44 QAT reruns in that script + `phase_11_families.yaml` (17 models); 2 = `phase_11_factorial_core.yaml` (36);
+3 = `phase_11_factorial_ext.yaml` (153). Analysis: `python -m scripts.phase11.factor_effects` -> every matched pair per
+factor (`results/phase_11_geometry_analysis/factorial_pair_summary.csv`, fig. 17).
+Status: code + tests ready, nothing committed or submitted yet.

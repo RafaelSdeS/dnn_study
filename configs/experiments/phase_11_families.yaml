@@ -1,0 +1,28 @@
+# Every other classification CNN of the study (Phases 1-4, 9) under the single Phase 11 protocol, so the
+# report's compensation/hybrid/baseline tables share it with the factorial. Already at this protocol, not
+# repeated: alexnet_bottleneck, alexnet_fire, alexnet_3x3_gap_bn (phase_11_geometry_controls), vgg16/vgg16_2x2,
+# alexnet_tv (pretrained), the AlexNetMixed/Stacked/SmallKernel variants. Left out: alexnet_se (its SE block
+# can't convert to INT8 -- "empty_strided not supported on quantized tensors"), the ViTs (own recipe, Eixo 7),
+# alexnet_2x2_fc (legacy unpadded 2x2, superseded by the factorial's k2 cells).
+# Same protocol as every Phase 11 run, enforced by tests/test_config.py.
+# Submit (clean tree, pulled): python -m scripts.cluster submit-sweep --experiment phase_11_families --runtime pcad --slurm tupi_4090
+extends: _protocols/no_patience
+name: phase_11_families
+models:
+  - alexnet_factorized
+  - alexnet_groupconv
+  - alexnet_depthwisesep
+  - alexnet_residual
+  - alexnet_dilated_fc
+  - alexnet_dilated_gap
+  - alexnet_small_kernel_with_bn
+  - tinyhybridnet
+  - tinymobilenetv2
+  - alexnet_final_bottleneck_fire
+  - alexnet_final_fire_residual
+  - alexnet_final_bottleneck_residual
+  - alexnet_final_depthwise_fire
+  - alexnet_fire_bypass
+  - vgg_style
+  - mobilenetv2
+  - resnet18tv

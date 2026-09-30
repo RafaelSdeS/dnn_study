@@ -8,7 +8,9 @@ them in sync if a notebook's fuse_map or lr changes.
 """
 
 from functools import partial
+from itertools import product
 
+import torch.nn as nn
 from torchvision.models.vgg import cfgs as VGG_CFGS
 
 from ml.quantization import find_fuse_groups
@@ -67,8 +69,9 @@ FUSE_MAP_VGG = [
 ]
 register_model("alexnet_tv", AlexNetTV, fuse_map=FUSE_MAP_ALEXNET_TV, fuse_root_attr="features", lr=3e-4)
 register_model("vgg_style", VGGStyleCNN, fuse_map=FUSE_MAP_VGG, fuse_root_attr="features", lr=1e-3)
-register_model("mobilenetv2", MobileNetV2TV, fuse_map=[], lr=1e-4)
-register_model("resnet18tv", ResNet18TV, fuse_map=[], lr=1e-4)
+# torchvision's quantizable variants (FloatFunctional residual adds); fuse maps found on an unpretrained twin
+register_model("mobilenetv2", MobileNetV2TV, fuse_map=find_fuse_groups(MobileNetV2TV(pretrained=False)), lr=1e-4)
+register_model("resnet18tv", ResNet18TV, fuse_map=find_fuse_groups(ResNet18TV(pretrained=False)), lr=1e-4)
 
 # notebooks/phase_2_kernel_restriction/alexnet_qat.ipynb
 # FUSE_MAP_ALEXNET_TV is the same Conv-ReLU (no BN) pattern the notebook calls FUSE_CONV_RELU,
@@ -173,6 +176,61 @@ register_model("alexnet_geo_s2_pk2n3_fc", partial(AlexNetAdapted, pool_count=3),
 register_model("alexnet_geo_s4_p3_fc_k3", partial(AlexNetAdapted, kernels=(3,) * 5, stem_stride=4,
                                                   pool_kernel=3, pool_count=3), **_GEO)
 register_model("alexnet_adapted_orig_fc_pt", partial(AlexNetAdapted, pretrained=True), **_GEO)
+
+# Phase 11 full factorial (configs/experiments/phase_11_factorial_{core,ext}.yaml, docs/logs/PHASE11_LOG.md):
+# every AlexNetAdapted cell of kernel x stem stride x pool kernel x pool count x head x BN, + Dropout(0.5) on
+# the FC head, + ImageNet pretraining on the 11-5-3-3-3 FC no-BN net (the only shape its weights fit). Default
+# init, same channels -- nothing else varies. alexnet_fx_<kernel>_s<stride>_pk<pool k>n<pool count>_<head>[_bn][_d][_pt].
+# All 208 cells are registered (so analysis can build any of them); FX_EXISTING maps the 19 that were already
+# trained under another name to that run (<experiment>/<model> under outputs/pcad) -- the yamls leave them out.
+FX_KERNELS = {"orig": (11, 5, 3, 3, 3), "k3": (3,) * 5, "k2": (2,) * 5, "mix": (3, 2, 3, 2, 3)}
+FX_EXISTING = {
+    "alexnet_fx_orig_s2_pk2n2_fc": "phase_11_geometry_controls/alexnet_adapted_orig_fc",
+    "alexnet_fx_orig_s2_pk2n2_gap": "phase_11_geometry_controls/alexnet_adapted_orig_gap",
+    "alexnet_fx_k3_s2_pk2n2_fc": "phase_11_geometry_controls/alexnet_3x3_fc",
+    "alexnet_fx_k3_s2_pk2n2_gap": "phase_11_mixed_kernel_comparison/alexnet_3x3_gap",
+    "alexnet_fx_k2_s2_pk2n2_fc": "phase_11_geometry_controls/alexnet_adapted_2x2_fc",
+    "alexnet_fx_k2_s2_pk2n2_gap": "phase_11_geometry_controls/alexnet_adapted_2x2_gap",
+    "alexnet_fx_k3_s2_pk2n2_gap_bn": "phase_11_geometry_controls/alexnet_3x3_gap_bn",
+    "alexnet_fx_orig_s4_pk3n3_fc": "phase_11_geometry_factorial/alexnet_geo_s4_p3_fc",
+    "alexnet_fx_orig_s2_pk3n3_fc": "phase_11_geometry_factorial/alexnet_geo_s2_p3_fc",
+    "alexnet_fx_orig_s4_pk2n2_fc": "phase_11_geometry_factorial/alexnet_geo_s4_p2_fc",
+    "alexnet_fx_orig_s4_pk3n3_gap": "phase_11_geometry_factorial/alexnet_geo_s4_p3_gap",
+    "alexnet_fx_k3_s4_pk3n3_fc": "phase_11_geometry_factorial/alexnet_geo_s4_p3_fc_k3",
+    "alexnet_fx_orig_s2_pk2n2_fc_d": "phase_11_geometry_factorial/alexnet_geo_s2_p2_drop_fc",
+    "alexnet_fx_orig_s2_pk3n2_fc": "phase_11_geometry_factorial/alexnet_geo_s2_pk3n2_fc",
+    "alexnet_fx_orig_s2_pk2n3_fc": "phase_11_geometry_factorial/alexnet_geo_s2_pk2n3_fc",
+    "alexnet_fx_orig_s2_pk2n2_fc_pt": "phase_11_geometry_factorial/alexnet_adapted_orig_fc_pt",
+    "alexnet_fx_orig_s4_pk3n3_fc_d_pt": "phase_11_geometry_factorial/alexnet_tv",
+    # AlexNetTV(pretrained=False) == these two cells layer for layer; both runs predate he_init (default init)
+    "alexnet_fx_orig_s4_pk3n3_fc_d": "phase_11_kernel_size_comparison/alexnet_tv_scratch",
+    "alexnet_fx_k3_s4_pk3n3_fc_d": "phase_11_reuse_old_init/alexnet_tv_3x3",
+}
+
+
+def _conv_groups(seq: nn.Sequential) -> list:
+    """[conv, (bn,) relu] index groups of a flat Sequential -- find_fuse_groups skips BN-less Conv-ReLU,
+    and the 2x2 cells' ZeroPad2d shifts indices, so no hand-written map."""
+    mods = list(seq)
+    return [[str(j) for j in range(i, i + (3 if isinstance(mods[i + 1], nn.BatchNorm2d) else 2))]
+            for i, m in enumerate(mods) if isinstance(m, nn.Conv2d)]
+
+
+# features' indices depend only on kernels and BN (stride/pool kernel are module args; a 3rd pool sits after
+# the last ReLU), so 8 small GAP instances cover all 208 cells
+_FX_FUSE = {(kn, bn): _conv_groups(AlexNetAdapted(kernels=ks, head="gap", batch_norm=bn).features)
+            for kn, ks in FX_KERNELS.items() for bn in (False, True)}
+for (kn, ks), s, pk, pn, head, bn, d in product(FX_KERNELS.items(), (2, 4), (2, 3), (2, 3), ("fc", "gap"),
+                                                (False, True), (False, True)):
+    if d and head == "gap":  # the GAP head has no Dropout
+        continue
+    kw = dict(kernels=ks, head=head, batch_norm=bn, stem_stride=s, pool_kernel=pk, pool_count=pn, dropout=0.5 * d)
+    if kn == "orig" and s == 4:
+        kw["stem_padding"] = 2  # torchvision's own conv1
+    name = f"alexnet_fx_{kn}_s{s}_pk{pk}n{pn}_{head}" + "_bn" * bn + "_d" * d
+    cells = [(name, kw)] + ([(name + "_pt", {**kw, "pretrained": True})] if kn == "orig" and head == "fc" and not bn else [])
+    for cell, cell_kw in cells:
+        register_model(cell, partial(AlexNetAdapted, **cell_kw), fuse_map=_FX_FUSE[kn, bn], fuse_root_attr="features", lr=3e-4)
 register_model("alexnet_stacked_gap", partial(AlexNetStacked, head="gap"),
                fuse_map=FUSE_MAP_STACKED, fuse_root_attr="features", lr=1e-3)
 # No BN -> features compresses to plain Conv-ReLU pairs (BN entries drop out, shifting every
@@ -193,11 +251,12 @@ register_model("alexnet_stacked_gap_nobn", partial(AlexNetStacked, head="gap", b
 # logits). Fuse the two Linear-ReLU pairs (see prepare_qat_model's classifier_fuse_pairs docstring
 # for why vgg16 needs this); classifier.6 has no ReLU after it and stays a standalone quantized Linear.
 CLASSIFIER_FUSE_MAP_VGG16 = [["0", "1"], ["3", "4"]]
-# qat_disable_observer_epoch=None: freezing observers collapsed vgg16's QAT to ln(200) in 3/3 runs
-# (docs/logs/PHASE11_LOG.md, "Revisit 2"), so its fake-quant ranges keep adapting for all of QAT.
+# vgg16 used to register qat_disable_observer_epoch=None: freezing observers collapsed its QAT to ln(200) in 3/3
+# runs ("Revisit 2"), but those runs trained QAT with BN unfolded (the fuse_root bug, 2026-09-30). Dropped so vgg16
+# follows the single protocol; the fused-QAT gate (docs/logs/PHASE11_LOG.md) decides whether it has to come back.
 register_model("vgg16", partial(VGG16, kernel_size=3),
                fuse_map=FUSE_MAP_VGG16, fuse_root_attr="features", lr=1e-3,
-               classifier_fuse_map=CLASSIFIER_FUSE_MAP_VGG16, qat_disable_observer_epoch=None)
+               classifier_fuse_map=CLASSIFIER_FUSE_MAP_VGG16)
 register_model("vgg16_2x2", partial(VGG16, kernel_size=2),
                fuse_map=FUSE_MAP_VGG16, fuse_root_attr="features", lr=1e-3,
                classifier_fuse_map=CLASSIFIER_FUSE_MAP_VGG16)

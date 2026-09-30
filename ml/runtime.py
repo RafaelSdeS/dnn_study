@@ -63,9 +63,21 @@ def load_runtime_root(runtime_name: str) -> Path:
     return expand_path(cfg.get("root"), default=f"outputs/{runtime_name}")
 
 
+# What a run *is*: a change anywhere else (outputs/, results/, report/, docs/) doesn't change what trains.
+CODE_PATHS = ("ml", "models", "scripts", "configs", "requirements.txt")
+
+
+def code_changes() -> str:
+    """`git status --porcelain` restricted to CODE_PATHS (untracked files there included); empty means the
+    checkout's HEAD is exactly the code that runs. Until 2026-09-30 git_dirty used the whole tree, so every
+    run on PCAD was "dirty" from its own sibling runs' outputs alone and the flag carried no information."""
+    return subprocess.run(["git", "status", "--porcelain", "--", *CODE_PATHS], capture_output=True, text=True,
+                          check=True, cwd=Path(__file__).resolve().parents[1]).stdout.strip()
+
+
 def capture_provenance() -> dict[str, Any]:
-    """Git hash, dirty flag, hostname, UTC timestamp, and the training environment (torch/
-    torchvision/CUDA/cuDNN versions, GPU name, Python, CPU count, SLURM job id) -- so a run is
+    """Git hash, code-dirty flag (+ which files), hostname, UTC timestamp, and the training environment
+    (torch/torchvision/CUDA/cuDNN versions, GPU name, Python, CPU count, SLURM job id) -- so a run is
     still reproducible months later without re-deriving what it ran on."""
     import torchvision
 
@@ -74,12 +86,13 @@ def capture_provenance() -> dict[str, Any]:
     except Exception:
         git_hash = "unknown"
     try:
-        git_dirty = bool(subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True, check=True).stdout.strip())
+        dirty_files = code_changes().splitlines()
     except Exception:
-        git_dirty = False
+        dirty_files = ["<git status failed>"]
     return {
         "git_hash": git_hash,
-        "git_dirty": git_dirty,
+        "git_dirty": bool(dirty_files),
+        "git_dirty_files": dirty_files[:50],
         "hostname": socket.gethostname(),
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "torch_version": torch.__version__,

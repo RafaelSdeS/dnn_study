@@ -10,6 +10,6 @@ distributed: false
 devices: 1
 launcher: single
 use_kagglehub_fallback: true
-persistent_workers: true
+persistent_workers: false  # every Phase 11 run used false (it was set on PCAD, uncommitted) -- keep the loader identical
 benchmark_warmup: 100
 quantized_engine: fbgemm

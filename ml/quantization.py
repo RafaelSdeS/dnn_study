@@ -180,12 +180,18 @@ def prepare_qat_model(
     to a sane range (~0.5) -- quantizing before it collapsed QAT to ln(num_classes) from epoch 1
     (docs/logs/PHASE11_LOG.md). Fusing Linear+ReLU moves the observer to the post-ReLU value,
     the same fix already in place for every Conv-BN-ReLU stage.
+
+    fuse_root is a submodule of the *input* model; it is re-located inside the deep copy by name.
+    Until 2026-09-30 the fusion ran on the caller's fuse_root itself, i.e. on the original model,
+    so every registry entry with fuse_root_attr trained QAT with no Conv-(BN-)ReLU fusion at all
+    (observer before the ReLU, BN left unfolded) -- see docs/logs/PHASE11_LOG.md, "QAT fusion bug".
     """
+    root_name = "" if fuse_root is None else next(n for n, m in model.named_modules() if m is fuse_root)
     model = copy.deepcopy(model)
     model.train()
     model.qconfig = tq.get_default_qat_qconfig(qengine)
     exclude_attention_from_qat(model)
-    root = model if fuse_root is None else fuse_root
+    root = model.get_submodule(root_name)
     if fuse_pairs:
         tq.fuse_modules_qat(root, fuse_pairs, inplace=True)
     if classifier_fuse_pairs:

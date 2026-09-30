@@ -86,10 +86,13 @@ def prepare_sim(
 
     Fusion is best-effort: if a fuse_map entry is incompatible (e.g. ReLU6 in
     MobileNetV2), we retry unfused rather than crash the whole run.
+    fuse_root is re-located inside the copy by name (same bug/fix as
+    ml.quantization.prepare_qat_model: it used to fuse the caller's original).
     """
+    root_name = "" if fuse_root is None else next(n for n, m in model.named_modules() if m is fuse_root)
     model = copy.deepcopy(model).to(device)
     model.train()
-    root = model if fuse_root is None else fuse_root
+    root = model.get_submodule(root_name)
     if fuse_map:
         try:
             tq.fuse_modules_qat(root, fuse_map, inplace=True)
