@@ -18,7 +18,7 @@ def test_feed_queue_requeues_on_qos_limit_and_records_outcomes(tmp_path):
     queue = tmp_path / "queue.txt"
     queue.write_text(f"echo 'Submitted batch job 1'\n{qos_once}\nexit 3\n")
 
-    env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "SLEEP": "0", "USER": "tester"}
+    env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "SLEEP": "0", "GAP": "0", "USER": "tester"}
     subprocess.run(["bash", str(SCRIPT), str(queue)], env=env, check=True, timeout=60, capture_output=True)
 
     assert queue.read_text() == ""

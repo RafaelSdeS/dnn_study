@@ -10,6 +10,8 @@ import yaml
 
 from configs.loader import load_config
 
+CODE_PATHS = ("ml", "models", "scripts", "configs", "requirements.txt")  # == ml.runtime.CODE_PATHS (tests/test_config.py)
+
 
 def _load_yaml(path_or_name: str, subdir: str) -> dict:
     candidate = Path(path_or_name)
@@ -141,9 +143,11 @@ def main() -> int:
     # A job records the checkout's git_hash (ml/runtime.py:capture_provenance) -- only unchanged code makes that
     # hash reproduce the run; code rsynced over a stale HEAD is how the git_dirty runs happened before.
     if not (args.dry_run or args.allow_dirty or getattr(args, "smoke", False)):
-        from ml.runtime import code_changes
-
-        if dirty := code_changes():
+        # git directly, not ml.runtime.code_changes: importing `ml` pulls in torch (~9 s CPU, ~640 MB per submit on
+        # the shared PCAD login node, where scripts/pcad/feed_queue.sh submits hundreds of these)
+        dirty = subprocess.run(["git", "status", "--porcelain", "--", *CODE_PATHS], capture_output=True, text=True,
+                               check=True, cwd=Path(__file__).resolve().parents[1]).stdout.strip()
+        if dirty:
             raise SystemExit(f"Refusing to submit: uncommitted code/config (commit + push + pull first, or --allow-dirty):\n{dirty}")
 
     if args.command == "submit":

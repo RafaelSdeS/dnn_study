@@ -617,3 +617,8 @@ pending + running** (MaxSubmitJobs; the association shows none, the QOS does), s
 through `scripts/pcad/feed_queue.sh ~/queue_phase11.txt` (setsid/nohup on the PCAD login node, log `~/queue_phase11.log`):
 one submit per free slot, max 48 queued, QOS rejections requeued at the head. After the gate passes, the 41 QAT reruns
 are prepended (`scripts/pcad/rerun_qat_fused.sh <experiment>/<model>`, one line each).
+
+Login-node load (measured 2026-09-30): the feeder idles at 3 MB + one 0.02 s `squeue` per 10 min, but every real submit
+cost ~9 s CPU / ~640 MB because the dirty-code guard imported `ml` (torch). `scripts/cluster.py` now runs the git check
+itself (its `CODE_PATHS` asserted equal to `ml.runtime.CODE_PATHS` in tests/test_config.py), and `feed_queue.sh` re-execs
+under `nice -n 19 ionice -c3` and waits 60 s after each submit, so a burst of freed slots is one light submit a minute.

@@ -122,6 +122,15 @@ def test_no_phase_11_model_overrides_the_uniform_protocol():
             assert "qat_disable_observer_epoch" not in MODEL_REGISTRY[model], (name, model)
 
 
+def test_submit_guard_checks_the_same_paths_as_run_provenance():
+    """scripts/cluster.py keeps its own copy (importing ml pulls in torch on the login node) -- it must not drift
+    from what capture_provenance calls code, or a submit could pass the guard and still record git_dirty."""
+    from ml.runtime import CODE_PATHS
+    from scripts.cluster import CODE_PATHS as SUBMIT_CODE_PATHS
+
+    assert SUBMIT_CODE_PATHS == CODE_PATHS
+
+
 def test_protocol_fragments_are_not_treated_as_experiments():
     """configs/experiments/_protocols/*.yaml are merge fragments, not runnable experiments --
     _experiment_names()'s non-recursive glob must not pick them up.
