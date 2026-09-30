@@ -1,0 +1,13 @@
+key,label,stem,pooling,map,fp32,qat,int8,best_ep,params_m,macs_m
+alexnet_geo_s4_p3_fc,s4 / pool 3×3 (torchvision),s4,"3×pool(3,2)",1×1,24.80289936065674,,,385,57.82324,94.868416
+alexnet_geo_s4_p2_fc,s4 / pool 2×2,s4,2×pool(2),3×3,24.984760582447052,,,110,57.82324,94.870464
+alexnet_geo_s2_p3_fc,s2 / pool 3×3,s2,"3×pool(3,2)",3×3,29.74337637424469,,,394,57.82324,253.024512
+alexnet_geo_s2_pk3n2_fc,s2 / 2 pools k3,s2,"2×pool(3,2)",7×7,24.166159331798553,,,414,57.82324,253.034752
+alexnet_geo_s2_pk2n3_fc,s2 / 3 pools k2,s2,3×pool(2),4×4,35.02624034881592,,,457,57.82324,294.621184
+alexnet_adapted_orig_fc,s2 / pool 2×2 (adaptado),s2,2×pool(2),8×8,36.16301417350769,,,483,57.82324,294.633472
+alexnet_geo_s2_p2_drop_fc,adaptado + Dropout,s2,2×pool(2)+Dropout,8×8,38.28611969947815,,,476,57.82324,294.633472
+alexnet_geo_s4_p3_gap,"s4 / pool 3×3, GAP",s4,"3×pool(3,2)",1×1,28.494256734848022,,,352,2.521096,39.574464
+alexnet_geo_s4_p3_fc_k3,"s4 / pool 3×3, kernels 3×3",s4,"3×pool(3,2), k=3",1×1,24.27956312894821,,,219,57.605128,80.449792
+alexnet_tv_scratch,AlexNetTV do zero (+Dropout),s4,"3×pool(3,2)+Dropout",1×1,27.505391836166382,,,424,57.82324,94.868416
+alexnet_tv,AlexNetTV pré-treinado,s4,"3×pool(3,2)+Dropout, pré-treino",1×1,35.903096199035645,,,444,57.82324,94.868416
+alexnet_adapted_orig_fc_pt,adaptado pré-treinado,s2,"2×pool(2), pré-treino",8×8,43.12324523925781,,,7,57.82324,294.633472
