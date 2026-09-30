@@ -14,6 +14,7 @@ from .quantization import (
     build_qat,
     build_qat_from_model,
     load_best_model,
+    load_int8_model,
     convert_to_int8,
     make_qat_callback,
     exclude_attention_from_qat,

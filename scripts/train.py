@@ -43,6 +43,7 @@ from ml import (
     make_qat_callback,
     make_run_summary,
     load_best_model,
+    load_int8_model,
     prediction_agreement,
     save_resolved_config,
     set_global_seed,
@@ -163,6 +164,14 @@ _QAT_FIT_FIELDS = {
     "epochs_budget": "qat_epochs_budget", "best_val_top1": "qat_best_val_top1",
     "best_val_top5": "qat_best_val_top5", "total_training_time_s": "qat_total_training_time_s",
 }
+# Summary fields make_run_summary derives from the FP32 fit's history/timer (ml/reporting.py). A rerun that trains no new
+# FP32 epoch (scripts/pcad/rerun_qat_fused.sh) keeps the original run's values: the skip path has no history to derive
+# them from (vgg16's came back None), and the no-op resume adds its own reload time to total_training_time_s.
+_FP32_TRAINING_FIELDS = (
+    "final_train_loss", "avg_epoch_time_s", "total_training_time_s", "peak_gpu_mem_mb", "avg_images_per_sec",
+    "avg_batch_time_s", "avg_cpu_percent", "avg_ram_used_mb", "avg_gpu_power_w", "avg_gpu_utilization_pct",
+    "avg_gpu_temp_c", "total_gpu_energy_wh",
+)
 # A run without the fp32 stage (e.g. qat_wino on a reused FP32 checkpoint) rewrites
 # {model}_summary.json; without this its fp32_* fields would be overwritten with None.
 _FP32_EVAL_FIELDS = {"top1": "fp32_top1", "top5": "fp32_top5", "loss": "fp32_loss", "ece": "fp32_ece"}
@@ -463,9 +472,9 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
             int8_model = None
             if qat_model is not None:
                 int8_model = convert_to_int8(qat_model)
-                torch.save(int8_model, int8_path)
+                torch.save(int8_model.state_dict(), int8_path)  # a pickled quantized module can't be loaded back
             elif int8_path.exists():
-                int8_model = torch.load(int8_path, map_location="cpu")
+                int8_model = load_int8_model(model_name, checkpoints_dir)
 
             if int8_model is not None:
                 int8_model = int8_model.to("cpu")
@@ -504,7 +513,9 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
             layer_stats_path = None
 
         fp32_logits_path = results_dir / f"{model_name}_fp32_val_logits.npz"
+        no_new_fp32_epoch = bool(prior_summary) and fp32_fit.get("epochs_used") == prior_summary.get("epochs_used")
         extra = {
+            **({k: prior_summary.get(k) for k in _FP32_TRAINING_FIELDS} if no_new_fp32_epoch else {}),
             "fp32_ece": fp32_eval.get("ece") if fp32_eval else None,
             "fp32_bs1_latency_ms_per_image": fp32_bs1_benchmark.get("latency_ms_per_image"),
             "fp32_bs1_throughput_img_per_s": fp32_bs1_benchmark.get("throughput_img_per_s"),

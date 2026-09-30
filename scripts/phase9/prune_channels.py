@@ -232,7 +232,7 @@ def _finetune_and_quantize(
 
     int8_model = convert_to_int8(qat_model)
     int8_path = checkpoints_dir / f"qat_{run_name}.pth"
-    torch.save(int8_model, int8_path)
+    torch.save(int8_model.state_dict(), int8_path)  # a pickled quantized module can't be loaded back
     int8_trainer = Trainer(
         int8_model.to("cpu"), val_loader, val_loader, replace(qat_trainer_cfg, use_amp=False),
         torch.device("cpu"), checkpoints_dir, f"qat_{run_name}", num_classes=data_cfg.num_classes,

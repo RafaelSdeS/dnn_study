@@ -139,8 +139,8 @@ def _model_bytes(path: str | Path) -> bytes | None:
 
     save_checkpoint() stores optimizer + scheduler + history alongside the weights, and AdamW
     keeps two momentum buffers per parameter -- so a `{name}_best.pth` file is ~3x the model
-    it holds. The INT8 artifact, by contrast, is written with a bare torch.save(model, ...)
-    and is model-only. Measuring both files raw made every FP32-vs-INT8 size comparison
+    it holds. The INT8 artifact, by contrast, is model-only: its bare state_dict (a pickled
+    torch.save(model, ...) until 2026-09-30, same bytes to within ~0.05%). Measuring both files raw made every FP32-vs-INT8 size comparison
     apples-to-oranges and inflated the compression ratio by ~3x (recorded ~11.9x where the
     true FP32->INT8 ratio is ~4x). Unwrapping model_state_dict here puts both sides on the
     same footing for every caller.
@@ -151,7 +151,7 @@ def _model_bytes(path: str | Path) -> bytes | None:
     try:
         obj = torch.load(p, map_location="cpu", weights_only=True)
     except Exception:
-        # A pickled nn.Module (the INT8 artifact) -- already model-only, measure as-is.
+        # A legacy pickled nn.Module INT8 artifact -- already model-only, measure as-is.
         return p.read_bytes()
     if isinstance(obj, dict) and "model_state_dict" in obj:
         buf = io.BytesIO()

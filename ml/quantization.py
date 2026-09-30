@@ -282,6 +282,15 @@ def convert_to_int8(qat_model: nn.Module, inplace: bool = False) -> nn.Module:
     return torch.ao.quantization.convert(qat_model, inplace=inplace)
 
 
+def load_int8_model(arch_name: str, save_dir: str | Path) -> nn.Module:
+    """Rebuild the INT8 model scripts/train.py saved as a state_dict (qat_<arch>.pth): same QAT graph -> convert ->
+    load. Until 2026-09-30 it saved the pickled module instead, which can't be loaded back at all -- quantized
+    convs don't unpickle their nn.Module internals ('ConvReLU2d' object has no attribute '_modules')."""
+    model = convert_to_int8(build_qat_from_model(MODEL_REGISTRY[arch_name]["ctor"](), arch_name, torch.device("cpu")))
+    model.load_state_dict(torch.load(Path(save_dir) / f"qat_{arch_name}.pth", map_location="cpu", weights_only=True))
+    return model
+
+
 def make_qat_callback(freeze_bn_epoch: int = 3, disable_observer_epoch: int | None = 5):
     """Return an epoch_callback that freezes BN stats then disables observers (never, if
     disable_observer_epoch is None)."""

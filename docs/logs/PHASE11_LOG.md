@@ -674,3 +674,28 @@ and vgg16's QAT climbing past ~3% by epoch 15.
 
 Known limitation, unchanged and uniform across runs: the best epoch is selected on the same val split that is reported
 (no held-out test split), a small optimistic bias.
+
+## Saving audit before the rerun (2026-09-30)
+
+A 1-epoch local run of `alexnet_fx_k3_s2_pk2n2_gap`, `resnet18tv` and `vgg16` (outputs kept, every artifact reopened)
+plus a simulated `rerun_qat_fused.sh` on it found three pre-existing saving defects, all fixed before any job of the
+rerun started (the 27 already-submitted jobs were held, the feeder paused, then both resumed on the fixed commit):
+
+- **INT8 artifact unloadable.** `torch.save(int8_model)` pickled the module; quantized convs don't unpickle their
+  nn.Module internals (`'ConvReLU2d' object has no attribute '_modules'`), so no `qat_<m>.pth(.gz)` ever written could be
+  loaded back -- same machine, same torch. Metrics were unaffected (computed in-process). Now a state_dict (loads with
+  `weights_only=True`), rebuilt by `ml.quantization.load_int8_model`; size identical to ~0.05%, so `int8_size_mb` stays
+  comparable. Every `qat_*.pth.gz` committed before this is a dead pickle; the QAT best checkpoint (PCAD) regenerates it.
+- **QAT rerun wiped the FP32 training record.** The summary is rewritten; its FP32 training fields come from the fit
+  history. With no `<m>_resume.pth` (vgg16's PCAD dir) the skip path had none -> `final_train_loss`, `avg_epoch_time_s`,
+  hardware/energy averages became None; with one, the no-op resume added its reload time to `total_training_time_s`.
+  A run that trains no new FP32 epoch now keeps the prior summary's values (`_FP32_TRAINING_FIELDS`, scripts/train.py).
+- **Summary top1/top5 were macro-averaged.** `Trainer.evaluate` used torchmetrics' default `average="macro"` (mean of
+  per-class accuracy); the random 90/10 split has 31-78 val images per class, so it drifted up to ~0.2pp from the
+  standard (micro) top-1 that `_validate` logs per epoch -- e.g. the gate's `alexnet_3x3_gap` best_val_top1 46.95 vs
+  fp32_top1 46.82 on the same weights. Now micro. Every committed summary top1/top5 is macro; for runs with saved logits
+  (Phase 11, 2026-09-13+) micro is recomputable from `*_val_logits.npz`, and every Phase 11 rerun re-evaluates FP32.
+
+Tests: `test_saved_int8_artifact_reloads_and_reproduces_the_reported_int8_logits`,
+`test_qat_rerun_keeps_the_fp32_training_record[resume|no resume]`, `test_evaluate_reports_the_standard_micro_top1`
+(each fails on the old code).

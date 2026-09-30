@@ -364,8 +364,11 @@ class Trainer(BaseTrainer):
         model = self.model.eval().to(self.device)
         criterion = nn.CrossEntropyLoss()
 
+        # average="micro": the standard top-k (fraction of images right), as _validate logs per epoch. torchmetrics
+        # defaults to "macro" (mean of per-class accuracies), which the random 90/10 split's 31-78 images per class
+        # pulled up to ~0.2pp off -- every summary top1/top5 until 2026-09-30 is macro
         accs = {
-            k: MulticlassAccuracy(num_classes=self.num_classes, top_k=k).to(self.device)
+            k: MulticlassAccuracy(num_classes=self.num_classes, top_k=k, average="micro").to(self.device)
             for k in topk
         }
         loss_m = MeanMetric().to(self.device)
