@@ -603,4 +603,8 @@ vgg16 without its observer override: pass if QAT->INT8 conversion loses < 1pp an
 1 = the 44 QAT reruns in that script + `phase_11_families.yaml` (17 models); 2 = `phase_11_factorial_core.yaml` (36);
 3 = `phase_11_factorial_ext.yaml` (153). Analysis: `python -m scripts.phase11.factor_effects` -> every matched pair per
 factor (`results/phase_11_geometry_analysis/factorial_pair_summary.csv`, fig. 17).
-Status: code + tests ready, nothing committed or submitted yet.
+Status: committed/pushed (855a492, 6bb41a5); local smoke (`alexnet_fx_k2_s4_pk3n3_gap_bn`, CPU, FP32->fused QAT->INT8) exit 0;
+29 tests pass on PCAD. PCAD synced to 6bb41a5 with clean code (backup `~/dnn_study_prepull_backup_20260930.tar.gz`, old
+rsynced edits in `git stash`, 269 identical untracked files moved to `~/dnn_study_prepull_untracked_20260930/`).
+Gate submitted 2026-09-30: jobs 826909 (`mixed_kernel_comparison/alexnet_3x3_gap`), 826910
+(`geometry_controls/alexnet_adapted_orig_gap`), 826911 (`kernel_size_comparison/vgg16`, no observer override).
