@@ -608,3 +608,12 @@ Status: committed/pushed (855a492, 6bb41a5); local smoke (`alexnet_fx_k2_s4_pk3n
 rsynced edits in `git stash`, 269 identical untracked files moved to `~/dnn_study_prepull_untracked_20260930/`).
 Gate submitted 2026-09-30: jobs 826909 (`mixed_kernel_comparison/alexnet_3x3_gap`), 826910
 (`geometry_controls/alexnet_adapted_orig_gap`), 826911 (`kernel_size_comparison/vgg16`, no observer override).
+
+Waves submitted without waiting for the gate (2026-09-30): the gate only tests QAT/INT8, and FP32 -- most of each new
+run's cost -- doesn't depend on it; if the gate fails, those runs only redo QAT (same archive + resubmit). Held for the
+gate: the 41 other QAT-only reruns (pure QAT, wasted whole if the fix isn't enough). PCAD's QOS caps a user at **50 jobs
+pending + running** (MaxSubmitJobs; the association shows none, the QOS does), so submit-sweep stopped after 50:
+`phase_11_families` 17 (826912-826928), `phase_11_factorial_core` 30 (826929-826958). The other 6 core + 153 ext cells go
+through `scripts/pcad/feed_queue.sh ~/queue_phase11.txt` (setsid/nohup on the PCAD login node, log `~/queue_phase11.log`):
+one submit per free slot, max 48 queued, QOS rejections requeued at the head. After the gate passes, the 41 QAT reruns
+are prepended (`scripts/pcad/rerun_qat_fused.sh <experiment>/<model>`, one line each).

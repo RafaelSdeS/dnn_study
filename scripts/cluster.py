@@ -149,6 +149,8 @@ def main() -> int:
     if args.command == "submit":
         runtime_cfg = _load_yaml(args.runtime, "runtime")
         slurm_cfg = _load_yaml(args.slurm, "slurm")
+        if args.model:  # same job name as submit-sweep's, so squeue/sacct show which model it is
+            slurm_cfg = {**slurm_cfg, "job_name": f"{slurm_cfg.get('job_name', 'train')}-{args.model}"}
         cmd = _build_sbatch_command(runtime_cfg, slurm_cfg, args.experiment, args.runtime, args.device, model=args.model, smoke=args.smoke)
         print(_sbatch(cmd, args.dry_run))
         return 0

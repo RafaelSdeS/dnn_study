@@ -74,12 +74,16 @@ fi
 for run in "${RUNS[@]}"; do
   exp=${run%/*}; m=${run#*/}; src=outputs/pcad/$run; dst=$ARCHIVE/$run
   [[ -f "$src/checkpoints/${m}_best.pth" ]] || { echo "SKIP $run: no FP32 checkpoint"; continue; }
-  if [[ -e "$dst/checkpoints/qat_${m}_best.pth" ]]; then echo "SKIP $run: already archived"; continue; fi
-  mkdir -p "$dst/checkpoints" "$dst/results" "$dst/logs"
-  for f in "checkpoints/qat_${m}_best.pth" "checkpoints/qat_${m}_resume.pth" "checkpoints/qat_${m}.pth" \
-           "results/${m}_qat_val_logits.npz" "results/${m}_int8_val_logits.npz" "logs/qat_${m}.log"; do
-    if [[ -e "$src/$f" ]]; then mv "$src/$f" "$dst/$f"; fi
-  done
-  cp "$src/results/${m}_summary.json" "$dst/results/"
+  if [[ -e "$dst/checkpoints/qat_${m}_best.pth" ]]; then
+    # archived before: the fused QAT already started if it left a checkpoint -- else the submit failed, retry it
+    if [[ -e "$src/checkpoints/qat_${m}_resume.pth" ]]; then echo "SKIP $run: fused QAT already running/done"; continue; fi
+  else
+    mkdir -p "$dst/checkpoints" "$dst/results" "$dst/logs"
+    for f in "checkpoints/qat_${m}_best.pth" "checkpoints/qat_${m}_resume.pth" "checkpoints/qat_${m}.pth" \
+             "results/${m}_qat_val_logits.npz" "results/${m}_int8_val_logits.npz" "logs/qat_${m}.log"; do
+      if [[ -e "$src/$f" ]]; then mv "$src/$f" "$dst/$f"; fi
+    done
+    cp "$src/results/${m}_summary.json" "$dst/results/"
+  fi
   python -m scripts.cluster submit --experiment "$exp" --model "$m" --runtime pcad --slurm tupi_4090
 done
