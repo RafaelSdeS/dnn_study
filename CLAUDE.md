@@ -77,11 +77,14 @@ ml/                       # Core package — notebooks and scripts import everyt
   trainer.py              # Trainer: fit(), evaluate(save_logits=path) -> adds ece + writes {model}_{stage}_val_logits.npz
                           #   (float16 logits + labels) so cross-stage/agreement/calibration questions never need a
                           #   rerun, benchmark(device=...) -> override self.device for one call (e.g. CPU latency
-                          #   alongside GPU), both added 2026-09-13 for Phase 11's metrics-per-run requirement
+                          #   alongside GPU), both added 2026-09-13 for Phase 11's metrics-per-run requirement;
+                          #   frozen_observers (2026-09-30): _validate/evaluate no longer calibrate QAT observers on val data
   distillation_trainer.py # Phase 8 H4: DistillationTrainer (hard-label KD from a frozen teacher, deit_tiny only)
   quantization.py         # find_fuse_groups, build_qat, convert_to_int8, load_best_model, make_qat_callback;
                           #   prepare_qat_model re-locates fuse_root inside its deep copy (fixed 2026-09-30: it used to fuse
-                          #   the caller's original, leaving every fuse_root_attr model's QAT unfused);
+                          #   the caller's original, leaving every fuse_root_attr model's QAT unfused), and wraps every avg
+                          #   pool as DeQuantStub->pool->QuantStub (requantize_avg_pools, 2026-09-30: eager INT8 pooling kept
+                          #   its input's coarse scale, costing GAP models 2-3pp that QAT never simulated);
                           #   Phase 8 D6: exclude_attention_from_qat (LayerNorm/ShiftedWindowAttention/MultiheadAttention
                           #   -> qconfig=None), swap_quantizable_mha (kept for correctness, not on the QAT path — see D6)
   quantization_advanced.py# Mixed-precision / sub-INT8 PTQ: make_qconfig, prepare_sim, calibrate,

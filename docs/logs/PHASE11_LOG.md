@@ -622,3 +622,55 @@ Login-node load (measured 2026-09-30): the feeder idles at 3 MB + one 0.02 s `sq
 cost ~9 s CPU / ~640 MB because the dirty-code guard imported `ml` (torch). `scripts/cluster.py` now runs the git check
 itself (its `CODE_PATHS` asserted equal to `ml.runtime.CODE_PATHS` in tests/test_config.py), and `feed_queue.sh` re-execs
 under `nice -n 19 ionice -c3` and waits 60 s after each submit, so a burst of freed slots is one light submit a minute.
+
+## Fused-QAT gate result + quantized GAP + val-calibrated observers (2026-09-30)
+
+**Gate (jobs 826909-826911, code 9900c8a).** Fusion works: fused `alexnet_3x3_gap` INT8 35.52 -> 44.14, fused
+`alexnet_adapted_orig_gap` 31.51 -> 42.39, INT8 ECE ~0.21 -> ~0.05, FP32 fields unchanged. But the conversion still lost
+2.4 / 3.1pp (fake-quant 46.57 / 45.54), and `vgg16` without its override collapsed (QAT 0.50%). Neither is fusion.
+All three runs were deleted and their QAT redone with the fixes below; the 48 jobs queued behind them were cancelled
+before any started (all 3 used pre-fix code).
+
+**Quantized GAP (root cause of the 2-3pp, measured by inference on the gate checkpoints).** Layer by layer, INT8 matches
+fake-quant to < 0.04 LSB on average except at `AdaptiveAvgPool2d`: eager fbgemm pooling keeps its *input's* qparams, and
+QAT has no observer after the pool, so the fake-quant model never sees that rounding. The GAP input's per-tensor scale is
+set by rare peaks (1.13 / 1.74 from maxima ~144 / ~220), so 58% / 66% of channel means fall below one step and round to 0.
+Top-1 over the 10k val split:
+
+| | alexnet_3x3_gap | alexnet_adapted_orig_gap |
+|---|---|---|
+| fake-quant (QAT eval) | 46.55 | 45.24 |
+| fake-quant, GAP rounded as in INT8 | 44.70 | 42.51 |
+| INT8 as converted | 44.21 | 42.36 |
+| INT8, float GAP + fitted requant | 46.45 | 45.13 |
+
+Fix: `ml/quantization.py:requantize_avg_pools` (called by `prepare_qat_model`) wraps every AvgPool2d/AdaptiveAvgPool2d as
+DeQuantStub -> pool -> QuantStub, i.e. int32 accumulate + requantize to the pool output's own scale -- what integer-only
+inference does (TFLite's MEAN, TensorRT), and QAT now simulates it exactly (Jacob et al. 2018: training must simulate the
+inference arithmetic). Check on the gate checkpoints (only the new observer calibrated, on train batches): INT8 46.47 vs
+fake-quant 46.63, and 45.17 vs 45.08; fake-quant/INT8 top-1 agreement 0.75 -> 0.91. >= 96 of the 207 queued models have a
+real-averaging pool on the INT8 path (GAP heads and several FC heads), so without it the head/BN factors' INT8 effects
+would carry this artifact. A pool fed a float tensor after convert (Phase 8's attention-excluded heads) stays a float pool.
+`tests/test_quantization.py::test_int8_avg_pool_requantizes_instead_of_inheriting_its_input_scale` fails on the old code.
+
+**Val-calibrated observers.** `FakeQuantize` ignores `eval()`, so every per-epoch validation pass updated the activation
+ranges from the val split -- for the first 5 QAT epochs of every model, and all 100 of vgg16's. `ml/trainer.py:
+frozen_observers` now disables them in `_validate`/`evaluate` and restores each flag
+(`test_validation_does_not_calibrate_qat_observers_on_val_data`).
+
+**vgg16 (not fusion).** Its FP32 last stage is heavy-tailed: `features.37` max ~398, p99.9 ~114, typical values < 1. The
+per-tensor 7-bit minmax scale (2.6) zeroes 96% of the nonzero activations, so the freshly calibrated QAT model (no step
+taken) is already at 0.49%; SQNR through `classifier.0/3` is ~0 dB. `qat_disable_observer_epoch=None` is back as the one
+documented protocol deviation (allowed by name in `tests/test_config.py`); with the val fix, its live observers now
+adapt on train data only. Untested fused -- vgg16 is in the new gate. More principled alternatives (learned clipping:
+PACT, LSQ) would change every model's QAT and were not taken.
+
+**Rerun scope.** Every Phase 11 QAT now comes from one code version: `scripts/pcad/rerun_qat_fused.sh` gains the 5 runs
+that were fused correctly all along but share the GAP/val defects (`alexnet_3x3_gap_bn`, `alexnet_bottleneck`,
+`alexnet_fire`, `alexnet_mixed_bn`, `alexnet_mixed_fc_bn`; `alexnet_stacked_fc_nobn` is skipped -- its FP32 is dead at
+0.5%). Queue (one `feed_queue.sh`): gate (the 3 runs above) -> `phase_11_families` -> `factorial_core` -> `factorial_ext`
+-> the other 46 QAT reruns. Move those 46 up once the gate passes: INT8 within ~0.5pp of fake-quant on both AlexNets,
+and vgg16's QAT climbing past ~3% by epoch 15.
+
+Known limitation, unchanged and uniform across runs: the best epoch is selected on the same val split that is reported
+(no held-out test split), a small optimistic bias.

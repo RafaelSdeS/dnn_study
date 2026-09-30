@@ -1,12 +1,14 @@
 import json
 import logging
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Callable, Optional
 
 import numpy as np
 import psutil
 import torch
+import torch.ao.quantization as tq
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
@@ -15,6 +17,20 @@ from .checkpoint import save_checkpoint, load_resume_state
 from .config import TrainerConfig
 from .profiling import GpuSampler
 from .reporting import expected_calibration_error
+
+
+@contextmanager
+def frozen_observers(model: nn.Module):
+    """QAT observers keep calibrating in eval() mode (FakeQuantize ignores it): without this, every validation
+    pass fitted the activation ranges to the val split. Disables them for the block, then restores each flag."""
+    fqs = [m for m in model.modules() if isinstance(m, tq.FakeQuantizeBase)]
+    enabled = [m.observer_enabled.clone() for m in fqs]
+    model.apply(tq.disable_observer)
+    try:
+        yield
+    finally:
+        for m, flag in zip(fqs, enabled):
+            m.observer_enabled.copy_(flag)
 
 
 class BaseTrainer:
@@ -355,14 +371,15 @@ class Trainer(BaseTrainer):
         loss_m = MeanMetric().to(self.device)
         all_logits, all_targets = [], []
 
-        for data, target in loader:
-            data, target = data.to(self.device), target.to(self.device)
-            out = model(data)
-            loss_m.update(criterion(out, target))
-            for acc in accs.values():
-                acc.update(out, target)
-            all_logits.append(out.detach().to("cpu", torch.float16))
-            all_targets.append(target.detach().cpu())
+        with frozen_observers(model):
+            for data, target in loader:
+                data, target = data.to(self.device), target.to(self.device)
+                out = model(data)
+                loss_m.update(criterion(out, target))
+                for acc in accs.values():
+                    acc.update(out, target)
+                all_logits.append(out.detach().to("cpu", torch.float16))
+                all_targets.append(target.detach().cpu())
 
         logits = torch.cat(all_logits)
         targets = torch.cat(all_targets)
@@ -459,6 +476,10 @@ class Trainer(BaseTrainer):
 
     @torch.no_grad()
     def _validate(self, model, criterion) -> dict:
+        with frozen_observers(model):
+            return self._validate_loop(model, criterion)
+
+    def _validate_loop(self, model, criterion) -> dict:
         model.eval()
         total_loss = correct1 = correct5 = total = 0
 

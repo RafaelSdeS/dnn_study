@@ -107,3 +107,45 @@ def test_qat_callback_with_no_observer_freeze_keeps_ranges_adapting():
     assert qat[0].freeze_bn
     fake_quants = [m for m in qat.modules() if isinstance(m, torch.ao.quantization.FakeQuantizeBase)]
     assert fake_quants and all(int(m.observer_enabled[0]) == 1 for m in fake_quants)
+
+
+def test_int8_avg_pool_requantizes_instead_of_inheriting_its_input_scale():
+    """Regression test for the quantized-GAP gap (docs/logs/PHASE11_LOG.md): eager INT8 avg pooling keeps its
+    input's scale, and QAT had no observer after the pool, so fake-quant and INT8 disagreed on every GAP model.
+    One outlier sets the per-tensor input scale to ~1; channel c's mean is 4c/64 < 0.5 of a step, so the old
+    INT8 GAP rounded channels 1-7 to 0 while the fake-quant model kept them."""
+    class Gap(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.quant, self.pool, self.dequant = torch.ao.quantization.QuantStub(), nn.AdaptiveAvgPool2d(1), \
+                torch.ao.quantization.DeQuantStub()
+
+        def forward(self, x):
+            return self.dequant(self.pool(self.quant(x))).flatten(1)
+
+    x = torch.zeros(1, 8, 8, 8)
+    x[0, 0, 0, 0] = 127.0
+    for c in range(1, 8):
+        x[0, c].view(-1)[:4 * c] = 1.0
+    qat = prepare_qat_model(Gap(), fuse_pairs=[]).eval()
+    qat(x)  # calibrate
+    qat.apply(torch.ao.quantization.disable_observer)
+    with torch.no_grad():
+        fq, int8 = qat(x), convert_to_int8(qat)(x)
+    assert torch.allclose(int8, fq, atol=1e-3), (fq, int8)
+    assert torch.allclose(int8[0, 1:], torch.arange(1, 8) * 4 / 64, atol=0.02), int8  # the means survive
+
+
+def test_validation_does_not_calibrate_qat_observers_on_val_data():
+    """FakeQuantize ignores eval(): Trainer's per-epoch validation used to update activation ranges from the val
+    split. frozen_observers must leave the ranges untouched and restore each module's own flag afterwards."""
+    from ml.trainer import frozen_observers
+    qat = prepare_qat_model(nn.Sequential(nn.Conv2d(3, 4, 3), nn.ReLU(inplace=False)), [["0", "1"]])
+    qat(torch.randn(2, 3, 8, 8))
+    fqs = [m for m in qat.modules() if isinstance(m, torch.ao.quantization.FakeQuantizeBase)]
+    fqs[0].disable_observer()  # a mixed state, as after make_qat_callback on some modules
+    before = [(m.observer_enabled.clone(), m.scale.clone()) for m in fqs]
+    with frozen_observers(qat.eval()):
+        qat(100 * torch.randn(2, 3, 8, 8))
+    for m, (flag, scale) in zip(fqs, before):
+        assert torch.equal(m.observer_enabled, flag) and torch.equal(m.scale, scale)

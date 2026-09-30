@@ -185,6 +185,9 @@ def prepare_qat_model(
     Until 2026-09-30 the fusion ran on the caller's fuse_root itself, i.e. on the original model,
     so every registry entry with fuse_root_attr trained QAT with no Conv-(BN-)ReLU fusion at all
     (observer before the ReLU, BN left unfolded) -- see docs/logs/PHASE11_LOG.md, "QAT fusion bug".
+
+    Every AvgPool2d/AdaptiveAvgPool2d is wrapped as DeQuantStub -> pool -> QuantStub (see
+    requantize_avg_pools).
     """
     root_name = "" if fuse_root is None else next(n for n, m in model.named_modules() if m is fuse_root)
     model = copy.deepcopy(model)
@@ -196,7 +199,40 @@ def prepare_qat_model(
         tq.fuse_modules_qat(root, fuse_pairs, inplace=True)
     if classifier_fuse_pairs:
         tq.fuse_modules_qat(model.classifier, classifier_fuse_pairs, inplace=True)
+    requantize_avg_pools(model)
     return tq.prepare_qat(model, inplace=False)
+
+
+def requantize_avg_pools(model: nn.Module) -> nn.Module:
+    """Replace every AvgPool2d/AdaptiveAvgPool2d with DeQuantStub -> pool -> QuantStub, in place.
+
+    Eager-mode quantized avg pooling keeps its INPUT's scale, and QAT puts no observer after the pool, so
+    the fake-quant model never sees that rounding. A GAP averages a ReLU map whose per-tensor scale is set
+    by rare peaks (alexnet_3x3_gap: scale 1.13 from a max of ~144), so most channel means fall below one
+    step and round to 0 -- the gate's fused alexnet_3x3_gap lost 2.4pp fake-quant -> INT8 (46.55 -> 44.21)
+    to this alone; float pool + a fitted requant scale recovered 46.45 (docs/logs/PHASE11_LOG.md, "Quantized
+    GAP"). The pool now runs in float and its output gets its own observer, i.e. INT8 hardware's int32
+    accumulate + requantize. Functional pooling (torchvision's quantizable MobileNetV2) is not covered.
+    """
+    for parent in list(model.modules()):
+        for name, child in parent.named_children():
+            if isinstance(child, (nn.AvgPool2d, nn.AdaptiveAvgPool2d)):
+                setattr(parent, name, _RequantizedPool(child))
+    return model
+
+
+class _RequantizedPool(nn.Module):
+    """DeQuantStub -> pool -> QuantStub. After convert, a pool that receives a float tensor sits in a float region
+    (Phase 8's attention-excluded heads, which re-quantize with their own stub) and stays a plain float pool."""
+
+    def __init__(self, pool: nn.Module):
+        super().__init__()
+        self.dequant, self.pool, self.quant = tq.DeQuantStub(), pool, tq.QuantStub()
+
+    def forward(self, x):
+        if x.is_quantized or isinstance(self.quant, tq.QuantStub):  # INT8 quantized region, or QAT/float
+            return self.quant(self.pool(self.dequant(x)))
+        return self.pool(x)
 
 
 def build_qat_from_model(model: nn.Module, arch_name: str, device: torch.device) -> nn.Module:

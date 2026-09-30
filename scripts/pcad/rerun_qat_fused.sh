@@ -8,6 +8,9 @@
 #   2. resubmit the model: FP32 "resumes" at 500/500 (a no-op that reloads the best checkpoint, ml/trainer.py),
 #      then QAT (100 ep) + INT8 run again from it, same protocol as every Phase 11 run.
 # Tracked files (qat_<m>.pth.gz, *_meta.json, the summary) are overwritten in place; git keeps the old ones.
+# The last 5 runs were fused correctly all along but share the other QAT defects fixed with it (INT8 GAP kept its
+# input's scale, observers calibrated on val data -- "Quantized GAP" in the log), so every Phase 11 QAT comes from
+# one code version. Their archive dir is still archive_unfused_qat/, for one place to look.
 # Idempotent: an already-archived run is skipped. Run on PCAD from the repo root, after `git pull`, clean code.
 #   scripts/pcad/rerun_qat_fused.sh            # all runs below
 #   scripts/pcad/rerun_qat_fused.sh RUN...     # only these <experiment>/<model> (the wave-0 gate)
@@ -68,6 +71,11 @@ phase_11_geometry_seeds_s44/alexnet_3x3_gap
 phase_11_geometry_seeds_s44/alexnet_adapted_orig_fc
 phase_11_geometry_seeds_s44/alexnet_adapted_orig_gap
 phase_11_reuse_old_init/alexnet_tv_3x3
+phase_11_geometry_controls/alexnet_3x3_gap_bn
+phase_11_geometry_controls/alexnet_bottleneck
+phase_11_geometry_controls/alexnet_fire
+phase_11_head_bn_ablation/alexnet_mixed_bn
+phase_11_head_bn_ablation/alexnet_mixed_fc_bn
 EOF
 fi
 
