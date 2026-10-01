@@ -112,16 +112,19 @@ def test_every_phase_11_experiment_shares_the_protocol_exactly():
 
 def test_no_phase_11_model_overrides_the_uniform_protocol():
     """uniform_hparams drops the registry's lr/weight_decay, but a registry key scripts/train.py still reads
-    per model would quietly give one net different training. The one documented exception is vgg16's observer
-    freeze: its QAT collapses without it even fused (docs/logs/PHASE11_LOG.md, "Fused-QAT gate")."""
+    per model would quietly give one net different training. The one documented exception is the VGG16 pair's
+    observer freeze: their QAT collapses without it even fused (docs/logs/PHASE11_LOG.md, "Fused-QAT gate",
+    "vgg16_2x2 joins")."""
     from ml import model_registrations  # noqa: F401 -- populates the registry
     from ml.registry import MODEL_REGISTRY
 
+    vgg_pair = ("vgg16", "vgg16_2x2")
     for name in (n for n in _experiment_names() if n.startswith("phase_11_")):
         for model in load_config(f"experiments/{name}.yaml")["models"]:
-            if model != "vgg16":
+            if model not in vgg_pair:
                 assert "qat_disable_observer_epoch" not in MODEL_REGISTRY[model], (name, model)
-    assert MODEL_REGISTRY["vgg16"]["qat_disable_observer_epoch"] is None
+    for model in vgg_pair:
+        assert MODEL_REGISTRY[model]["qat_disable_observer_epoch"] is None, model
 
 
 def test_submit_guard_checks_the_same_paths_as_run_provenance():

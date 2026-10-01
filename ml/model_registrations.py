@@ -251,17 +251,17 @@ register_model("alexnet_stacked_gap_nobn", partial(AlexNetStacked, head="gap", b
 # logits). Fuse the two Linear-ReLU pairs (see prepare_qat_model's classifier_fuse_pairs docstring
 # for why vgg16 needs this); classifier.6 has no ReLU after it and stays a standalone quantized Linear.
 CLASSIFIER_FUSE_MAP_VGG16 = [["0", "1"], ["3", "4"]]
-# Protocol deviation, on purpose: vgg16's QAT never freezes its observers. The fused-QAT gate (job 826911,
-# 2026-09-30) collapsed without it: its FP32 last stage is heavy-tailed (features.37: max ~398, p99.9 ~114, most
-# values < 1), so the per-tensor 7-bit minmax scale (2.6) zeroes 96% of the nonzero activations and the freshly
-# calibrated QAT model is already at 0.49% before any step. Live observers let training shrink that range
-# (docs/logs/PHASE11_LOG.md, "Revisit 2" and "Fused-QAT gate").
+# Protocol deviation, on purpose, for both VGG16s (a matched kernel pair, so they share it): QAT never freezes its
+# observers. The fused-QAT gate (job 826911, 2026-09-30) collapsed vgg16 without it (QAT 0.50%); the rerun with live
+# observers recovers (1.96% ep 10 -> 48% ep 45, job 827242). Freshly calibrated fused QAT, no step taken (1024 val
+# images, 2026-10-01): vgg16 47.8% with eval-mode calibration but 3.4% with train-mode (BN batch statistics, what QAT
+# epoch 1 sees); vgg16_2x2 starts worse, 2.0% / 1.3% vs FP32 55.0% (docs/logs/PHASE11_LOG.md, "vgg16_2x2 joins").
 register_model("vgg16", partial(VGG16, kernel_size=3),
                fuse_map=FUSE_MAP_VGG16, fuse_root_attr="features", lr=1e-3,
                classifier_fuse_map=CLASSIFIER_FUSE_MAP_VGG16, qat_disable_observer_epoch=None)
 register_model("vgg16_2x2", partial(VGG16, kernel_size=2),
                fuse_map=FUSE_MAP_VGG16, fuse_root_attr="features", lr=1e-3,
-               classifier_fuse_map=CLASSIFIER_FUSE_MAP_VGG16)
+               classifier_fuse_map=CLASSIFIER_FUSE_MAP_VGG16, qat_disable_observer_epoch=None)
 
 # large-scale sweep (see configs/experiments/large_scale.yaml)
 FUSE_MAP_ALEXNET_SMALLKERNEL = [["0", "1"], ["3", "4"], ["6", "7"], ["8", "9"], ["10", "11"]]

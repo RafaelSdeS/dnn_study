@@ -699,3 +699,45 @@ rerun started (the 27 already-submitted jobs were held, the feeder paused, then 
 Tests: `test_saved_int8_artifact_reloads_and_reproduces_the_reported_int8_logits`,
 `test_qat_rerun_keeps_the_fp32_training_record[resume|no resume]`, `test_evaluate_reports_the_standard_micro_top1`
 (each fails on the old code).
+
+## Gate on d2f4fdc + vgg16_2x2 joins vgg16's observer deviation (2026-10-01)
+
+**Gate (jobs 827240-827242, code d2f4fdc).** Both AlexNets pass, conversion now within 0.4pp of fake-quant (FP32 fields
+preserved, provenance clean):
+
+| run | FP32 | QAT | INT8 | INT8 before (unfused, 2026-09) |
+|---|---|---|---|---|
+| `mixed_kernel_comparison/alexnet_3x3_gap` (827240) | 46.95 | 46.79 | 46.39 | 35.52 |
+| `geometry_controls/alexnet_adapted_orig_gap` (827241) | 45.50 | 45.44 | 45.34 | 31.51 |
+
+`vgg16` (827242) with live observers: QAT val 1.96% at epoch 10 -> 27.4% at 15 -> 48.0% at 45 (FP32 47.71).
+
+**Queue audit.** The 255 feeder lines (`~/queue_phase11.txt` + `.done`) are exactly the expected set -- 17 families,
+36 core, 153 ext, the 49 `rerun_qat_fused.sh` runs -- no duplicate, each through the right path (rerun vs fresh
+submit), every one of the 208 factorial cells in core/ext/`FX_EXISTING`. Only `head_bn_ablation/alexnet_stacked_fc_nobn`
+(dead FP32) is out, on purpose. Local structural check of the 246 queued models (fused QAT copy: no free BN; every
+module avg pool wrapped; INT8 converts and runs): all pass. `mobilenetv2`/`resnet18tv` drift more between fake-quant
+and INT8 on synthetic calibration (logit rel. error 0.21/0.11 vs <= 0.07 elsewhere) -- per module the INT8 output is
+within ~0.2 LSB mean of its QAT twin, so it is depth accumulation, not a mis-simulated op. `mobilenetv2`'s functional
+GAP (torchvision) is not wrapped by `requantize_avg_pools`; turning it into a module changed neither error. Check both
+models' QAT -> INT8 gap when they land.
+
+**vgg16_2x2.** It was in the rerun list on the default schedule (observers frozen at epoch 5), the schedule that
+collapsed fused `vgg16`. Freshly calibrated fused QAT, no step taken, on the PCAD FP32 checkpoints (1024 val images,
+8 train batches of calibration):
+
+| | FP32 | eval-mode calibration | train-mode calibration (BN batch stats) |
+|---|---|---|---|
+| vgg16 | 47.6 | 47.8 | 3.4 |
+| vgg16_2x2 | 55.0 | 2.0 | 1.3 |
+
+So `vgg16_2x2` starts worse off than `vgg16`, and the pair is the Phase 11 VGG kernel contrast -- different QAT
+schedules would add a second variable to its INT8 delta. `vgg16_2x2` now registers `qat_disable_observer_epoch=None`
+too (`tests/test_config.py` allows exactly the pair). Correction to "Fused-QAT gate" above: the 0.49% "before any step"
+reproduces only with train-mode calibration; the same `vgg16` checkpoint calibrated in eval mode keeps 47.8%, so the
+start-of-QAT collapse is a BN batch-stat vs running-stat range mismatch, not the per-tensor scale alone.
+
+Left as is, not worth changing code under 206 pending jobs: `scripts/train.py`'s `no_new_fp32_epoch` (an FP32
+retrain with the same `epochs_used` over an old summary would keep the old timing fields -- no queued run does that),
+and `analyze_geometry.load`'s `post_fix = "git_dirty_files" in prov` (true for 855a492..9900c8a too, but no run made
+on those commits survives).
