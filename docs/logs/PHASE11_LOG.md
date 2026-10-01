@@ -737,6 +737,18 @@ too (`tests/test_config.py` allows exactly the pair). Correction to "Fused-QAT g
 reproduces only with train-mode calibration; the same `vgg16` checkpoint calibrated in eval mode keeps 47.8%, so the
 start-of-QAT collapse is a BN batch-stat vs running-stat range mismatch, not the per-tensor scale alone.
 
+**Queue reordered (the 46 QAT reruns first, as planned once the gate passed).** Prepending them to the feeder file
+alone would not have moved them: the 50-job QOS cap was full with 47 never-started families/core jobs (~7 h each), so
+the reruns (~1 h each) would have entered Slurm only after those, ~5-7 days later. Feeder stopped, the 47 *pending*
+jobs cancelled (`scancel --state=PENDING`; none had started, nothing lost), `~/queue_phase11.txt` rewritten (backup
+`.bak_20261001`) as 46 reruns -> 17 families -> 36 core -> 153 ext, `vgg16_2x2` last among the reruns so it starts
+after vgg16's INT8 lands; feeder restarted (first reruns 827742-827744). Stale-checkpoint audit before that: the
+family/factorial run dirs hold no checkpoint yet; each of the 46 reruns has a complete FP32 (`epochs_used` = 500, so
+its FP32 "resume" is a no-op) and all three old QAT files, which `rerun_qat_fused.sh` moves to the archive before
+submitting (checked on the first two: 0 `qat_*.pth` left in the run dir). Every checkpoint load is strict, so an
+architecture drift fails the job loudly; a forward-only drift would show as the rerun's re-evaluated `fp32_top1`
+differing from the old summary's `best_val_top1` (same weights, same split -- the gate: 46.95/46.95, 45.50/45.49).
+
 Left as is, not worth changing code under 206 pending jobs: `scripts/train.py`'s `no_new_fp32_epoch` (an FP32
 retrain with the same `epochs_used` over an old summary would keep the old timing fields -- no queued run does that),
 and `analyze_geometry.load`'s `post_fix = "git_dirty_files" in prov` (true for 855a492..9900c8a too, but no run made
