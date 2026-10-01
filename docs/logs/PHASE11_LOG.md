@@ -749,6 +749,25 @@ submitting (checked on the first two: 0 `qat_*.pth` left in the run dir). Every 
 architecture drift fails the job loudly; a forward-only drift would show as the rerun's re-evaluated `fp32_top1`
 differing from the old summary's `best_val_top1` (same weights, same split -- the gate: 46.95/46.95, 45.50/45.49).
 
+**Protocol audit** (every Phase 11 summary's recorded config; the 3 gate runs from their archived copy, which holds
+the FP32 run's config). Identical across all 55 FP32 runs: `training` (500 ep, lr 3e-4, wd 5e-4, label smoothing 0.1,
+AMP, no early stopping, no warmup, cosine T_max = epochs), `data` (bs 64, 4 workers, 90/10 split), `qat` (100 ep,
+lr 1e-5, BN freeze 3, observer freeze 5), uniform_hparams, stages; all on tupi RTX 4090, same torch/CUDA/cuDNN/Python;
+every one at `epochs_used` = 500. Differences, all known: seed 43/44 (the replicates); `persistent_workers` -- 50 runs
+recorded **true**, 5 false, so `configs/runtime/pcad.yaml`'s "every Phase 11 run used false" was wrong (comment fixed,
+value kept: every run since 2026-09-30, all QAT and all new FP32, uses false). It does not change training: the four
+train augmentations draw only from torch's RNG (checked in torchvision 0.20's source), which the loader reseeds every
+epoch either way; `worker_init`'s `random.seed` reaches nothing. The FP32 loop (optimizer, scheduler, loss, AMP,
+augmentation, sampler, best-epoch selection) is unchanged from 120c5da to HEAD -- only `frozen_observers` (no-op
+without FakeQuantize), the micro `evaluate` (reporting) and qat_wino code moved -- so the 206 new FP32 runs train
+like the reused ones. Every QAT/INT8 of the report now comes from the current code: QAT starts from `<m>_best.pth`
+(the best FP32 epoch, `build_qat`), INT8 converts the best QAT epoch (`fit()` reloads `qat_<m>_best.pth`, observer
+scales included). Starting points by design: init per architecture family (`AlexNetAdapted` and so every factorial
+cell = PyTorch default; the two AlexNetTV runs mapped into the factorial predate `he_init`, so default too; the
+`kernel_size_comparison` trio still mixes inits, see "Geometry confound" item 3), ImageNet weights for the `_pt`
+cells, `alexnet_tv`, `mobilenetv2` and `resnet18tv`. Not bitwise reproducible (AMP, no
+`torch.use_deterministic_algorithms`), and a QAT rerun starts from a different RNG state than a same-job QAT.
+
 Left as is, not worth changing code under 206 pending jobs: `scripts/train.py`'s `no_new_fp32_epoch` (an FP32
 retrain with the same `epochs_used` over an old summary would keep the old timing fields -- no queued run does that),
 and `analyze_geometry.load`'s `post_fix = "git_dirty_files" in prov` (true for 855a492..9900c8a too, but no run made

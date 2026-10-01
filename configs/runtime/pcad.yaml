@@ -10,6 +10,9 @@ distributed: false
 devices: 1
 launcher: single
 use_kagglehub_fallback: true
-persistent_workers: false  # every Phase 11 run used false (it was set on PCAD, uncommitted) -- keep the loader identical
+# Not every Phase 11 run used false: 50 of the 55 reused FP32 runs recorded true, 5 false; every run since 2026-09-30
+# (all QAT, all new FP32) uses false. Harmless: the train augmentations draw only from torch's RNG, which the loader
+# reseeds per epoch either way -- this changes the random stream, not the protocol (docs/logs/PHASE11_LOG.md, "Protocol audit").
+persistent_workers: false
 benchmark_warmup: 100
 quantized_engine: fbgemm
