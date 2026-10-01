@@ -1,333 +1,159 @@
-"""Phase 11 figures — kernel pattern (2x2 / 3x3 / original / misto) x head (GAP / FC) x
-architecture family (AlexNet custom / AlexNetTV / VGG16), one question per PNG.
+"""Phase 11 figures 01-04 — kernel pattern, one network/layout per figure, plus the accuracy-vs-size overview.
 
-Pulls fp32/int8 top-1 + size directly from the curated Phase 11 result trees
-(phase_11_kernel_size_comparison, phase_11_mixed_kernel_comparison,
-phase_11_head_bn_ablation) instead of a models: list, since the FC/GAP head pairing
-for the mixed-kernel models spans two experiment configs.
+    01_overview_accuracy_vs_size.png   every kernel run below (the one figure that mixes factors on purpose)
+    02_kernel_original_layout.png      AlexNet, layout original, head FC | GAP
+    03_kernel_64px_layout.png          AlexNet, layout 64px, head FC | GAP (dots = seeds 42/43/44)
+    04_kernel_vgg16.png                VGG16, 3x3 (its original) vs 2x2
 
-Read across families with care: "AlexNet compacto" (adapted stride/pool, no Dropout) and AlexNetTV
-(original 224x224 stride/pool, 1x1 map before the classifier at 64x64) differ in far more than kernels
-(~17pp at matched protocol), so a cross-family gap is not a kernel effect; only the within-family
-kernel-pattern comparisons are. See docs/logs/PHASE11_LOG.md, "Geometry confound".
+Figures 05-14 come from scripts/phase11/factor_effects.py, 15 from scripts/phase11/analyze_geometry.py, whose module
+docstring defines "layout original" / "layout 64px". Data comes from analyze_geometry.load(), so a pre-fix INT8 is only
+ever drawn faded. Within one panel only the kernel changes, except for the init: † = He init, while the original-kernel
+runs use PyTorch's default (the original AlexNet's He-init retry never trained -- docs/logs/PHASE11_LOG.md). Across
+layouts the gap is geometry, not kernel ("Geometry confound" in the log).
 
     python -m scripts.phase11.plot_kernel_comparison
 """
-import json
-from pathlib import Path
+from statistics import geometric_mean
 
 import matplotlib.pyplot as plt
+import pandas as pd
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 
-from ml.plotting import BLUE, RED, GREEN, AMBER, apply_report_style
+from ml.plotting import AMBER, BLUE, GREEN, RED, apply_report_style
+from scripts.phase11.analyze_geometry import (BASE_KEY, BASE_LABEL, LAYOUTS, OLD_INT8, int8_bar, load, precision_handles,
+                                              reference_lines, savefig)
 
-ROOT = Path(__file__).resolve().parents[2]
-FIGURES_DIR = ROOT / "results/figures_generated/phase_11_kernel_size_comparison"
+KERNEL_COLOR = {"11-5-3-3-3": AMBER, "3×3": GREEN, "2×2": BLUE}  # any other label is a mixed 2x2/3x3 pattern -> RED
+KERNEL_LEGEND = [Patch(color=AMBER, label="11-5-3-3-3 (kernels originais do AlexNet)"),
+                 Patch(color=GREEN, label="3×3 em todas as convs"), Patch(color=BLUE, label="2×2 em todas as convs"),
+                 Patch(color=RED, label="misto 2×2/3×3 (rótulo = kernel de cada conv, da 1ª à 5ª)")]
 
-PATTERN_COLOR = {"2x2": BLUE, "3x3": GREEN, "original": AMBER, "misto": RED}
-
-# One row per trained model. `key` = output directory name (unique, unlike the json's
-# internal model_name -- two dead/retry runs share a model_name with their surviving twin).
-# `variant` pairs the three mixed-kernel patterns across their FC/GAP head twins.
-# `label` is always the literal conv1->conv5 kernel sequence (VGG16's 13 conv layers are
-# uniform, so its label just says so instead of spelling out 13 numbers).
-MODELS = [
-    dict(key="alexnet_2x2_gap", family="AlexNet compacto", head="GAP", pattern="2x2", label="2-2-2-2-2"),
-    dict(key="alexnet_3x3_gap", family="AlexNet compacto", head="GAP", pattern="3x3", label="3-3-3-3-3"),
-    # AlexNetMixed (models/alexnet_variants.py): conv1=3x3, conv2=2x2, conv3=3x3, conv4=2x2,
-    # conv5=3x3 -- the *inverse* alternation from AlexNetTV's "mixed_alt" (2-3-2-3-2) below,
-    # and a different architecture entirely (own channel widths, not AlexNetTV's).
-    dict(key="alexnet_mixed_preheinit", family="AlexNet compacto", head="GAP", pattern="misto", label="3-2-3-2-3"),
-    dict(key="alexnet_tv_mixed_alt_gap", family="AlexNetTV", head="GAP", pattern="misto", variant="alt", label="2-3-2-3-2"),
-    dict(key="alexnet_tv_mixed_early3_gap", family="AlexNetTV", head="GAP", pattern="misto", variant="early3", label="3-3-3-2-2"),
-    dict(key="alexnet_tv_mixed_early2_gap", family="AlexNetTV", head="GAP", pattern="misto", variant="early2", label="2-2-2-3-3"),
-    dict(key="alexnet_tv_2x2", family="AlexNetTV", head="FC", pattern="2x2", label="2-2-2-2-2"),
-    dict(key="alexnet_tv_3x3", family="AlexNetTV", head="FC", pattern="3x3", label="3-3-3-3-3"),
-    dict(key="alexnet_tv_scratch", family="AlexNetTV", head="FC", pattern="original", label="11-5-3-3-3\n(original)"),
-    dict(key="alexnet_tv_mixed_alt", family="AlexNetTV", head="FC", pattern="misto", variant="alt", label="2-3-2-3-2"),
-    dict(key="alexnet_tv_mixed_early3", family="AlexNetTV", head="FC", pattern="misto", variant="early3", label="3-3-3-2-2"),
-    dict(key="alexnet_tv_mixed_early2", family="AlexNetTV", head="FC", pattern="misto", variant="early2", label="2-2-2-3-3"),
-    dict(key="vgg16", family="VGG16", head="FC", pattern="3x3", label="3x3 nativo\n(13 convs, uniforme)"),
-    dict(key="vgg16_2x2", family="VGG16", head="FC", pattern="2x2", label="2x2\n(13 convs, uniforme)"),
-]
+# (layout, head) -> [(run key, kernel label)]: within one list only the kernel changes (and the init, marked †).
+KERNEL_SETS = {
+    ("original", "FC"): [(BASE_KEY, "11-5-3-3-3"), ("alexnet_tv_3x3", "3×3†"), ("alexnet_tv_2x2", "2×2†"),
+                         ("alexnet_tv_mixed_early3", "3-3-3-2-2†"), ("alexnet_tv_mixed_alt", "2-3-2-3-2†"),
+                         ("alexnet_tv_mixed_early2", "2-2-2-3-3†")],
+    ("original", "GAP"): [("alexnet_geo_s4_p3_gap", "11-5-3-3-3"), ("alexnet_tv_mixed_early3_gap", "3-3-3-2-2†"),
+                          ("alexnet_tv_mixed_alt_gap", "2-3-2-3-2†"), ("alexnet_tv_mixed_early2_gap", "2-2-2-3-3†")],
+    ("64px", "FC"): [("alexnet_adapted_orig_fc", "11-5-3-3-3"), ("alexnet_3x3_fc", "3×3"), ("alexnet_adapted_2x2_fc", "2×2"),
+                     ("alexnet_mixed_fc", "3-2-3-2-3†")],
+    ("64px", "GAP"): [("alexnet_adapted_orig_gap", "11-5-3-3-3"), ("alexnet_3x3_gap", "3×3"),
+                      ("alexnet_adapted_2x2_gap", "2×2"), ("alexnet_mixed", "3-2-3-2-3†")],
+    ("VGG16", "FC"): [("vgg16", "3×3 (original)"), ("vgg16_2x2", "2×2")],
+}
+HEAD = {"FC": "cabeça FC (3 camadas densas, 4096 neurônios)", "GAP": "cabeça GAP (média global + 1 camada linear)"}
+GROUP = {("original", "FC"): "AlexNet · layout original · FC", ("original", "GAP"): "AlexNet · layout original · GAP",
+         ("64px", "FC"): "AlexNet · layout 64px · FC", ("64px", "GAP"): "AlexNet · layout 64px · GAP",
+         ("VGG16", "FC"): "VGG16 (13 convs) · FC"}
 
 
-def load_rows() -> dict:
-    rows = {}
-    for experiment in ["phase_11_kernel_size_comparison", "phase_11_mixed_kernel_comparison", "phase_11_head_bn_ablation"]:
-        for summary_path in (ROOT / "outputs/pcad" / experiment).glob("*/results/*_summary.json"):
-            model_dir = summary_path.parents[1].name
-            rows[model_dir] = json.loads(summary_path.read_text())
-    for m in MODELS:
-        assert m["key"] in rows, f"missing summary.json for {m['key']}"
-        m.update(rows[m["key"]])
-    return rows
+def kernel_color(label):
+    return KERNEL_COLOR.get(label.split(" ")[0].rstrip("†"), RED)
 
 
-def savefig(fig, name):
-    FIGURES_DIR.mkdir(parents=True, exist_ok=True)
-    out = FIGURES_DIR / name
-    fig.savefig(out, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    print(f"wrote {out}")
+def runs_of(df, key):
+    runs = df[df.key == key]
+    assert len(runs), f"no summary for {key}"
+    return runs
 
 
-def bar_group_legend(ax, title="Padrão de kernel", loc="upper right", outside=False, patterns=None):
-    patterns = patterns if patterns is not None else list(PATTERN_COLOR)
-    handles = [plt.Rectangle((0, 0), 1, 1, facecolor=PATTERN_COLOR[p], label=p) for p in patterns]
-    kwargs = dict(bbox_to_anchor=(1.02, 1), loc="upper left") if outside else dict(loc=loc)
-    ax.legend(handles=handles, title=title, fontsize=9, **kwargs)
-
-
-# ── 1. Master overview: every model, accuracy vs size, log-x (3 orders of magnitude) ──
-def fig_overview(models):
-    # short_family: color already carries kernel pattern; keep the tag to just
-    # family+head, short enough that 6-way clusters (same size, ~3pp apart) stay legible.
-    short_family = {"AlexNet compacto": "AlexNet", "AlexNetTV": "TV", "VGG16": "VGG16"}
-    # The 6 AlexNetTV-FC points sit within ~3pp of each other at nearly the same size --
-    # no offset declutters that honestly, so only the outlier (original kernel) gets a
-    # label here; the full breakdown is chart 03. Two more manual bumps for close pairs.
-    dense_fc_skip = {"alexnet_tv_2x2", "alexnet_tv_3x3", "alexnet_tv_mixed_alt",
-                      "alexnet_tv_mixed_early3", "alexnet_tv_mixed_early2"}
-    manual_dy = {"alexnet_3x3_gap": 10, "alexnet_mixed_preheinit": -13}
-    # Full "(13 convs, uniforme)"/"(original)" detail belongs to charts 03/04 -- here it
-    # only needs to disambiguate from the AlexNetTV/AlexNet points sharing this cluster.
-    short_label = {"vgg16": "3x3 nativo", "vgg16_2x2": "2x2", "alexnet_tv_scratch": "11-5-3-3-3 (original)"}
-    fig, ax = plt.subplots(figsize=(12, 7.5))
-    for i, m in enumerate(models):
-        color = PATTERN_COLOR[m["pattern"]]
-        fp32_size, fp32_top1 = m["fp32_size_mb"], m["fp32_top1"]
-        int8_size, int8_top1 = m["int8_size_mb"], m["int8_top1"]
-        ax.plot([fp32_size, int8_size], [fp32_top1, int8_top1], color="gray", lw=1, alpha=0.4, zorder=1)
-        ax.scatter(fp32_size, fp32_top1, color=color, marker="o", s=120, edgecolors="white", lw=0.6, zorder=3)
-        ax.scatter(int8_size, int8_top1, color=color, marker="s", s=100, edgecolors="white", lw=0.6, zorder=3)
-        if m["key"] in dense_fc_skip:
-            continue
-        label = short_label.get(m["key"], m["label"])
-        tag = f"{short_family[m['family']]} {label}".replace("\n", " ") + (" GAP" if m["head"] == "GAP" else "")
-        dy = manual_dy.get(m["key"], 6 if i % 2 == 0 else -11)
-        ax.annotate(tag, (fp32_size, fp32_top1), xytext=(5, dy), textcoords="offset points",
-                    fontsize=7.5, color=color)
-    ax.text(60, 30, "+ 5 variantes TV-FC 2x2/3x3/misto\n(quase mesmo tamanho e acurácia --\nver gráfico 03)",
-            fontsize=7.5, color="#4d4d4d", ha="left")
-    ax.set_xscale("log")
-    ax.margins(x=0.06, y=0.14)  # keep every marker/annotation clear of the axes edges
-    ax.set_xlabel("Tamanho do modelo (MB, escala log)")
-    ax.set_ylabel("Top-1 (%)")
-    ax.set_title(
-        "Visão geral — comparação de kernel em 3 arquiteturas (○ FP32  □ INT8, \"GAP\" no rótulo = classificador final GAP)\n"
-        "\"AlexNet\" = classificador final GAP (1 camada)   "
-        "\"TV\"/\"VGG16\" = classificador final FC (3 camadas)",
-        fontsize=12)
-    bar_group_legend(ax, outside=True)
-    savefig(fig, "01_overview_accuracy_vs_size.png")
-
-
-# ── 2-4. Kernel pattern within each family (bar, FP32 vs INT8) ──
-def fig_family_bar(models, family, filename, title):
-    sub = [m for m in models if m["family"] == family]
-    order = {"original": 0, "3x3": 1, "2x2": 2, "misto": 3}
-    sub.sort(key=lambda m: (order[m["pattern"]], m["label"]))
-    labels = [m["label"].replace("\n", " ") for m in sub]
-    colors = [PATTERN_COLOR[m["pattern"]] for m in sub]
-    fp32 = [m["fp32_top1"] for m in sub]
-    int8 = [m["int8_top1"] for m in sub]
-
-    fig, ax = plt.subplots(figsize=(1.8 * len(sub) + 2.5, 6.5))
-    x = range(len(sub))
-    width = 0.36
-    ax.bar([i - width / 2 for i in x], fp32, width, color=colors, edgecolor="white", lw=0.6)
-    ax.bar([i + width / 2 for i in x], int8, width, color=colors, alpha=0.45, edgecolor="white", lw=0.6)
-    ax.set_xticks(list(x))
-    ax.set_xticklabels(labels, rotation=20, ha="right", fontsize=9)
-    ax.set_ylabel("Top-1 (%)")
-    ax.set_title(title, fontsize=11.5)
-    ax.margins(y=0.2)  # headroom so both legends sit inside the axes instead of widening the figure
-    fp32_patch = plt.Rectangle((0, 0), 1, 1, facecolor="gray", label="FP32")
-    int8_patch = plt.Rectangle((0, 0), 1, 1, facecolor="gray", alpha=0.45, label="INT8")
-    precision_legend = ax.legend(handles=[fp32_patch, int8_patch], title="Precisão", loc="upper left", fontsize=9)
-    ax.add_artist(precision_legend)  # kept alive so the pattern-color legend below doesn't replace it
-    present_patterns = [p for p in PATTERN_COLOR if p in {m["pattern"] for m in sub}]
-    bar_group_legend(ax, loc="upper right", patterns=present_patterns)
+def fig_kernel(df, layout, filename, title, note, base_key=BASE_KEY, base_label=BASE_LABEL):
+    heads = [h for (lay, h) in KERNEL_SETS if lay == layout]
+    sizes = [len(KERNEL_SETS[(layout, h)]) for h in heads]
+    fig, axes = plt.subplots(1, len(heads), figsize=(1.5 * sum(sizes) + 3, 6.2), sharey=True, squeeze=False,
+                             gridspec_kw={"width_ratios": sizes})
+    colors, seeded = set(), False
+    for ax, head in zip(axes[0], heads):
+        ticks = []
+        for i, (key, label) in enumerate(KERNEL_SETS[(layout, head)]):
+            runs, color = runs_of(df, key), kernel_color(label)
+            colors.add(color)
+            fp32, int8 = runs.fp32.mean(), runs.int8.mean()
+            ax.bar(i - 0.19, fp32, 0.38, color=color, edgecolor="white")
+            int8_bar(ax, i + 0.19, int8, runs.int8_raw.mean(), 0.38, color)
+            value = dict(ha="center", va="bottom", fontsize=8, zorder=6, bbox=dict(facecolor="white", edgecolor="none", pad=0.3))
+            ax.text(i - 0.19, max(fp32, runs.fp32.max()) + 0.5, f"{fp32:.1f}", **value)
+            if pd.notna(int8):
+                ax.text(i + 0.19, max(int8, runs.int8.max()) + 0.5, f"{int8:.1f}", **value)
+            if len(runs) > 1:
+                seeded = True
+                valid = runs.int8.notna().all()
+                ax.scatter([i - 0.19] * len(runs), runs.fp32, color="k", s=12, zorder=5)
+                ax.scatter([i + 0.19] * len(runs), runs.int8 if valid else runs.int8_raw, color="k", s=12, zorder=5,
+                           alpha=1 if valid else 0.35)
+            ticks.append(f"{label}\n{runs.macs_m.iloc[0]:.0f}M MACs" + (f"\nmédia de {len(runs)} seeds" if len(runs) > 1 else ""))
+        ax.set_xticks(range(len(ticks)))
+        ax.set_xticklabels(ticks, fontsize=9)
+        ax.set_title(HEAD[head], fontsize=10)
+        ax.margins(y=0.08)
+        ref = reference_lines(ax, df, base_key, base_label)
+    axes[0][0].set_ylabel("Top-1 (%)")
+    kernels = [h for h in KERNEL_LEGEND if h.get_facecolor()[:3] in {Patch(color=c).get_facecolor()[:3] for c in colors}]
+    rest = precision_handles() + ref
+    if seeded:
+        rest.append(Line2D([], [], marker="o", color="k", ls="", ms=4, label="uma seed (42/43/44)"))
+    fig.legend(handles=kernels, loc="upper right", bbox_to_anchor=(0.49, 0.0), fontsize=9, title="cor = kernel", title_fontsize=9)
+    fig.legend(handles=rest, loc="upper left", bbox_to_anchor=(0.51, 0.0), fontsize=9, title="preenchimento / linhas", title_fontsize=9)
+    fig.suptitle(f"{title}\n{note}", fontsize=11)
+    fig.tight_layout()
     savefig(fig, filename)
 
 
-# ── 5. 2x2 vs 3x3, head-to-head across every family that has both ──
-def fig_2x2_vs_3x3(models):
-    families = ["AlexNet compacto", "AlexNetTV", "VGG16"]
-    # Each x-tick spells out exactly which network + head this bar pair is, so the
-    # chart stands on its own without needing charts 02-04 open alongside it. Positions
-    # are spread out (not 0,1,2) so the 2-line descriptions have room, not overlap.
-    family_desc = {
-        "AlexNet compacto": "AlexNet compacto (código próprio deste projeto,\nnão usa o módulo torchvision.models.alexnet)\nclassificador GAP (Global Average Pooling) -> poucos MB",
-        "AlexNetTV": "AlexNetTV (torchvision, clássico)\nclassificador FC (Fully Connected,\n3 camadas, 4096 neurônios) -> ~220 MB",
-        "VGG16": "VGG16 (torchvision, 13 convoluções)\nclassificador FC (Fully Connected,\n3 camadas) -> ~500 MB",
-    }
-    xpos = [0, 2.1, 4.2]
-    fig, ax = plt.subplots(figsize=(13, 7))
-    width = 0.35
-    for i, pattern in enumerate(["2x2", "3x3"]):
-        fp32 = []
-        for fam in families:
-            # AlexNetTV's 2x2/3x3 are FC-only; the custom-arch AlexNet's are GAP-only --
-            # each (family, pattern) pair here has exactly one entry regardless of head.
-            cands = [m for m in models if m["family"] == fam and m["pattern"] == pattern]
-            fp32.append(cands[0]["fp32_top1"] if cands else float("nan"))
-        offset = (i - 0.5) * width
-        ax.bar([x + offset for x in xpos], fp32, width * 0.95,
-               color=PATTERN_COLOR[pattern], label=pattern, edgecolor="white", lw=0.6)
-    ax.set_xticks(xpos)
-    ax.set_xticklabels([family_desc[f] for f in families], fontsize=9.5)
-    ax.set_ylabel("Top-1 FP32 (%)")
-    ax.set_title("2x2 vs 3x3 uniforme (todas as camadas) — 3 arquiteturas treinadas do zero,\ncada uma com seu próprio classificador final (GAP ou FC)")
-    ax.legend(title="Kernel", fontsize=9)
-    savefig(fig, "05_2x2_vs_3x3_by_family.png")
-
-
-# ── 6-7. Head-to-head FC vs GAP, same AlexNetTV backbone, mixed-kernel variants only ──
-def fig_head_accuracy(models):
-    variants = ["early3", "alt", "early2"]
-    variant_label = {"early3": "3-3-3-2-2", "alt": "2-3-2-3-2", "early2": "2-2-2-3-3"}
-    fc = {m["variant"]: m for m in models if m["head"] == "FC" and m.get("variant")}
-    gap = {m["variant"]: m for m in models if m["head"] == "GAP" and m.get("variant")}
-
-    fig, ax = plt.subplots(figsize=(7, 6))
-    x = range(len(variants))
-    width = 0.36
-    ax.bar([i - width / 2 for i in x], [fc[v]["fp32_top1"] for v in variants], width,
-           color=RED, edgecolor="white", lw=0.6, label="FC (Fully Connected)")
-    ax.bar([i + width / 2 for i in x], [gap[v]["fp32_top1"] for v in variants], width,
-           color=RED, alpha=0.45, edgecolor="white", lw=0.6, label="GAP (Global Average Pooling)")
-    ax.set_xticks(list(x))
-    ax.set_xticklabels([variant_label[v] for v in variants], fontsize=10)
-    ax.set_ylabel("Top-1 FP32 (%)")
-    ax.set_title("Mesmo backbone AlexNetTV misto — head FC vs GAP (acurácia)")
-    ax.legend(fontsize=9)
-    savefig(fig, "06_head_fc_vs_gap_accuracy.png")
-
-
-def fig_head_size(models):
-    variants = ["early3", "alt", "early2"]
-    variant_label = {"early3": "3-3-3-2-2", "alt": "2-3-2-3-2", "early2": "2-2-2-3-3"}
-    fc = {m["variant"]: m for m in models if m["head"] == "FC" and m.get("variant")}
-    gap = {m["variant"]: m for m in models if m["head"] == "GAP" and m.get("variant")}
-
-    fig, ax = plt.subplots(figsize=(7, 6))
-    x = range(len(variants))
-    width = 0.36
-    ax.bar([i - width / 2 for i in x], [fc[v]["fp32_size_mb"] for v in variants], width,
-           color=RED, edgecolor="white", lw=0.6, label="FC (Fully Connected)")
-    ax.bar([i + width / 2 for i in x], [gap[v]["fp32_size_mb"] for v in variants], width,
-           color=RED, alpha=0.45, edgecolor="white", lw=0.6, label="GAP (Global Average Pooling)")
-    ax.set_yscale("log")
-    ax.set_xticks(list(x))
-    ax.set_xticklabels([variant_label[v] for v in variants], fontsize=10)
-    ax.set_ylabel("Tamanho FP32 (MB, escala log)")
-    ax.set_title("Mesmo backbone AlexNetTV misto — head FC vs GAP (tamanho)")
-    ax.legend(fontsize=9)
-    savefig(fig, "07_head_fc_vs_gap_size.png")
-
-
-# ── 8b. All 7 mixed-kernel (misto) models, across every backbone/head combo ──
-def fig_all_mixed(models):
-    sub = [m for m in models if m["pattern"] == "misto"]
-    group_order = [("AlexNet compacto", "GAP"), ("AlexNetTV", "GAP"), ("AlexNetTV", "FC")]
-    group_color = {("AlexNet compacto", "GAP"): GREEN, ("AlexNetTV", "GAP"): BLUE, ("AlexNetTV", "FC"): RED}
-    group_label = {
-        ("AlexNet compacto", "GAP"): "AlexNet compacto (backbone próprio) + GAP",
-        ("AlexNetTV", "GAP"): "AlexNetTV (torchvision) + GAP",
-        ("AlexNetTV", "FC"): "AlexNetTV (torchvision) + FC",
-    }
-    sub.sort(key=lambda m: (group_order.index((m["family"], m["head"])), m["label"]))
-    labels = [f"{m['label']}\n({m['head']})" for m in sub]
-    colors = [group_color[(m["family"], m["head"])] for m in sub]
-    fp32 = [m["fp32_top1"] for m in sub]
-    int8 = [m["int8_top1"] for m in sub]
-
-    fig, ax = plt.subplots(figsize=(1.8 * len(sub) + 2.5, 7))
-    x = range(len(sub))
-    width = 0.36
-    ax.bar([i - width / 2 for i in x], fp32, width, color=colors, edgecolor="white", lw=0.6)
-    ax.bar([i + width / 2 for i in x], int8, width, color=colors, alpha=0.45, edgecolor="white", lw=0.6)
-    ax.set_xticks(list(x))
-    ax.set_xticklabels(labels, fontsize=9)
-    ax.set_ylabel("Top-1 (%)")
-    ax.set_title(
-        "Todas as 7 redes de kernel misto (2x2/3x3 alternado) -- todo backbone e classificador testados\n"
-        "\"AlexNet compacto\" = código próprio deste projeto (não usa torchvision.models.alexnet)\n"
-        "\"AlexNetTV\" = o AlexNet real do torchvision, só com o kernel trocado\n"
-        "rótulos das barras = kernel usado em cada uma das 5 camadas, na ordem (1ª -> 5ª)", fontsize=11.5)
-    ax.margins(y=0.2)
-    fp32_patch = plt.Rectangle((0, 0), 1, 1, facecolor="gray", label="FP32")
-    int8_patch = plt.Rectangle((0, 0), 1, 1, facecolor="gray", alpha=0.45, label="INT8")
-    precision_legend = ax.legend(handles=[fp32_patch, int8_patch], title="Precisão", loc="upper left", fontsize=9)
-    ax.add_artist(precision_legend)
-    group_handles = [plt.Rectangle((0, 0), 1, 1, facecolor=group_color[g], label=group_label[g]) for g in group_order]
-    ax.legend(handles=group_handles, title="Arquitetura + classificador final", fontsize=8.5, loc="upper right")
-    savefig(fig, "10_all_mixed_kernel_variants.png")
-
-
-# ── 8. Quantization drop, every model, sorted ──
-def fig_quant_drop(models):
-    sub = sorted(models, key=lambda m: m["fp32_top1"] - m["int8_top1"])
-    labels = [f"{m['family']} {m['label']}".replace('\n', ' ') + (" (GAP)" if m["head"] == "GAP" else " (FC)") for m in sub]
-    drops = [m["fp32_top1"] - m["int8_top1"] for m in sub]
-    colors = [PATTERN_COLOR[m["pattern"]] for m in sub]
-
-    fig, ax = plt.subplots(figsize=(9.5, 8))
-    ax.barh(range(len(sub)), drops, color=colors, edgecolor="white", lw=0.6)
-    ax.set_yticks(range(len(sub)))
-    ax.set_yticklabels(labels, fontsize=8)
-    ax.invert_yaxis()
-    ax.set_xlabel("Queda FP32 -> INT8 no top-1 (pp)")
-    ax.set_title("Robustez à quantização (menor = melhor, ordenado do melhor pro pior)")
-    bar_group_legend(ax, outside=True)
-    savefig(fig, "08_quantization_drop.png")
-
-
-# ── 9. Efficiency leaderboard: top-1 / MB, every model, sorted ──
-def fig_efficiency(models):
-    sub = sorted(models, key=lambda m: m["fp32_top1"] / m["fp32_size_mb"], reverse=True)
-    labels = [f"{m['family']} {m['label']}".replace('\n', ' ') + (" (GAP)" if m["head"] == "GAP" else " (FC)") for m in sub]
-    eff = [m["fp32_top1"] / m["fp32_size_mb"] for m in sub]
-    colors = [PATTERN_COLOR[m["pattern"]] for m in sub]
-
-    fig, ax = plt.subplots(figsize=(9.5, 8))
-    ax.barh(range(len(sub)), eff, color=colors, edgecolor="white", lw=0.6)
-    ax.set_yticks(range(len(sub)))
-    ax.set_yticklabels(labels, fontsize=8)
-    ax.invert_yaxis()
+def fig_overview(df):
+    fig, ax = plt.subplots(figsize=(13, 7.5))
+    for group, entries in KERNEL_SETS.items():
+        pts = []
+        for key, label in entries:
+            runs, color = runs_of(df, key), kernel_color(label)
+            fp32, int8, int8_raw = runs.fp32.mean(), runs.int8.mean(), runs.int8_raw.mean()
+            x32, x8 = runs.fp32_mb.iloc[0], runs.int8_mb.iloc[0]
+            ax.plot([x32, x8], [fp32, int8 if pd.notna(int8) else int8_raw], color="gray", lw=1, alpha=0.3, zorder=1)
+            ax.scatter(x32, fp32, color=color, marker="o", s=110, edgecolors="white", lw=0.6, zorder=3)
+            if pd.notna(int8):
+                ax.scatter(x8, int8, color=color, marker="s", s=90, edgecolors="white", lw=0.6, zorder=3)
+            else:
+                ax.scatter(x8, int8_raw, facecolors="none", edgecolors=color, marker="s", s=80, alpha=0.6, zorder=3)
+            if key == BASE_KEY:
+                ax.scatter(x32, fp32, s=380, facecolors="none", edgecolors="k", lw=1.6, zorder=4)
+            pts.append((x32, fp32))
+        x, y = geometric_mean([p[0] for p in pts]), max(p[1] for p in pts)  # centred above its cluster (log x)
+        ax.annotate(GROUP[group], (x, y), xytext=(0, 14), textcoords="offset points", ha="center", va="bottom",
+                    fontsize=9, fontweight="bold", color="#333333")
     ax.set_xscale("log")
-    ax.set_xlabel("Top-1 FP32 / MB (escala log, maior = melhor)")
-    ax.set_title("Eficiência acurácia/tamanho — ranking (melhor no topo)")
-    bar_group_legend(ax, outside=True)
-    savefig(fig, "09_efficiency_ranking.png")
+    ax.margins(x=0.12, y=0.1)
+    ax.set_xlabel("Tamanho do modelo (MB, escala log)")
+    ax.set_ylabel("Top-1 (%)")
+    ax.set_title("Visão geral: acurácia × tamanho de toda rede de kernel da Fase 11 (a figura que mistura fatores;\n"
+                 "um fator por vez nas figuras 02–14; ponto ligado ao seu INT8 pela linha cinza)\n" + LAYOUTS, fontsize=10.5)
+    marker_handles = [
+        Line2D([], [], marker="o", color="gray", ls="", ms=9, label="FP32"),
+        Line2D([], [], marker="s", color="gray", ls="", ms=8, label="INT8"),
+        Line2D([], [], marker="s", mfc="none", mec="gray", ls="", ms=8, label=OLD_INT8),
+        Line2D([], [], marker="o", mfc="none", mec="k", mew=1.6, ls="", ms=16, label=BASE_LABEL)]
+    ax.legend(handles=KERNEL_LEGEND + marker_handles, loc="upper left", bbox_to_anchor=(1.01, 1), fontsize=9,
+              title="cor = kernel · forma = precisão", title_fontsize=9, labelspacing=1.0)
+    savefig(fig, "01_overview_accuracy_vs_size.png")
 
 
 def main():
     apply_report_style(figsize=(9, 6))
-    models = MODELS
-    load_rows()
-
-    fig_overview(models)
-    fig_family_bar(models, "AlexNet compacto", "02_kernel_pattern_alexnet_gap.png",
-                    "AlexNet compacto — código próprio deste projeto, NÃO usa o módulo torchvision.models.alexnet\n"
-                    "(diferente do AlexNetTV, que usa esse módulo e só troca o kernel)\n"
-                    "5 convoluções estilo AlexNet + classificador GAP (Global Average Pooling, 1 camada) -> modelo pequeno\n"
-                    "rótulos das barras = kernel usado em cada uma das 5 camadas, na ordem (1ª -> 5ª)")
-    fig_family_bar([m for m in models if m["family"] == "AlexNetTV" and m["head"] == "FC"],
-                    "AlexNetTV", "03_kernel_pattern_alexnettv_fc.png",
-                    "AlexNetTV — o AlexNet clássico (torchvision), treinado do zero\n"
-                    "5 convoluções + classificador final FC original (3 camadas, 4096 neurônios)\n"
-                    "rótulos das barras = kernel usado em cada uma das 5 camadas, na ordem (1ª -> 5ª)")
-    fig_family_bar(models, "VGG16", "04_kernel_pattern_vgg16.png",
-                    "VGG16 (torchvision), treinada do zero — rede mais profunda, 13 convoluções\n"
-                    "kernel igual em todas as 13 camadas (não existe uma versão \"mista\" desta rede)")
-    fig_2x2_vs_3x3(models)
-    fig_head_accuracy(models)
-    fig_head_size(models)
-    fig_all_mixed(models)
-    fig_quant_drop(models)
-    fig_efficiency(models)
+    df = load()
+    # phase_11_reuse_old_init/alexnet_tv_3x3 is the default-init twin of the He-init alexnet_tv_3x3 used here
+    df = df[df.exp != "reuse_old_init"]
+    fig_overview(df)
+    fig_kernel(df, "original", "02_kernel_original_layout.png",
+               "Kernel no AlexNet de layout original (o do torchvision: conv1 stride 4 + 3 max-pools 3×3/2 → mapa final 1×1 "
+               "em 64×64)\nem cada painel só o kernel muda; treino do zero, seed 42",
+               "† = inicialização He; sem † = inicialização padrão do PyTorch (a versão He da original não treinou, PHASE11_LOG)")
+    fig_kernel(df, "64px", "03_kernel_64px_layout.png",
+               "Kernel no AlexNet de layout 64px (adaptado a 64×64: conv1 stride 2 + 2 max-pools 2×2 → mapa final 8×8, "
+               "sem Dropout)\nem cada painel só o kernel muda; treino do zero",
+               "† = AlexNetMixed: inicialização He e convs 2×2 sem padding (os mapas encolhem 1 px a cada 2×2)")
+    fig_kernel(df, "VGG16", "04_kernel_vgg16.png",
+               "Kernel na VGG16 (torchvision, 13 convs + BatchNorm), treinada do zero, seed 42\n"
+               "mesma rede, só o kernel das 13 convs muda", "baseline = a própria VGG16 com seu kernel original 3×3",
+               base_key="vgg16", base_label="VGG16 original (3×3)")
 
 
 if __name__ == "__main__":

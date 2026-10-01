@@ -1,23 +1,23 @@
-factor,contrast,cell_a,cell_b,fp32,int8,dqat,macs_pct,params_pct
-kernel,Kernel 11-5-3-3-3 → 3×3,alexnet_fx_orig_s2_pk2n2_fc,alexnet_fx_k3_s2_pk2n2_fc,1.4339804649353027,,,-24.55652560751821,-0.37720473636551066
-kernel,Kernel 11-5-3-3-3 → 3×3,alexnet_fx_orig_s2_pk2n2_gap,alexnet_fx_k3_s2_pk2n2_gap,1.3234466314315796,,,-30.229752278269796,-8.651475390068452
-kernel,Kernel 11-5-3-3-3 → 3×3,alexnet_fx_orig_s4_pk3n3_fc,alexnet_fx_k3_s4_pk3n3_fc,-0.5233362317085266,,,-15.198550379506703,-0.37720473636551066
-kernel,Kernel 3×3 → 2×2,alexnet_fx_k3_s2_pk2n2_fc,alexnet_fx_k2_s2_pk2n2_fc,-2.2906482219696045,,,-41.7188766860765,-2.1703623330200705
-kernel,Kernel 3×3 → 2×2,alexnet_fx_k3_s2_pk2n2_gap,alexnet_fx_k2_s2_pk2n2_gap,-2.8200656175613403,,,-55.53307087579872,-54.28782831317977
-kernel,Kernel 11-5-3-3-3 → 2×2,alexnet_fx_orig_s2_pk2n2_fc,alexnet_fx_k2_s2_pk2n2_fc,-0.8566677570343018,,,-56.03069565700939,-2.5393803598691367
-kernel,Kernel 11-5-3-3-3 → 2×2,alexnet_fx_orig_s2_pk2n2_gap,alexnet_fx_k2_s2_pk2n2_gap,-1.4966189861297607,,,-68.97531339579857,-58.242605596930865
-head,Cabeça FC → GAP,alexnet_fx_orig_s2_pk2n2_fc,alexnet_fx_orig_s2_pk2n2_gap,9.33094322681427,,,-18.767029972752034,-95.63999526833847
-head,Cabeça FC → GAP,alexnet_fx_orig_s4_pk3n3_fc,alexnet_fx_orig_s4_pk3n3_gap,3.691357374191284,,,-58.284890094507325,-95.63999526833847
-head,Cabeça FC → GAP,alexnet_fx_k3_s2_pk2n2_fc,alexnet_fx_k3_s2_pk2n2_gap,9.220409393310547,,,-24.875617306700082,-96.00211981127791
-head,Cabeça FC → GAP,alexnet_fx_k2_s2_pk2n2_fc,alexnet_fx_k2_s2_pk2n2_gap,8.690991997718811,,,-42.68211711142027,-98.13193843983862
-bn,BatchNorm não → sim,alexnet_fx_k3_s2_pk2n2_gap,alexnet_fx_k3_s2_pk2n2_gap_bn,3.292107582092285,,,0.20604142904447897,0.05002205833823936
-stride,Stride do stem 4 → 2,alexnet_fx_orig_s4_pk2n2_fc,alexnet_fx_orig_s2_pk2n2_fc,11.178253591060638,,,210.5639622464585,0.0
-stride,Stride do stem 4 → 2,alexnet_fx_orig_s4_pk3n3_fc,alexnet_fx_orig_s2_pk3n3_fc,4.940477013587952,,,166.71101159736872,0.0
-pool_k,Kernel do pool 3 → 2,alexnet_fx_orig_s2_pk3n2_fc,alexnet_fx_orig_s2_pk2n2_fc,11.996854841709137,,,16.439923635469643,0.0
-pool_k,Kernel do pool 3 → 2,alexnet_fx_orig_s2_pk3n3_fc,alexnet_fx_orig_s2_pk2n3_fc,5.282863974571228,,,16.43977955780034,0.0
-pool_n,Nº de pools 3 → 2,alexnet_fx_orig_s2_pk2n3_fc,alexnet_fx_orig_s2_pk2n2_fc,1.1367738246917725,,,0.004170779518686274,0.0
-pool_n,Nº de pools 3 → 2,alexnet_fx_orig_s2_pk3n3_fc,alexnet_fx_orig_s2_pk3n2_fc,-5.5772170424461365,,,0.004047038731180841,0.0
-drop,"Dropout 0 → 0,5 (FC)",alexnet_fx_orig_s2_pk2n2_fc,alexnet_fx_orig_s2_pk2n2_fc_d,2.123105525970459,,,0.0,0.0
-drop,"Dropout 0 → 0,5 (FC)",alexnet_fx_orig_s4_pk3n3_fc,alexnet_fx_orig_s4_pk3n3_fc_d,2.7024924755096436,,,0.0,0.0
-pt,"Pré-treino ImageNet (11-5-3, FC, sem BN)",alexnet_fx_orig_s2_pk2n2_fc,alexnet_fx_orig_s2_pk2n2_fc_pt,6.960231065750122,,,0.0,0.0
-pt,"Pré-treino ImageNet (11-5-3, FC, sem BN)",alexnet_fx_orig_s4_pk3n3_fc_d,alexnet_fx_orig_s4_pk3n3_fc_d_pt,8.397704362869263,,,0.0,0.0
+factor,contrast,cell_a,cell_b,fp32,int8,dqat,int8_raw,dqat_raw,macs_pct,params_pct
+kernel,Kernel 11-5-3-3-3 → 3×3,alexnet_fx_orig_s2_pk2n2_fc,alexnet_fx_k3_s2_pk2n2_fc,1.4339804649353027,,,3.629007935523987,2.195027470588684,-24.55652560751821,-0.37720473636551066
+kernel,Kernel 11-5-3-3-3 → 3×3,alexnet_fx_orig_s2_pk2n2_gap,alexnet_fx_k3_s2_pk2n2_gap,1.3234466314315796,,,4.01206910610199,2.68862247467041,-30.229752278269796,-8.651475390068452
+kernel,Kernel 11-5-3-3-3 → 3×3,alexnet_fx_orig_s4_pk3n3_fc,alexnet_fx_k3_s4_pk3n3_fc,-0.5233362317085266,,,1.7662525177001953,2.289588749408722,-15.198550379506703,-0.37720473636551066
+kernel,Kernel 3×3 → 2×2,alexnet_fx_k3_s2_pk2n2_fc,alexnet_fx_k2_s2_pk2n2_fc,-2.2906482219696045,,,-0.844353437423706,1.4462947845458984,-41.7188766860765,-2.1703623330200705
+kernel,Kernel 3×3 → 2×2,alexnet_fx_k3_s2_pk2n2_gap,alexnet_fx_k2_s2_pk2n2_gap,-2.8200656175613403,,,-3.141355514526367,-0.32128989696502686,-55.53307087579872,-54.28782831317977
+kernel,Kernel 11-5-3-3-3 → 2×2,alexnet_fx_orig_s2_pk2n2_fc,alexnet_fx_k2_s2_pk2n2_fc,-0.8566677570343018,,,2.7846544981002808,3.6413222551345825,-56.03069565700939,-2.5393803598691367
+kernel,Kernel 11-5-3-3-3 → 2×2,alexnet_fx_orig_s2_pk2n2_gap,alexnet_fx_k2_s2_pk2n2_gap,-1.4966189861297607,,,0.8707135915756226,2.3673325777053833,-68.97531339579857,-58.242605596930865
+head,Cabeça FC → GAP,alexnet_fx_orig_s2_pk2n2_fc,alexnet_fx_orig_s2_pk2n2_gap,9.33094322681427,,,0.5417048931121826,-8.789238333702087,-18.767029972752034,-95.63999526833847
+head,Cabeça FC → GAP,alexnet_fx_orig_s4_pk3n3_fc,alexnet_fx_orig_s4_pk3n3_gap,3.691357374191284,,,5.79485148191452,2.103494107723236,-58.284890094507325,-95.63999526833847
+head,Cabeça FC → GAP,alexnet_fx_k3_s2_pk2n2_fc,alexnet_fx_k3_s2_pk2n2_gap,9.220409393310547,,,0.9247660636901855,-8.295643329620361,-24.875617306700082,-96.00211981127791
+head,Cabeça FC → GAP,alexnet_fx_k2_s2_pk2n2_fc,alexnet_fx_k2_s2_pk2n2_gap,8.690991997718811,,,-1.3722360134124756,-10.063228011131287,-42.68211711142027,-98.13193843983862
+bn,BatchNorm não → sim,alexnet_fx_k3_s2_pk2n2_gap,alexnet_fx_k3_s2_pk2n2_gap_bn,3.292107582092285,,,13.634565472602844,10.342457890510559,0.20604142904447897,0.05002205833823936
+stride,Stride da conv1 4 → 2,alexnet_fx_orig_s4_pk2n2_fc,alexnet_fx_orig_s2_pk2n2_fc,11.178253591060638,,,5.786791443824768,-5.39146214723587,210.5639622464585,0.0
+stride,Stride da conv1 4 → 2,alexnet_fx_orig_s4_pk3n3_fc,alexnet_fx_orig_s2_pk3n3_fc,4.940477013587952,,,5.5957213044166565,0.6552442908287048,166.71101159736872,0.0
+pool_k,Janela do max-pool 3×3 → 2×2,alexnet_fx_orig_s2_pk3n2_fc,alexnet_fx_orig_s2_pk2n2_fc,11.996854841709137,,,10.279162228107452,-1.7176926136016846,16.439923635469643,0.0
+pool_k,Janela do max-pool 3×3 → 2×2,alexnet_fx_orig_s2_pk3n3_fc,alexnet_fx_orig_s2_pk2n3_fc,5.282863974571228,,,4.22004759311676,-1.0628163814544678,16.43977955780034,0.0
+pool_n,Nº de max-pools 3 → 2,alexnet_fx_orig_s2_pk2n3_fc,alexnet_fx_orig_s2_pk2n2_fc,1.1367738246917725,,,-0.3620266914367676,-1.49880051612854,0.004170779518686274,0.0
+pool_n,Nº de max-pools 3 → 2,alexnet_fx_orig_s2_pk3n3_fc,alexnet_fx_orig_s2_pk3n2_fc,-5.5772170424461365,,,-6.42114132642746,-0.8439242839813232,0.004047038731180841,0.0
+drop,"Dropout 0 → 0,5 (só cabeça FC)",alexnet_fx_orig_s2_pk2n2_fc,alexnet_fx_orig_s2_pk2n2_fc_d,2.123105525970459,,,2.91215181350708,0.7890462875366211,0.0,0.0
+drop,"Dropout 0 → 0,5 (só cabeça FC)",alexnet_fx_orig_s4_pk3n3_fc,alexnet_fx_orig_s4_pk3n3_fc_d,2.7024924755096436,,,1.3939931988716125,-1.308499276638031,0.0,0.0
+pt,"Pré-treino ImageNet (11-5-3-3-3, FC, sem BN)",alexnet_fx_orig_s2_pk2n2_fc,alexnet_fx_orig_s2_pk2n2_fc_pt,6.960231065750122,,,17.26822853088379,10.307997465133667,0.0,0.0
+pt,"Pré-treino ImageNet (11-5-3-3-3, FC, sem BN)",alexnet_fx_orig_s4_pk3n3_fc_d,alexnet_fx_orig_s4_pk3n3_fc_d_pt,8.397704362869263,,,9.62526798248291,1.2275636196136475,0.0,0.0

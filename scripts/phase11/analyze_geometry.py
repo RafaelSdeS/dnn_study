@@ -1,9 +1,14 @@
-"""Phase 11 geometry/kernel/BN analysis — tables + figures 11-14, from the raw per-run summaries.
+"""Phase 11 geometry/kernel/BN analysis — tables + figure 15, from the raw per-run summaries; also the shared
+loader and plot helpers of scripts/phase11/{plot_kernel_comparison,factor_effects}.py.
 
 Reads every outputs/pcad/phase_11_*/<model>/results/*_summary.json (seed 42 in phase_11_geometry_controls /
 _factorial and the earlier Phase 11 experiments, seeds 43/44 in phase_11_geometry_seeds_s43/_s44) and writes
   results/phase_11_geometry_analysis/{all_runs,kernel_seeds,geometry_factorial,bn_block}.csv
-  results/figures_generated/phase_11_kernel_size_comparison/{11..14}_*.png
+  results/figures_generated/phase_11_kernel_size_comparison/15_quantization_drop_where.png
+
+Figure vocabulary (every Phase 11 figure): "layout original" = torchvision's AlexNet geometry (conv1 stride 4, three
+3x3/2 max-pools -> 1x1 map before the classifier at 64x64); "layout 64px" = the adapted one (conv1 stride 2, two 2x2
+max-pools -> 8x8 map, no Dropout). Baseline = alexnet_tv_scratch, the original AlexNet trained from scratch.
 
     python -m scripts.phase11.analyze_geometry
 """
@@ -13,18 +18,26 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from ml.plotting import AMBER, BLUE, GREEN, RED, apply_report_style
+from matplotlib.patches import Patch
+
+from ml.plotting import BLUE, RED, TEXT_SECONDARY, apply_report_style
 
 ROOT = Path(__file__).resolve().parents[2]
 TABLES = ROOT / "results/phase_11_geometry_analysis"
 FIGS = ROOT / "results/figures_generated/phase_11_kernel_size_comparison"
-GRAY = "#8a8a8a"
+
+BASE_KEY = "alexnet_tv_scratch"  # the original AlexNet (11-5-3-3-3, layout original, FC + Dropout), from scratch
+BASE_LABEL = "AlexNet original do zero (baseline)"
+OLD_INT8 = "INT8 antigo: QAT antes da correção de 30/09, inválido (rerun na fila)"
+LAYOUTS = ("layout original = o do AlexNet torchvision: conv1 stride 4 + 3 max-pools 3×3/2 → mapa final 1×1 em 64×64\n"
+           "layout 64px = adaptado a 64×64: conv1 stride 2 + 2 max-pools 2×2 → mapa final 8×8, sem Dropout")
 
 
 def load() -> pd.DataFrame:
-    """One row per run. qat/int8 are NaN for a run whose QAT predates the fusion fix and whose model's fuse map
-    needed it (registry fuse_root_attr): those numbers measured an unfused QAT graph (docs/logs/PHASE11_LOG.md,
-    "QAT fusion bug"). A run made with the fix records git_dirty_files in its provenance (same commit)."""
+    """One row per run. qat/int8 are NaN for a run made before the 2026-09-30 QAT fixes (fusion, quantized GAP,
+    val-calibrated observers -- docs/logs/PHASE11_LOG.md): every Phase 11 QAT is being redone on one code version
+    ("Rerun scope"), so a pre-fix number is shown only faded, from qat_raw/int8_raw. A run made with the fixes records
+    git_dirty_files in its provenance. qat_fused (unfused QAT before the fix) stays as a column for the tables."""
     from ml import model_registrations  # noqa: F401 -- populates the registry
     from ml.registry import MODEL_REGISTRY
 
@@ -37,8 +50,9 @@ def load() -> pd.DataFrame:
         nan = float("nan")
         rows.append(dict(
             exp=p.parents[2].name.removeprefix("phase_11_"), key=key, seed=d["config"]["experiment"]["seed"],
-            fp32=d["fp32_top1"], qat=d["qat_top1"] if fused else nan, int8=d["int8_top1"] if fused else nan,
-            params_m=d["params_m"], macs_m=d["macs"] / 1e6, int8_mb=d["int8_size_mb"], best_ep=d["epochs"],
+            fp32=d["fp32_top1"], qat=d["qat_top1"] if post_fix else nan, int8=d["int8_top1"] if post_fix else nan,
+            qat_raw=d["qat_top1"], int8_raw=d["int8_top1"],
+            params_m=d["params_m"], macs_m=d["macs"] / 1e6, fp32_mb=d["fp32_size_mb"], int8_mb=d["int8_size_mb"], best_ep=d["epochs"],
             ece=d.get("fp32_ece"), qat_fused=fused, post_fix=post_fix, git_hash=prov.get("git_hash", "")[:7],
             git_dirty=prov.get("git_dirty")))
     df = pd.DataFrame(rows)
@@ -46,6 +60,8 @@ def load() -> pd.DataFrame:
     df["drop_qat"] = df.fp32 - df.qat      # FP32 -> fake-quant (what QAT costs)
     df["drop_convert"] = df.qat - df.int8  # fake-quant -> real INT8 (what convert_to_int8 costs)
     df["drop_total"] = df.fp32 - df.int8
+    df["drop_qat_raw"] = df.fp32 - df.qat_raw
+    df["drop_convert_raw"] = df.qat_raw - df.int8_raw
     return df
 
 
@@ -54,6 +70,30 @@ def savefig(fig, name):
     fig.savefig(FIGS / name, dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(f"wrote {FIGS / name}")
+
+
+def int8_bar(ax, x, valid, raw, width, color):
+    """INT8 bar beside its FP32 one: light fill when valid, faded hatched outline when only the pre-fix value exists."""
+    if pd.notna(valid):
+        ax.bar(x, valid, width, color=color, alpha=0.45, edgecolor="white")
+    elif pd.notna(raw):
+        ax.bar(x, raw, width, facecolor="none", edgecolor=color, hatch="///", alpha=0.6, lw=0.8)
+
+
+def precision_handles(color=TEXT_SECONDARY):
+    return [Patch(facecolor=color, label="barra cheia = FP32"), Patch(facecolor=color, alpha=0.45, label="barra clara ao lado = INT8"),
+            Patch(facecolor="none", edgecolor=color, hatch="///", alpha=0.6, label=f"barra hachurada = {OLD_INT8}")]
+
+
+def reference_lines(ax, df, key=BASE_KEY, label=BASE_LABEL, int8=True):
+    """Dashed (FP32) / dotted (INT8) lines at the baseline run's top-1; returns them as legend handles."""
+    r = df[(df.key == key) & (df.seed == 42)].iloc[0]
+    lines = [ax.axhline(r.fp32, color="#333333", ls="--", lw=1.3, zorder=4, label=f"{label}: FP32 {r.fp32:.1f}%")]
+    if int8:
+        v, old = (r.int8, "") if pd.notna(r.int8) else (r.int8_raw, " antigo")
+        lines.append(ax.axhline(v, color="#333333", ls=":", lw=1.3, zorder=4, alpha=0.6 if old else 1,
+                                label=f"{label}: INT8{old} {v:.1f}%"))
+    return lines
 
 
 def kernel_seeds(df):
@@ -65,40 +105,22 @@ def kernel_seeds(df):
     agg = d.groupby(["head", "kernel"]).agg(
         n=("seed", "count"), fp32=("fp32", "mean"), fp32_sd=("fp32", "std"), int8=("int8", "mean"), int8_sd=("int8", "std"),
         drop_qat=("drop_qat", "mean"), drop_convert=("drop_convert", "mean"), params_m=("params_m", "first"), macs_m=("macs_m", "first"))
-    return d, agg.reset_index()
+    return agg.reset_index()
 
 
-def fig_kernel(d):
-    fig, axes = plt.subplots(1, 2, figsize=(11, 4.8), sharey=False)
-    colors = {"11-5-3-3-3": AMBER, "3x3": GREEN, "2x2": BLUE}
-    for ax, head in zip(axes, ["FC", "GAP"]):
-        for i, kern in enumerate(["11-5-3-3-3", "3x3", "2x2"]):
-            s = d[(d["head"] == head) & (d.kernel == kern)]
-            for j, (col, off) in enumerate([("fp32", -0.18), ("int8", 0.18)]):
-                ax.bar(i + off, s[col].mean(), 0.34, color=colors[kern], alpha=1 if col == "fp32" else 0.5,
-                       label=None, edgecolor="white")
-                ax.scatter([i + off] * len(s), s[col], color="k", s=14, zorder=3)
-            ax.text(i, -0.26, f"{s.macs_m.iloc[0]:.0f}M MACs · n={len(s)}", ha="center", fontsize=8, color="#4d4d4d", transform=ax.get_xaxis_transform())
-        ax.set_xticks(range(3)); ax.set_xticklabels(["11-5-3-3-3\n(original)", "3x3", "2x2"]); ax.tick_params(axis="x", pad=14)
-        ax.set_title(f"Classificador {head}"); ax.set_ylabel("Top-1 (%)")
-    axes[0].set_ylim(0, 42); axes[1].set_ylim(0, 52)
-    fig.suptitle("Efeito do kernel na geometria adaptada (mapa 8×8, sem BN) — barra cheia FP32, clara INT8, pontos = seeds 42/43/44", fontsize=11)
-    savefig(fig, "11_kernel_effect_adapted_geometry_seeds.png")
-
-
-FACTORIAL = {  # key: (stride, pooling, final map, label)
-    "alexnet_geo_s4_p3_fc": ("s4", "3×pool(3,2)", "1×1", "s4 / pool 3×3 (torchvision)"),
-    "alexnet_geo_s4_p2_fc": ("s4", "2×pool(2)", "3×3", "s4 / pool 2×2"),
-    "alexnet_geo_s2_p3_fc": ("s2", "3×pool(3,2)", "3×3", "s2 / pool 3×3"),
-    "alexnet_geo_s2_pk3n2_fc": ("s2", "2×pool(3,2)", "7×7", "s2 / 2 pools k3"),
-    "alexnet_geo_s2_pk2n3_fc": ("s2", "3×pool(2)", "4×4", "s2 / 3 pools k2"),
-    "alexnet_adapted_orig_fc": ("s2", "2×pool(2)", "8×8", "s2 / pool 2×2 (adaptado)"),
-    "alexnet_geo_s2_p2_drop_fc": ("s2", "2×pool(2)+Dropout", "8×8", "adaptado + Dropout"),
-    "alexnet_geo_s4_p3_gap": ("s4", "3×pool(3,2)", "1×1", "s4 / pool 3×3, GAP"),
-    "alexnet_geo_s4_p3_fc_k3": ("s4", "3×pool(3,2), k=3", "1×1", "s4 / pool 3×3, kernels 3×3"),
-    "alexnet_tv_scratch": ("s4", "3×pool(3,2)+Dropout", "1×1", "AlexNetTV do zero (+Dropout)"),
-    "alexnet_tv": ("s4", "3×pool(3,2)+Dropout, pré-treino", "1×1", "AlexNetTV pré-treinado"),
-    "alexnet_adapted_orig_fc_pt": ("s2", "2×pool(2), pré-treino", "8×8", "adaptado pré-treinado"),
+FACTORIAL = {  # key: (conv1 stride, pooling, final map, label)
+    "alexnet_geo_s4_p3_fc": ("s4", "3×pool(3,2)", "1×1", "layout original (s4, 3 pools 3×3), sem Dropout"),
+    "alexnet_geo_s4_p2_fc": ("s4", "2×pool(2)", "3×3", "s4, 2 pools 2×2"),
+    "alexnet_geo_s2_p3_fc": ("s2", "3×pool(3,2)", "3×3", "s2, 3 pools 3×3"),
+    "alexnet_geo_s2_pk3n2_fc": ("s2", "2×pool(3,2)", "7×7", "s2, 2 pools 3×3"),
+    "alexnet_geo_s2_pk2n3_fc": ("s2", "3×pool(2)", "4×4", "s2, 3 pools 2×2"),
+    "alexnet_adapted_orig_fc": ("s2", "2×pool(2)", "8×8", "layout 64px (s2, 2 pools 2×2)"),
+    "alexnet_geo_s2_p2_drop_fc": ("s2", "2×pool(2)+Dropout", "8×8", "layout 64px + Dropout"),
+    "alexnet_geo_s4_p3_gap": ("s4", "3×pool(3,2)", "1×1", "layout original, cabeça GAP"),
+    "alexnet_geo_s4_p3_fc_k3": ("s4", "3×pool(3,2), k=3", "1×1", "layout original, kernels 3×3, sem Dropout"),
+    "alexnet_tv_scratch": ("s4", "3×pool(3,2)+Dropout", "1×1", "AlexNet original do zero (+Dropout)"),
+    "alexnet_tv": ("s4", "3×pool(3,2)+Dropout, pré-treino", "1×1", "AlexNet original pré-treinada"),
+    "alexnet_adapted_orig_fc_pt": ("s2", "2×pool(2), pré-treino", "8×8", "layout 64px pré-treinado"),
 }
 
 
@@ -108,37 +130,44 @@ def geometry_table(df):
     return d.reset_index()[["key", "label", "stem", "pooling", "map", "fp32", "qat", "int8", "best_ep", "params_m", "macs_m"]]
 
 
-def fig_geometry(g):
-    g = g.sort_values("fp32")
-    color = [RED if "GAP" in r.label else (BLUE if "pré" in r.label else (GREEN if r.map == "8×8" else GRAY)) for r in g.itertuples()]
-    fig, ax = plt.subplots(figsize=(10, 6))
-    y = range(len(g))
-    ax.barh(y, g.fp32, color=color, alpha=0.9)
-    ax.scatter(g.int8, y, color="k", marker="s", s=22, zorder=3, label="INT8")
-    for i, r in enumerate(g.itertuples()):
-        ax.text(max(r.fp32, r.int8) + 0.6, i, f"{r.fp32:.1f}  (mapa {r.map})", va="center", fontsize=8)
-    ax.set_yticks(list(y)); ax.set_yticklabels(g.label, fontsize=9)
-    ax.set_xlabel("Top-1 FP32 (%)"); ax.set_xlim(0, 52); ax.legend(loc="lower right")
-    ax.set_title("Fatorial de geometria a 64×64 (kernels 11-5-3-3-3, sem BN, seed 42; ruído entre seeds ≈ ±0,3–0,9pp)\n"
-                 "cinza = geometria torchvision · verde = adaptada · azul = pré-treinado · vermelho = GAP", fontsize=10)
-    savefig(fig, "12_geometry_factorial.png")
+# "64px"/"original" = layout (module docstring); s1 = conv1 stride 1 (neither layout)
+CONVERT_KEYS = {
+    BASE_KEY: "AlexNet original\n(baseline)", "alexnet_3x3_fc": "64px · 3×3 · FC",
+    "alexnet_adapted_orig_fc": "64px · 11-5-3-3-3 · FC", "alexnet_adapted_2x2_fc": "64px · 2×2 · FC",
+    "alexnet_3x3_gap": "64px · 3×3 · GAP", "alexnet_adapted_orig_gap": "64px · 11-5-3-3-3 · GAP",
+    "alexnet_adapted_2x2_gap": "64px · 2×2 · GAP", "alexnet_2x2_gap": "64px · 2×2 sem padding · GAP",
+    "alexnet_mixed": "64px · misto 3-2-3-2-3 · GAP", "alexnet_smallkernel": "3×3 estreito, conv1 s1 · GAP",
+    "alexnet_stacked_gap_nobn": "64px · 3×3 empilhado · GAP",
+    "alexnet_3x3_gap_bn": "64px · 3×3 · GAP", "alexnet_mixed_bn": "64px · misto 3-2-3-2-3 · GAP",
+    "alexnet_stacked_gap": "64px · 3×3 empilhado · GAP", "alexnet_bottleneck": "Bottleneck · GAP", "alexnet_fire": "Fire · GAP",
+}
 
 
 def fig_convert(df):
-    keys = ["alexnet_3x3_fc", "alexnet_adapted_orig_fc", "alexnet_adapted_2x2_fc", "alexnet_3x3_gap", "alexnet_adapted_orig_gap",
-            "alexnet_adapted_2x2_gap", "alexnet_2x2_gap", "alexnet_mixed", "alexnet_smallkernel", "alexnet_stacked_gap_nobn",
-            "alexnet_3x3_gap_bn", "alexnet_mixed_bn", "alexnet_stacked_gap", "alexnet_bottleneck", "alexnet_fire"]
-    d = df[df.key.isin(keys) & (df.seed == 42)].drop_duplicates("key").set_index("key").loc[keys]
-    fig, ax = plt.subplots(figsize=(11, 5.5))
-    x = range(len(d))
-    ax.bar(x, d.drop_qat, color=BLUE, label="FP32 → QAT (fake-quant)")
-    ax.bar(x, d.drop_convert, bottom=d.drop_qat.clip(lower=0), color=RED, label="QAT → INT8 real (convert_to_int8)")
-    ax.set_xticks(list(x)); ax.set_xticklabels([k.replace("alexnet_", "") for k in d.index], rotation=45, ha="right", fontsize=9)
+    d = df[df.key.isin(CONVERT_KEYS) & (df.seed == 42)].drop_duplicates("key").set_index("key").loc[list(CONVERT_KEYS)]
+    fig, ax = plt.subplots(figsize=(13, 6))
+    for i, r in enumerate(d.itertuples()):
+        valid = pd.notna(r.int8)
+        dq, dc = (r.drop_qat, r.drop_convert) if valid else (r.drop_qat_raw, r.drop_convert_raw)
+        for val, bottom, color in [(dq, 0, BLUE), (dc, max(dq, 0), RED)]:
+            kw = dict(color=color) if valid else dict(facecolor="none", edgecolor=color, hatch="///", alpha=0.6, lw=0.8)
+            ax.bar(i, val, 0.7, bottom=bottom, **kw)
+    first_bn = list(CONVERT_KEYS).index("alexnet_3x3_gap_bn")
+    ax.axvline(first_bn - 0.5, color=TEXT_SECONDARY, lw=1, ls="--")
+    for x, txt, ha in [(first_bn - 0.6, "sem BatchNorm ←", "right"), (first_bn - 0.4, "→ com BatchNorm", "left")]:
+        ax.text(x, 0.97, txt, transform=ax.get_xaxis_transform(), ha=ha, va="top", fontsize=9, color=TEXT_SECONDARY)
+    ax.axhline(0, color="k", lw=0.8)
+    ax.margins(y=0.1)  # headroom for the BN labels above the tallest bar
+    ax.set_xticks(range(len(d))); ax.set_xticklabels(list(CONVERT_KEYS.values()), rotation=40, ha="right", fontsize=9)
     ax.set_ylabel("Perda de top-1 (pp)")
-    ax.set_title("Onde o INT8 perde acurácia: no QAT ou na conversão? (seed 42)\n"
-                 "GAP sem BN perde 5–25pp só ao converter; com BN (3x3_gap_bn, mixed_bn, stacked_gap, bottleneck, fire) a conversão é ≈ 0", fontsize=10)
-    ax.legend()
-    savefig(fig, "13_quantization_drop_where.png")
+    ax.set_title("Onde o INT8 perde acurácia: no treino QAT ou na conversão para INT8 real? (seed 42)\n"
+                 "64px = layout 64px (conv1 stride 2, 2 max-pools 2×2)\nhachurado = QAT antigo, antes das correções de fusão e de "
+                 "pooling INT8 de 30/09 — a perda grande na conversão vinha desses bugs (PHASE11_LOG)", fontsize=10)
+    ax.legend(handles=[Patch(color=BLUE, label="FP32 → QAT (perda no treino com fake-quant)"),
+                       Patch(color=RED, label="QAT → INT8 real (perda na conversão)"),
+                       Patch(facecolor="none", edgecolor=TEXT_SECONDARY, hatch="///", alpha=0.6, label=OLD_INT8)],
+              loc="upper left", bbox_to_anchor=(1.01, 1), fontsize=9)
+    savefig(fig, "15_quantization_drop_where.png")
 
 
 def bn_block(df):
@@ -148,30 +177,16 @@ def bn_block(df):
     return d[["key", "fp32", "qat", "int8", "params_m", "macs_m", "int8_mb"]]
 
 
-def fig_bn_block(b):
-    fig, ax = plt.subplots(figsize=(9, 5.5))
-    for r in b.itertuples():
-        col = GREEN if r.key in ("alexnet_bottleneck", "alexnet_fire") else (AMBER if "bn" in r.key else GRAY)
-        ax.scatter(r.macs_m, r.fp32, color=col, s=110, edgecolors="white", zorder=3)
-        ax.scatter(r.macs_m, r.int8, color=col, marker="s", s=80, edgecolors="white", zorder=3)
-        ax.plot([r.macs_m] * 2, [r.fp32, r.int8], color=col, alpha=0.4)
-        ax.annotate(f"{r.key.replace('alexnet_', '')} ({r.params_m:.2f}M par.)", (r.macs_m, r.fp32), xytext=(6, 5), textcoords="offset points", fontsize=8)
-    ax.set_xlabel("MACs (M, 64×64)"); ax.set_ylabel("Top-1 (%)"); ax.margins(x=0.12)
-    ax.set_title("BN e blocos de compensação no layout adaptado, GAP (○ FP32  □ INT8, seed 42)\n"
-                 "cinza = sem BN · laranja = 3x3 + BN · verde = Bottleneck/Fire (com BN)", fontsize=10)
-    savefig(fig, "14_bn_and_compensation_blocks.png")
-
-
 def main():
     apply_report_style()
     df = load()
     TABLES.mkdir(parents=True, exist_ok=True)
     df.sort_values(["exp", "key", "seed"]).to_csv(TABLES / "all_runs.csv", index=False)
-    d, agg = kernel_seeds(df)
+    agg = kernel_seeds(df)
     agg.to_csv(TABLES / "kernel_seeds.csv", index=False)
     g = geometry_table(df); g.to_csv(TABLES / "geometry_factorial.csv", index=False)
     b = bn_block(df); b.to_csv(TABLES / "bn_block.csv", index=False)
-    fig_kernel(d); fig_geometry(g); fig_convert(df); fig_bn_block(b)
+    fig_convert(df)
     pd.set_option("display.width", 200)
     for name, t in [("kernel_seeds", agg), ("geometry_factorial", g), ("bn_block", b)]:
         print(f"\n== {name}\n{t.round(2).to_string(index=False)}")
