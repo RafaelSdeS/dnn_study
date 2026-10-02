@@ -28,16 +28,17 @@ FIGS = ROOT / "results/figures_generated/phase_11_kernel_size_comparison"
 
 BASE_KEY = "alexnet_tv_scratch"  # the original AlexNet (11-5-3-3-3, layout original, FC + Dropout), from scratch
 BASE_LABEL = "AlexNet original do zero (baseline)"
-OLD_INT8 = "INT8 antigo: QAT antes da correção de 30/09, inválido (rerun na fila)"
+OLD_INT8 = "INT8 antigo: QAT antes das correções de 30/09–02/10, inválido (rerun na fila)"
 LAYOUTS = ("layout original = o do AlexNet torchvision: conv1 stride 4 + 3 max-pools 3×3/2 → mapa final 1×1 em 64×64\n"
            "layout 64px = adaptado a 64×64: conv1 stride 2 + 2 max-pools 2×2 → mapa final 8×8, sem Dropout")
 
 
 def load() -> pd.DataFrame:
-    """One row per run. qat/int8 are NaN for a run made before the 2026-09-30 QAT fixes (fusion, quantized GAP,
-    val-calibrated observers -- docs/logs/PHASE11_LOG.md): every Phase 11 QAT is being redone on one code version
-    ("Rerun scope"), so a pre-fix number is shown only faded, from qat_raw/int8_raw. A run made with the fixes records
-    git_dirty_files in its provenance. qat_fused (unfused QAT before the fix) stays as a column for the tables."""
+    """One row per run. qat/int8 are NaN for a run made before the current QAT code -- the 2026-09-30 fixes (fusion,
+    quantized GAP, val-calibrated observers) and the 2026-10-02 float logits layer (docs/logs/PHASE11_LOG.md): every
+    Phase 11 QAT is being redone on one code version ("Rerun scope"), so an older number is shown only faded, from
+    qat_raw/int8_raw. A current run's summary has qat_float_logits. qat_fused (unfused QAT before 09-30) stays as a
+    column for the tables."""
     from ml import model_registrations  # noqa: F401 -- populates the registry
     from ml.registry import MODEL_REGISTRY
 
@@ -45,7 +46,7 @@ def load() -> pd.DataFrame:
     for p in sorted((ROOT / "outputs/pcad").glob("phase_11_*/*/results/*_summary.json")):
         d = json.loads(p.read_text())
         prov, key = d["config"]["provenance"], p.parents[1].name
-        post_fix = "git_dirty_files" in prov
+        post_fix = d.get("qat_float_logits", False)
         fused = post_fix or (key in MODEL_REGISTRY and not MODEL_REGISTRY[key].get("fuse_root_attr"))
         nan = float("nan")
         rows.append(dict(

@@ -136,6 +136,24 @@ def test_int8_avg_pool_requantizes_instead_of_inheriting_its_input_scale():
     assert torch.allclose(int8[0, 1:], torch.arange(1, 8) * 4 / 64, atol=0.02), int8  # the means survive
 
 
+def test_logits_layer_stays_float_so_int8_logits_do_not_tie():
+    """2026-10-02 audit (docs/logs/PHASE11_LOG.md, "Float logits layer"): the logits Linear's output went through an
+    8-bit fake-quant, leaving 8-31 distinct values per image and 14-31% top-1 ties in QAT/INT8. resnet18tv because
+    its input QuantStub is registered after fc: the logits layer must be found in execution order."""
+    from ml.quantization import _FloatLogits
+    x = torch.randn(4, 3, 64, 64)
+    for name, model in [("alexnet_3x3_gap", MODEL_REGISTRY["alexnet_3x3_gap"]["ctor"]()),
+                        ("resnet18tv", ResNet18TV(pretrained=False))]:
+        qat = build_qat_from_model(model, name, torch.device("cpu")).eval()
+        qat(x)  # calibrate
+        int8 = convert_to_int8(qat)
+        heads = [m for m in int8.modules() if isinstance(m, _FloatLogits)]
+        assert len(heads) == 1 and type(heads[0].linear) is nn.Linear, name
+        assert any(isinstance(m, torch.ao.nn.quantized.Quantize) for m in int8.modules()), f"{name}: input not quantized"
+        out = int8(x)
+        assert not out.is_quantized and all(len(torch.unique(row)) == 200 for row in out), name
+
+
 def test_validation_does_not_calibrate_qat_observers_on_val_data():
     """FakeQuantize ignores eval(): Trainer's per-epoch validation used to update activation ranges from the val
     split. frozen_observers must leave the ranges untouched and restore each module's own flag afterwards."""

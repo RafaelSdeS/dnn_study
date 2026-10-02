@@ -7,6 +7,9 @@ import torch.ao.quantization as tq
 
 from .registry import MODEL_REGISTRY
 
+# Tiny ImageNet input; keep_logits_float only runs it through the model to see which layer executes last
+LOGITS_PROBE_SHAPE = (1, 3, 64, 64)
+
 
 def find_fuse_groups(module: nn.Module, prefix: str = "") -> list:
     """Walk the module tree and collect fusable Conv-BN(-ReLU) groups.
@@ -169,8 +172,12 @@ def prepare_qat_model(
     fuse_root: nn.Module | None = None,
     qengine: str = "fbgemm",
     classifier_fuse_pairs: list | None = None,
+    float_logits: bool = False,
 ) -> nn.Module:
     """Deep-copy model, fuse Conv-BN(-ReLU) pairs, insert fake-quant observers.
+
+    float_logits keeps the logits Linear in float (keep_logits_float); build_qat_from_model, the path every real
+    run takes, always sets it. Off by default only so toy modules without a logits layer still prepare.
 
     classifier_fuse_pairs additionally fuses model.classifier's Linear-ReLU pairs. Needed for
     vgg16/vgg16_2x2: their torchvision-style classifier head is otherwise left unfused (like
@@ -200,6 +207,8 @@ def prepare_qat_model(
     if classifier_fuse_pairs:
         tq.fuse_modules_qat(model.classifier, classifier_fuse_pairs, inplace=True)
     requantize_avg_pools(model)
+    if float_logits:
+        keep_logits_float(model, torch.zeros(LOGITS_PROBE_SHAPE, device=next(model.parameters()).device))
     return tq.prepare_qat(model, inplace=False)
 
 
@@ -235,6 +244,46 @@ class _RequantizedPool(nn.Module):
         return self.pool(x)
 
 
+def keep_logits_float(model: nn.Module, probe: torch.Tensor) -> nn.Module:
+    """Replace the logits Linear with DeQuantStub -> float Linear, in place.
+
+    Its output used to get the same 8-bit fake-quant as every activation, so QAT/INT8 logits sat on a grid of 8-31
+    distinct values per image: 14-31% of val images tied for top-1, top-5 depended on the tie-break, and FC heads lost
+    ~0.4pp top-1 to the grid alone (docs/logs/PHASE11_LOG.md, "Float logits layer"). Every layer before it stays INT8;
+    its own weights stay FP32. The logits layer is the last Conv/Linear to run on `probe` -- execution order, not
+    registration order (quantizable ResNet18 registers its input QuantStub after fc). Any other head shape fails here.
+    """
+    order = []
+    hooks = [m.register_forward_hook(lambda mod, i, o: order.append(mod)) for m in model.modules() if not list(m.children())]
+    was_training = model.training
+    with torch.no_grad():
+        model.eval()(probe)
+    model.train(was_training)
+    for h in hooks:
+        h.remove()
+    i = max(k for k, m in enumerate(order) if isinstance(m, (nn.Linear, nn.Conv2d)))
+    tail = [type(m).__name__ for m in order[i + 1:]]
+    assert isinstance(order[i], nn.Linear) and all(isinstance(m, tq.DeQuantStub) for m in order[i + 1:]), \
+        f"unsupported logits layer: {type(order[i]).__name__} followed by {tail}"
+    name = next(n for n, m in model.named_modules() if m is order[i])
+    parent, _, child = name.rpartition(".")
+    setattr(model.get_submodule(parent), child, _FloatLogits(order[i]))
+    return model
+
+
+class _FloatLogits(nn.Module):
+    """DeQuantStub -> the logits Linear with qconfig=None, so prepare_qat/convert leave it float; the stub converts
+    like any other, so the Linear always receives a float tensor."""
+
+    def __init__(self, linear: nn.Linear):
+        super().__init__()
+        linear.qconfig = None
+        self.dequant, self.linear = tq.DeQuantStub(), linear
+
+    def forward(self, x):
+        return self.linear(self.dequant(x))
+
+
 def build_qat_from_model(model: nn.Module, arch_name: str, device: torch.device) -> nn.Module:
     """Apply QAT preparation to a pre-loaded FP32 model."""
     spec = MODEL_REGISTRY[arch_name]
@@ -242,7 +291,7 @@ def build_qat_from_model(model: nn.Module, arch_name: str, device: torch.device)
     fuse_root = getattr(model, root_attr) if root_attr else None
     return prepare_qat_model(
         model, spec["fuse_map"], fuse_root=fuse_root,
-        classifier_fuse_pairs=spec.get("classifier_fuse_map"),
+        classifier_fuse_pairs=spec.get("classifier_fuse_map"), float_logits=True,
     ).to(device)
 
 

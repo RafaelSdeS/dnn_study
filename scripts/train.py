@@ -542,6 +542,9 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
             "agreement_fp32_int8": prediction_agreement(
                 fp32_logits_path, results_dir / f"{model_name}_int8_val_logits.npz"),
             "layer_stats_path": str(layer_stats_path) if layer_stats_path else None,
+            # QAT/INT8 built with the logits Linear in float (ml/quantization.py:keep_logits_float, 2026-10-02);
+            # scripts/phase11/analyze_geometry.py treats qat/int8 numbers without it as superseded
+            "qat_float_logits": True,
         }
 
         summary = make_run_summary(

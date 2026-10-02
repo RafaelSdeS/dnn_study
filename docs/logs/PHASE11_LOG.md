@@ -772,3 +772,54 @@ Left as is, not worth changing code under 206 pending jobs: `scripts/train.py`'s
 retrain with the same `epochs_used` over an old summary would keep the old timing fields -- no queued run does that),
 and `analyze_geometry.load`'s `post_fix = "git_dirty_files" in prov` (true for 855a492..9900c8a too, but no run made
 on those commits survives).
+
+## Float logits layer (2026-10-02)
+
+**Audit of the 15 runs done on d2f4fdc/eb2557d** (the 3 gates + 12 reruns). Data and artifacts check out:
+- the 90/10 split reproduces exactly on the laptop (same labels in all 15 `*_val_logits.npz`, no train/val
+  overlap, per-class sd 6.97 ≈ binomial);
+- top-1, ECE and agreement recomputed from the saved logits match the summaries;
+- `load_int8_model` on the saved `qat_<m>.pth` reproduces the saved INT8 logits **bit for bit** (5 AlexNets + vgg16).
+
+One measurement artifact: the logits Linear's output got the same 8-bit fake-quant as every activation. So QAT/INT8
+logits had only 8–31 distinct values per image (FP32: 95–160, fp16-limited). Consequences:
+- 14–31% of val images tied for top-1 (vgg16 7%), and 47–82% tied at the 5th/6th place, so the reported top-5 depended
+  on the tie-break (torch.topk vs argpartition: up to 0.5 pp);
+- best-epoch selection picks the luckiest tie-break, putting the reported QAT top-1 on average +0.20 pp (14/15
+  positive) above the random-tie-break expectation, and INT8 +0.10 pp;
+- re-evaluating the saved QAT checkpoints with only the last fake-quant disabled cost nothing on the GAP heads (top-1
+  −0.6..+0.0 pp vs the reported first-index number). `alexnet_smallkernel_fc` gained +0.40 top-1 and +0.97 top-5
+  (44.55→44.95, 65.19→66.16);
+- corr(FP32→INT8 drop, % ties) = −0.61. Part of "FC heads lose more under INT8" was this grid, not weight/activation
+  quantization.
+
+**Change.** `ml/quantization.py:keep_logits_float`, applied by `build_qat_from_model`, the path of every real run:
+- the logits layer is the last Conv/Linear to run on a 64×64 probe, found in execution order (quantizable ResNet18
+  registers its input QuantStub after `fc`);
+- it becomes DeQuantStub → float Linear (`qconfig=None`);
+- any head other than "Linear followed only by DeQuantStub" fails loudly.
+
+Checked on every registry model: the 91 non-factorial ones plus one per factorial cell type. Every Phase 11 head is a
+Linear + DeQuantStub. The only failures predate the change: `*_fpga`/`*_orig` never take the fbgemm INT8 path, and
+`alexnet_se`.
+
+INT8 now means every conv and hidden Linear in INT8 and the logits layer in FP32. `int8_size_mb` grows by that layer's
+FP32 weights: +0.14 MB (+6%) on the GAP AlexNets, +2.3 MB (+4%) on the FC ones.
+
+Summaries carry `qat_float_logits: true`, and `analyze_geometry.load` treats any qat/int8 without it as superseded.
+That replaces the `git_dirty_files` proxy, which every run since 09-30 satisfies.
+
+Not changed: `quantization_advanced.prepare_sim` (Phase 9 mixed-precision PTQ), `qat_wino`, Phase 7's own QAT
+builders (backbone only, heads already FP32), and the INT8 results already recorded for phases 6/9.
+
+**Rerun scope.** The 15 runs above, archived with
+`ARCHIVE=outputs/pcad/archive_quantized_logits_qat scripts/pcad/rerun_qat_fused.sh RUN...` and resubmitted. Every
+queued job (34 QAT reruns, 206 new runs) imports the new code at start; the 48 pending were held before the pull.
+Gate first: `mixed_kernel_comparison/alexnet_3x3_gap` (GAP) and `head_bn_ablation/alexnet_smallkernel_fc` (FC). The
+other 47 stay held until both pass:
+- exit 0, QAT 100/100;
+- `fp32_top1` unchanged (46.95 / 45.55);
+- the flag present, with clean provenance;
+- ~200 distinct logits per image;
+- QAT−INT8 < ~0.5 pp;
+- `int8_size_mb` ≈ 2.37 / 56.8.

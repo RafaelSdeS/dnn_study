@@ -14,8 +14,11 @@
 # Idempotent: an already-archived run is skipped. Run on PCAD from the repo root, after `git pull`, clean code.
 #   scripts/pcad/rerun_qat_fused.sh            # all runs below
 #   scripts/pcad/rerun_qat_fused.sh RUN...     # only these <experiment>/<model> (the wave-0 gate)
+# Wave 2 (2026-10-02, float logits layer -- docs/logs/PHASE11_LOG.md): the QAT runs finished on the 09-30 code go to
+# their own archive, same steps:
+#   ARCHIVE=outputs/pcad/archive_quantized_logits_qat scripts/pcad/rerun_qat_fused.sh RUN...
 set -euo pipefail
-ARCHIVE=outputs/pcad/archive_unfused_qat
+ARCHIVE=${ARCHIVE:-outputs/pcad/archive_unfused_qat}
 
 # The default-init alexnet_tv_3x3 (factorial cell alexnet_fx_k3_s4_pk3n3_fc_d) lives in archive_old_init;
 # give it a live run dir of its own experiment (configs/experiments/phase_11_reuse_old_init.yaml).
