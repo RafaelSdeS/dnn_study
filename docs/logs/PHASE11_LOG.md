@@ -873,8 +873,46 @@ Later waves (pool kernel 3, Dropout, the mixed patterns at other geometries) nee
 
 **AlexNet wave 1, same four factors.** kernel {orig, k3, k2, mix} × stride {2, 4} × pool {adapted pk2n2, torchvision
 pk3n3} × head {FC, GAP}, with no BN, Dropout or pretraining. That is 32 cells: 11 reused, 21 queued. On PCAD those 21
-lines were moved to the head of `~/queue_phase11.txt` (backup `.bak_20261002_wave1`). Families, the rest of
-core/ext (BN, crossed pools, Dropout, pretraining) and the VGG wave follow.
+lines were moved to the head of `~/queue_phase11.txt` (backup `.bak_20261002_wave1`).
 
-The 49 pending QAT reruns stay ahead of everything: the feeder only submits below 48 queued jobs, and they are
-older. Holding them wouldn't free slots, since held jobs still count toward the QOS limit.
+**Queue on PCAD** (code 40937c0, pulled; `~/queue_phase11.txt` 238 lines, backup `.bak_20261002_vgg`):
+
+| Order | What | Where |
+|---|---|---|
+| 1 | 49 QAT reruns | already submitted, pending in Slurm |
+| 2 | 21 AlexNet wave-1 cells | queue lines 1–21 |
+| 3 | 32 VGG wave-1 runs | queue lines 22–53 |
+| 4 | 17 families, then the other 168 core/ext cells (BN, crossed pools, Dropout, pretraining) | lines 54 onward |
+
+The reruns stay ahead because the feeder only submits below 48 queued jobs, and the reruns are older. Holding them
+wouldn't free slots: held jobs still count toward the QOS limit.
+
+The `vgg16_bn` ImageNet weights were copied into PCAD's shared `~/.cache/torch/hub/checkpoints` (md5 checked), so
+the `_pt` jobs don't depend on network access from a compute node.
+
+`num_workers` stays at 4 (`configs/data.yaml`), like every other run (user decision, 2026-10-02). The FP32 stage is
+loader-bound (4–40% GPU utilization on the 4090s), but more workers would change each worker's augmentation random
+stream relative to the runs already trained.
+
+### QAT rerun coverage audit (2026-10-02)
+
+The question: does every Phase 11 run with a usable FP32 get a QAT/INT8 from the current code? The inputs were
+pulled from PCAD: every `phase_11_*` run dir's summary and checkpoint list, `squeue` (job → experiment via its
+StdOut path) and the queue file. Result:
+- **49 run dirs with a 500-epoch FP32 = 49 pending reruns**, matched one to one. Every pending run has its
+  `<m>_best.pth` and no `qat_<m>_best/_resume.pth` left over. A leftover would make `scripts/train.py` skip QAT and
+  leave the old INT8 in place.
+- None is valid yet. The 15 that had finished on the 09-30 code were archived in wave 2 (float logits) and resubmitted.
+- The 20 cells the factorials reuse from earlier runs (19 in `FX_EXISTING`, `vgg16` in `VGG_FX_EXISTING`) are all
+  among the 49.
+- Every model of every finished Phase 11 yaml is covered, with three explained exceptions:
+  - `alexnet_stacked_fc_nobn` (FP32 0.50%, dead) is left out on purpose.
+  - `mixed_kernel_comparison.yaml` still lists `alexnet_mixed`/`alexnet_stacked`. Their default-init runs were moved
+    aside as `*_preheinit`, and the canonical `he_init` runs are `head_bn_ablation`'s, which are pending.
+  - `mixed_kernel_comparison_early2_retry.yaml` files into `mixed_kernel_comparison/alexnet_tv_mixed_early2` via its
+    `name:`, which is pending.
+- The other run dirs are kept only for provenance and are not cells of anything: `vgg16_original`,
+  `alexnet_tv_scratch_dead_heinit`, `alexnet_tv_mixed_early2_dead_seed42`, `alexnet_{mixed,stacked}_preheinit`.
+- `families`, `factorial_core/_ext` and `vgg_factorial` have no FP32 yet: they are new runs in the feeder queue.
+
+Check as they land: `qat_float_logits` true, QAT 100/100, `fp32_top1` equal to the archived summary's, QAT−INT8 < ~0.5 pp.
