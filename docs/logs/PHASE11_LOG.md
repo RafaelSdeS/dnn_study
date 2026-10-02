@@ -823,3 +823,58 @@ other 47 stay held until both pass:
 - ~200 distinct logits per image;
 - QAT−INT8 < ~0.5 pp;
 - `int8_size_mb` ≈ 2.37 / 56.8.
+
+**Update (2026-10-02 ~11:30).** Gate skipped at the user's request: all 49 jobs released at once. The criteria
+above became first-landing checks, not a hold.
+
+## VGG factorial + wave-1 priority (2026-10-02)
+
+**Why.** The AlexNet factorial (`alexnet_fx_*`, 208/208 cells queued or reused) had no counterpart in a deeper,
+natively-3×3 family, and only one mixed pattern (3-2-3-2-3). `VGG16(kernel_size=2)` can't be extended to it: its 1/0
+padding alternation keeps the pooled sizes only under MaxPool 2×2, so with a 3×3 pool the map size would depend
+on the kernel pattern.
+
+**Model.** `models/baselines.py:VGGAdapted` is VGG16 (cfgs["D"] + BN) with one knob per factor:
+- kernels: 3 or 2 per conv. 2×2 uses a right/bottom ZeroPad2d, as `AlexNetAdapted` does, and pads 0 on a strided stem.
+- stem_stride: 1 / 2.
+- pool_kernel: 2 / 3. The 3 is MaxPool(3, 2, padding=1), which changes only the overlap, never the map size.
+- pool_count: 5 / 4.
+- head: GAP / FC / FC + Dropout 0.5.
+
+Final map at 64×64, identical across kernel patterns and pool kernels: s1/n5 2×2, s1/n4 4×4, s2/n5 1×1, s2/n4 2×2.
+s1/n5 and s2/n4 both end at 2×2, which separates final map size from where the resolution drops.
+
+The defaults are `VGG16(kernel_size=3)` layer for layer, with the same init. So vgg16's run is the
+`vgg_fx_k3_s1_pk2n5_fc_d` cell (`VGG_FX_EXISTING`), and `vgg16_2x2` is not a cell.
+
+BN is fixed, not a factor: a plain VGG16 stays at ln(200) from scratch (jobs 821246/7).
+
+`pretrained=True` loads torchvision's `vgg16_bn`: its convs and BNs, plus the first two Linears when the head is FC.
+vgg16_bn's conv bias is folded into BN's running_mean, since our convs are bias-free; the test checks the eval
+output matches. The weights were copied into PCAD's `~/.cache/torch/hub/checkpoints`, md5 checked.
+
+**Cells.** `ml/model_registrations.py` registers all 168:
+- 6 patterns × 2 strides × 2 pool kernels × 2 pool counts × 3 heads;
+- + 24 `_pt` cells (3×3 only).
+
+The 6 patterns are k3, k2, alt32, alt23, early3 (stages 1–3 at 3×3) and early2. The four mixed ones each put 6–7 of
+the 13 convs at 3×3, so they compare order and position at roughly equal proportion.
+
+Every cell keeps vgg16's live QAT observers, so the family has one protocol. `tests/test_config.py` now allows the
+deviation for `vgg_fx_*` as well.
+
+**Wave 1** (`configs/experiments/phase_11_vgg_factorial.yaml`, 32 runs):
+- kernel {k3, k2, alt32} × stride {1, 2} × pool count {5, 4} × head {FC, GAP}, with pool 2×2 and no Dropout: 24 runs;
+- {alt23, early3, early2} × VGG's own geometry × {FC, GAP}: 6 runs;
+- 2 pretrained cells, each paired with a from-scratch twin: `k3_s1_pk2n5_fc_d_pt` with vgg16, and
+  `k3_s1_pk2n5_gap_pt` with `k3_s1_pk2n5_gap`.
+
+Later waves (pool kernel 3, Dropout, the mixed patterns at other geometries) need only a yaml.
+
+**AlexNet wave 1, same four factors.** kernel {orig, k3, k2, mix} × stride {2, 4} × pool {adapted pk2n2, torchvision
+pk3n3} × head {FC, GAP}, with no BN, Dropout or pretraining. That is 32 cells: 11 reused, 21 queued. On PCAD those 21
+lines were moved to the head of `~/queue_phase11.txt` (backup `.bak_20261002_wave1`). Families, the rest of
+core/ext (BN, crossed pools, Dropout, pretraining) and the VGG wave follow.
+
+The 49 pending QAT reruns stay ahead of everything: the feeder only submits below 48 queued jobs, and they are
+older. Holding them wouldn't free slots, since held jobs still count toward the QOS limit.

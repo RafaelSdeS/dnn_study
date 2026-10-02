@@ -10,15 +10,18 @@ them in sync if a notebook's fuse_map or lr changes.
 from functools import partial
 from itertools import product
 
+import torch
 import torch.nn as nn
 from torchvision.models.vgg import cfgs as VGG_CFGS
 
 from ml.quantization import find_fuse_groups
 from ml.registry import register_model
 from ml.winograd_bridge import custom_model, torchvision_model
+from models.baselines import _vgg_adapted_features
 from models import (
     AlexNetTV,
     VGG16,
+    VGGAdapted,
     VGGStyleCNN,
     MobileNetV2TV,
     ResNet18TV,
@@ -262,6 +265,28 @@ register_model("vgg16", partial(VGG16, kernel_size=3),
 register_model("vgg16_2x2", partial(VGG16, kernel_size=2),
                fuse_map=FUSE_MAP_VGG16, fuse_root_attr="features", lr=1e-3,
                classifier_fuse_map=CLASSIFIER_FUSE_MAP_VGG16, qat_disable_observer_epoch=None)
+
+# Phase 11 VGG factorial (configs/experiments/phase_11_vgg_factorial.yaml, docs/logs/PHASE11_LOG.md "VGG factorial"):
+# every VGGAdapted cell of kernel pattern x stem stride x pool kernel x pool count x head (GAP / FC / FC + Dropout 0.5),
+# + ImageNet pretraining (vgg16_bn) on the all-3x3 cells. vgg_fx_<pattern>_s<stride>_pk<pool k>n<pool count>_<head>[_pt].
+# The 4 mixed patterns all put 6-7 of the 13 convs at 3x3, so they compare order/position at ~equal proportion; early*
+# splits after stage 3 (7 convs). All 168 cells are registered, the yaml lists the ones queued; vgg16's run IS the
+# k3_s1_pk2n5_fc_d cell (VGG_FX_EXISTING). Every cell keeps vgg16's live QAT observers, so the family shares one protocol.
+_alt = lambda first: tuple(first if i % 2 == 0 else 5 - first for i in range(13))  # noqa: E731
+VGG_FX_KERNELS = {"k3": (3,) * 13, "k2": (2,) * 13, "alt32": _alt(3), "alt23": _alt(2),
+                  "early3": (3,) * 7 + (2,) * 6, "early2": (2,) * 7 + (3,) * 6}
+VGG_FX_EXISTING = {"vgg_fx_k3_s1_pk2n5_fc_d": "phase_11_kernel_size_comparison/vgg16"}
+with torch.device("meta"):  # the fuse map depends only on where the ZeroPad2d's sit: kernel pattern x stem stride
+    _VGG_FX_FUSE = {(kn, s): _conv_groups(_vgg_adapted_features(ks, s, 2, 5))
+                    for kn, ks in VGG_FX_KERNELS.items() for s in (1, 2)}
+for (kn, ks), s, pk, pn, head in product(VGG_FX_KERNELS.items(), (1, 2), (2, 3), (5, 4), ("gap", "fc", "fc_d")):
+    kw = dict(kernels=ks, stem_stride=s, pool_kernel=pk, pool_count=pn, head="gap" if head == "gap" else "fc",
+              dropout=0.5 if head == "fc_d" else 0.0)
+    name = f"vgg_fx_{kn}_s{s}_pk{pk}n{pn}_{head}"
+    for cell, cell_kw in [(name, kw)] + ([(name + "_pt", {**kw, "pretrained": True})] if kn == "k3" else []):
+        register_model(cell, partial(VGGAdapted, **cell_kw), fuse_map=_VGG_FX_FUSE[kn, s], fuse_root_attr="features",
+                       lr=1e-3, qat_disable_observer_epoch=None,
+                       **({} if head == "gap" else {"classifier_fuse_map": CLASSIFIER_FUSE_MAP_VGG16}))
 
 # large-scale sweep (see configs/experiments/large_scale.yaml)
 FUSE_MAP_ALEXNET_SMALLKERNEL = [["0", "1"], ["3", "4"], ["6", "7"], ["8", "9"], ["10", "11"]]

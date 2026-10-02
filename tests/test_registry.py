@@ -204,3 +204,71 @@ def test_phase_11_kernel_swap_only_changes_the_kernel():
         assert tuple(model.features(x).shape) == (1, 512, 2, 2), name
         kernel_sets.add(frozenset(m.kernel_size for m in model.features if isinstance(m, torch.nn.Conv2d)))
     assert len(kernel_sets) == len(vgg_variants), "vgg16 and vgg16_2x2 share identical kernels"
+
+
+VGG_FX_MAPS = {(1, 5): 2, (1, 4): 4, (2, 5): 1, (2, 4): 2}  # (stem stride, pool count) -> final map at 64x64
+
+
+def test_vgg_factorial_grid_is_complete_and_only_stride_and_pool_count_set_the_map():
+    """168 cells = 6 kernel patterns x 2 strides x 2 pool kernels x 2 pool counts x 3 heads + 24 pretrained (3x3).
+    The kernel and pool-kernel factors are only clean if they never change the map size -- checked on every cell
+    (meta device: shapes only, no weights), plus each fuse group being Conv-BN-ReLU in the padded layout."""
+    from ml.model_registrations import VGG_FX_KERNELS
+
+    fx = [n for n in MODEL_REGISTRY if n.startswith("vgg_fx_")]
+    assert len(fx) == 168 and sum(n.endswith("_pt") for n in fx) == 24
+    for name in (n for n in fx if not n.endswith("_pt")):
+        spec = MODEL_REGISTRY[name]
+        with torch.device("meta"):
+            model = spec["ctor"]()
+            out = model.features(torch.zeros(1, 3, 64, 64))
+        kw = spec["ctor"].keywords
+        assert tuple(out.shape) == (1, 512, *(2 * [VGG_FX_MAPS[kw["stem_stride"], kw["pool_count"]]])), name
+        assert tuple(m.kernel_size[0] for m in model.features if isinstance(m, torch.nn.Conv2d)) == kw["kernels"], name
+        assert [type(model.features.get_submodule(i)) for g in spec["fuse_map"] for i in g] == \
+            [torch.nn.Conv2d, torch.nn.BatchNorm2d, torch.nn.ReLU] * 13, name
+    assert sum(k == 3 for k in VGG_FX_KERNELS["alt32"]) == 7 and sum(k == 3 for k in VGG_FX_KERNELS["early2"]) == 6
+
+
+def test_vgg_factorial_reused_cell_is_vgg16_layer_for_layer():
+    """vgg16's run stands in for vgg_fx_k3_s1_pk2n5_fc_d -- only valid if it is the same net, same state_dict."""
+    from ml.model_registrations import VGG_FX_EXISTING
+    from models import VGG16
+
+    for cell, run in VGG_FX_EXISTING.items():
+        with torch.device("meta"):
+            mine, ref = MODEL_REGISTRY[cell]["ctor"](), MODEL_REGISTRY[run.split("/")[1]]["ctor"]()
+        assert _layout(mine) == _layout(ref), cell
+        assert {k: v.shape for k, v in mine.state_dict().items()} == {k: v.shape for k, v in ref.state_dict().items()}, cell
+    with torch.device("meta"):  # the no-Dropout FC level keeps the same indices (Dropout(0.0)), so the same fuse map
+        assert MODEL_REGISTRY["vgg_fx_k3_s1_pk2n5_fc"]["ctor"]().state_dict().keys() == VGG16().state_dict().keys()
+
+
+def test_vgg_factorial_cells_survive_the_qat_to_int8_path():
+    """The fuse map changes with kernel pattern x stem stride (ZeroPad2d positions): a 2x2 stride-1 stem, a strided
+    2x2 stem and an alternating pattern, with the overlapping pool, through the real QAT->INT8 path (GAP head --
+    the FC head's classifier fusion is vgg16's, tested in test_quantization)."""
+    from ml.quantization import build_qat_from_model, convert_to_int8
+
+    for name in ("vgg_fx_k2_s1_pk3n5_gap", "vgg_fx_k2_s2_pk3n4_gap", "vgg_fx_alt23_s1_pk3n4_gap"):
+        qat_model = build_qat_from_model(MODEL_REGISTRY[name]["ctor"](), name, torch.device("cpu"))
+        assert convert_to_int8(qat_model.eval())(torch.randn(2, 3, 64, 64)).shape == (2, 200), name
+
+
+def test_pretrained_vgg_cell_loads_vgg16_bn_and_matches_it_in_eval():
+    """vgg16_bn's convs carry a bias, ours don't (BN follows) -- the load folds it into running_mean, which must
+    leave the features' eval output unchanged; with the FC head the first two Linears load too."""
+    import pytest
+    from torchvision.models import vgg16_bn
+
+    try:
+        tv = vgg16_bn(weights="IMAGENET1K_V1").eval()
+    except Exception as e:  # no cached weights and no network
+        pytest.skip(f"ImageNet weights unavailable: {e}")
+    model = MODEL_REGISTRY["vgg_fx_k3_s1_pk2n5_fc_d_pt"]["ctor"]().eval()
+    x = torch.randn(2, 3, 64, 64)
+    with torch.no_grad():
+        assert torch.allclose(model.features(x), tv.features(x), atol=1e-4)
+    assert torch.equal(model.classifier[0].weight, tv.classifier[0].weight)
+    assert torch.equal(model.classifier[3].weight, tv.classifier[3].weight)
+    assert tuple(model.classifier[6].weight.shape) == (200, 4096)

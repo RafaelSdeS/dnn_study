@@ -3,7 +3,7 @@
 import torch
 import torch.nn as nn
 import torch.ao.quantization as tq
-from torchvision.models import alexnet, mobilenet_v2
+from torchvision.models import alexnet, mobilenet_v2, vgg16_bn
 from torchvision.models.quantization import mobilenet_v2 as mobilenet_v2_qat
 from torchvision.models.quantization import resnet18 as resnet18_qat
 from torchvision.models.vgg import VGG, cfgs as VGG_CFGS
@@ -249,6 +249,90 @@ class VGG16(nn.Module):
         self.avgpool = base.avgpool
         self.classifier = base.classifier
         self.dequant = tq.DeQuantStub()
+
+    def forward(self, x):
+        x = self.quant(x)
+        x = self.features(x)
+        x = self.avgpool(x)
+        x = torch.flatten(x, 1)
+        x = self.classifier(x)
+        x = self.dequant(x)
+        return x
+
+
+# ─── VGGAdapted ───────────────────────────────────────────────────────────────
+
+def _vgg_adapted_features(kernels: tuple, stem_stride: int, pool_kernel: int, pool_count: int) -> nn.Sequential:
+    """VGG16's 13 convs (cfgs["D"]) + BN, one kernel (3 or 2) per conv. 3x3 pads 1; 2x2 gets an asymmetric
+    right/bottom ZeroPad2d (as models.alexnet_variants.AlexNetAdapted does), except a strided stem, which pads 0.
+    So every stride-1 conv keeps its map and every kernel pattern reaches the same pooled sizes under either pool
+    -- VGG16(kernel_size=2)'s 1/0 padding alternation only does that with MaxPool 2x2."""
+    layers: list[nn.Module] = []
+    in_ch, i = 3, 0
+    for stage, channels in enumerate(_vgg16_stages(VGG_CFGS["D"])):
+        for out_ch in channels:
+            k, stride = kernels[i], stem_stride if i == 0 else 1
+            assert k in (2, 3), k
+            if k == 2 and stride == 1:
+                layers.append(nn.ZeroPad2d((0, 1, 0, 1)))
+            layers += [nn.Conv2d(in_ch, out_ch, k, stride=stride, padding=1 if k == 3 else 0, bias=False),
+                       nn.BatchNorm2d(out_ch), nn.ReLU(inplace=False)]
+            in_ch, i = out_ch, i + 1
+        if stage < pool_count:
+            layers.append(nn.MaxPool2d(2, 2) if pool_kernel == 2 else nn.MaxPool2d(3, 2, padding=1))
+    assert i == len(kernels), (i, len(kernels))
+    return nn.Sequential(*layers)
+
+
+class VGGAdapted(nn.Module):
+    """VGG16 (cfgs["D"] + BN) with one knob per factor of the Phase 11 VGG factorial
+    (configs/experiments/phase_11_vgg_factorial.yaml, docs/logs/PHASE11_LOG.md "VGG factorial"):
+      - kernels: 3 or 2 per conv (13 entries), padding as in _vgg_adapted_features;
+      - stem_stride: 1 (VGG) / 2 on the first conv;
+      - pool_kernel: 2 (VGG) / 3 = MaxPool2d(3, 2, padding=1) -- overlap only, the map size never changes
+        (unlike AlexNetAdapted's pool_kernel=3, which reproduces torchvision AlexNet's shrinking pool);
+      - pool_count: 5 (VGG) / 4 (no pool after the last stage);
+      - head: "fc" = torchvision VGG's AdaptiveAvgPool(7) + 3 Linears with Dropout(dropout) after the first two
+        ReLUs; "gap" = AdaptiveAvgPool(1) + Linear(512, num_classes), no Dropout.
+    Final map at 64x64, the same for every kernel pattern and pool kernel: s1/5 pools 2x2, s1/4 4x4, s2/5 1x1, s2/4 2x2.
+    The defaults are VGG16(kernel_size=3) layer for layer with the same init (he_init is torchvision VGG's own),
+    which is why vgg16's run is reused as the k3/s1/pk2n5/FC+Dropout cell. BN is not a knob: a plain VGG16 does
+    not train from scratch (see _vgg16_features).
+    pretrained=True loads torchvision's vgg16_bn ImageNet weights: every conv + BN (3x3 only; any stride/pool) and,
+    with the FC head, its first two Linears -- the logits Linear stays fresh.
+    """
+
+    def __init__(self, num_classes: int = 200, kernels: tuple = (3,) * 13, head: str = "fc", dropout: float = 0.5,
+                 stem_stride: int = 1, pool_kernel: int = 2, pool_count: int = 5, pretrained: bool = False):
+        super().__init__()
+        assert head in ("fc", "gap") and pool_kernel in (2, 3) and pool_count in (4, 5), (head, pool_kernel, pool_count)
+        self.quant = tq.QuantStub()
+        self.features = _vgg_adapted_features(kernels, stem_stride, pool_kernel, pool_count)
+        if head == "gap":
+            self.avgpool, self.classifier = nn.AdaptiveAvgPool2d(1), nn.Linear(512, num_classes)
+        else:
+            # ponytail: Dropout(0.0) rather than no module when dropout=0, so both FC levels keep classifier.0/3/6
+            # (CLASSIFIER_FUSE_MAP_VGG16, the vgg16_bn load below)
+            self.avgpool = nn.AdaptiveAvgPool2d((7, 7))
+            self.classifier = nn.Sequential(
+                nn.Linear(512 * 7 * 7, 4096), nn.ReLU(inplace=False), nn.Dropout(dropout),
+                nn.Linear(4096, 4096), nn.ReLU(inplace=False), nn.Dropout(dropout),
+                nn.Linear(4096, num_classes),
+            )
+        self.dequant = tq.DeQuantStub()
+        he_init(self)  # BN keeps PyTorch's weight 1 / bias 0, which is also what torchvision VGG sets
+        if pretrained:
+            assert set(kernels) == {3}, "ImageNet weights only fit 3x3 convs"
+            tv = vgg16_bn(weights="IMAGENET1K_V1")
+            pick = lambda seq, cls: [m for m in seq if isinstance(m, cls)]  # noqa: E731
+            for conv, bn, tv_conv, tv_bn in zip(pick(self.features, nn.Conv2d), pick(self.features, nn.BatchNorm2d),
+                                                pick(tv.features, nn.Conv2d), pick(tv.features, nn.BatchNorm2d), strict=True):
+                conv.weight.data.copy_(tv_conv.weight.data)
+                bn.load_state_dict(tv_bn.state_dict())
+                bn.running_mean -= tv_conv.bias.data  # bias-free conv here: BN(Wx + b) == BN(Wx) with mean - b
+            if head == "fc":
+                for i in (0, 3):
+                    self.classifier[i].load_state_dict(tv.classifier[i].state_dict())
 
     def forward(self, x):
         x = self.quant(x)
