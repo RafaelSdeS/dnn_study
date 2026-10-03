@@ -80,7 +80,6 @@ def main():
     # Setup
     set_global_seed(42)
     device = torch.device(runtime_cfg["device"])
-    torch.backends.quantized.engine = runtime_cfg.get("quantized_engine", "fbgemm")
 
     runtime_root = Path(runtime_cfg.get("root", "outputs/local"))
     output_dir = runtime_root / "phase6"

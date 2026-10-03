@@ -182,8 +182,8 @@ register_model("alexnet_adapted_orig_fc_pt", partial(AlexNetAdapted, pretrained=
 
 # Phase 11 full factorial (configs/experiments/phase_11_factorial_{core,ext}.yaml, docs/logs/PHASE11_LOG.md):
 # every AlexNetAdapted cell of kernel x stem stride x pool kernel x pool count x head x BN, + Dropout(0.5) on
-# the FC head, + ImageNet pretraining on the 11-5-3-3-3 FC no-BN net (the only shape its weights fit). Default
-# init, same channels -- nothing else varies. alexnet_fx_<kernel>_s<stride>_pk<pool k>n<pool count>_<head>[_bn][_d][_pt].
+# the FC head, + ImageNet pretraining on the 11-5-3-3-3 FC no-BN net (the only shape its weights fit). He
+# init (default init until 2026-10-03), same channels -- nothing else varies. alexnet_fx_<kernel>_s<stride>_pk<pool k>n<pool count>_<head>[_bn][_d][_pt].
 # All 208 cells are registered (so analysis can build any of them); FX_EXISTING maps the 19 that were already
 # trained under another name to that run (<experiment>/<model> under outputs/pcad) -- the yamls leave them out.
 FX_KERNELS = {"orig": (11, 5, 3, 3, 3), "k3": (3,) * 5, "k2": (2,) * 5, "mix": (3, 2, 3, 2, 3)}
@@ -205,9 +205,9 @@ FX_EXISTING = {
     "alexnet_fx_orig_s2_pk2n3_fc": "phase_11_geometry_factorial/alexnet_geo_s2_pk2n3_fc",
     "alexnet_fx_orig_s2_pk2n2_fc_pt": "phase_11_geometry_factorial/alexnet_adapted_orig_fc_pt",
     "alexnet_fx_orig_s4_pk3n3_fc_d_pt": "phase_11_geometry_factorial/alexnet_tv",
-    # AlexNetTV(pretrained=False) == these two cells layer for layer; both runs predate he_init (default init)
+    # AlexNetTV(pretrained=False) == these two cells layer for layer, He init in both since 2026-10-03
     "alexnet_fx_orig_s4_pk3n3_fc_d": "phase_11_kernel_size_comparison/alexnet_tv_scratch",
-    "alexnet_fx_k3_s4_pk3n3_fc_d": "phase_11_reuse_old_init/alexnet_tv_3x3",
+    "alexnet_fx_k3_s4_pk3n3_fc_d": "phase_11_kernel_size_comparison/alexnet_tv_3x3",
 }
 
 
@@ -250,28 +250,18 @@ register_model("alexnet_stacked_fc_nobn", partial(AlexNetStacked, batch_norm=Fal
                fuse_map=FUSE_MAP_STACKED_NOBN, fuse_root_attr="features", lr=1e-3)
 register_model("alexnet_stacked_gap_nobn", partial(AlexNetStacked, head="gap", batch_norm=False),
                fuse_map=FUSE_MAP_STACKED_NOBN, fuse_root_attr="features", lr=1e-3)
-# torchvision's VGG classifier: Linear(0)-ReLU(1)-Dropout(2)-Linear(3)-ReLU(4)-Dropout(5)-Linear(6,
-# logits). Fuse the two Linear-ReLU pairs (see prepare_qat_model's classifier_fuse_pairs docstring
-# for why vgg16 needs this); classifier.6 has no ReLU after it and stays a standalone quantized Linear.
-CLASSIFIER_FUSE_MAP_VGG16 = [["0", "1"], ["3", "4"]]
-# Protocol deviation, on purpose, for both VGG16s (a matched kernel pair, so they share it): QAT never freezes its
-# observers. The fused-QAT gate (job 826911, 2026-09-30) collapsed vgg16 without it (QAT 0.50%); the rerun with live
-# observers recovers (1.96% ep 10 -> 48% ep 45, job 827242). Freshly calibrated fused QAT, no step taken (1024 val
-# images, 2026-10-01): vgg16 47.8% with eval-mode calibration but 3.4% with train-mode (BN batch statistics, what QAT
-# epoch 1 sees); vgg16_2x2 starts worse, 2.0% / 1.3% vs FP32 55.0% (docs/logs/PHASE11_LOG.md, "vgg16_2x2 joins").
-register_model("vgg16", partial(VGG16, kernel_size=3),
-               fuse_map=FUSE_MAP_VGG16, fuse_root_attr="features", lr=1e-3,
-               classifier_fuse_map=CLASSIFIER_FUSE_MAP_VGG16, qat_disable_observer_epoch=None)
-register_model("vgg16_2x2", partial(VGG16, kernel_size=2),
-               fuse_map=FUSE_MAP_VGG16, fuse_root_attr="features", lr=1e-3,
-               classifier_fuse_map=CLASSIFIER_FUSE_MAP_VGG16, qat_disable_observer_epoch=None)
+# The classifier's Linear-ReLU pairs need no map: ml.quantization.fuse_sequential_relus fuses them for every model.
+# Until 2026-10-03 the VGG family's QAT never froze its observers (a protocol deviation: vgg16 collapsed to 0.50% with
+# them frozen under the old AdamW QAT, docs/logs/PHASE11_LOG.md "vgg16_2x2 joins"); every model now shares one QAT.
+register_model("vgg16", partial(VGG16, kernel_size=3), fuse_map=FUSE_MAP_VGG16, fuse_root_attr="features", lr=1e-3)
+register_model("vgg16_2x2", partial(VGG16, kernel_size=2), fuse_map=FUSE_MAP_VGG16, fuse_root_attr="features", lr=1e-3)
 
 # Phase 11 VGG factorial (configs/experiments/phase_11_vgg_factorial.yaml, docs/logs/PHASE11_LOG.md "VGG factorial"):
 # every VGGAdapted cell of kernel pattern x stem stride x pool kernel x pool count x head (GAP / FC / FC + Dropout 0.5),
 # + ImageNet pretraining (vgg16_bn) on the all-3x3 cells. vgg_fx_<pattern>_s<stride>_pk<pool k>n<pool count>_<head>[_pt].
 # The 4 mixed patterns all put 6-7 of the 13 convs at 3x3, so they compare order/position at ~equal proportion; early*
 # splits after stage 3 (7 convs). All 168 cells are registered, the yaml lists the ones queued; vgg16's run IS the
-# k3_s1_pk2n5_fc_d cell (VGG_FX_EXISTING). Every cell keeps vgg16's live QAT observers, so the family shares one protocol.
+# k3_s1_pk2n5_fc_d cell (VGG_FX_EXISTING).
 _alt = lambda first: tuple(first if i % 2 == 0 else 5 - first for i in range(13))  # noqa: E731
 VGG_FX_KERNELS = {"k3": (3,) * 13, "k2": (2,) * 13, "alt32": _alt(3), "alt23": _alt(2),
                   "early3": (3,) * 7 + (2,) * 6, "early2": (2,) * 7 + (3,) * 6}
@@ -285,8 +275,7 @@ for (kn, ks), s, pk, pn, head in product(VGG_FX_KERNELS.items(), (1, 2), (2, 3),
     name = f"vgg_fx_{kn}_s{s}_pk{pk}n{pn}_{head}"
     for cell, cell_kw in [(name, kw)] + ([(name + "_pt", {**kw, "pretrained": True})] if kn == "k3" else []):
         register_model(cell, partial(VGGAdapted, **cell_kw), fuse_map=_VGG_FX_FUSE[kn, s], fuse_root_attr="features",
-                       lr=1e-3, qat_disable_observer_epoch=None,
-                       **({} if head == "gap" else {"classifier_fuse_map": CLASSIFIER_FUSE_MAP_VGG16}))
+                       lr=1e-3)
 
 # large-scale sweep (see configs/experiments/large_scale.yaml)
 FUSE_MAP_ALEXNET_SMALLKERNEL = [["0", "1"], ["3", "4"], ["6", "7"], ["8", "9"], ["10", "11"]]

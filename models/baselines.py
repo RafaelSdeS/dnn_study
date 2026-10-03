@@ -39,7 +39,9 @@ _ALEXNET_CONV_INDICES = [0, 3, 6, 8, 10]
 
 
 def he_init(module: nn.Module) -> None:
-    """torchvision VGG's from-scratch init, for the nets in this study that have none.
+    """torchvision VGG's from-scratch init: He et al. 2015 (kaiming normal, fan_out) for convs, N(0, 0.01) for
+    Linears (Krizhevsky et al. 2012's init). Since 2026-10-03 every from-scratch model in the study calls it, so the
+    whole Phase 11 program shares one init; before, some classes kept PyTorch's default (below).
 
     Neither torchvision's AlexNet nor the hand-written CNNs in models/alexnet_variants.py define
     any weight init, so every conv falls back to PyTorch's nn.Conv2d default (kaiming_uniform_
@@ -112,9 +114,6 @@ class AlexNetTV(nn.Module):
                 old_conv = base.features[idx]
                 base.features[idx] = nn.Conv2d(old_conv.in_channels, old_conv.out_channels, k, stride=s, padding=p)
 
-        if not pretrained:
-            he_init(base)
-
         self.quant = tq.QuantStub()
         self.features = base.features
         if head == "gap":
@@ -124,6 +123,8 @@ class AlexNetTV(nn.Module):
             self.avgpool = base.avgpool
             self.classifier = base.classifier
         self.dequant = tq.DeQuantStub()
+        if not pretrained:
+            he_init(self)  # after the head swap: the GAP Linear kept PyTorch's default init until 2026-10-03
 
     def forward(self, x):
         x = self.quant(x)
@@ -185,6 +186,7 @@ class VGGStyleCNN(nn.Module):
             nn.Flatten(),
             nn.Linear(256, num_classes),
         )
+        he_init(self)  # He et al. 2015 (torchvision's VGG/ResNet init) -- every from-scratch model, 2026-10-03
 
     def forward(self, x):
         x = self.quant(x)
@@ -312,7 +314,7 @@ class VGGAdapted(nn.Module):
             self.avgpool, self.classifier = nn.AdaptiveAvgPool2d(1), nn.Linear(512, num_classes)
         else:
             # ponytail: Dropout(0.0) rather than no module when dropout=0, so both FC levels keep classifier.0/3/6
-            # (CLASSIFIER_FUSE_MAP_VGG16, the vgg16_bn load below)
+            # (vgg16's state_dict layout, the vgg16_bn load below)
             self.avgpool = nn.AdaptiveAvgPool2d((7, 7))
             self.classifier = nn.Sequential(
                 nn.Linear(512 * 7 * 7, 4096), nn.ReLU(inplace=False), nn.Dropout(dropout),

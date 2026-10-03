@@ -1,6 +1,6 @@
 from .config import (DataConfig, TrainerConfig, QATConfig, QATWinoConfig,
                      DetSegDataConfig)
-from .data import create_imagenet_loaders
+from .data import create_imagenet_loaders, create_test_loader
 from .det_seg_data import create_voc_detection_loaders, create_voc_segmentation_loaders
 from .det_seg_models import build_ssd_detector, build_deeplabv3_segmenter, compute_anchor_recall
 from .det_seg_trainer import DetectionTrainer, SegmentationTrainer
@@ -18,13 +18,14 @@ from .quantization import (
     convert_to_int8,
     make_qat_callback,
     exclude_attention_from_qat,
+    QUANT_PROTOCOL,
 )
 from .reporting import (
     disk_mb, gzip_mb, build_comparison_table, create_results_summary, compute_flops, make_run_summary,
-    expected_calibration_error, prediction_agreement, layer_stats,
+    expected_calibration_error, prediction_agreement, layer_stats, wilson_ci, mcnemar_p,
 )
 from .runtime import (
-    set_global_seed, build_runtime_paths, resolve_dataset_train_path, expand_path, capture_provenance,
+    set_global_seed, build_runtime_paths, resolve_dataset_train_path, expand_path, capture_provenance, dataset_fingerprint,
     load_runtime_root, RuntimePaths, load_profile, ensure_dataset_path, make_model_runs, save_resolved_config,
 )
 from .quantization_advanced import (

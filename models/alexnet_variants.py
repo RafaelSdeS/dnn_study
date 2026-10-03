@@ -88,6 +88,7 @@ class AlexNet3x3FC(nn.Module):
             nn.ReLU(inplace=False),
             nn.Linear(4096, num_classes),
         )
+        he_init(self)  # He et al. 2015 (torchvision's VGG/ResNet init) -- every from-scratch model, 2026-10-03
 
     def forward(self, x):
         x = self.quant(x)
@@ -140,6 +141,7 @@ class AlexNet2x2GAP(nn.Module):
             nn.Flatten(),
             nn.Linear(256, num_classes),
         )
+        he_init(self)  # He et al. 2015 (torchvision's VGG/ResNet init) -- every from-scratch model, 2026-10-03
 
     def forward(self, x):
         x = self.quant(x)
@@ -193,6 +195,7 @@ class AlexNet2x2FC(nn.Module):
             nn.ReLU(inplace=False),
             nn.Linear(4096, num_classes),
         )
+        he_init(self)  # He et al. 2015 (torchvision's VGG/ResNet init) -- every from-scratch model, 2026-10-03
 
     def forward(self, x):
         x = self.quant(x)
@@ -242,6 +245,7 @@ class AlexNet3x3GAP(nn.Module):
             nn.Flatten(),
             nn.Linear(256, num_classes),
         )
+        he_init(self)  # He et al. 2015 (torchvision's VGG/ResNet init) -- every from-scratch model, 2026-10-03
 
     def forward(self, x):
         x = self.quant(x)
@@ -267,8 +271,8 @@ class AlexNetAdapted(nn.Module):
         price the kernel effect without the stride/pool/Dropout confound of AlexNetTV.
       - batch_norm=True, kernels=(3,)*5, head="gap": AlexNet3x3GAP + BN, to separate the BN in
         Bottleneck/Fire (every conv) from their block structure.
-    Default PyTorch init (no he_init), like AlexNet3x3FC/GAP: a no-BN large-kernel net may stay on the
-    ln(num_classes) plateau (see models.baselines.he_init) -- that is a result, not a bug to patch.
+    He init (models.baselines.he_init, He et al. 2015), like every from-scratch model since 2026-10-03; until then
+    this class kept PyTorch's default init, on which a no-BN large-kernel net may stay on the ln(num_classes) plateau.
 
     Geometry knobs for the factorial that walks from this layout back to torchvision's (all default to
     the adapted layout, so every model above is unchanged): stem_stride (2 adapted / 4 original) and
@@ -311,6 +315,7 @@ class AlexNetAdapted(nn.Module):
         layers.append(pool)
         self.features = nn.Sequential(*layers)
         self.classifier = classifier
+        he_init(self)  # He et al. 2015; the pretrained load below then overwrites all but the last Linear
         if pretrained:
             assert tuple(kernels) == (11, 5, 3, 3, 3) and head == "fc" and not batch_norm, \
                 "pretrained weights only fit the original 11-5-3-3-3 FC net"

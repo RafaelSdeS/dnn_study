@@ -18,6 +18,9 @@ class DataConfig:
     pin_memory: bool = True
     train_val_split: float = 0.9
     seed: int = 42
+    # "legacy": RRC(0.7-1) + rotation 15 + AutoAugment (Phases 1-10). "crop_flip_autoaug": 4-px pad + random crop + flip
+    # (He et al. 2016) then AutoAugment's ImageNet policy (Cubuk et al. 2019) -- Phase 11 since 2026-10-03
+    train_aug: str = "legacy"
 
 
 @dataclass
@@ -29,10 +32,14 @@ class TrainerConfig:
     # ── regularisation ───────────────────────────────────────────────
     label_smoothing: float = 0.1
     grad_clip_norm: Optional[float] = None
+    # ── optimizer ────────────────────────────────────────────────────
+    optimizer: str = "adamw"     # "adamw" (Phases 1-10) | "sgd": momentum SGD, L2 weight decay (Krizhevsky et al. 2012)
+    momentum: float = 0.9        # sgd only
     # ── training options ─────────────────────────────────────────────
     use_amp: bool = True         # set False for QAT fine-tuning
     early_stopping_patience: Optional[int] = DEFAULT_EARLY_STOPPING_PATIENCE
     warmup_epochs: int = 0       # linear LR warmup before cosine decay; 0 disables
+    eta_min: float = 0.0         # cosine decay floor (QAT: 1% of its start lr, Wu et al. 2020 App. A.2)
     reset_scheduler_on_resume: bool = False  # skip the checkpoint's stale scheduler state
                                               # (wrong T_max) when resuming into a bigger epochs budget
 
@@ -43,6 +50,7 @@ class QATConfig:
     epochs: int = DEFAULT_QAT_EPOCHS
     lr: float = 1e-5
     weight_decay: float = 5e-4
+    eta_min: float = 0.0
     # ── observer / BN freeze schedule ────────────────────────────────
     freeze_bn_epoch: int = 3     # freeze BN running stats after this epoch
     disable_observer_epoch: int = 5  # disable fake-quant observers after this

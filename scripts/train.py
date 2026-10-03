@@ -19,6 +19,7 @@ import ml.model_registrations  # noqa: F401 — populates MODEL_REGISTRY
 from configs.loader import load_config
 from ml import (
     MODEL_REGISTRY,
+    QUANT_PROTOCOL,
     DataConfig,
     TrainerConfig,
     QATConfig,
@@ -28,11 +29,13 @@ from ml import (
     build_qat,
     build_runtime_paths,
     capture_provenance,
+    dataset_fingerprint,
     compress_checkpoint,
     compute_flops,
     convert_to_int8,
     create_imagenet_loaders,
     create_results_summary,
+    create_test_loader,
     disk_mb,
     gzip_mb,
     ensure_dataset_path,
@@ -216,15 +219,12 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
     data_cfg.dataset_path = str(dataset_path)
 
     train_ds, val_ds, train_loader, val_loader = create_imagenet_loaders(data_cfg, persistent_workers=runtime_cfg.get("persistent_workers", False))
+    test_loader = create_test_loader(data_cfg, train_ds)
     bs1_loader = _bs1_loader(val_ds)
 
     results_rows: list[dict[str, Any]] = []
-    # Only the fbgemm stages need it, and fbgemm needs AVX2: set unconditionally, a node without
-    # it (PCAD's beagle) couldn't even run fp32 / qat_wino.
-    if {"qat", "int8"} & set(stage_list):
-        torch.backends.quantized.engine = runtime_cfg.get("quantized_engine", "fbgemm")
     device = torch.device(runtime_cfg.get("device", "cuda" if torch.cuda.is_available() else "cpu"))
-    provenance = capture_provenance()
+    provenance = {**capture_provenance(), "dataset": dataset_fingerprint(dataset_path)}
     # *_fpga models and the qat_wino stage run Winograd-FPGA code (ml/winograd_bridge.py),
     # so this repo's git hash alone doesn't pin what trained them.
     if "qat_wino" in stage_list or any(name.endswith("_fpga") for name in selected_models):
@@ -315,17 +315,25 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
             group=experiment_name,
         )
 
+        test_evals: dict[str, dict[str, Any]] = {}
+
+        def _test_eval(t: Trainer, stage: str) -> None:
+            """The same metrics on the held-out test set (ml.data.create_test_loader), logits kept for later stats."""
+            test_evals[stage] = t.evaluate(loader=test_loader, topk=(1, 5),
+                                           save_logits=results_dir / f"{model_name}_{stage}_test_logits.npz")
+
         def _fp32_extra(trainer: Trainer):
             """eval (+ saved logits/ECE) and the three extra benchmark points (bs64-GPU already
             covered by the caller; bs1, and both again on CPU when training ran on GPU) -- so a
             later CPU-vs-GPU or bs1-vs-bs64 comparison never needs to rerun inference."""
             eval_result = trainer.evaluate(topk=(1, 5), save_logits=results_dir / f"{model_name}_fp32_val_logits.npz")
-            bench = trainer.benchmark(warmup=int(runtime_cfg.get("benchmark_warmup", 100)))
-            bench_bs1 = trainer.benchmark(loader=bs1_loader, warmup=1)
+            _test_eval(trainer, "fp32")
+            bench = trainer.benchmark()
+            bench_bs1 = trainer.benchmark(loader=bs1_loader)
             bench_cpu = bench_cpu_bs1 = None
             if device.type == "cuda":
-                bench_cpu = trainer.benchmark(warmup=int(runtime_cfg.get("benchmark_warmup", 100)), device="cpu")
-                bench_cpu_bs1 = trainer.benchmark(loader=bs1_loader, warmup=1, device="cpu")
+                bench_cpu = trainer.benchmark(device="cpu")
+                bench_cpu_bs1 = trainer.benchmark(loader=bs1_loader, device="cpu")
             return eval_result, bench, bench_bs1, bench_cpu, bench_cpu_bs1
 
         if "fp32" in stage_list:
@@ -370,7 +378,8 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
         qat_model = None
         if "qat" in stage_list:
             qat_model = build_qat(model_name, save_dir=checkpoints_dir, device=device)
-            qat_cfg_run = replace(model_cfg, epochs=qat_cfg.epochs, lr=qat_cfg.lr, weight_decay=qat_cfg.weight_decay, use_amp=False)
+            qat_cfg_run = replace(model_cfg, epochs=qat_cfg.epochs, lr=qat_cfg.lr, eta_min=qat_cfg.eta_min,
+                                  weight_decay=qat_cfg.weight_decay, use_amp=False)
             resume_from = auto_resume_path(checkpoints_dir, f"qat_{model_name}")
             qat_best_path = checkpoints_dir / f"qat_{model_name}_best.pth"
             if qat_best_path.exists() and resume_from is None:
@@ -391,7 +400,7 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
                     f"qat_{model_name}",
                     num_classes=data_cfg.num_classes,
                     wandb_run=wandb_run,
-                    epoch_callback=make_qat_callback(qat_cfg.freeze_bn_epoch, spec.get("qat_disable_observer_epoch", qat_cfg.disable_observer_epoch)),
+                    epoch_callback=make_qat_callback(qat_cfg.freeze_bn_epoch, qat_cfg.disable_observer_epoch),
                     metrics_callback=metrics_callback,
                     log_file=logs_dir / f"qat_{model_name}.log",
                 )
@@ -413,6 +422,7 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
             )
             qat_eval = qat_eval_trainer.evaluate(
                 topk=(1, 5), save_logits=results_dir / f"{model_name}_qat_val_logits.npz")
+            _test_eval(qat_eval_trainer, "qat")
 
         if "qat_wino" in stage_list:
             # Fase 2 do plano de avaliacao Winograd (accelerator-numeric QAT,
@@ -492,8 +502,9 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
                 )
                 int8_eval = int8_trainer.evaluate(
                     topk=(1, 5), save_logits=results_dir / f"{model_name}_int8_val_logits.npz")
-                int8_benchmark = int8_trainer.benchmark(warmup=int(runtime_cfg.get("benchmark_warmup", 100)))
-                int8_bs1_benchmark = int8_trainer.benchmark(loader=bs1_loader, warmup=1)
+                _test_eval(int8_trainer, "int8")
+                int8_benchmark = int8_trainer.benchmark()
+                int8_bs1_benchmark = int8_trainer.benchmark(loader=bs1_loader)
 
         fp32_model = load_best_model(model_name, spec["ctor"], checkpoints_dir, device) if best_model_path.exists() else spec["ctor"]().to(device)
         flops_results = compute_flops(fp32_model)
@@ -542,9 +553,13 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
             "agreement_fp32_int8": prediction_agreement(
                 fp32_logits_path, results_dir / f"{model_name}_int8_val_logits.npz"),
             "layer_stats_path": str(layer_stats_path) if layer_stats_path else None,
-            # QAT/INT8 built with the logits Linear in float (ml/quantization.py:keep_logits_float, 2026-10-02);
-            # scripts/phase11/analyze_geometry.py treats qat/int8 numbers without it as superseded
-            "qat_float_logits": True,
+            # held-out test set (the official val split): what the paper reports; the val fields above picked the epoch
+            **{f"test_{stage}_{k}": e.get(k) for stage, e in test_evals.items() for k in ("top1", "top5", "ece")},
+            # INT8 kernels vs. the fake-quant they should reproduce, same test images
+            "agreement_qat_int8": prediction_agreement(
+                results_dir / f"{model_name}_qat_test_logits.npz", results_dir / f"{model_name}_int8_test_logits.npz"),
+            # which QAT/INT8 definition built these numbers (ml/quantization.py); analysis treats any other as superseded
+            "quant_protocol": QUANT_PROTOCOL,
         }
 
         summary = make_run_summary(

@@ -96,8 +96,12 @@ def test_every_phase_11_experiment_shares_the_protocol_exactly():
     reference = load_config("experiments/phase_11_kernel_size_comparison.yaml")
     for key in ("name", "models", "seed"):
         reference.pop(key, None)
-    assert reference["training"] == {"epochs": 500, "early_stopping_patience": None}
-    assert reference["qat"] == {"epochs": 100} and reference["uniform_hparams"] is True
+    # AlexNet's recipe (Krizhevsky et al. 2012), cosine to 0, 500 ep; QAT per Wu et al. 2020 App. A.2
+    assert reference["training"] == {"epochs": 500, "early_stopping_patience": None, "optimizer": "sgd", "momentum": 0.9,
+                                     "lr": 0.01, "weight_decay": 5e-4}
+    assert reference["data"] == {"batch_size": 128, "train_aug": "crop_flip_autoaug"}
+    assert reference["qat"] == {"epochs": 50, "lr": 1e-4, "eta_min": 1e-6, "weight_decay": 5e-4, "disable_observer_epoch": 4}
+    assert reference["uniform_hparams"] is True
     assert reference["stages"] == ["fp32", "qat", "int8"]
 
     names = [n for n in _experiment_names() if n.startswith("phase_11_")]
@@ -110,21 +114,16 @@ def test_every_phase_11_experiment_shares_the_protocol_exactly():
         assert cfg == reference, f"{name} differs from the Phase 11 protocol: {cfg} vs {reference}"
 
 
-def test_no_phase_11_model_overrides_the_uniform_protocol():
-    """uniform_hparams drops the registry's lr/weight_decay, but a registry key scripts/train.py still reads
-    per model would quietly give one net different training. The one documented exception is the VGG family's
-    observer freeze: the VGG16 pair's QAT collapses without it even fused (docs/logs/PHASE11_LOG.md, "Fused-QAT
-    gate", "vgg16_2x2 joins"), and the vgg_fx_* factorial shares it so the family keeps one protocol."""
+def test_no_model_overrides_the_uniform_protocol():
+    """uniform_hparams drops the registry's lr/weight_decay, and scripts/train.py reads no other per-model training
+    key: every model trains and quantizes with the same recipe. The VGG family's QAT observer exception (live
+    observers, until 2026-10-03) is gone; a registry key like it would quietly give one net different training."""
     from ml import model_registrations  # noqa: F401 -- populates the registry
     from ml.registry import MODEL_REGISTRY
 
-    is_vgg = lambda m: m in ("vgg16", "vgg16_2x2") or m.startswith("vgg_fx_")  # noqa: E731
-    for name in (n for n in _experiment_names() if n.startswith("phase_11_")):
-        for model in load_config(f"experiments/{name}.yaml")["models"]:
-            if not is_vgg(model):
-                assert "qat_disable_observer_epoch" not in MODEL_REGISTRY[model], (name, model)
-    for model in filter(is_vgg, MODEL_REGISTRY):
-        assert MODEL_REGISTRY[model]["qat_disable_observer_epoch"] is None, model
+    allowed = {"ctor", "fuse_map", "fuse_root_attr", "lr", "weight_decay"}
+    for name, spec in MODEL_REGISTRY.items():
+        assert set(spec) <= allowed, (name, set(spec) - allowed)
 
 
 def test_submit_guard_checks_the_same_paths_as_run_provenance():

@@ -13,9 +13,11 @@ max-pools -> 8x8 map, no Dropout). Baseline = alexnet_tv_scratch, the original A
     python -m scripts.phase11.analyze_geometry
 """
 import json
+import re
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 
 from matplotlib.patches import Patch
@@ -34,34 +36,37 @@ LAYOUTS = ("layout original = o do AlexNet torchvision: conv1 stride 4 + 3 max-p
 
 
 def load() -> pd.DataFrame:
-    """One row per run. qat/int8 are NaN for a run made before the current QAT code -- the 2026-09-30 fixes (fusion,
-    quantized GAP, val-calibrated observers) and the 2026-10-02 float logits layer (docs/logs/PHASE11_LOG.md): every
-    Phase 11 QAT is being redone on one code version ("Rerun scope"), so an older number is shown only faded, from
-    qat_raw/int8_raw. A current run's summary has qat_float_logits. qat_fused (unfused QAT before 09-30) stays as a
-    column for the tables."""
+    """One row per run, accuracies on the held-out test set (Tiny ImageNet's official val split; the 90/10 split of
+    train/ only picked each run's best epoch). fp32/qat/int8 are NaN for a run without the current quant_protocol
+    (ml/quantization.py:QUANT_PROTOCOL) -- every Phase 11 QAT is redone on that one definition, and the test set
+    arrived with it, so an older run is shown only faded, from its validation-split qat_raw/int8_raw. qat_fused
+    (unfused QAT before 09-30) stays as a column for the tables. `results` is the run's results dir, where the
+    per-image *_test_logits.npz live (factor_effects' McNemar tests)."""
     from ml import model_registrations  # noqa: F401 -- populates the registry
+    from ml.quantization import QUANT_PROTOCOL
     from ml.registry import MODEL_REGISTRY
 
     rows = []
     for p in sorted((ROOT / "outputs/pcad").glob("phase_11_*/*/results/*_summary.json")):
         d = json.loads(p.read_text())
         prov, key = d["config"]["provenance"], p.parents[1].name
-        post_fix = d.get("qat_float_logits", False)
+        post_fix = d.get("quant_protocol") == QUANT_PROTOCOL
         fused = post_fix or (key in MODEL_REGISTRY and not MODEL_REGISTRY[key].get("fuse_root_attr"))
         nan = float("nan")
         rows.append(dict(
             exp=p.parents[2].name.removeprefix("phase_11_"), key=key, seed=d["config"]["experiment"]["seed"],
-            fp32=d["fp32_top1"], qat=d["qat_top1"] if post_fix else nan, int8=d["int8_top1"] if post_fix else nan,
+            fp32=d["test_fp32_top1"] if post_fix else nan, qat=d["test_qat_top1"] if post_fix else nan,
+            int8=d["test_int8_top1"] if post_fix else nan, fp32_val=d["fp32_top1"], results=p.parent,
             qat_raw=d["qat_top1"], int8_raw=d["int8_top1"],
             params_m=d["params_m"], macs_m=d["macs"] / 1e6, fp32_mb=d["fp32_size_mb"], int8_mb=d["int8_size_mb"], best_ep=d["epochs"],
-            ece=d.get("fp32_ece"), qat_fused=fused, post_fix=post_fix, git_hash=prov.get("git_hash", "")[:7],
+            ece=d.get("test_fp32_ece") if post_fix else nan, qat_fused=fused, post_fix=post_fix, git_hash=prov.get("git_hash", "")[:7],
             git_dirty=prov.get("git_dirty")))
     df = pd.DataFrame(rows)
     assert not df[df.post_fix & df.git_dirty].shape[0], df[df.post_fix & df.git_dirty][["exp", "key", "git_hash"]]
     df["drop_qat"] = df.fp32 - df.qat      # FP32 -> fake-quant (what QAT costs)
     df["drop_convert"] = df.qat - df.int8  # fake-quant -> real INT8 (what convert_to_int8 costs)
     df["drop_total"] = df.fp32 - df.int8
-    df["drop_qat_raw"] = df.fp32 - df.qat_raw
+    df["drop_qat_raw"] = df.fp32_val - df.qat_raw  # the superseded numbers only exist on the validation split
     df["drop_convert_raw"] = df.qat_raw - df.int8_raw
     return df
 
@@ -178,11 +183,66 @@ def bn_block(df):
     return d[["key", "fp32", "qat", "int8", "params_m", "macs_m", "int8_mb"]]
 
 
+def noise_band(df):
+    """2*sqrt(2)*pooled SD across seeds, for the 4 models replicated at seeds 42-44: the training-noise floor a
+    single-seed difference has to clear (Bouthillier et al., MLSys 2021: seed variance is a first-order source of
+    variance in benchmark comparisons)."""
+    rep = df[df.key.isin(["alexnet_3x3_fc", "alexnet_adapted_orig_fc", "alexnet_3x3_gap", "alexnet_adapted_orig_gap"])]
+    g = rep.groupby("key")
+    return {c: 2 * np.sqrt(2) * np.sqrt((g[c].var(ddof=1)).mean()) for c in ["fp32", "int8"]}
+
+
+LOG_EPOCH = re.compile(r"Epoch\s+(\d+)/(\d+) \| train_loss=[\d.]+ train_acc=([\d.]+)% \| val_loss=([\d.]+) val_acc=([\d.]+)%")
+CONVERGED_PP = 0.5  # fallback threshold until the seed replicates carry test numbers (then noise_band's FP32 value)
+
+
+def convergence(df, band_pp: float) -> pd.DataFrame:
+    """Per run and stage (FP32, QAT), from the per-epoch lines Trainer logs. A run counts as converged when its last
+    20% of epochs raised the best validation top-1 by less than band_pp: the cosine schedule has annealed to ~0 there
+    (a fixed budget with the LR decayed to zero, Li, Yumer & Ramanan, ICLR 2020), so a longer one would act on a
+    plateau. Logs are gitignored and PCAD holds the only copy -- fetch them first:
+        rsync -a --prune-empty-dirs --include='*/' --include='phase_11_*/*/logs/*.log' --exclude='*' \\
+            rsdsouza@gppd-hpc.inf.ufrgs.br:dnn_study/outputs/pcad/ outputs/pcad/"""
+    rows = []
+    for r in df.itertuples():
+        for stage, log in (("fp32", r.results.parent / "logs" / f"{r.key}.log"),
+                           ("qat", r.results.parent / "logs" / f"qat_{r.key}.log")):
+            if not log.exists():
+                continue
+            ep = {int(m[1]): (int(m[2]), float(m[3]), float(m[4]), float(m[5]))  # a resumed epoch keeps its last line
+                  for m in LOG_EPOCH.finditer(log.read_text(errors="ignore"))}
+            if not ep:
+                continue
+            budget, last = ep[max(ep)][0], max(ep)
+            va = [ep[e][3] for e in sorted(ep)]
+            best, cut = max(va), int(0.8 * len(va))
+            rows.append(dict(
+                exp=r.exp, key=r.key, seed=r.seed, stage=stage, budget=budget, complete=last == budget,
+                best_val=best, best_epoch=va.index(best) + 1,
+                epoch_within_1pp=next(i + 1 for i, v in enumerate(va) if v >= best - 1),
+                epoch_within_0p5pp=next(i + 1 for i, v in enumerate(va) if v >= best - 0.5),
+                gain_last20pct=best - max(va[:cut]) if cut else float("nan"),
+                min_val_loss_epoch=min(sorted(ep), key=lambda e: ep[e][2]), final_train_acc=ep[last][1]))
+    c = pd.DataFrame(rows)
+    if not c.empty:
+        c["converged"] = c.complete & (c.gain_last20pct < band_pp)
+    return c
+
+
 def main():
     apply_report_style()
     df = load()
     TABLES.mkdir(parents=True, exist_ok=True)
-    df.sort_values(["exp", "key", "seed"]).to_csv(TABLES / "all_runs.csv", index=False)
+    df.drop(columns="results").sort_values(["exp", "key", "seed"]).to_csv(TABLES / "all_runs.csv", index=False)
+    band = noise_band(df)["fp32"]
+    band = band if np.isfinite(band) else CONVERGED_PP
+    conv = convergence(df, band)
+    conv.to_csv(TABLES / "convergence.csv", index=False)
+    if not conv.empty:
+        done = conv[conv.complete]
+        print(f"\n== convergence (last 20% of epochs < {band:.2f}pp): {int(done.converged.sum())}/{len(done)} complete runs; "
+              f"median best epoch {done.best_epoch.median():.0f}, median last-20% gain {done.gain_last20pct.median():.2f}pp")
+        print(done[~done.converged][["exp", "key", "seed", "stage", "best_epoch", "gain_last20pct"]].to_string(index=False))
     agg = kernel_seeds(df)
     agg.to_csv(TABLES / "kernel_seeds.csv", index=False)
     g = geometry_table(df); g.to_csv(TABLES / "geometry_factorial.csv", index=False)

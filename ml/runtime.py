@@ -106,6 +106,23 @@ def capture_provenance() -> dict[str, Any]:
     }
 
 
+def dataset_fingerprint(train_dir: str | Path) -> dict[str, Any]:
+    """SHA-256 over the sorted (relative path, size) of every file in the Tiny ImageNet train/ and val/ dirs next to
+    train_dir -- the exact dataset version a run saw, which the ML reproducibility checklist asks to record (Pineau et
+    al., JMLR 2021). Equal hashes = same files, same split inputs; the kagglehub mirror's own version is not enough."""
+    import hashlib
+
+    root, h, n = Path(train_dir).parent, hashlib.sha256(), 0
+    for sub in ("train", "val"):
+        for dirpath, dirnames, filenames in os.walk(root / sub):
+            dirnames.sort()
+            for f in sorted(filenames):
+                p = Path(dirpath) / f
+                h.update(f"{p.relative_to(root)}\t{p.stat().st_size}\n".encode())
+                n += 1
+    return {"root": str(root), "sha256": h.hexdigest(), "n_files": n}
+
+
 def resolve_dataset_train_path(dataset_root: str | Path | None) -> Path | None:
     if dataset_root in {None, ""}:
         return None
@@ -120,11 +137,12 @@ def resolve_dataset_train_path(dataset_root: str | Path | None) -> Path | None:
 
 
 def load_profile(name_or_path: str, subdir: str) -> dict[str, Any]:
-    """configs/<subdir>/<name>.yaml (via load_config, so `extends:` works), or the file
-    itself when name_or_path is an existing path."""
+    """configs/<subdir>/<name>.yaml, or the file itself when name_or_path is an existing path -- both via
+    load_config, so `extends:` works either way (resolved next to the file; it used to be silently ignored on a
+    path, so a file extending a protocol trained with the bare defaults)."""
     path = Path(name_or_path)
     if path.exists():
-        return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        return load_config(str(path.resolve()))
     return load_config(f"{subdir}/{name_or_path}.yaml")
 
 

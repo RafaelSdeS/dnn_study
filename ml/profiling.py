@@ -11,6 +11,8 @@ import torch.ao.quantization as tq
 import torch.profiler
 from torch.autograd import DeviceType
 
+from .quantization import QUANT_ENGINE
+
 
 class GpuSampler:
     """Background nvidia-smi sampler for power/utilization/temperature/memory.
@@ -195,7 +197,9 @@ def profile_layer_latency_int8(
         padding=(kernel_size - 1) // 2, bias=False, groups=groups
     )
     model = nn.Sequential(tq.QuantStub(), conv, tq.DeQuantStub()).eval()
-    model.qconfig = tq.get_default_qconfig("fbgemm")
+    torch.backends.quantized.engine = QUANT_ENGINE
+    # full 8-bit activations (Jacob et al. 2018), like ml.quantization.INT8_QAT_QCONFIG; PTQ observers since this only times
+    model.qconfig = tq.get_default_qconfig(QUANT_ENGINE)
     tq.prepare(model, inplace=True)
 
     input_tensor = torch.randn(input_shape)  # CPU tensor -- quantized conv is CPU-only

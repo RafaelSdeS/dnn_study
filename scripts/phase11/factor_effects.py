@@ -23,7 +23,8 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
 from ml.plotting import AMBER, BLUE, GREEN, NEUTRAL, RED, apply_report_style
-from scripts.phase11.analyze_geometry import (LAYOUTS, OLD_INT8, TABLES, int8_bar, load, precision_handles,
+from ml.reporting import holm, mcnemar_p, wilson_ci
+from scripts.phase11.analyze_geometry import (LAYOUTS, OLD_INT8, TABLES, int8_bar, load, noise_band, precision_handles,
                                               reference_lines, savefig)
 
 PURPLE = "#7b3fa0"
@@ -45,19 +46,18 @@ C = [
     ("Cabeça (FC → GAP)", "64px · 3×3", "alexnet_3x3_fc", "alexnet_3x3_gap", ""),
     ("Cabeça (FC → GAP)", "64px · 11-5-3-3-3", "alexnet_adapted_orig_fc", "alexnet_adapted_orig_gap", ""),
     ("Cabeça (FC → GAP)", "64px · 2×2", "alexnet_adapted_2x2_fc", "alexnet_adapted_2x2_gap", ""),
-    ("Cabeça (FC → GAP)", "64px · misto 3-2-3-2-3 · sem BN", "alexnet_mixed_fc", "alexnet_mixed", "init He nos dois"),
-    ("Cabeça (FC → GAP)", "64px · misto 3-2-3-2-3 · com BN", "alexnet_mixed_fc_bn", "alexnet_mixed_bn", "init He nos dois"),
-    ("Cabeça (FC → GAP)", "64px · 3×3 empilhado (2 convs/estágio) · com BN", "alexnet_stacked", "alexnet_stacked_gap",
-     "init He nos dois"),
+    ("Cabeça (FC → GAP)", "64px · misto 3-2-3-2-3 · sem BN", "alexnet_mixed_fc", "alexnet_mixed", ""),
+    ("Cabeça (FC → GAP)", "64px · misto 3-2-3-2-3 · com BN", "alexnet_mixed_fc_bn", "alexnet_mixed_bn", ""),
+    ("Cabeça (FC → GAP)", "64px · 3×3 empilhado (2 convs/estágio) · com BN", "alexnet_stacked", "alexnet_stacked_gap", ""),
     ("Cabeça (FC → GAP)", "3×3 estreito, conv1 stride 1", "alexnet_smallkernel_fc", "alexnet_smallkernel",
-     "AlexNetSmallKernel (canais 64→256), init He nos dois"),
+     "AlexNetSmallKernel (canais 64→256)"),
     ("Cabeça (FC → GAP)", "original sem Dropout · 11-5-3-3-3", "alexnet_geo_s4_p3_fc", "alexnet_geo_s4_p3_gap", ""),
     ("Cabeça (FC → GAP)", "original · misto 3-3-3-2-2†", "alexnet_tv_mixed_early3", "alexnet_tv_mixed_early3_gap",
-     "a FC do torchvision tem Dropout, que sai junto; init He nos dois"),
+     "a FC do torchvision tem Dropout, que sai junto"),
     ("Cabeça (FC → GAP)", "original · misto 2-3-2-3-2†", "alexnet_tv_mixed_alt", "alexnet_tv_mixed_alt_gap",
-     "a FC do torchvision tem Dropout, que sai junto; init He nos dois"),
+     "a FC do torchvision tem Dropout, que sai junto"),
     ("Cabeça (FC → GAP)", "original · misto 2-2-2-3-3†", "alexnet_tv_mixed_early2", "alexnet_tv_mixed_early2_gap",
-     "a FC do torchvision tem Dropout, que sai junto; init He nos dois"),
+     "a FC do torchvision tem Dropout, que sai junto"),
     ("Stride da conv1 (4 → 2)", "com 3 max-pools 3×3/2 (os do layout original)", "alexnet_geo_s4_p3_fc", "alexnet_geo_s2_p3_fc", ""),
     ("Stride da conv1 (4 → 2)", "com 2 max-pools 2×2 (os do layout 64px)", "alexnet_geo_s4_p2_fc", "alexnet_adapted_orig_fc", ""),
     ("Pooling", "conv1 stride 4: 3 pools 3×3 → 2 pools 2×2", "alexnet_geo_s4_p3_fc", "alexnet_geo_s4_p2_fc", ""),
@@ -67,21 +67,44 @@ C = [
     ("Pooling", "conv1 stride 2, janela 3×3: 3 → 2 pools", "alexnet_geo_s2_p3_fc", "alexnet_geo_s2_pk3n2_fc", ""),
     ("Dropout (0 → 0,5)", "64px · 11-5-3-3-3 · FC", "alexnet_adapted_orig_fc", "alexnet_geo_s2_p2_drop_fc", ""),
     ("Dropout (0 → 0,5)", "original · 11-5-3-3-3 · FC†", "alexnet_geo_s4_p3_fc", "alexnet_tv_scratch",
-     "B é o run antigo da AlexNet original (job 821243); init padrão nos dois"),
+     "B é a AlexNet original do torchvision (com Dropout)"),
     ("Pré-treino ImageNet (não → sim)", "original · 11-5-3-3-3 · FC + Dropout†", "alexnet_tv_scratch", "alexnet_tv",
-     "A é o run antigo da AlexNet original"),
+     "A é a AlexNet original do torchvision (com Dropout)"),
     ("Pré-treino ImageNet (não → sim)", "64px · 11-5-3-3-3 · FC†", "alexnet_adapted_orig_fc", "alexnet_adapted_orig_fc_pt",
-     "melhor época do FP32 = 7; depois o QAT (lr 1e-5) ainda sobe +5,7pp"),
+     ""),
     ("BatchNorm (sem → com)", "64px · 3×3 · GAP", "alexnet_3x3_gap", "alexnet_3x3_gap_bn", ""),
-    ("BatchNorm (sem → com)", "64px · misto 3-2-3-2-3 · GAP", "alexnet_mixed", "alexnet_mixed_bn", "init He nos dois"),
-    ("BatchNorm (sem → com)", "64px · misto 3-2-3-2-3 · FC", "alexnet_mixed_fc", "alexnet_mixed_fc_bn", "init He nos dois"),
-    ("BatchNorm (sem → com)", "64px · 3×3 empilhado (2 convs/estágio) · GAP", "alexnet_stacked_gap_nobn", "alexnet_stacked_gap",
-     "init He nos dois"),
+    ("BatchNorm (sem → com)", "64px · misto 3-2-3-2-3 · GAP", "alexnet_mixed", "alexnet_mixed_bn", ""),
+    ("BatchNorm (sem → com)", "64px · misto 3-2-3-2-3 · FC", "alexnet_mixed_fc", "alexnet_mixed_fc_bn", ""),
+    ("BatchNorm (sem → com)", "64px · 3×3 empilhado (2 convs/estágio) · GAP", "alexnet_stacked_gap_nobn", "alexnet_stacked_gap", ""),
     ("Bloco de compensação (sobre 3×3 + BN + GAP)", "64px · 3×3 + BN + GAP → Bottleneck", "alexnet_3x3_gap_bn",
      "alexnet_bottleneck", ""),
     ("Bloco de compensação (sobre 3×3 + BN + GAP)", "64px · 3×3 + BN + GAP → Fire†", "alexnet_3x3_gap_bn", "alexnet_fire",
      "o Fire usa conv1 stride 1 (mapas 16×16)"),
 ]
+
+
+def _test_hits(results, key, stage):
+    """Per-image top-1 hits on the held-out test set, or None before the run's current-protocol rerun wrote them."""
+    p = results / f"{key}_{stage}_test_logits.npz"
+    if not p.exists():
+        return None
+    z = np.load(p)
+    return z["logits"].argmax(1) == z["labels"]
+
+
+def _pair_stats(idx, a, b):
+    """Seed-42 McNemar p-value (Dietterich 1998) of A vs B on the same test images, FP32 and INT8, plus each side's
+    95% Wilson interval -- the test-set sampling error; the seed band covers the training noise."""
+    out = {}
+    for stage in ("fp32", "int8"):
+        ha, hb = (_test_hits(idx.loc[(k, 42), "results"], k, stage) for k in (a, b))
+        if ha is None or hb is None:
+            continue
+        out[f"p_{stage}"] = mcnemar_p(ha, hb)
+        for side, h in (("A", ha), ("B", hb)):
+            lo, hi = wilson_ci(int(h.sum()), len(h))
+            out[f"{stage}_{side}_ci95"] = f"{100 * lo:.1f}–{100 * hi:.1f}"
+    return out
 
 
 def contrasts(df):
@@ -96,14 +119,18 @@ def contrasts(df):
                   for k in (a, b))
         d = {c: vb[c] - va[c] for c in va}
         rows.append(dict(
-            factor=factor, contrast=label, A=a, B=b, n_seeds=len(seeds),
+            factor=factor, contrast=label, A=a, B=b, n_seeds=len(seeds), **_pair_stats(idx, a, b),
             d_fp32=d["fp32"].mean(), d_fp32_seeds=" / ".join(f"{x:+.2f}" for x in d["fp32"]),
             d_int8=d["int8"].mean(), d_int8_seeds=" / ".join(f"{x:+.2f}" for x in d["int8"]), d_int8_raw=d["int8_raw"].mean(),
             **{f"{c}_{side}": v[c].mean() for side, v in [("A", va), ("B", vb)] for c in ["fp32", "int8", "int8_raw"]},
             macs_change_pct=100 * (vb["macs_m"][0] / va["macs_m"][0] - 1),
             params_change_pct=100 * (vb["params_m"][0] / va["params_m"][0] - 1), note=note,
             pts_fp32=list(d["fp32"]), pts_int8=list(d["int8"]), pts_int8_raw=list(d["int8_raw"])))
-    return pd.DataFrame(rows)
+    t = pd.DataFrame(rows)
+    for stage in ("fp32", "int8"):  # ~35 tests in one table: family-wise correction (Holm 1979)
+        if f"p_{stage}" in t:
+            t[f"p_{stage}_holm"] = holm(t[f"p_{stage}"].tolist())
+    return t
 
 
 def fig_factor(t, df, factor, per_row=6):
@@ -138,13 +165,6 @@ def fig_factor(t, df, factor, per_row=6):
     fig.legend(handles=[Patch(color=NEUTRAL, label="A = antes (1º nível do fator)"), Patch(color=color, label="B = depois (2º nível)")]
                + precision_handles() + ref, loc="outside lower center", ncol=2, fontsize=8.5)
     savefig(fig, FACTOR_FIG[factor])
-
-
-def noise_band(df):
-    """2*sqrt(2)*pooled SD across seeds, for the 4 models replicated at seeds 42-44."""
-    rep = df[df.key.isin(["alexnet_3x3_fc", "alexnet_adapted_orig_fc", "alexnet_3x3_gap", "alexnet_adapted_orig_gap"])]
-    g = rep.groupby("key")
-    return {c: 2 * np.sqrt(2) * np.sqrt((g[c].var(ddof=1)).mean()) for c in ["fp32", "int8"]}
 
 
 def fig_forest(t, band):
@@ -249,10 +269,11 @@ def factorial_cells(df):
         if hits.empty:
             continue
         levels = {k: (v is not None) if k in ("bn", "drop", "pt") else v for k, v in FX_RE.match(cell).groupdict().items()}
-        rows.append({"cell": cell, **levels, **hits.iloc[0][["fp32", "int8", "int8_raw", "params_m", "macs_m"]].to_dict()})
+        rows.append({"cell": cell, **levels,
+                     **hits.iloc[0][["fp32", "fp32_val", "int8", "int8_raw", "params_m", "macs_m"]].to_dict()})
     cells = pd.DataFrame(rows)
     cells["dqat"] = cells.int8 - cells.fp32
-    cells["dqat_raw"] = cells.int8_raw - cells.fp32
+    cells["dqat_raw"] = cells.int8_raw - cells.fp32_val
     return cells
 
 
@@ -268,15 +289,27 @@ def matched_pairs(cells):
     return pd.DataFrame(out)
 
 
+def bootstrap_median_ci(v, n_boot=10_000):
+    """95% percentile-bootstrap interval of the median (Efron & Tibshirani 1993), fixed RNG so reruns match. Each
+    matched pair holds every other factor fixed, so the spread over pairs is the effect's spread over the rest of the
+    design -- the replication an unreplicated factorial has."""
+    if len(v) < 2:
+        return np.nan, np.nan
+    meds = np.median(np.random.default_rng(0).choice(np.asarray(v), (n_boot, len(v))), axis=1)
+    return tuple(np.percentile(meds, [2.5, 97.5]))
+
+
 def summarize_pairs(pairs):
-    """Per contrast: n pairs, median/IQR of each Δ, and in how many pairs b beat a (the 'in k of n configurations' line)."""
+    """Per contrast: n pairs, median/IQR of each Δ with a bootstrap 95% CI of the median, and in how many pairs b beat a
+    (the 'in k of n configurations' line)."""
     rows = []
     for (f, label), g in pairs.groupby(["factor", "contrast"], sort=False):
         row = dict(factor=f, contrast=label, n_pairs=len(g), macs_pct=g.macs_pct.median(), params_pct=g.params_pct.median())
         for m in METRICS:
             v = g[m].dropna()
+            lo, hi = bootstrap_median_ci(v)
             row.update({f"{m}_n": len(v), f"{m}_median": v.median(), f"{m}_q25": v.quantile(0.25), f"{m}_q75": v.quantile(0.75),
-                        f"{m}_n_positive": int((v > 0).sum())})
+                        f"{m}_ci_lo": lo, f"{m}_ci_hi": hi, f"{m}_n_positive": int((v > 0).sum())})
         rows.append(row)
     return pd.DataFrame(rows)
 
@@ -300,6 +333,8 @@ def fig_matched_pairs(pairs, summary, n_cells):
             ax.scatter(v, yy, s=10 if not old else 16, alpha=0.5, **(dict(facecolors="none", edgecolors=BLUE) if old else dict(color=BLUE)))
             ax.scatter(v.median(), y[s.contrast], marker="D", s=50, zorder=3,
                        **(dict(facecolors="none", edgecolors=RED, alpha=0.6) if old else dict(color=RED)))
+            if not old:
+                ax.hlines(y[s.contrast], *bootstrap_median_ci(v), color=RED, lw=2, zorder=2)
             ax.text(1.01, y[s.contrast], f"{int((v > 0).sum())}/{len(v)}", transform=ax.get_yaxis_transform(), va="center",
                     fontsize=8, alpha=0.5 if old else 1)
         if not drawn:
@@ -308,7 +343,7 @@ def fig_matched_pairs(pairs, summary, n_cells):
     axes[0].set_yticks(list(y.values()))
     axes[0].set_yticklabels(list(y.keys()), fontsize=9)
     fig.legend(handles=[Line2D([], [], marker="o", color=BLUE, ls="", ms=4, alpha=0.5, label="um par de células iguais em todo o resto"),
-                        Line2D([], [], marker="D", color=RED, ls="", ms=7, label="mediana dos pares"),
+                        Line2D([], [], marker="D", color=RED, ls="-", ms=7, label="mediana dos pares (barra: IC 95% bootstrap)"),
                         Line2D([], [], marker="o", mfc="none", mec=BLUE, ls="", ms=5, label=f"par com {OLD_INT8}"),
                         Line2D([], [], ls="", label="k/n à direita = pares em que o 2º nível ganha")],
                loc="upper center", bbox_to_anchor=(0.5, 0), ncol=2, fontsize=9)

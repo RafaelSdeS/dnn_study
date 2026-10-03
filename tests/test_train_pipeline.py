@@ -20,20 +20,21 @@ def _run(tmp_path, monkeypatch, stages, ctor=_tiny_model, **runtime):
                         batch_size=4)
     monkeypatch.setattr(train, "ensure_dataset_path", lambda cfg: tmp_path)
     monkeypatch.setattr(train, "create_imagenet_loaders", lambda cfg, persistent_workers=False: (loader.dataset, loader.dataset, loader, loader))
+    monkeypatch.setattr(train, "create_test_loader", lambda cfg, train_ds: loader)
+    monkeypatch.setattr(train, "dataset_fingerprint", lambda path: {"sha256": "test"})
     monkeypatch.setattr(train.signal, "signal", lambda *args: None)  # keep pytest's own SIGINT handler
     monkeypatch.setitem(MODEL_REGISTRY, "tiny", {"ctor": ctor, "fuse_map": []})
     rows = train.run_experiment(
         {"name": "exp", "models": ["tiny"], "stages": stages,
          "training": {"epochs": 3, "use_amp": False, "early_stopping_patience": None},
          "qat": {"epochs": 1}},
-        {"root": str(tmp_path), "device": "cpu", "tensorboard": False, "benchmark_warmup": 1, **runtime},
+        {"root": str(tmp_path), "device": "cpu", "tensorboard": False, **runtime},
     )
     return rows, tmp_path / "exp" / "tiny"
 
 
 def test_fp32_stage_writes_summary(tmp_path, monkeypatch):
-    # an invalid engine stands in for a node without fbgemm (PCAD's beagle): fp32 never touches it
-    rows, run_root = _run(tmp_path, monkeypatch, ["fp32"], quantized_engine="not-an-engine")
+    rows, run_root = _run(tmp_path, monkeypatch, ["fp32"])
     assert [row["model_name"] for row in rows] == ["tiny"]
     assert (rows[0]["epochs_used"], rows[0]["epochs_budget"]) == (3, 3)
     assert (run_root / "results" / "tiny_summary.json").exists()
@@ -45,6 +46,10 @@ def test_fp32_stage_writes_summary(tmp_path, monkeypatch):
     z = np.load(run_root / "results" / "tiny_fp32_val_logits.npz")  # top1 is the plain fraction right (micro)
     assert rows[0]["fp32_top1"] == pytest.approx(100 * (z["logits"].argmax(1) == z["labels"]).mean())
     assert rows[0]["fp32_bs1_latency_ms_per_image"] is not None
+    # the held-out test set is evaluated too, logits kept (here the same synthetic loader)
+    assert rows[0]["test_fp32_top1"] == pytest.approx(rows[0]["fp32_top1"])
+    assert (run_root / "results" / "tiny_fp32_test_logits.npz").exists()
+    assert rows[0]["quant_protocol"]
 
 
 def test_stop_during_fp32_ends_the_run_before_qat(tmp_path, monkeypatch):

@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.ao.quantization as tq
 
+from .baselines import he_init
 from .compensation import _float_functional
 
 
@@ -32,11 +33,10 @@ class FireMobileResidual(nn.Module):
                 nn.BatchNorm2d(out_ch),
             )
 
-        self.skip_add = _float_functional()
-        self.relu = nn.ReLU(inplace=False)
+        self.skip_add = _float_functional()  # add_relu: ReLU fused into the add (Jacob et al. 2018; torchvision QuantizableBasicBlock)
 
     def forward(self, x):
-        return self.relu(self.skip_add.add(self.block(x), self.shortcut(x)))
+        return self.skip_add.add_relu(self.block(x), self.shortcut(x))
 
 
 class TinyHybridNet(nn.Module):
@@ -62,6 +62,7 @@ class TinyHybridNet(nn.Module):
         )
         self.pool = nn.AdaptiveAvgPool2d(1)
         self.fc = nn.Linear(256, num_classes)
+        he_init(self)  # He et al. 2015 (torchvision's VGG/ResNet init) -- every from-scratch model, 2026-10-03
 
     def forward(self, x):
         x = self.quant(x)
@@ -129,6 +130,7 @@ class TinyMobileNetV2(nn.Module):
         )
         self.pool = nn.AdaptiveAvgPool2d(1)
         self.fc = nn.Linear(256, num_classes)
+        he_init(self)  # He et al. 2015 (torchvision's VGG/ResNet init) -- every from-scratch model, 2026-10-03
 
     def forward(self, x):
         x = self.quant(x)

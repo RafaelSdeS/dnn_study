@@ -11,5 +11,3 @@ devices: 1
 launcher: single
 use_kagglehub_fallback: true
 persistent_workers: false
-benchmark_warmup: 100
-quantized_engine: fbgemm

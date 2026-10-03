@@ -916,3 +916,132 @@ StdOut path) and the queue file. Result:
 - `families`, `factorial_core/_ext` and `vgg_factorial` have no FP32 yet: they are new runs in the feeder queue.
 
 Check as they land: `qat_float_logits` true, QAT 100/100, `fp32_top1` equal to the archived summary's, QAT−INT8 < ~0.5 pp.
+
+## Literature-standard INT8 + held-out test set (2026-10-03)
+
+**Why.** Every choice in the QAT/INT8 path and in the evaluation should be one a reference already justifies, so
+the paper needs a citation, not an explanation. An audit against the references found five deviations:
+- activations were **7-bit**: `tq.get_default_qat_qconfig("fbgemm")` sets `reduce_range=True` (0..127), fbgemm's
+  workaround for int16 saturation on CPUs without AVX-512 VNNI (checked in torch 2.5.1's source);
+- the logits Linear had **FP32 weights**;
+- every FC head except vgg16's ran its **Linear-ReLU unfused** (observer before the ReLU) -- an INT8 handicap only
+  FC heads had, i.e. a confound in the head factor's INT8 effect; residual blocks ran add then a standalone ReLU;
+- the best epoch was **picked and reported on the same 90/10 split**, which also moves with the seed;
+- `Trainer.benchmark` timed the **DataLoader** along with the model.
+
+**Change** (QAT/INT8/eval side; the FP32 recipe changed the same day -- next section -- so every Phase 11 run is
+retrained, not only the 49 QATs):
+
+| Choice | Reference |
+|---|---|
+| 8-bit per-tensor affine activations, EMA min/max, BN folding (`INT8_QAT_QCONFIG`, onednn's QAT qconfig) | Jacob et al., CVPR 2018; Krishnamoorthi 2018 |
+| Per-channel symmetric weights in [-127, 127] | Wu et al. 2020 Sec. 6; LiteRT int8 spec |
+| Inputs and weights of every Conv/Linear quantized; logits output FP32 (`_FloatLogits`: INT8 input + weights, stored as int8); pools requantized as the next layer's input | Wu et al. 2020 Sec. 3, 5.1 |
+| Activation fused into its producer (`fuse_sequential_relus`, `FloatFunctional.add_relu`) | Jacob 2018; PyTorch `fuse_modules`; LiteRT fused activations |
+| QAT 50 ep (1/10 of FP32's 500 ep), same optimizer, lr 1e-4 (1/100 of FP32's 0.01) cosine to 1e-6 (1/100 of that) (`_protocols/no_patience.yaml`) | Wu et al. 2020 App. A.2 |
+| Observers frozen after epoch 4, BN stats after epoch 3 | torchvision `references/classification/train_quantization.py` |
+| Best epoch on the 90/10 split, reported on Tiny ImageNet's official val (`create_test_loader`, 10k) | Cawley & Talbot, JMLR 2010 |
+| 95% Wilson CI; exact McNemar between two models on the same test images (`ml/reporting.py`) | Wilson 1927; Dietterich, Neural Computation 1998 |
+| Seed-to-seed spread as the noise floor (`noise_band`); bootstrap CI of the factorial's matched-pair medians | Bouthillier et al., MLSys 2021; Efron & Tibshirani 1993 |
+| Latency: `torch.utils.benchmark` median + IQR on one device-resident batch, fixed threads | PyTorch benchmark utilities |
+| 15-bin ECE; mixed-precision training, FP32 eval (unchanged) | Guo et al. 2017; Micikevicius et al. 2018 |
+
+Kernels: `QUANT_ENGINE = "onednn"`, set by `convert_to_int8` (the runtime yamls' `quantized_engine` is gone). INT8 vs
+its own fake-quant on this laptop (i7-13650HX, AVX-VNNI but no AVX-512), random weights, SQNR in dB:
+
+| | alexnet_3x3_gap | alexnet_mixed_fc_bn | alexnet_residual | resnet18tv | mobilenetv2 |
+|---|---|---|---|---|---|
+| onednn, 8-bit (now) | 50.8 | 18.0 | 18.7 | 24.4 | 13.2 |
+| fbgemm, 7-bit (until today) | 48.4 | 12.7 | 13.2 | 19.3 | 7.2 |
+| fbgemm, 8-bit | 42.7 | 14.2 | 17.3 | 21.6 | 10.0 |
+
+onednn is the most faithful everywhere; fbgemm at 8 bits is worse than at 7, the saturation `reduce_range` exists for.
+The low numbers of the BN/residual nets are backend-independent: per-block hooks on resnet18 show the error growing
+~3 dB per block from 42 dB at conv1, i.e. 1-LSB rounding differences amplified by random weights, not one broken op.
+The real check is on trained weights: summaries now carry `agreement_qat_int8` (test set).
+
+Summaries carry `quant_protocol: "2026-10-03"`, `test_{fp32,qat,int8}_{top1,top5,ece}` and `*_test_logits.npz`;
+`analyze_geometry.load` reads the test numbers and treats any other protocol as superseded (shown faded, from its
+validation-split numbers). `build_cross_phase_results` labels Phases 1-9's INT8 `legacy` (7-bit activations,
+validation split) -- kept, not rerun.
+
+**Rollout** (superseded by the next section). The 49 pending QAT reruns were held (`scontrol hold`) before any could
+start on the old code; with the FP32 recipe changing too they were cancelled, never run.
+
+## One recipe, every number from a reference (2026-10-03)
+
+**Why.** Every QAT was being redone anyway, so the FP32 recipe was the only thing still without a citation -- and
+the cheapest moment to change it (49 of the program's runs existed). The old recipe had three unreferenced choices:
+AdamW lr 3e-4 with wd 5e-4 (decoupled, so it shrank the weights only ~5% over 500 epochs; the usual AdamW value is
+0.01-0.05), RRC(0.7-1) + 15° rotation + AutoAugment, and PyTorch's default init in the factorial cells but He init
+elsewhere. Decision (user, 2026-10-03): adopt a fully referenced recipe and retrain the whole Phase 11 program on it,
+gated by a pilot of the cells most likely to break.
+
+**FP32 recipe** (`configs/experiments/_protocols/no_patience.yaml`; every `phase_11_*.yaml` extends it and
+`tests/test_config.py` fails any that drifts):
+
+| Choice | Value | Reference |
+|---|---|---|
+| Optimizer | SGD, momentum 0.9, L2 weight decay 5e-4 | Krizhevsky et al., NeurIPS 2012 (AlexNet); same values in Simonyan & Zisserman, ICLR 2015 (VGG) |
+| LR, batch | 0.01, 128 | Krizhevsky et al. 2012 (VGG: 0.01 at batch 256) |
+| Schedule | cosine annealing to 0, no warmup | Loshchilov & Hutter, ICLR 2017 (replaces AlexNet's /10 on plateau); warmup is for large-minibatch LR scaling (Goyal et al. 2017), AlexNet used none at this lr/batch |
+| Budget | 500 epochs, fixed, no early stopping; best epoch picked on the 90/10 split | Li, Yumer & Ramanan, ICLR 2020 (fixed budget, LR decayed to zero by its end); Cawley & Talbot, JMLR 2010 |
+| Augmentation | 4-px pad + random crop + horizontal flip, then AutoAugment's ImageNet policy | He et al., CVPR 2016 Sec. 4.2; Cubuk et al., CVPR 2019 |
+| Init | He normal (fan_out) on convs, N(0, 0.01) on Linears, in every from-scratch model | He et al., ICCV 2015; Krizhevsky et al. 2012 (the Linear std); torchvision's VGG init |
+| Loss | cross-entropy, label smoothing 0.1 | Szegedy et al., CVPR 2016 |
+| Precision | mixed-precision training, FP32 evaluation | Micikevicius et al., ICLR 2018 |
+| Pretrained cells (`_pt`) | the same recipe -- pretraining is the only variable of their contrast | design choice of the factorial |
+
+QAT, INT8 and evaluation: the table of the previous section (QAT = Wu et al. 2020 App. A.2 applied to this recipe:
+50 ep, SGD, lr 1e-4 cosine to 1e-6).
+
+**What no single reference fixes.** The 500-epoch budget: no Tiny ImageNet paper prescribes one. 500 epochs = 352k
+iterations at batch 128, between CIFAR's long schedules (WRN 200 ep = 78k, DenseNet 300 ep = 234k) and ImageNet's
+(ResNet 600k at batch 256, AlexNet ~844k at batch 128); returns diminish with budget (Wightman et al. 2021: 100/300/600
+ep -> 78.1/79.8/80.4%). Under the old recipe all 51 finished FP32 runs had converged (median best epoch 423, median
+gain of the last 100 epochs +0.09 pp, max +0.53). Under the new one this is re-checked per run, not assumed:
+`analyze_geometry.convergence()` flags any run whose last-20%-of-epochs gain exceeds the seed noise band
+(Bouthillier et al., MLSys 2021). Batch size, `num_workers` (4) and the 90/10 split are protocol constants, identical
+for every run.
+
+**Code.** `TrainerConfig.optimizer/momentum/eta_min`, `DataConfig.train_aug` (old values kept as the defaults, so
+Phases 1-10 configs are unchanged); `he_init` in every from-scratch class -- an init audit over all 279 Phase 11
+models (last Linear std == 0.01) caught `AlexNetTV`'s GAP head still on PyTorch's default, fixed (resnet18tv /
+mobilenetv2 are pretrained, their new head on torchvision's default); `load_profile` now resolves `extends:` when
+given a file path (it silently trained a path-loaded config on the bare defaults); `dataset_fingerprint` (SHA-256 of
+train/ and val/ file list + sizes) in the provenance (Pineau et al., JMLR 2021); `holm()` adjusts the contrast
+table's ~35 McNemar p-values (Holm 1979); worker seeding follows PyTorch's reproducibility notes (`seed_worker`).
+Not adopted: `torch.use_deterministic_algorithms` -- `AdaptiveAvgPool2d`'s CUDA backward has no deterministic kernel,
+and PyTorch promises no bit-exactness across versions/platforms anyway; seeds, `cudnn.deterministic`, pinned
+`requirements.txt` and the recorded git/CUDA/GPU/dataset provenance are what the checklists ask for.
+`phase_11_reuse_old_init.yaml` and `phase_11_mixed_kernel_comparison_early2_retry.yaml` are deleted: the first
+re-QAT'd a superseded checkpoint, the second trained the same slot as its parent yaml (He init is now universal).
+
+**Smoke** (laptop, 2026-10-03, real data, `alexnet_3x3_gap_bn` + `alexnet_3x3_fc`, 2 FP32 + 2 QAT epochs): resolved
+config = the table above; lr 0.01 -> 5e-3 -> 0, QAT 1e-4 -> 5.05e-5 -> 1e-6; FP32 -> QAT -> INT8 -> test set end to
+end; INT8 artifact 1/4 of FP32 (the logits weights are int8 too); INT8 vs its fake-quant: logit SQNR 40.2 / 38.4 dB,
+top-1 agreement 0.980 / 0.979. The disagreements are near-ties of a 2-epoch model (median QAT top-2 margin 0.005 on
+them vs 0.14 over all images), so the `agreement_qat_int8 >= 0.99` gate applies to trained runs.
+
+**Superseded.** Every `outputs/pcad/phase_11_*` run (old recipe) moves to `outputs/pcad/archive_adamw_recipe/` on
+PCAD before anything is submitted (`scripts/train.py` would otherwise resume from the old checkpoints). The tracked
+summaries stay in git until each new run overwrites its own; `analyze_geometry.load` shows none of their numbers
+(no `quant_protocol`).
+
+**Program = the full factorial.** `phase_11_vgg_factorial_ext.yaml` (135 cells) completes the VGG factorial, so every
+registered cell of both factorials is queued: AlexNet 208 (kernel {11-5-3-3-3, 3x3, 2x2, 3-2-3-2-3} x stem stride
+{2, 4} x pool kernel {2, 3} x pool count {2, 3} x head {GAP, FC, FC + Dropout} x BN, + pretraining on the 11-5-3 FC
+no-BN cells), VGG 168 (6 kernel patterns x stem stride {1, 2} x pool kernel x pool count {5, 4} x head, +
+pretraining on the 3x3 cells), plus the families, mixed-kernel, head/BN and seed-43/44 experiments: 424 runs. Cost,
+from the old logs' 35-78 s/epoch on a 4090: ~5-11 h per AlexNet FP32 run, ~3,000-3,500 GPU-h in total, i.e. weeks on
+tupi's six 4090s.
+
+**Pilot first** -- the cells most at risk under a fixed, untuned lr 0.01 (every earlier collapse was a no-BN net stuck
+at ln(200)): `alexnet_adapted_orig_fc` (11-5-3 no-BN FC) and `alexnet_adapted_2x2_fc` (2x2 no-BN FC) in
+`phase_11_geometry_controls`, `vgg16` (deepest; its QAT collapsed with frozen observers under the old QAT) and
+`alexnet_tv_scratch` (stride 4, original layout) in `phase_11_kernel_size_comparison`, `alexnet_3x3_gap_bn` (BN
+folding on trained weights) in `phase_11_geometry_controls`. Gate: each FP32 leaves ln(200) early (val top-1 far above
+the 0.5% chance level by epoch ~20); on completion exit 0, QAT 50/50, `quant_protocol` + test fields present,
+`agreement_qat_int8 >= 0.99`. A cell that does not train is fixed globally (lr for all), never per cell. Then the
+rest, in the existing priority: the earlier experiments' runs, AlexNet wave 1 (kernel x stride x pool x head), VGG
+wave 1, families, the rest of the AlexNet factorial, VGG wave 2.

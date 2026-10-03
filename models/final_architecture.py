@@ -9,6 +9,7 @@ them compounds their individual gains. All use GAP + single Linear head
 import torch.nn as nn
 import torch.ao.quantization as tq
 
+from .baselines import he_init
 from .compensation import _AlexBottleneck, _FireModule, _float_functional
 
 
@@ -22,11 +23,10 @@ class _FireResBlock(nn.Module):
         self.shortcut = nn.Identity() if in_ch == out_ch else nn.Sequential(
             nn.Conv2d(in_ch, out_ch, 1, bias=False), nn.BatchNorm2d(out_ch),
         )
-        self.skip_add = _float_functional()
-        self.relu = nn.ReLU(inplace=False)
+        self.skip_add = _float_functional()  # add_relu: ReLU fused into the add (Jacob et al. 2018; torchvision QuantizableBasicBlock)
 
     def forward(self, x):
-        return self.relu(self.skip_add.add(self.fire(x), self.shortcut(x)))
+        return self.skip_add.add_relu(self.fire(x), self.shortcut(x))
 
 
 class _BottleneckResBlock(nn.Module):
@@ -49,11 +49,10 @@ class _BottleneckResBlock(nn.Module):
                 nn.Conv2d(in_ch, out_ch, 1, stride=stride, bias=False),
                 nn.BatchNorm2d(out_ch),
             )
-        self.skip_add = _float_functional()
-        self.relu = nn.ReLU(inplace=False)
+        self.skip_add = _float_functional()  # add_relu: ReLU fused into the add (Jacob et al. 2018; torchvision QuantizableBasicBlock)
 
     def forward(self, x):
-        return self.relu(self.skip_add.add(self.block(x), self.shortcut(x)))
+        return self.skip_add.add_relu(self.block(x), self.shortcut(x))
 
 
 # ─── AlexNetFinalBottleneckFire ────────────────────────────────────────────────
@@ -83,6 +82,7 @@ class AlexNetFinalBottleneckFire(nn.Module):
             nn.AdaptiveAvgPool2d(1),
         )
         self.classifier = nn.Sequential(nn.Flatten(), nn.Linear(256, num_classes))
+        he_init(self)  # He et al. 2015 (torchvision's VGG/ResNet init) -- every from-scratch model, 2026-10-03
 
     def forward(self, x):
         x = self.quant(x)
@@ -122,6 +122,7 @@ class AlexNetFinalFireResidual(nn.Module):
             nn.AdaptiveAvgPool2d(1),
         )
         self.classifier = nn.Sequential(nn.Flatten(), nn.Linear(256, num_classes))
+        he_init(self)  # He et al. 2015 (torchvision's VGG/ResNet init) -- every from-scratch model, 2026-10-03
 
     def forward(self, x):
         x = self.quant(x)
@@ -159,6 +160,7 @@ class AlexNetFinalBottleneckResidual(nn.Module):
             nn.AdaptiveAvgPool2d(1),
         )
         self.classifier = nn.Sequential(nn.Flatten(), nn.Linear(256, num_classes))
+        he_init(self)  # He et al. 2015 (torchvision's VGG/ResNet init) -- every from-scratch model, 2026-10-03
 
     def forward(self, x):
         x = self.quant(x)
@@ -205,6 +207,7 @@ class AlexNetFinalDepthwiseFire(nn.Module):
             nn.AdaptiveAvgPool2d(1),
         )
         self.classifier = nn.Sequential(nn.Flatten(), nn.Linear(256, num_classes))
+        he_init(self)  # He et al. 2015 (torchvision's VGG/ResNet init) -- every from-scratch model, 2026-10-03
 
     def forward(self, x):
         x = self.quant(x)

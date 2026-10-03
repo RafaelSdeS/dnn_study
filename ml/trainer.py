@@ -116,19 +116,23 @@ class BaseTrainer:
         cfg = self.cfg
         model = self.model.to(self.device)
         criterion = self._build_criterion()
-        optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
+        if cfg.optimizer == "sgd":  # AlexNet's recipe (Krizhevsky et al. 2012): momentum 0.9, L2 weight decay
+            optimizer = torch.optim.SGD(model.parameters(), lr=cfg.lr, momentum=cfg.momentum, weight_decay=cfg.weight_decay)
+        else:
+            assert cfg.optimizer == "adamw", cfg.optimizer
+            optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
         if cfg.warmup_epochs > 0:
             warmup = torch.optim.lr_scheduler.LinearLR(
                 optimizer, start_factor=0.1, total_iters=cfg.warmup_epochs
             )
             cosine = torch.optim.lr_scheduler.CosineAnnealingLR(
-                optimizer, T_max=cfg.epochs - cfg.warmup_epochs
+                optimizer, T_max=cfg.epochs - cfg.warmup_epochs, eta_min=cfg.eta_min
             )
             scheduler = torch.optim.lr_scheduler.SequentialLR(
                 optimizer, schedulers=[warmup, cosine], milestones=[cfg.warmup_epochs]
             )
         else:
-            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=cfg.epochs)
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=cfg.epochs, eta_min=cfg.eta_min)
         scaler = torch.amp.GradScaler("cuda") if cfg.use_amp else None
 
         primary_key = self._primary_metric_key()
@@ -398,44 +402,35 @@ class Trainer(BaseTrainer):
         }
 
     @torch.no_grad()
-    def benchmark(self, loader: Optional[DataLoader] = None, warmup: int = 100,
-                  device: Optional[torch.device] = None) -> dict:
-        """Time inference over val_loader; returns latency_ms_per_image and throughput_img_per_s.
+    def benchmark(self, loader: Optional[DataLoader] = None, warmup: int = 10,
+                  device: Optional[torch.device] = None, min_run_time_s: float = 2.0) -> dict:
+        """Forward-pass latency on one batch of `loader` (val_loader by default) already on the device; data loading is
+        not timed. `warmup` untimed passes, then torch.utils.benchmark's blocked_autorange (CUDA-synchronized), whose
+        median per block is reported -- with its IQR -- at a fixed, recorded thread count. The batch size is the
+        loader's: the val batch (data.batch_size) for throughput (MLPerf Inference's offline scenario), 1 (the bs1 loader) for single-stream latency
+        (Reddi et al., "MLPerf Inference Benchmark", ISCA 2020, which reports single-stream latency as a percentile).
 
         device, if given, overrides self.device for this call only (e.g. an FP32-on-CPU number
         alongside the normal FP32-on-GPU one) -- the model is moved back to self.device before
         returning.
         """
-        loader = loader or self.val_loader
+        from torch.utils import benchmark as tb
+
         run_device = torch.device(device) if device is not None else self.device
         model = self.model.eval().to(run_device)
-        n_warmup = 0
-
-        # warmup
-        for data, _ in loader:
-            data = data.to(run_device)
-            model(data)
-            n_warmup += data.size(0)
-            if n_warmup >= warmup:
-                break
-
-        total_images = 0
-        t0 = time.perf_counter()
-        for data, _ in loader:
-            data = data.to(run_device)
-            model(data)
-            total_images += data.size(0)
-        if run_device.type == "cuda":
-            torch.cuda.synchronize()
-        elapsed = time.perf_counter() - t0
+        x = next(iter(loader or self.val_loader))[0].to(run_device)
+        for _ in range(warmup):
+            model(x)
+        m = tb.Timer("model(x)", globals={"model": model, "x": x},
+                     num_threads=torch.get_num_threads()).blocked_autorange(min_run_time=min_run_time_s)
 
         if device is not None:
             model.to(self.device)
 
-        latency_ms = elapsed / total_images * 1000
-        throughput = total_images / elapsed
+        n = x.size(0)
         return {
-            "latency_ms_per_image": latency_ms, "throughput_img_per_s": throughput,
+            "latency_ms_per_image": m.median / n * 1000, "latency_iqr_ms_per_image": m.iqr / n * 1000,
+            "throughput_img_per_s": n / m.median, "batch_size": n,
             "device": str(run_device), "num_threads": torch.get_num_threads(),
         }
 

@@ -14,5 +14,3 @@ use_kagglehub_fallback: true
 # (all QAT, all new FP32) uses false. Harmless: the train augmentations draw only from torch's RNG, which the loader
 # reseeds per epoch either way -- this changes the random stream, not the protocol (docs/logs/PHASE11_LOG.md, "Protocol audit").
 persistent_workers: false
-benchmark_warmup: 100
-quantized_engine: fbgemm

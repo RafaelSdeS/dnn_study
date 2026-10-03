@@ -37,7 +37,7 @@ PHASE_8_CSV = RESULTS_DIR / "phase_8_efficient_vit" / "phase8_comparison.csv"
 RESULTS_CROSS_PHASE_FIELDS = [
     "phase", "base_model", "top1_%_FP32", "top1_%_INT8", "qat_top1_drop_%",
     "top5_%_FP32", "top5_%_INT8", "qat_top5_drop_%", "loss_FP32", "loss_INT8",
-    "params_M_FP32", "size_MB_FP32", "size_MB_INT8",
+    "params_M_FP32", "size_MB_FP32", "size_MB_INT8", "int8_protocol",
 ]
 
 MODEL_DETAILS_FIELDS = [
@@ -133,6 +133,9 @@ def _to_results_row(phase: str, s: dict[str, Any]) -> dict[str, Any]:
         "params_M_FP32": _num(s, "params_m"),
         "size_MB_FP32": _num(s, "fp32_size_mb"),
         "size_MB_INT8": _num(s, "int8_size_mb"),
+        # ml/quantization.py:QUANT_PROTOCOL; "legacy" = PyTorch's fbgemm default (7-bit activations, FP32 or 8-bit-grid
+        # logits) and validation-split accuracy, i.e. not comparable with a current-protocol INT8 number
+        "int8_protocol": s.get("quant_protocol") or "legacy",
     }
 
 

@@ -1,6 +1,7 @@
 import io
 import gzip
 import json
+import math
 import re
 import statistics
 import time
@@ -242,6 +243,35 @@ def prediction_agreement(path_a: str | Path, path_b: str | Path) -> float | None
     pred_a = np.load(path_a)["logits"].argmax(axis=1)
     pred_b = np.load(path_b)["logits"].argmax(axis=1)
     return float((pred_a == pred_b).mean())
+
+
+def wilson_ci(correct: int, n: int, z: float = 1.959964) -> tuple[float, float]:
+    """95% Wilson score interval (Wilson 1927) for an accuracy of correct/n, as fractions."""
+    p, z2 = correct / n, z * z
+    center, half = (p + z2 / (2 * n)) / (1 + z2 / n), z * math.sqrt(p * (1 - p) / n + z2 / (4 * n * n)) / (1 + z2 / n)
+    return center - half, center + half
+
+
+def mcnemar_p(correct_a, correct_b) -> float:
+    """Exact two-sided McNemar p-value (Dietterich 1998) for two classifiers scored on the same images: a binomial
+    test on the images exactly one of them gets right. correct_a/correct_b: boolean arrays, one entry per image."""
+    a, b = np.asarray(correct_a, bool), np.asarray(correct_b, bool)
+    n01, n10 = int((~a & b).sum()), int((a & ~b).sum())
+    n, k = n01 + n10, min(n01, n10)
+    if n == 0:
+        return 1.0
+    return min(1.0, 2 * sum(math.comb(n, i) for i in range(k + 1)) / 2 ** n)
+
+
+def holm(pvalues) -> list:
+    """Holm's step-down adjusted p-values (Holm 1979, Scand. J. Statistics): family-wise error control for the many
+    McNemar tests of one contrast table. NaNs (no test) pass through and don't count toward the family size."""
+    idx = [i for i, p in enumerate(pvalues) if p == p]
+    out, running = list(pvalues), 0.0
+    for rank, i in enumerate(sorted(idx, key=lambda i: pvalues[i])):
+        running = max(running, min(1.0, (len(idx) - rank) * pvalues[i]))
+        out[i] = running
+    return out
 
 
 def layer_stats(model: nn.Module, loader, device, n_batches: int = 10) -> dict:

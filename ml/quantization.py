@@ -3,12 +3,26 @@ from pathlib import Path
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.ao.quantization as tq
 
 from .registry import MODEL_REGISTRY
 
 # Tiny ImageNet input; keep_logits_float only runs it through the model to see which layer executes last
 LOGITS_PROBE_SHAPE = (1, 3, 64, 64)
+
+# INT8 as the literature defines it -- 8-bit per-tensor affine activations with EMA min/max ranges (Jacob et al.,
+# CVPR 2018) and 8-bit per-channel symmetric weights in [-127, 127] (Wu et al. 2020, Sec. 6 / LiteRT int8 spec).
+# PyTorch's onednn QAT qconfig is exactly the first part; fbgemm's default instead sets reduce_range=True, i.e. 7-bit
+# activations (0..127), to dodge int16 saturation on CPUs without AVX-512 VNNI -- what every run used until 2026-10-03.
+_ONEDNN_QAT = tq.get_default_qat_qconfig("onednn")
+INT8_QAT_QCONFIG = tq.QConfig(activation=_ONEDNN_QAT.activation, weight=_ONEDNN_QAT.weight.with_args(quant_min=-127))
+# Kernels that run INT8_QAT_QCONFIG's full 8-bit activation range as is; set by every convert below.
+QUANT_ENGINE = "onednn"
+# Written into every run summary; analysis treats a QAT/INT8 number without the current value as superseded.
+# 2026-10-03: the INT8 definition above, fused Linear/add + ReLU, W8 logits layer, Wu et al. 2020's QAT schedule --
+# and, for Phase 11, the new FP32 recipe that landed the same day, so analyze_geometry.load drops FP32 without it too.
+QUANT_PROTOCOL = "2026-10-03"
 
 
 def find_fuse_groups(module: nn.Module, prefix: str = "") -> list:
@@ -170,23 +184,18 @@ def prepare_qat_model(
     model: nn.Module,
     fuse_pairs: list,
     fuse_root: nn.Module | None = None,
-    qengine: str = "fbgemm",
-    classifier_fuse_pairs: list | None = None,
     float_logits: bool = False,
 ) -> nn.Module:
-    """Deep-copy model, fuse Conv-BN(-ReLU) pairs, insert fake-quant observers.
+    """Deep-copy model, fuse Conv-BN(-ReLU) pairs, insert fake-quant observers (INT8_QAT_QCONFIG).
 
-    float_logits keeps the logits Linear in float (keep_logits_float); build_qat_from_model, the path every real
+    float_logits gives the logits Linear an FP32 output (keep_logits_float); build_qat_from_model, the path every real
     run takes, always sets it. Off by default only so toy modules without a logits layer still prepare.
 
-    classifier_fuse_pairs additionally fuses model.classifier's Linear-ReLU pairs. Needed for
-    vgg16/vgg16_2x2: their torchvision-style classifier head is otherwise left unfused (like
-    every other model here), so the fake-quant observer sits on the raw pre-ReLU Linear output.
-    For vgg16 that output is a genuinely heavy-tailed distribution (p999 ~27k, max ~115k per
-    results/phase_11_kernel_size_comparison layer_stats) that only ReLU's clipping brings back
-    to a sane range (~0.5) -- quantizing before it collapsed QAT to ln(num_classes) from epoch 1
-    (docs/logs/PHASE11_LOG.md). Fusing Linear+ReLU moves the observer to the post-ReLU value,
-    the same fix already in place for every Conv-BN-ReLU stage.
+    After the registered fuse_pairs, every Conv/Linear still directly followed by its ReLU inside an nn.Sequential
+    is fused too (fuse_sequential_relus) -- the activation is folded into the layer that feeds it, as Jacob et al.
+    2018 and every INT8 runtime do. That covers the FC heads (Linear-ReLU), which only vgg16 had fused until
+    2026-10-03: unfused, the observer sat on the pre-ReLU output, spending half the 8-bit range on negatives that
+    ReLU then drops (for vgg16 a p999 ~27k tail that collapsed QAT outright, docs/logs/PHASE11_LOG.md).
 
     fuse_root is a submodule of the *input* model; it is re-located inside the deep copy by name.
     Until 2026-09-30 the fusion ran on the caller's fuse_root itself, i.e. on the original model,
@@ -199,17 +208,39 @@ def prepare_qat_model(
     root_name = "" if fuse_root is None else next(n for n, m in model.named_modules() if m is fuse_root)
     model = copy.deepcopy(model)
     model.train()
-    model.qconfig = tq.get_default_qat_qconfig(qengine)
+    model.qconfig = INT8_QAT_QCONFIG
     exclude_attention_from_qat(model)
     root = model.get_submodule(root_name)
     if fuse_pairs:
         tq.fuse_modules_qat(root, fuse_pairs, inplace=True)
-    if classifier_fuse_pairs:
-        tq.fuse_modules_qat(model.classifier, classifier_fuse_pairs, inplace=True)
+    fuse_sequential_relus(model)
     requantize_avg_pools(model)
     if float_logits:
         keep_logits_float(model, torch.zeros(LOGITS_PROBE_SHAPE, device=next(model.parameters()).device))
     return tq.prepare_qat(model, inplace=False)
+
+
+def fuse_sequential_relus(model: nn.Module) -> nn.Module:
+    """Fuse every run of adjacent [Conv2d, BatchNorm2d(, ReLU)] or [Conv2d|Linear, ReLU] children of a plain
+    nn.Sequential, in place -- whatever a registry fuse_map left unfused. Only plain Sequentials, where child order is
+    execution order; fused intrinsic modules subclass Sequential, hence the exact type check."""
+    for seq in [m for m in model.modules() if type(m) is nn.Sequential]:
+        names, mods = list(seq._modules), list(seq._modules.values())
+        groups, i = [], 0
+        while i < len(mods):
+            nxt = mods[i + 1] if i + 1 < len(mods) else None
+            if isinstance(mods[i], nn.Conv2d) and isinstance(nxt, nn.BatchNorm2d):
+                n = 3 if i + 2 < len(mods) and isinstance(mods[i + 2], nn.ReLU) else 2
+            elif isinstance(mods[i], (nn.Conv2d, nn.Linear)) and isinstance(nxt, nn.ReLU):
+                n = 2
+            else:
+                i += 1
+                continue
+            groups.append(names[i:i + n])
+            i += n
+        if groups:
+            tq.fuse_modules_qat(seq, groups, inplace=True)
+    return model
 
 
 def requantize_avg_pools(model: nn.Module) -> nn.Module:
@@ -221,7 +252,9 @@ def requantize_avg_pools(model: nn.Module) -> nn.Module:
     step and round to 0 -- the gate's fused alexnet_3x3_gap lost 2.4pp fake-quant -> INT8 (46.55 -> 44.21)
     to this alone; float pool + a fitted requant scale recovered 46.45 (docs/logs/PHASE11_LOG.md, "Quantized
     GAP"). The pool now runs in float and its output gets its own observer, i.e. INT8 hardware's int32
-    accumulate + requantize. Functional pooling (torchvision's quantizable MobileNetV2) is not covered.
+    accumulate + requantize: the quantizer sits at the input of the next compute layer, Wu et al. 2020's placement
+    (ONNX Runtime's QLinear(Global)AveragePool likewise takes its own y_scale). Functional pooling (torchvision's
+    quantizable MobileNetV2) is not covered.
     """
     for parent in list(model.modules()):
         for name, child in parent.named_children():
@@ -245,12 +278,13 @@ class _RequantizedPool(nn.Module):
 
 
 def keep_logits_float(model: nn.Module, probe: torch.Tensor) -> nn.Module:
-    """Replace the logits Linear with DeQuantStub -> float Linear, in place.
+    """Replace the logits Linear with _FloatLogits (INT8 input and weights, FP32 output), in place.
 
     Its output used to get the same 8-bit fake-quant as every activation, so QAT/INT8 logits sat on a grid of 8-31
     distinct values per image: 14-31% of val images tied for top-1, top-5 depended on the tie-break, and FC heads lost
-    ~0.4pp top-1 to the grid alone (docs/logs/PHASE11_LOG.md, "Float logits layer"). Every layer before it stays INT8;
-    its own weights stay FP32. The logits layer is the last Conv/Linear to run on `probe` -- execution order, not
+    ~0.4pp top-1 to the grid alone (docs/logs/PHASE11_LOG.md, "Float logits layer"). Wu et al. 2020 quantize a layer's
+    inputs and weights and requantize its int32 accumulator only where another quantized layer reads it -- the logits
+    have no such reader. The logits layer is the last Conv/Linear to run on `probe` -- execution order, not
     registration order (quantizable ResNet18 registers its input QuantStub after fc). Any other head shape fails here.
     """
     order = []
@@ -272,16 +306,37 @@ def keep_logits_float(model: nn.Module, probe: torch.Tensor) -> nn.Module:
 
 
 class _FloatLogits(nn.Module):
-    """DeQuantStub -> the logits Linear with qconfig=None, so prepare_qat/convert leave it float; the stub converts
-    like any other, so the Linear always receives a float tensor."""
+    """DeQuantStub -> the logits Linear with INT8 weights and an FP32 output. The Linear has qconfig=None, so
+    prepare_qat/convert leave the module itself alone; its input arrives dequantized from the previous layer's 8-bit
+    grid, and its weight goes through INT8_QAT_QCONFIG's per-channel fake-quant (frozen with every other observer).
+    freeze(), run by convert_to_int8, keeps that weight as int8 codes + the fake-quant's scales, so the INT8 model
+    holds no FP32 weight copy and computes exactly what the fake-quant did."""
 
     def __init__(self, linear: nn.Linear):
         super().__init__()
         linear.qconfig = None
         self.dequant, self.linear = tq.DeQuantStub(), linear
+        self.weight_fake_quant = INT8_QAT_QCONFIG.weight().to(linear.weight.device)  # prepare_qat needs one device
+        self.weight_fake_quant.qconfig = None
+        self.register_buffer("qweight", None)
 
     def forward(self, x):
-        return self.linear(self.dequant(x))
+        if self.qweight is None:
+            w = self.weight_fake_quant(self.linear.weight)
+        else:  # symmetric: zero_point is 0
+            w = self.qweight.float() * self.weight_fake_quant.scale[:, None]
+        return F.linear(self.dequant(x), w, self.linear.bias)
+
+    def freeze(self) -> None:
+        """int8 codes on the fake-quant's frozen grid. Calibrates it first only if it never ran: load_int8_model's
+        freshly built model, whose codes and scales the loaded state_dict then overwrites."""
+        fq, w = self.weight_fake_quant, self.linear.weight.detach()
+        if fq.scale.numel() != w.size(0):
+            fq.enable_observer()
+            fq(w)
+        q = torch.fake_quantize_per_channel_affine(w, fq.scale, fq.zero_point, fq.ch_axis, fq.quant_min, fq.quant_max)
+        self.qweight = torch.round(q / fq.scale[:, None]).to(torch.int8)
+        self.linear.weight = None
 
 
 def build_qat_from_model(model: nn.Module, arch_name: str, device: torch.device) -> nn.Module:
@@ -289,10 +344,7 @@ def build_qat_from_model(model: nn.Module, arch_name: str, device: torch.device)
     spec = MODEL_REGISTRY[arch_name]
     root_attr = spec.get("fuse_root_attr")
     fuse_root = getattr(model, root_attr) if root_attr else None
-    return prepare_qat_model(
-        model, spec["fuse_map"], fuse_root=fuse_root,
-        classifier_fuse_pairs=spec.get("classifier_fuse_map"), float_logits=True,
-    ).to(device)
+    return prepare_qat_model(model, spec["fuse_map"], fuse_root=fuse_root, float_logits=True).to(device)
 
 
 def load_best_model(
@@ -326,9 +378,14 @@ def build_qat(arch_name: str, save_dir: str | Path, device: torch.device) -> nn.
 
 
 def convert_to_int8(qat_model: nn.Module, inplace: bool = False) -> nn.Module:
-    """Convert a trained QAT model to real INT8 ops (CPU-only)."""
-    qat_model = qat_model.to("cpu").eval()
-    return torch.ao.quantization.convert(qat_model, inplace=inplace)
+    """Convert a trained QAT model to real INT8 ops (CPU-only), on QUANT_ENGINE's kernels. The logits layer is
+    frozen first: convert() strips every fake-quant's observer, which an uncalibrated one still needs."""
+    torch.backends.quantized.engine = QUANT_ENGINE
+    model = (qat_model if inplace else copy.deepcopy(qat_model)).to("cpu").eval()
+    for m in model.modules():
+        if isinstance(m, _FloatLogits):
+            m.freeze()
+    return torch.ao.quantization.convert(model, inplace=True)
 
 
 def load_int8_model(arch_name: str, save_dir: str | Path) -> nn.Module:

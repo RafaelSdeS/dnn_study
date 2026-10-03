@@ -179,7 +179,6 @@ def _finetune_and_quantize(
     _train_ds, _val_ds, train_loader, val_loader = create_imagenet_loaders(
         data_cfg, persistent_workers=runtime_cfg.get("persistent_workers", False)
     )
-    torch.backends.quantized.engine = runtime_cfg.get("quantized_engine", "fbgemm")
 
     # SIGUSR1 (Slurm's pre-timeout warning, see train.sbatch) -> request_stop() -> Trainer writes
     # its resume checkpoint and exits cleanly, same pattern scripts/train.py uses.
@@ -205,7 +204,7 @@ def _finetune_and_quantize(
     active_trainer["trainer"] = trainer
     fit_results = trainer.fit(resume_from=auto_resume_path(checkpoints_dir, run_name))
     fp32_eval = trainer.evaluate(topk=(1, 5))
-    fp32_benchmark = trainer.benchmark(warmup=int(runtime_cfg.get("benchmark_warmup", 100)))
+    fp32_benchmark = trainer.benchmark()
     print(f"Pruned + fine-tuned (FP32) | top1={fp32_eval['top1']:.2f}% | top5={fp32_eval['top5']:.2f}%")
 
     # QAT needs the *best* fine-tuned checkpoint (not necessarily the last epoch) loaded into a
@@ -238,7 +237,7 @@ def _finetune_and_quantize(
         torch.device("cpu"), checkpoints_dir, f"qat_{run_name}", num_classes=data_cfg.num_classes,
     )
     int8_eval = int8_trainer.evaluate(topk=(1, 5))
-    int8_benchmark = int8_trainer.benchmark(warmup=int(runtime_cfg.get("benchmark_warmup", 100)))
+    int8_benchmark = int8_trainer.benchmark()
     print(f"Pruned + fine-tuned (INT8) | top1={int8_eval['top1']:.2f}% | top5={int8_eval['top5']:.2f}%")
 
     flops_results = compute_flops(best_model)

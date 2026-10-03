@@ -5,24 +5,39 @@ FloatFunctional, so the residual add wasn't instrumented and converting to INT8 
 results or crashed. Fixed by switching to torchvision's quantizable resnet18. This test builds QAT +
 converts to INT8 for every residual-bearing model in the sweep and asserts the forward pass still works.
 """
+import copy
+
+import pytest
 import torch
 import torch.nn as nn
 
 import torch.ao.nn.intrinsic.qat as nniqat
+import torch.ao.quantization as tq
 
-from ml.model_registrations import CLASSIFIER_FUSE_MAP_VGG16
+import ml.model_registrations  # noqa: F401 -- populates MODEL_REGISTRY
 from ml.quantization import build_qat_from_model, convert_to_int8, find_fuse_groups, make_qat_callback, prepare_qat_model
 from ml.registry import MODEL_REGISTRY
-from models.baselines import AlexNetTV, ResNet18TV, VGG16
+from models.baselines import ResNet18TV
 from models.final_architecture import AlexNetFinalBottleneckResidual, AlexNetFinalFireResidual
 
-# CLAUDE.md mandates fbgemm for real training runs (PCAD's x86 GPU nodes), but dev/CI boxes
-# (e.g. ARM, or an x86 box without AVX2) may lack it — fall back to whatever's supported so this
-# test still exercises the same QAT graph-construction logic everywhere.
-torch.backends.quantized.engine = (
-    "fbgemm" if "fbgemm" in torch.backends.quantized.supported_engines
-    else torch.backends.quantized.supported_engines[0]
-)
+# One model per family the report trains (phase_11_families.yaml + the Phase 11 comparisons), plus the factorial's
+# cell types: FC/GAP heads, BN, Dropout, 2x2 + ZeroPad2d, stride 4, torchvision's AlexNet head. No FC-head VGG
+# (~130M params: too much RAM for a laptop test); vgg16's Linear-ReLU pairs go through the same Sequential pass.
+REPORT_MODELS = [
+    "alexnet_3x3_fc", "alexnet_3x3_gap", "alexnet_tv_scratch", "alexnet_tv_mixed_alt_gap", "alexnet_mixed_fc_bn",
+    "alexnet_stacked", "alexnet_stacked_gap_nobn", "alexnet_smallkernel_fc", "alexnet_adapted_2x2_fc",
+    "alexnet_fx_k2_s4_pk3n3_fc_bn_d", "alexnet_fx_orig_s2_pk3n2_gap", "alexnet_3x3_gap_bn", "alexnet_bottleneck",
+    "alexnet_fire", "alexnet_factorized", "alexnet_groupconv", "alexnet_depthwisesep", "alexnet_residual",
+    "alexnet_dilated_fc", "alexnet_dilated_gap", "alexnet_small_kernel_with_bn", "tinyhybridnet", "tinymobilenetv2",
+    "alexnet_final_bottleneck_fire", "alexnet_final_fire_residual", "alexnet_final_bottleneck_residual",
+    "alexnet_final_depthwise_fire", "alexnet_fire_bypass", "vgg_style", "mobilenetv2", "resnet18tv",
+    "vgg_fx_alt32_s2_pk2n4_gap",
+]
+
+
+def _qat(name):
+    return build_qat_from_model(MODEL_REGISTRY[name]["ctor"](), name, torch.device("cpu"))
+
 
 RESIDUAL_MODELS = [
     ("alexnet_final_bottleneck_residual", AlexNetFinalBottleneckResidual),
@@ -60,22 +75,65 @@ def test_prepare_qat_attaches_weight_and_activation_fake_quant():
     assert has_activation_fake_quant, "no activation fake-quantizer found after prepare_qat"
 
 
-def test_vgg16_classifier_linear_relu_fusion_for_qat():
-    """Regression test for the QAT collapse in docs/logs/PHASE11_LOG.md: vgg16's classifier.0
-    Linear feeds a heavy-tailed raw output (p999 ~27k, max ~115k) straight into an activation
-    observer unless Linear+ReLU are fused first, the same mechanism already used for every
-    Conv-BN-ReLU stage."""
-    assert MODEL_REGISTRY["vgg16"]["classifier_fuse_map"] == CLASSIFIER_FUSE_MAP_VGG16
-    assert MODEL_REGISTRY["vgg16_2x2"]["classifier_fuse_map"] == CLASSIFIER_FUSE_MAP_VGG16
+def test_int8_definition_is_8bit_activations_and_symmetric_per_channel_weights():
+    """The literature's INT8 (Jacob et al. 2018; Wu et al. 2020 Sec. 6): activations 0..255 -- not fbgemm's default
+    reduce_range, which made them 7-bit until 2026-10-03 -- and weights per-channel symmetric in [-127, 127]."""
+    qat = _qat("alexnet_3x3_fc")
+    weights = [m.weight_fake_quant for m in qat.modules() if hasattr(m, "weight_fake_quant")]
+    acts = [m for m in qat.modules() if isinstance(m, tq.FakeQuantizeBase) and all(m is not w for w in weights)]
+    assert weights and acts
+    for fq in weights:
+        obs = fq.activation_post_process
+        assert (obs.quant_min, obs.quant_max, obs.qscheme) == (-127, 127, torch.per_channel_symmetric)
+    for fq in acts:
+        obs = fq.activation_post_process
+        assert (obs.quant_min, obs.quant_max, obs.reduce_range) == (0, 255, False), type(obs)
 
-    qat_model = build_qat_from_model(VGG16(kernel_size=3), "vgg16", torch.device("cpu"))
-    assert isinstance(qat_model.classifier[0], nniqat.LinearReLU)
-    assert isinstance(qat_model.classifier[3], nniqat.LinearReLU)
-    assert not isinstance(qat_model.classifier[6], nniqat.LinearReLU)  # logits layer, no ReLU after it
 
-    # models without classifier_fuse_map are unaffected
-    alexnet_qat = build_qat_from_model(AlexNetTV(pretrained=False), "alexnet_tv_scratch", torch.device("cpu"))
-    assert not isinstance(alexnet_qat.classifier[0], nniqat.LinearReLU)
+@pytest.mark.parametrize("name", REPORT_MODELS)
+def test_every_relu_is_fused_into_the_layer_that_feeds_it(name):
+    """Conv/Linear/add + ReLU must be fused (Jacob et al. 2018; LiteRT fused activations): an unfused ReLU leaves its
+    producer's observer on the pre-ReLU range, half of it spent on negatives. Until 2026-10-03 every FC head except
+    vgg16's ran its Linear-ReLU pairs unfused -- an INT8 handicap only FC heads had."""
+    qat, ran = _qat(name).eval(), []
+    for n, m in qat.named_modules():
+        if type(m) is nn.ReLU:
+            m.register_forward_hook(lambda mod, i, o, n=n: ran.append(n))
+    with torch.no_grad():
+        qat(torch.randn(2, 3, 64, 64))
+    assert not ran, f"{name}: standalone ReLU(s) {ran}"
+
+
+@pytest.mark.parametrize("name", ["alexnet_3x3_gap", "alexnet_3x3_fc", "alexnet_adapted_2x2_gap",
+                                  "alexnet_final_fire_residual"])
+def test_int8_kernels_reproduce_the_fake_quant_model(name):
+    """The converted model must compute what QAT simulated (Jacob et al. 2018); a gap means the kernels round,
+    saturate or requantize differently -- e.g. fbgemm's int16 saturation on full-range activations without VNNI
+    (2026-10-03, this laptop's AVX-VNNI-only i7: alexnet_3x3_gap 50.8 dB on onednn, 42.7 on fbgemm 8-bit, 48.4 on the
+    old fbgemm 7-bit). The model is put in its deployed state first -- BN running stats settled on data, as a trained
+    checkpoint has them, observers calibrated on what eval computes. Random weights still amplify 1-LSB rounding
+    differences with depth, the same on every backend (resnet18 ~3 dB per block), so the real check is
+    scripts/train.py's agreement_qat_int8 on trained models; this one catches a broken kernel or definition."""
+    torch.manual_seed(0)
+    fp = MODEL_REGISTRY[name]["ctor"]().train()
+    with torch.no_grad():
+        for m in fp.modules():
+            if isinstance(m, nn.BatchNorm2d):
+                m.momentum = None  # cumulative average
+        for _ in range(5):
+            fp(torch.randn(16, 3, 64, 64))
+    qat = build_qat_from_model(fp, name, torch.device("cpu"))
+    qat.apply(nniqat.freeze_bn_stats)
+    qat.eval()
+    with torch.no_grad():
+        for _ in range(3):
+            qat(torch.randn(16, 3, 64, 64))
+    qat.apply(tq.disable_observer)
+    x = torch.randn(16, 3, 64, 64)
+    with torch.no_grad():
+        fq, int8 = qat(x), convert_to_int8(copy.deepcopy(qat))(x)
+    sqnr_db = 10 * torch.log10(fq.pow(2).sum() / (fq - int8).pow(2).sum())
+    assert sqnr_db > 30, f"{name}: INT8 vs fake-quant SQNR {sqnr_db:.1f} dB"
 
 
 def test_fuse_root_models_are_fused_in_the_qat_copy_not_the_input():
@@ -136,9 +194,10 @@ def test_int8_avg_pool_requantizes_instead_of_inheriting_its_input_scale():
     assert torch.allclose(int8[0, 1:], torch.arange(1, 8) * 4 / 64, atol=0.02), int8  # the means survive
 
 
-def test_logits_layer_stays_float_so_int8_logits_do_not_tie():
+def test_logits_layer_has_int8_weights_and_an_fp32_output_so_int8_logits_do_not_tie():
     """2026-10-02 audit (docs/logs/PHASE11_LOG.md, "Float logits layer"): the logits Linear's output went through an
-    8-bit fake-quant, leaving 8-31 distinct values per image and 14-31% top-1 ties in QAT/INT8. resnet18tv because
+    8-bit fake-quant, leaving 8-31 distinct values per image and 14-31% top-1 ties in QAT/INT8. Wu et al. 2020: INT8
+    input and weights, the int32 accumulator rescaled to FP32 since no quantized layer reads it. resnet18tv because
     its input QuantStub is registered after fc: the logits layer must be found in execution order."""
     from ml.quantization import _FloatLogits
     x = torch.randn(4, 3, 64, 64)
@@ -146,12 +205,18 @@ def test_logits_layer_stays_float_so_int8_logits_do_not_tie():
                         ("resnet18tv", ResNet18TV(pretrained=False))]:
         qat = build_qat_from_model(model, name, torch.device("cpu")).eval()
         qat(x)  # calibrate
+        qat.apply(tq.disable_observer)
         int8 = convert_to_int8(qat)
         heads = [m for m in int8.modules() if isinstance(m, _FloatLogits)]
-        assert len(heads) == 1 and type(heads[0].linear) is nn.Linear, name
+        assert len(heads) == 1 and heads[0].linear.weight is None and heads[0].qweight.dtype == torch.int8, name
         assert any(isinstance(m, torch.ao.nn.quantized.Quantize) for m in int8.modules()), f"{name}: input not quantized"
-        out = int8(x)
+        with torch.no_grad():
+            out = int8(x)
+            qat_head = next(m for m in qat.modules() if isinstance(m, _FloatLogits))
+            fake_quant_w = qat_head.weight_fake_quant(qat_head.linear.weight)
         assert not out.is_quantized and all(len(torch.unique(row)) == 200 for row in out), name
+        # the stored int8 codes are exactly the weights QAT trained against
+        assert torch.allclose(heads[0].qweight.float() * heads[0].weight_fake_quant.scale[:, None], fake_quant_w), name
 
 
 def test_validation_does_not_calibrate_qat_observers_on_val_data():
