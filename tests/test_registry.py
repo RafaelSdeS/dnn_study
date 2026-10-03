@@ -128,10 +128,12 @@ def _layout(m):
 def test_factorial_grid_is_complete_and_every_gap_cell_runs():
     """208 cells = 4 kernels x 2 strides x 2 pool kernels x 2 pool counts x (FC x BN x Dropout + GAP x BN)
     + 16 pretrained; each GAP cell (cheap to build) runs and has one Conv-(BN-)ReLU fuse group per conv."""
-    fx = [n for n in MODEL_REGISTRY if n.startswith("alexnet_fx_")]
-    assert len(fx) == 208 and sum(n.endswith("_pt") for n in fx) == 16
+    from ml.model_registrations import CELL_FACTORS, FX_KERNELS
+
+    fx = [n for n, f in CELL_FACTORS.items() if f["family"] == "alexnet" and f["kernels"] in FX_KERNELS]
+    assert len(fx) == 208 and sum(CELL_FACTORS[n]["pretrained"] for n in fx) == 16
     x = torch.randn(1, 3, 64, 64)
-    for name in (n for n in fx if "_gap" in n):
+    for name in (n for n in fx if CELL_FACTORS[n]["head"] == "gap"):
         spec, model = MODEL_REGISTRY[name], MODEL_REGISTRY[name]["ctor"]().eval()
         assert model(x).shape == (1, 200), name
         for group in spec["fuse_map"]:
@@ -140,27 +142,53 @@ def test_factorial_grid_is_complete_and_every_gap_cell_runs():
         assert len(spec["fuse_map"]) == 5, name
 
 
-def test_factorial_cells_already_trained_elsewhere_are_the_same_net():
-    """FX_EXISTING reuses 19 runs as factorial cells -- only valid if each is layer for layer that cell
-    (the *_pt cells share their non-pt twin's layout; the ImageNet load is tested above)."""
-    from ml.model_registrations import FX_EXISTING
-    from models import AlexNetTV
+def test_every_cell_name_says_what_the_net_is():
+    """The descriptive names are only useful if true: on every registered cell (meta device, shapes only), the kernels,
+    conv1 stride, max-pools, last-map side, head, Dropout and BN read off the built net match its name."""
+    from ml.model_registrations import CELL_FACTORS, FX_KERNELS, VGG_FX_KERNELS, _cell_name
 
-    for cell, run in FX_EXISTING.items():
-        if cell.endswith("_pt"):
-            continue
-        model = run.split("/")[1]
-        ref = AlexNetTV(pretrained=False, kernel_size=3) if model == "alexnet_tv_3x3" else MODEL_REGISTRY[model]["ctor"]()
-        assert _layout(MODEL_REGISTRY[cell]["ctor"]()) == _layout(ref), (cell, run)
+    for name, f in CELL_FACTORS.items():
+        kernels = {"alexnet": FX_KERNELS, "vgg16": VGG_FX_KERNELS}[f["family"]]
+        assert _cell_name(**f) == name, name
+        with torch.device("meta"):
+            m = MODEL_REGISTRY[name]["ctor"]()
+            feats = [x for x in m.features if not isinstance(x, torch.nn.AdaptiveAvgPool2d)]
+            side = torch.nn.Sequential(*feats)(torch.zeros(1, 3, 64, 64)).shape[-1]
+        convs = [x for x in m.features if isinstance(x, torch.nn.Conv2d)]
+        pools = [x for x in m.features if isinstance(x, torch.nn.MaxPool2d)]
+        if f["kernels"] in kernels:
+            assert tuple(c.kernel_size[0] for c in convs) == kernels[f["kernels"]], name
+        assert convs[0].stride[0] == f["stride"] and side == f["map_side"], name
+        assert len(pools) == f["pool_count"] and {p.kernel_size for p in pools} == {f["pool_kernel"]}, name
+        assert any(isinstance(x, torch.nn.BatchNorm2d) for x in m.modules()) == f["bn"], name
+        assert (sum(isinstance(x, torch.nn.Linear) for x in m.classifier.modules()) == 1) == (f["head"] == "gap"), name
+        assert any(isinstance(x, torch.nn.Dropout) and x.p > 0 for x in m.modules()) == f["dropout"], name
+
+
+def test_named_reference_cells_are_the_reference_nets():
+    """The cells the report names after a known net must be that net layer for layer: AlexNet trained from scratch
+    (torchvision's layout), VGG16 + BN, and the Phase 2 AlexNet3x3 FC/GAP the 64px layout started from."""
+    from models import AlexNetTV, VGG16
+
+    twins = {"alexnet_k11-5-3_stride4_3pool3x3_map1_fcdrop_nobn": lambda: AlexNetTV(pretrained=False),
+             "alexnet_k3x3_stride4_3pool3x3_map1_fcdrop_nobn": lambda: AlexNetTV(pretrained=False, kernel_size=3),
+             "alexnet_k3x3_stride2_2pool2x2_map8_fc_nobn": MODEL_REGISTRY["alexnet_3x3_fc"]["ctor"],
+             "alexnet_k3x3_stride2_2pool2x2_map8_gap_nobn": MODEL_REGISTRY["alexnet_3x3_gap"]["ctor"]}
+    for cell, ref in twins.items():
+        assert _layout(MODEL_REGISTRY[cell]["ctor"]()) == _layout(ref()), cell
+    with torch.device("meta"):
+        mine, ref = MODEL_REGISTRY["vgg16_k3x3_stride1_5pool2x2_map2_fcdrop_bn"]["ctor"](), VGG16()
+    assert _layout(mine) == _layout(ref)
+    assert {k: v.shape for k, v in mine.state_dict().items()} == {k: v.shape for k, v in ref.state_dict().items()}
 
 
 def test_factorial_cells_survive_the_qat_to_int8_path():
     """One GAP cell per kernel x BN (the fuse map depends on nothing else) through the real QAT->INT8 path."""
     from ml.quantization import build_qat_from_model, convert_to_int8
 
-    for kernel in ("orig", "k3", "k2", "mix"):
-        for bn in ("", "_bn"):
-            name = f"alexnet_fx_{kernel}_s4_pk3n2_gap{bn}"  # a stride-4 2x2 stem and a crossed pool: the newest paths
+    for kernel, side in (("k11-5-3", 3), ("k3x3", 3), ("k2x2", 3), ("kalt3-2", 3)):
+        for bn in ("nobn", "bn"):
+            name = f"alexnet_{kernel}_stride4_2pool3x3_map{side}_gap_{bn}"  # a stride-4 2x2 stem + crossed pool: the newest paths
             qat_model = build_qat_from_model(MODEL_REGISTRY[name]["ctor"](), name, torch.device("cpu"))
             assert convert_to_int8(qat_model.eval())(torch.randn(2, 3, 64, 64)).shape == (2, 200), name
 
@@ -213,11 +241,11 @@ def test_vgg_factorial_grid_is_complete_and_only_stride_and_pool_count_set_the_m
     """168 cells = 6 kernel patterns x 2 strides x 2 pool kernels x 2 pool counts x 3 heads + 24 pretrained (3x3).
     The kernel and pool-kernel factors are only clean if they never change the map size -- checked on every cell
     (meta device: shapes only, no weights), plus each fuse group being Conv-BN-ReLU in the padded layout."""
-    from ml.model_registrations import VGG_FX_KERNELS
+    from ml.model_registrations import CELL_FACTORS, VGG_FX_KERNELS
 
-    fx = [n for n in MODEL_REGISTRY if n.startswith("vgg_fx_")]
-    assert len(fx) == 168 and sum(n.endswith("_pt") for n in fx) == 24
-    for name in (n for n in fx if not n.endswith("_pt")):
+    fx = [n for n, f in CELL_FACTORS.items() if f["family"] == "vgg16"]
+    assert len(fx) == 168 and sum(CELL_FACTORS[n]["pretrained"] for n in fx) == 24
+    for name in (n for n in fx if not CELL_FACTORS[n]["pretrained"]):
         spec = MODEL_REGISTRY[name]
         with torch.device("meta"):
             model = spec["ctor"]()
@@ -227,21 +255,15 @@ def test_vgg_factorial_grid_is_complete_and_only_stride_and_pool_count_set_the_m
         assert tuple(m.kernel_size[0] for m in model.features if isinstance(m, torch.nn.Conv2d)) == kw["kernels"], name
         assert [type(model.features.get_submodule(i)) for g in spec["fuse_map"] for i in g] == \
             [torch.nn.Conv2d, torch.nn.BatchNorm2d, torch.nn.ReLU] * 13, name
-    assert sum(k == 3 for k in VGG_FX_KERNELS["alt32"]) == 7 and sum(k == 3 for k in VGG_FX_KERNELS["early2"]) == 6
+    assert sum(k == 3 for k in VGG_FX_KERNELS["kalt3-2"]) == 7 and sum(k == 3 for k in VGG_FX_KERNELS["k2x2then3x3"]) == 6
 
 
-def test_vgg_factorial_reused_cell_is_vgg16_layer_for_layer():
-    """vgg16's run stands in for vgg_fx_k3_s1_pk2n5_fc_d -- only valid if it is the same net, same state_dict."""
-    from ml.model_registrations import VGG_FX_EXISTING
+def test_vgg_no_dropout_fc_cell_keeps_vgg16s_state_dict_layout():
+    """The no-Dropout FC level keeps the same indices (Dropout(0.0)), so the same fuse map as VGG16 itself."""
     from models import VGG16
 
-    for cell, run in VGG_FX_EXISTING.items():
-        with torch.device("meta"):
-            mine, ref = MODEL_REGISTRY[cell]["ctor"](), MODEL_REGISTRY[run.split("/")[1]]["ctor"]()
-        assert _layout(mine) == _layout(ref), cell
-        assert {k: v.shape for k, v in mine.state_dict().items()} == {k: v.shape for k, v in ref.state_dict().items()}, cell
-    with torch.device("meta"):  # the no-Dropout FC level keeps the same indices (Dropout(0.0)), so the same fuse map
-        assert MODEL_REGISTRY["vgg_fx_k3_s1_pk2n5_fc"]["ctor"]().state_dict().keys() == VGG16().state_dict().keys()
+    with torch.device("meta"):
+        assert MODEL_REGISTRY["vgg16_k3x3_stride1_5pool2x2_map2_fc_bn"]["ctor"]().state_dict().keys() == VGG16().state_dict().keys()
 
 
 def test_vgg_factorial_cells_survive_the_qat_to_int8_path():
@@ -250,7 +272,8 @@ def test_vgg_factorial_cells_survive_the_qat_to_int8_path():
     the FC head's classifier fusion is vgg16's, tested in test_quantization)."""
     from ml.quantization import build_qat_from_model, convert_to_int8
 
-    for name in ("vgg_fx_k2_s1_pk3n5_gap", "vgg_fx_k2_s2_pk3n4_gap", "vgg_fx_alt23_s1_pk3n4_gap"):
+    for name in ("vgg16_k2x2_stride1_5pool3x3_map2_gap_bn", "vgg16_k2x2_stride2_4pool3x3_map2_gap_bn",
+                 "vgg16_kalt2-3_stride1_4pool3x3_map4_gap_bn"):
         qat_model = build_qat_from_model(MODEL_REGISTRY[name]["ctor"](), name, torch.device("cpu"))
         assert convert_to_int8(qat_model.eval())(torch.randn(2, 3, 64, 64)).shape == (2, 200), name
 
@@ -265,7 +288,7 @@ def test_pretrained_vgg_cell_loads_vgg16_bn_and_matches_it_in_eval():
         tv = vgg16_bn(weights="IMAGENET1K_V1").eval()
     except Exception as e:  # no cached weights and no network
         pytest.skip(f"ImageNet weights unavailable: {e}")
-    model = MODEL_REGISTRY["vgg_fx_k3_s1_pk2n5_fc_d_pt"]["ctor"]().eval()
+    model = MODEL_REGISTRY["vgg16_k3x3_stride1_5pool2x2_map2_fcdrop_bn_pretrained"]["ctor"]().eval()
     x = torch.randn(2, 3, 64, 64)
     with torch.no_grad():
         assert torch.allclose(model.features(x), tv.features(x), atol=1e-4)

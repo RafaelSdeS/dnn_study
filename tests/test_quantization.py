@@ -26,12 +26,12 @@ from models.final_architecture import AlexNetFinalBottleneckResidual, AlexNetFin
 REPORT_MODELS = [
     "alexnet_3x3_fc", "alexnet_3x3_gap", "alexnet_tv_scratch", "alexnet_tv_mixed_alt_gap", "alexnet_mixed_fc_bn",
     "alexnet_stacked", "alexnet_stacked_gap_nobn", "alexnet_smallkernel_fc", "alexnet_adapted_2x2_fc",
-    "alexnet_fx_k2_s4_pk3n3_fc_bn_d", "alexnet_fx_orig_s2_pk3n2_gap", "alexnet_3x3_gap_bn", "alexnet_bottleneck",
+    "alexnet_k2x2_stride4_3pool3x3_map1_fcdrop_bn", "alexnet_k11-5-3_stride2_2pool3x3_map7_gap_nobn", "alexnet_3x3_gap_bn", "alexnet_bottleneck",
     "alexnet_fire", "alexnet_factorized", "alexnet_groupconv", "alexnet_depthwisesep", "alexnet_residual",
     "alexnet_dilated_fc", "alexnet_dilated_gap", "alexnet_small_kernel_with_bn", "tinyhybridnet", "tinymobilenetv2",
     "alexnet_final_bottleneck_fire", "alexnet_final_fire_residual", "alexnet_final_bottleneck_residual",
     "alexnet_final_depthwise_fire", "alexnet_fire_bypass", "vgg_style", "mobilenetv2", "resnet18tv",
-    "vgg_fx_alt32_s2_pk2n4_gap",
+    "vgg16_kalt3-2_stride2_4pool2x2_map2_gap_bn",
 ]
 
 

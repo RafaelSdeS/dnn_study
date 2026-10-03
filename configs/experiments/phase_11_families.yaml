@@ -1,14 +1,16 @@
 # Every other classification CNN of the study (Phases 1-4, 9) under the single Phase 11 protocol, so the
-# report's compensation/hybrid/baseline tables share it with the factorial. Already at this protocol, not
-# repeated: alexnet_bottleneck, alexnet_fire, alexnet_3x3_gap_bn (phase_11_geometry_controls), vgg16/vgg16_2x2,
-# alexnet_tv (pretrained), the AlexNetMixed/Stacked/SmallKernel variants. Left out: alexnet_se (its SE block
-# can't convert to INT8 -- "empty_strided not supported on quantized tensors"), the ViTs (own recipe, Eixo 7),
-# alexnet_2x2_fc (legacy unpadded 2x2, superseded by the factorial's k2 cells).
+# report's compensation/hybrid/baseline tables share it with the kernel study. The AlexNet/VGG kernel, head, BN,
+# geometry, Dropout, pretraining and stacked/narrow comparisons live in the other phase_11_*.yaml files (descriptive
+# names). Left out: alexnet_se (its SE block can't convert to INT8 -- "empty_strided not supported on quantized
+# tensors"), the ViTs (own recipe, Eixo 7), alexnet_2x2_fc (legacy unpadded 2x2, superseded by the k2x2 cells).
+# Lowest priority of the Phase 11 queue (docs/logs/PHASE11_LOG.md "Reduced design, descriptive names").
 # Same protocol as every Phase 11 run, enforced by tests/test_config.py.
 # Submit (clean tree, pulled): python -m scripts.cluster submit-sweep --experiment phase_11_families --runtime pcad --slurm tupi_4090
 extends: _protocols/no_patience
 name: phase_11_families
 models:
+  - alexnet_bottleneck
+  - alexnet_fire
   - alexnet_factorized
   - alexnet_groupconv
   - alexnet_depthwisesep

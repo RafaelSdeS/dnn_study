@@ -15,7 +15,7 @@ import torch.nn as nn
 from torchvision.models.vgg import cfgs as VGG_CFGS
 
 from ml.quantization import find_fuse_groups
-from ml.registry import register_model
+from ml.registry import MODEL_REGISTRY, register_model
 from ml.winograd_bridge import custom_model, torchvision_model
 from models.baselines import _vgg_adapted_features
 from models import (
@@ -180,35 +180,39 @@ register_model("alexnet_geo_s4_p3_fc_k3", partial(AlexNetAdapted, kernels=(3,) *
                                                   pool_kernel=3, pool_count=3), **_GEO)
 register_model("alexnet_adapted_orig_fc_pt", partial(AlexNetAdapted, pretrained=True), **_GEO)
 
-# Phase 11 full factorial (configs/experiments/phase_11_factorial_{core,ext}.yaml, docs/logs/PHASE11_LOG.md):
-# every AlexNetAdapted cell of kernel x stem stride x pool kernel x pool count x head x BN, + Dropout(0.5) on
-# the FC head, + ImageNet pretraining on the 11-5-3-3-3 FC no-BN net (the only shape its weights fit). He
-# init (default init until 2026-10-03), same channels -- nothing else varies. alexnet_fx_<kernel>_s<stride>_pk<pool k>n<pool count>_<head>[_bn][_d][_pt].
-# All 208 cells are registered (so analysis can build any of them); FX_EXISTING maps the 19 that were already
-# trained under another name to that run (<experiment>/<model> under outputs/pcad) -- the yamls leave them out.
-FX_KERNELS = {"orig": (11, 5, 3, 3, 3), "k3": (3,) * 5, "k2": (2,) * 5, "mix": (3, 2, 3, 2, 3)}
-FX_EXISTING = {
-    "alexnet_fx_orig_s2_pk2n2_fc": "phase_11_geometry_controls/alexnet_adapted_orig_fc",
-    "alexnet_fx_orig_s2_pk2n2_gap": "phase_11_geometry_controls/alexnet_adapted_orig_gap",
-    "alexnet_fx_k3_s2_pk2n2_fc": "phase_11_geometry_controls/alexnet_3x3_fc",
-    "alexnet_fx_k3_s2_pk2n2_gap": "phase_11_mixed_kernel_comparison/alexnet_3x3_gap",
-    "alexnet_fx_k2_s2_pk2n2_fc": "phase_11_geometry_controls/alexnet_adapted_2x2_fc",
-    "alexnet_fx_k2_s2_pk2n2_gap": "phase_11_geometry_controls/alexnet_adapted_2x2_gap",
-    "alexnet_fx_k3_s2_pk2n2_gap_bn": "phase_11_geometry_controls/alexnet_3x3_gap_bn",
-    "alexnet_fx_orig_s4_pk3n3_fc": "phase_11_geometry_factorial/alexnet_geo_s4_p3_fc",
-    "alexnet_fx_orig_s2_pk3n3_fc": "phase_11_geometry_factorial/alexnet_geo_s2_p3_fc",
-    "alexnet_fx_orig_s4_pk2n2_fc": "phase_11_geometry_factorial/alexnet_geo_s4_p2_fc",
-    "alexnet_fx_orig_s4_pk3n3_gap": "phase_11_geometry_factorial/alexnet_geo_s4_p3_gap",
-    "alexnet_fx_k3_s4_pk3n3_fc": "phase_11_geometry_factorial/alexnet_geo_s4_p3_fc_k3",
-    "alexnet_fx_orig_s2_pk2n2_fc_d": "phase_11_geometry_factorial/alexnet_geo_s2_p2_drop_fc",
-    "alexnet_fx_orig_s2_pk3n2_fc": "phase_11_geometry_factorial/alexnet_geo_s2_pk3n2_fc",
-    "alexnet_fx_orig_s2_pk2n3_fc": "phase_11_geometry_factorial/alexnet_geo_s2_pk2n3_fc",
-    "alexnet_fx_orig_s2_pk2n2_fc_pt": "phase_11_geometry_factorial/alexnet_adapted_orig_fc_pt",
-    "alexnet_fx_orig_s4_pk3n3_fc_d_pt": "phase_11_geometry_factorial/alexnet_tv",
-    # AlexNetTV(pretrained=False) == these two cells layer for layer, He init in both since 2026-10-03
-    "alexnet_fx_orig_s4_pk3n3_fc_d": "phase_11_kernel_size_comparison/alexnet_tv_scratch",
-    "alexnet_fx_k3_s4_pk3n3_fc_d": "phase_11_kernel_size_comparison/alexnet_tv_3x3",
-}
+# Phase 11 cells, named by what they are (2026-10-03, docs/logs/PHASE11_LOG.md "Reduced design, descriptive names"):
+#   alexnet_<kernels>_stride<s>_<n>pool<k>x<k>_map<m>_<gap|fc|fcdrop>_<bn|nobn>[_pretrained]
+#   vgg16_<kernels>_stride<s>_<n>pool<k>x<k>_map<m>_<gap|fc|fcdrop>_bn[_pretrained]
+# kernels: k11-5-3 = AlexNet's own 11-5-3-3-3; k3x3 / k2x2 = every conv; kalt3-2 / kalt2-3 = alternating, starting with
+# the first; k3x3then2x2 / k2x2then3x3 (VGG) = first 7 convs one size, last 6 the other; k3x3stacked = two 3x3 per
+# AlexNet stage; k3x3narrow = AlexNetSmallKernel (5 convs, 64-128-256 channels). stride = conv1's; <n>pool<k>x<k> = n
+# max-pools of k x k; map = side of the last conv map at a 64x64 input (what the head sees; computed, not assumed);
+# fcdrop = FC head + Dropout 0.5; pretrained = ImageNet weights (AlexNet: only the 11-5-3 FC no-BN shape fits; VGG:
+# vgg16_bn on the 3x3 cells). Every cell of both grids is registered with its factors in CELL_FACTORS (analysis groups by
+# them); the phase_11_*.yaml files list the cells that run. Same channels and He init within a family.
+FX_KERNELS = {"k11-5-3": (11, 5, 3, 3, 3), "k3x3": (3,) * 5, "k2x2": (2,) * 5, "kalt3-2": (3, 2, 3, 2, 3)}
+CELL_FACTORS: dict[str, dict] = {}
+
+
+def _map_side(features: nn.Sequential) -> int:
+    """Side of the last conv map at a 64x64 input: features minus the head's adaptive pool, on whatever device the
+    module lives (meta here: shapes only)."""
+    mods = list(features)
+    while isinstance(mods[-1], nn.AdaptiveAvgPool2d):
+        mods.pop()
+    return nn.Sequential(*mods)(torch.zeros(1, 3, 64, 64, device=next(features.parameters()).device)).shape[-1]
+
+
+def _cell_name(family, kernels, stride, pool_kernel, pool_count, map_side, head, dropout, bn, pretrained) -> str:
+    return (f"{family}_{kernels}_stride{stride}_{pool_count}pool{pool_kernel}x{pool_kernel}_map{map_side}_"
+            f"{'fcdrop' if dropout else head}_{'bn' if bn else 'nobn'}" + "_pretrained" * pretrained)
+
+
+def _register_cell(ctor, fuse_map, lr, **factors) -> str:
+    name = _cell_name(**factors)
+    register_model(name, ctor, fuse_map=fuse_map, fuse_root_attr="features", lr=lr)
+    CELL_FACTORS[name] = factors
+    return name
 
 
 def _conv_groups(seq: nn.Sequential) -> list:
@@ -223,17 +227,18 @@ def _conv_groups(seq: nn.Sequential) -> list:
 # the last ReLU), so 8 small GAP instances cover all 208 cells
 _FX_FUSE = {(kn, bn): _conv_groups(AlexNetAdapted(kernels=ks, head="gap", batch_norm=bn).features)
             for kn, ks in FX_KERNELS.items() for bn in (False, True)}
-for (kn, ks), s, pk, pn, head, bn, d in product(FX_KERNELS.items(), (2, 4), (2, 3), (2, 3), ("fc", "gap"),
-                                                (False, True), (False, True)):
-    if d and head == "gap":  # the GAP head has no Dropout
-        continue
-    kw = dict(kernels=ks, head=head, batch_norm=bn, stem_stride=s, pool_kernel=pk, pool_count=pn, dropout=0.5 * d)
-    if kn == "orig" and s == 4:
-        kw["stem_padding"] = 2  # torchvision's own conv1
-    name = f"alexnet_fx_{kn}_s{s}_pk{pk}n{pn}_{head}" + "_bn" * bn + "_d" * d
-    cells = [(name, kw)] + ([(name + "_pt", {**kw, "pretrained": True})] if kn == "orig" and head == "fc" and not bn else [])
-    for cell, cell_kw in cells:
-        register_model(cell, partial(AlexNetAdapted, **cell_kw), fuse_map=_FX_FUSE[kn, bn], fuse_root_attr="features", lr=3e-4)
+for (kn, ks), s, pk, pn in product(FX_KERNELS.items(), (2, 4), (2, 3), (2, 3)):
+    geo = dict(kernels=ks, stem_stride=s, pool_kernel=pk, pool_count=pn,
+               **({"stem_padding": 2} if kn == "k11-5-3" and s == 4 else {}))  # torchvision's own conv1
+    with torch.device("meta"):  # the map can depend on the kernel (stride 4: 11x11 pad 2 vs 3x3 pad 1)
+        side = _map_side(AlexNetAdapted(head="gap", **geo).features)
+    for head, bn, d in product(("gap", "fc"), (False, True), (False, True)):
+        if d and head == "gap":  # the GAP head has no Dropout
+            continue
+        for pt in (False, True) if kn == "k11-5-3" and head == "fc" and not bn else (False,):
+            _register_cell(partial(AlexNetAdapted, head=head, batch_norm=bn, dropout=0.5 * d, pretrained=pt, **geo),
+                           _FX_FUSE[kn, bn], 3e-4, family="alexnet", kernels=kn, stride=s, pool_kernel=pk,
+                           pool_count=pn, map_side=side, head=head, dropout=d, bn=bn, pretrained=pt)
 register_model("alexnet_stacked_gap", partial(AlexNetStacked, head="gap"),
                fuse_map=FUSE_MAP_STACKED, fuse_root_attr="features", lr=1e-3)
 # No BN -> features compresses to plain Conv-ReLU pairs (BN entries drop out, shifting every
@@ -256,26 +261,26 @@ register_model("alexnet_stacked_gap_nobn", partial(AlexNetStacked, head="gap", b
 register_model("vgg16", partial(VGG16, kernel_size=3), fuse_map=FUSE_MAP_VGG16, fuse_root_attr="features", lr=1e-3)
 register_model("vgg16_2x2", partial(VGG16, kernel_size=2), fuse_map=FUSE_MAP_VGG16, fuse_root_attr="features", lr=1e-3)
 
-# Phase 11 VGG factorial (configs/experiments/phase_11_vgg_factorial.yaml, docs/logs/PHASE11_LOG.md "VGG factorial"):
-# every VGGAdapted cell of kernel pattern x stem stride x pool kernel x pool count x head (GAP / FC / FC + Dropout 0.5),
-# + ImageNet pretraining (vgg16_bn) on the all-3x3 cells. vgg_fx_<pattern>_s<stride>_pk<pool k>n<pool count>_<head>[_pt].
-# The 4 mixed patterns all put 6-7 of the 13 convs at 3x3, so they compare order/position at ~equal proportion; early*
-# splits after stage 3 (7 convs). All 168 cells are registered, the yaml lists the ones queued; vgg16's run IS the
-# k3_s1_pk2n5_fc_d cell (VGG_FX_EXISTING).
+# Phase 11 VGG grid (names: see CELL_FACTORS above): every VGGAdapted (VGG16 + BN) cell of kernel pattern x stem stride x
+# pool kernel x pool count x head (GAP / FC / FC + Dropout 0.5), + ImageNet pretraining (vgg16_bn) on the all-3x3 cells
+# = 168. The 4 mixed patterns all put 6-7 of the 13 convs at 3x3, so they compare order/position at ~equal proportion;
+# the *then* patterns split after stage 3 (7 convs). vgg16_k3x3_stride1_5pool2x2_map2_fcdrop_bn IS torchvision's VGG16
+# (+ BN), layer for layer (tests/test_registry.py).
 _alt = lambda first: tuple(first if i % 2 == 0 else 5 - first for i in range(13))  # noqa: E731
-VGG_FX_KERNELS = {"k3": (3,) * 13, "k2": (2,) * 13, "alt32": _alt(3), "alt23": _alt(2),
-                  "early3": (3,) * 7 + (2,) * 6, "early2": (2,) * 7 + (3,) * 6}
-VGG_FX_EXISTING = {"vgg_fx_k3_s1_pk2n5_fc_d": "phase_11_kernel_size_comparison/vgg16"}
+VGG_FX_KERNELS = {"k3x3": (3,) * 13, "k2x2": (2,) * 13, "kalt3-2": _alt(3), "kalt2-3": _alt(2),
+                  "k3x3then2x2": (3,) * 7 + (2,) * 6, "k2x2then3x3": (2,) * 7 + (3,) * 6}
 with torch.device("meta"):  # the fuse map depends only on where the ZeroPad2d's sit: kernel pattern x stem stride
     _VGG_FX_FUSE = {(kn, s): _conv_groups(_vgg_adapted_features(ks, s, 2, 5))
                     for kn, ks in VGG_FX_KERNELS.items() for s in (1, 2)}
-for (kn, ks), s, pk, pn, head in product(VGG_FX_KERNELS.items(), (1, 2), (2, 3), (5, 4), ("gap", "fc", "fc_d")):
-    kw = dict(kernels=ks, stem_stride=s, pool_kernel=pk, pool_count=pn, head="gap" if head == "gap" else "fc",
-              dropout=0.5 if head == "fc_d" else 0.0)
-    name = f"vgg_fx_{kn}_s{s}_pk{pk}n{pn}_{head}"
-    for cell, cell_kw in [(name, kw)] + ([(name + "_pt", {**kw, "pretrained": True})] if kn == "k3" else []):
-        register_model(cell, partial(VGGAdapted, **cell_kw), fuse_map=_VGG_FX_FUSE[kn, s], fuse_root_attr="features",
-                       lr=1e-3)
+    _VGG_MAP = {(s, pk, pn): _map_side(_vgg_adapted_features((3,) * 13, s, pk, pn))  # kernel-independent (tested)
+                for s, pk, pn in product((1, 2), (2, 3), (5, 4))}
+for (kn, ks), s, pk, pn, head in product(VGG_FX_KERNELS.items(), (1, 2), (2, 3), (5, 4), ("gap", "fc", "fcdrop")):
+    for pt in (False, True) if kn == "k3x3" else (False,):
+        _register_cell(partial(VGGAdapted, kernels=ks, stem_stride=s, pool_kernel=pk, pool_count=pn,
+                               head="gap" if head == "gap" else "fc", dropout=0.5 * (head == "fcdrop"), pretrained=pt),
+                       _VGG_FX_FUSE[kn, s], 1e-3, family="vgg16", kernels=kn, stride=s, pool_kernel=pk, pool_count=pn,
+                       map_side=_VGG_MAP[s, pk, pn], head="gap" if head == "gap" else "fc", dropout=head == "fcdrop",
+                       bn=True, pretrained=pt)
 
 # large-scale sweep (see configs/experiments/large_scale.yaml)
 FUSE_MAP_ALEXNET_SMALLKERNEL = [["0", "1"], ["3", "4"], ["6", "7"], ["8", "9"], ["10", "11"]]
@@ -290,6 +295,17 @@ register_model(
 # features indices are unchanged by the head swap, so this reuses the GAP variant's fuse_map.
 register_model("alexnet_smallkernel_fc", partial(AlexNetSmallKernel, head="fc"),
                fuse_map=FUSE_MAP_ALEXNET_SMALLKERNEL, fuse_root_attr="features", lr=3e-4)
+# The two non-grid AlexNets of Phase 11 under descriptive names -- the same nets as the legacy names. k3x3stacked shares
+# the k3x3 grid cells' geometry (stride 2, two 2x2 pools, 8x8 map), so the analysis pairs them: one extra 3x3 per stage.
+for _old, _head, _bn in (("alexnet_stacked_gap", "gap", True), ("alexnet_stacked", "fc", True),
+                         ("alexnet_stacked_gap_nobn", "gap", False), ("alexnet_stacked_fc_nobn", "fc", False),
+                         ("alexnet_smallkernel", "gap", False), ("alexnet_smallkernel_fc", "fc", False)):
+    _spec = MODEL_REGISTRY[_old]
+    with torch.device("meta"):
+        _side = _map_side(_spec["ctor"]().features)
+    _register_cell(_spec["ctor"], _spec["fuse_map"], _spec["lr"], family="alexnet",
+                   kernels="k3x3stacked" if "stacked" in _old else "k3x3narrow", stride=1 if "smallkernel" in _old else 2,
+                   pool_kernel=2, pool_count=2, map_side=_side, head=_head, dropout=False, bn=_bn, pretrained=False)
 # models/compensation.py — exists since the Phase 2 QAT-drop investigation, never
 # trained (Winograd-FPGA plano_avaliacao_redes_winograd.md Fase 1). No `features`
 # Sequential (named conv/bn/relu attrs instead), so find_fuse_groups like the

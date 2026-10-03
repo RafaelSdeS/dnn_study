@@ -28,7 +28,7 @@ ROOT = Path(__file__).resolve().parents[2]
 TABLES = ROOT / "results/phase_11_geometry_analysis"
 FIGS = ROOT / "results/figures_generated/phase_11_kernel_size_comparison"
 
-BASE_KEY = "alexnet_tv_scratch"  # the original AlexNet (11-5-3-3-3, layout original, FC + Dropout), from scratch
+BASE_KEY = "alexnet_k11-5-3_stride4_3pool3x3_map1_fcdrop_nobn"  # the original AlexNet (torchvision layout), from scratch
 BASE_LABEL = "AlexNet original do zero (baseline)"
 OLD_INT8 = "INT8 antigo: QAT antes das correções de 30/09–02/10, inválido (rerun na fila)"
 LAYOUTS = ("layout original = o do AlexNet torchvision: conv1 stride 4 + 3 max-pools 3×3/2 → mapa final 1×1 em 64×64\n"

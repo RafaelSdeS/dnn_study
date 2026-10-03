@@ -1044,4 +1044,63 @@ folding on trained weights) in `phase_11_geometry_controls`. Gate: each FP32 lea
 the 0.5% chance level by epoch ~20); on completion exit 0, QAT 50/50, `quant_protocol` + test fields present,
 `agreement_qat_int8 >= 0.99`. A cell that does not train is fixed globally (lr for all), never per cell. Then the
 rest, in the existing priority: the earlier experiments' runs, AlexNet wave 1 (kernel x stride x pool x head), VGG
-wave 1, families, the rest of the AlexNet factorial, VGG wave 2.
+wave 1, families, the rest of the AlexNet factorial, VGG wave 2. (Superseded the same day by the next section: the
+pilot jobs 828503-828507 were cancelled before starting and resubmitted under the new names.)
+
+## Reduced design, descriptive names (2026-10-03)
+
+**Why.** The old runs (AdamW recipe, validation split, seed 42) already sort the factors into two groups:
+
+| Factor (matched pairs) | Effect on FP32 top-1 |
+|---|---|
+| Head GAP vs FC | +8 to +9 pp |
+| Geometry (conv1 stride, pooling) | up to ~12 pp |
+| ImageNet pretraining | +7 to +8 pp |
+| BN | +3 pp |
+| Dropout 0.5 on the FC head | +2 pp |
+| **Kernel 11-5-3 / 3x3 / 2x2 at fixed geometry** | **1 to 3 pp** |
+| Seed-to-seed noise band (2*sqrt(2)*pooled SD, 4 models x 3 seeds) | 1.0 to 1.8 pp |
+
+The 424-run full factorial spent most of its runs crossing geometry with everything at one seed: precise where the
+answer is already plain, unresolved on the study's own question -- the kernel effect sits inside the noise band, and
+single-seed differences that small are not evidence (Bouthillier et al., MLSys 2021). Decision (user): keep only the
+most informative runs, replicate the main contrast, and name every run by what it is.
+
+**Design** -- 130 runs instead of 424 (~1,000 GPU-h instead of ~3,400), in queue priority:
+
+| # | Experiment | Question | Runs |
+|---|---|---|---|
+| 1 | `phase_11_kernel_head_bn` (+ `_seed43`, `_seed44`) | Main question: what the kernel restriction costs, and whether head/BN change it. Kernel {11-5-3, 3x3, 2x2, alternating 3-2} x head {GAP, FC} x BN, 64px geometry (8x8 map), 3 seeds | 48 |
+| 2 | `phase_11_kernel_geometry` | Does the kernel effect depend on how the net downsamples? 4 kernels x head x the other 3 of stride {2, 4} x pooling {two 2x2, three 3x3}, no BN (incl. torchvision's layout, where a 2x2 kernel at stride 4 reads 25% of the pixels) | 24 |
+| 3 | `phase_11_vgg_kernel_head` (+ `_seed43`, `_seed44`) | Does it replicate in a deeper BN net? VGG16 + BN at its own geometry: 6 kernel patterns x head {GAP, FC}, + VGG16's own FC + Dropout head for 3x3 and 2x2, + the 3x3 pretrained twin; 3x3 vs 2x2 x head at seeds 43/44 | 15 + 8 |
+| 4 | `phase_11_dropout_pretraining` | The original AlexNet's other levers: FC + Dropout for the 4 kernels at both layouts (the 11-5-3 original-layout cell is AlexNet from scratch, every figure's baseline), + 2 pretrained/scratch pairs | 10 |
+| 5 | `phase_11_stacked_narrow` | Compensating a 3x3-only net: depth (two 3x3 per stage x head x BN) and a narrow cheap net (x head) | 6 |
+| 6 | `phase_11_families` | The compensation/hybrid tables of the report (+ `alexnet_bottleneck`, `alexnet_fire`) | 19 |
+
+A fractional factorial (Box, Hunter & Hunter 2005; Montgomery 2017) was the alternative, but its resolution-V
+estimates assume negligible 3-factor interactions, and the old geometry cells show a strong one (stride x pool kernel x
+pool count set the final map together, and the FC head's size with it).
+
+**Names** (`ml/model_registrations.py`, `CELL_FACTORS` holds each cell's factors):
+`alexnet_<kernels>_stride<s>_<n>pool<k>x<k>_map<m>_<gap|fc|fcdrop>_<bn|nobn>[_pretrained]` and the same with `vgg16_`.
+E.g. `alexnet_k2x2_stride4_3pool3x3_map1_fc_nobn` = 2x2 kernels, conv1 stride 4, three 3x3 max-pools, 1x1 last map, FC
+head, no BN. `map` is computed from the built net (it depends on the kernel at stride 4: 3x3 for 11-5-3, 4x4 for the
+small kernels with two 2x2 pools). `tests/test_registry.py::test_every_cell_name_says_what_the_net_is` reads every
+factor back off all 382 built cells; `test_named_reference_cells_are_the_reference_nets` checks that the cells named
+after AlexNet/VGG16 are those nets layer for layer.
+
+**Removed.** The 11 superseded `phase_11_*.yaml` (factorial_core/_ext, geometry_controls/_factorial/_seeds_s43/_s44,
+head_bn_ablation, kernel_size_comparison, mixed_kernel_comparison, vgg_factorial/_ext), `FX_EXISTING` /
+`VGG_FX_EXISTING` (nothing is reused now), and the `alexnet_tv_mixed_*` / `AlexNetMixed` runs (the `kalt3-2` cells
+cover mixed kernels at both layouts). The legacy registry names stay, for the archived runs.
+
+**Pilot** (same 5 risky cells, new names): `alexnet_k11-5-3_stride2_2pool2x2_map8_fc_nobn`,
+`alexnet_k2x2_stride2_2pool2x2_map8_fc_nobn`, `alexnet_k3x3_stride2_2pool2x2_map8_gap_bn` (kernel_head_bn),
+`vgg16_k3x3_stride1_5pool2x2_map2_fcdrop_bn` (= VGG16, vgg_kernel_head), `alexnet_k11-5-3_stride4_3pool3x3_map1_fcdrop_nobn`
+(= AlexNet from scratch, dropout_pretraining). Gate as in the previous section.
+
+**Analysis.** `factor_effects.factorial_cells` / matched pairs now read `CELL_FACTORS` (both families + stacked, with a
+3x3 -> stacked contrast) and `analyze_geometry.BASE_KEY` is the new AlexNet-from-scratch name. The other figure code
+(`plot_kernel_comparison.py`, `analyze_geometry`'s geometry/kernel-seed tables, `factor_effects`' hand-picked contrast
+table) still keys on the legacy names: it gets rebuilt on these blocks when the first results land (core: mean and
+95% CI over the 3 seeds, kernel x head x BN).

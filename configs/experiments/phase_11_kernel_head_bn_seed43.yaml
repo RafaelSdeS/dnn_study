@@ -1,0 +1,27 @@
+# Phase 11 reduced design (docs/logs/PHASE11_LOG.md "Reduced design, descriptive names"). MAIN QUESTION: what restricting the kernel
+# costs, and whether the head or BN changes that. Kernel {11-5-3, 3x3, 2x2, alternating 3-2} x head {GAP, FC} x BN, at
+# the 64px geometry (conv1 stride 2, two 2x2 pools, 8x8 map) = 16 cells, x 3 seeds (this file: seed 43): kernel effects are
+# ~1-3 pp, about the seed-to-seed noise band, so they need replicates (Bouthillier et al., MLSys 2021).
+# Same protocol as every Phase 11 run (_protocols/no_patience.yaml), enforced by tests/test_config.py. Model names:
+# ml/model_registrations.py (CELL_FACTORS). Queued one job per model on PCAD (scripts/pcad/feed_queue.sh):
+#   python -m scripts.cluster submit --experiment phase_11_kernel_head_bn_seed43 --runtime pcad --slurm tupi_4090 --model <m>
+extends: _protocols/no_patience
+seed: 43
+name: phase_11_kernel_head_bn_seed43
+models:
+  - alexnet_k11-5-3_stride2_2pool2x2_map8_gap_nobn
+  - alexnet_k11-5-3_stride2_2pool2x2_map8_gap_bn
+  - alexnet_k11-5-3_stride2_2pool2x2_map8_fc_nobn
+  - alexnet_k11-5-3_stride2_2pool2x2_map8_fc_bn
+  - alexnet_k3x3_stride2_2pool2x2_map8_gap_nobn
+  - alexnet_k3x3_stride2_2pool2x2_map8_gap_bn
+  - alexnet_k3x3_stride2_2pool2x2_map8_fc_nobn
+  - alexnet_k3x3_stride2_2pool2x2_map8_fc_bn
+  - alexnet_k2x2_stride2_2pool2x2_map8_gap_nobn
+  - alexnet_k2x2_stride2_2pool2x2_map8_gap_bn
+  - alexnet_k2x2_stride2_2pool2x2_map8_fc_nobn
+  - alexnet_k2x2_stride2_2pool2x2_map8_fc_bn
+  - alexnet_kalt3-2_stride2_2pool2x2_map8_gap_nobn
+  - alexnet_kalt3-2_stride2_2pool2x2_map8_gap_bn
+  - alexnet_kalt3-2_stride2_2pool2x2_map8_fc_nobn
+  - alexnet_kalt3-2_stride2_2pool2x2_map8_fc_bn

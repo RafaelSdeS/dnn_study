@@ -93,7 +93,7 @@ def test_every_phase_11_experiment_shares_the_protocol_exactly():
     """Every Phase 11 run (the report's single protocol) is only comparable to the others if nothing but
     name/models/seed differs: epochs, early stopping, QAT budget, lr policy, stages. Globbed, so a new
     phase_11_*.yaml can't drift without failing here."""
-    reference = load_config("experiments/phase_11_kernel_size_comparison.yaml")
+    reference = load_config("experiments/phase_11_kernel_head_bn.yaml")
     for key in ("name", "models", "seed"):
         reference.pop(key, None)
     # AlexNet's recipe (Krizhevsky et al. 2012), cosine to 0, 500 ep; QAT per Wu et al. 2020 App. A.2
@@ -105,11 +105,11 @@ def test_every_phase_11_experiment_shares_the_protocol_exactly():
     assert reference["stages"] == ["fp32", "qat", "int8"]
 
     names = [n for n in _experiment_names() if n.startswith("phase_11_")]
-    assert len(names) >= 12, names
+    assert len(names) >= 10, names
     for name in names:
         cfg = load_config(f"experiments/{name}.yaml")
         seed = cfg.pop("seed")
-        assert seed == {"phase_11_geometry_seeds_s43": 43, "phase_11_geometry_seeds_s44": 44}.get(name, 42), name
+        assert seed == (int(name.rsplit("_seed", 1)[1]) if "_seed" in name else 42), name  # replicates: <exp>_seed<N>
         cfg.pop("name"), cfg.pop("models")
         assert cfg == reference, f"{name} differs from the Phase 11 protocol: {cfg} vs {reference}"
 

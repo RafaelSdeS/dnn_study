@@ -9,11 +9,10 @@ the 4 replicated models (a single-seed delta inside it is not distinguishable fr
     05..11_*.png                  one figure per factor (absolute top-1 of A and B, baseline line)
     12_factor_effects_forest.png  every contrast's delta at once
     13_interactions.png           conv1 stride x pooling, kernel x head
-    14_factorial_matched_pairs.png every matched pair of the alexnet_fx_* factorial
+    14_factorial_matched_pairs.png every matched pair of the factorial cells (CELL_FACTORS)
 
     python -m scripts.phase11.factor_effects
 """
-import re
 import textwrap
 
 import numpy as np
@@ -238,40 +237,28 @@ def fig_interaction(df):
     savefig(fig, "13_interactions.png")
 
 
-# ── Full factorial (alexnet_fx_*): every matched pair, not one hand-picked pair per factor ──
-FX_RE = re.compile(r"alexnet_fx_(?P<kernel>orig|k3|k2|mix)_s(?P<stride>[24])_pk(?P<pool_k>[23])n(?P<pool_n>[23])_"
-                   r"(?P<head>fc|gap)(?P<bn>_bn)?(?P<drop>_d)?(?P<pt>_pt)?$")
-FACTORS = ["kernel", "stride", "pool_k", "pool_n", "head", "bn", "drop", "pt"]
+# ── Factorial cells (ml/model_registrations.py:CELL_FACTORS): every matched pair, not one hand-picked pair per factor ──
+FACTORS = ["family", "kernels", "stride", "pool_kernel", "pool_count", "head", "bn", "dropout", "pretrained"]  # map_side
+# follows from kernels + geometry, so it is not a pairing key
 METRICS = ["fp32", "int8", "dqat"]  # dqat = INT8 - FP32, the report's ΔQAT (negative = loses under INT8)
 # (factor, level a, level b, label): Δ = b - a over every pair of cells equal in all other factors
-PAIRS = [("kernel", "orig", "k3", "Kernel 11-5-3-3-3 → 3×3"), ("kernel", "k3", "k2", "Kernel 3×3 → 2×2"),
-         ("kernel", "orig", "k2", "Kernel 11-5-3-3-3 → 2×2"), ("kernel", "k3", "mix", "Kernel 3×3 → misto 3-2-3-2-3"),
+PAIRS = [("kernels", "k11-5-3", "k3x3", "Kernel 11-5-3-3-3 → 3×3"), ("kernels", "k3x3", "k2x2", "Kernel 3×3 → 2×2"),
+         ("kernels", "k11-5-3", "k2x2", "Kernel 11-5-3-3-3 → 2×2"), ("kernels", "k3x3", "kalt3-2", "Kernel 3×3 → alternado 3-2"),
+         ("kernels", "k3x3", "k3x3stacked", "3×3 → dois 3×3 empilhados por estágio"),
          ("head", "fc", "gap", "Cabeça FC → GAP"), ("bn", False, True, "BatchNorm não → sim"),
-         ("stride", "4", "2", "Stride da conv1 4 → 2"), ("pool_k", "3", "2", "Janela do max-pool 3×3 → 2×2"),
-         ("pool_n", "3", "2", "Nº de max-pools 3 → 2"), ("drop", False, True, "Dropout 0 → 0,5 (só cabeça FC)"),
-         ("pt", False, True, "Pré-treino ImageNet (11-5-3-3-3, FC, sem BN)")]
+         ("stride", 4, 2, "Stride da conv1 4 → 2"), ("pool_kernel", 3, 2, "Janela do max-pool 3×3 → 2×2"),
+         ("pool_count", 3, 2, "Nº de max-pools 3 → 2"), ("dropout", False, True, "Dropout 0 → 0,5 (só cabeça FC)"),
+         ("pretrained", False, True, "Pré-treino ImageNet")]
 
 
 def factorial_cells(df):
-    """Seed-42 factorial table, one row per trained cell; FX_EXISTING cells come from the run they alias."""
-    from ml.model_registrations import FX_EXISTING
-    from ml.registry import MODEL_REGISTRY
+    """Seed-42 table, one row per trained cell of CELL_FACTORS (AlexNet and VGG grids + stacked/narrow)."""
+    from ml.model_registrations import CELL_FACTORS
 
-    runs = df[df.seed == 42].set_index(["exp", "key"])
+    runs = df[(df.seed == 42) & df.key.isin(CELL_FACTORS)].set_index("key")
     assert runs.index.is_unique, runs.index[runs.index.duplicated()]
-    rows = []
-    for cell in (n for n in MODEL_REGISTRY if n.startswith("alexnet_fx_")):
-        if cell in FX_EXISTING:
-            exp, key = FX_EXISTING[cell].split("/")
-            hits = runs.loc[[(exp.removeprefix("phase_11_"), key)]] if (exp.removeprefix("phase_11_"), key) in runs.index else runs.iloc[:0]
-        else:
-            hits = runs[runs.index.get_level_values("key") == cell]
-        if hits.empty:
-            continue
-        levels = {k: (v is not None) if k in ("bn", "drop", "pt") else v for k, v in FX_RE.match(cell).groupdict().items()}
-        rows.append({"cell": cell, **levels,
-                     **hits.iloc[0][["fp32", "fp32_val", "int8", "int8_raw", "params_m", "macs_m"]].to_dict()})
-    cells = pd.DataFrame(rows)
+    cells = pd.DataFrame([{"cell": k, **CELL_FACTORS[k], **r[["fp32", "fp32_val", "int8", "int8_raw", "params_m", "macs_m"]].to_dict()}
+                          for k, r in runs.iterrows()])
     cells["dqat"] = cells.int8 - cells.fp32
     cells["dqat_raw"] = cells.int8_raw - cells.fp32_val
     return cells
@@ -347,7 +334,7 @@ def fig_matched_pairs(pairs, summary, n_cells):
                         Line2D([], [], marker="o", mfc="none", mec=BLUE, ls="", ms=5, label=f"par com {OLD_INT8}"),
                         Line2D([], [], ls="", label="k/n à direita = pares em que o 2º nível ganha")],
                loc="upper center", bbox_to_anchor=(0.5, 0), ncol=2, fontsize=9)
-    fig.suptitle(f"Fatorial completo (AlexNetAdapted, seed 42; {n_cells}/208 células treinadas até agora): cada ponto compara "
+    fig.suptitle(f"Células do desenho da Fase 11 (seed 42; {n_cells} treinadas até agora): cada ponto compara "
                  "duas células que só diferem no fator da linha", fontsize=11)
     fig.tight_layout(rect=(0, 0, 1, 0.95))
     savefig(fig, "14_factorial_matched_pairs.png")
@@ -375,7 +362,7 @@ def main():
     pairs.to_csv(TABLES / "factorial_pairs.csv", index=False)
     summary.to_csv(TABLES / "factorial_pair_summary.csv", index=False)
     fig_matched_pairs(pairs, summary, len(cells))
-    print(f"\n{len(cells)}/208 factorial cells trained")
+    print(f"\n{len(cells)} factorial cells trained (seed 42)")
     print(summary[["contrast", "n_pairs", "fp32_median", "fp32_n_positive", "int8_n", "int8_median", "dqat_median", "dqat_n_positive",
                    "macs_pct"]].round(2).to_string(index=False))
 

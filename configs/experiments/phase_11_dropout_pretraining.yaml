@@ -1,0 +1,20 @@
+# Phase 11 reduced design (docs/logs/PHASE11_LOG.md "Reduced design, descriptive names"). The original AlexNet's two other levers:
+# Dropout 0.5 on the FC head, for the 4 kernels at the 64px and at the original layout (8; the 11-5-3 one at the original
+# layout IS AlexNet trained from scratch -- every figure's baseline), and ImageNet pretraining (2; only the 11-5-3 FC
+# no-BN shape takes the weights), each with its from-scratch twin here or in phase_11_kernel_head_bn.
+# Same protocol as every Phase 11 run (_protocols/no_patience.yaml), enforced by tests/test_config.py. Model names:
+# ml/model_registrations.py (CELL_FACTORS). Queued one job per model on PCAD (scripts/pcad/feed_queue.sh):
+#   python -m scripts.cluster submit --experiment phase_11_dropout_pretraining --runtime pcad --slurm tupi_4090 --model <m>
+extends: _protocols/no_patience
+name: phase_11_dropout_pretraining
+models:
+  - alexnet_k11-5-3_stride2_2pool2x2_map8_fcdrop_nobn
+  - alexnet_k11-5-3_stride4_3pool3x3_map1_fcdrop_nobn
+  - alexnet_k3x3_stride2_2pool2x2_map8_fcdrop_nobn
+  - alexnet_k3x3_stride4_3pool3x3_map1_fcdrop_nobn
+  - alexnet_k2x2_stride2_2pool2x2_map8_fcdrop_nobn
+  - alexnet_k2x2_stride4_3pool3x3_map1_fcdrop_nobn
+  - alexnet_kalt3-2_stride2_2pool2x2_map8_fcdrop_nobn
+  - alexnet_kalt3-2_stride4_3pool3x3_map1_fcdrop_nobn
+  - alexnet_k11-5-3_stride2_2pool2x2_map8_fc_nobn_pretrained
+  - alexnet_k11-5-3_stride4_3pool3x3_map1_fcdrop_nobn_pretrained
