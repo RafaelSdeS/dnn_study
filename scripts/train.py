@@ -204,8 +204,8 @@ MACHINE_KEYS = {"dataset_path"}  # the same dataset sits at a different path on 
 
 def _protocol(cfg: dict[str, Any]) -> dict[str, Any]:
     cfg = json.loads(json.dumps(cfg, default=str))  # the on-disk form (tuples -> lists), so the two compare as equals
-    return {"seed": cfg["experiment"].get("seed"),
-            **{k: {f: v for f, v in cfg[k].items() if f not in MACHINE_KEYS} for k in PROTOCOL_KEYS}}
+    return {"seed": cfg.get("experiment", {}).get("seed"),
+            **{k: {f: v for f, v in cfg.get(k, {}).items() if f not in MACHINE_KEYS} for k in PROTOCOL_KEYS}}
 
 
 def refuse_foreign_run_dir(run_root: Path, resolved_config: dict[str, Any]) -> None:

@@ -1,8 +1,8 @@
 """Phase 11 geometry/kernel/BN analysis — tables + figure 15, from the raw per-run summaries; also the shared
 loader and plot helpers of scripts/phase11/{plot_kernel_comparison,factor_effects}.py.
 
-Reads every outputs/pcad/phase_11_*/<model>/results/*_summary.json (seed 42 in phase_11_geometry_controls /
-_factorial and the earlier Phase 11 experiments, seeds 43/44 in phase_11_geometry_seeds_s43/_s44) and writes
+Reads every outputs/pcad/phase_11_*/<model>/results/*_summary.json -- the live experiments of
+configs/experiments/phase_11_*.yaml (seeds 43/44 in the *_seed43/_seed44 ones), never outputs/pcad/archive_* -- and writes
   results/phase_11_geometry_analysis/{all_runs,kernel_seeds,geometry_factorial,bn_block}.csv
   results/figures_generated/phase_11_kernel_size_comparison/15_quantization_drop_where.png
 

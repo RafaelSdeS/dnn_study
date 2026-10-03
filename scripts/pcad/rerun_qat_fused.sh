@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# [one-off] SUPERSEDED 2026-10-03 -- do not run: every Phase 11 run is retrained on the one cited recipe and the
+# experiments below are archived (outputs/pcad/archive_adamw_recipe/SUPERSEDED.md); kept for provenance only.
 # Wave 1 of the fused-QAT rerun (docs/logs/PHASE11_LOG.md, "QAT fusion bug"). Every run below trained QAT
 # with no Conv-(BN-)ReLU fusion (ml/quantization.py:prepare_qat_model fused the caller's original, not the
 # copy); its FP32 checkpoint is unaffected and is reused. Per <experiment>/<model>:

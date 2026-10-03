@@ -116,7 +116,7 @@ register_model("alexnet_tv_3x3", partial(AlexNetTV, pretrained=False, kernel_siz
                fuse_map=FUSE_MAP_ALEXNET_TV, fuse_root_attr="features", lr=3e-4)
 register_model("alexnet_tv_2x2", partial(AlexNetTV, pretrained=False, kernel_size=2),
                fuse_map=FUSE_MAP_ALEXNET_TV, fuse_root_attr="features", lr=3e-4)
-# Mixed 3x3/2x2 per-layer kernels (configs/experiments/phase_11_mixed_kernel_comparison.yaml) --
+# Mixed 3x3/2x2 per-layer kernels (phase_11_mixed_kernel_comparison.yaml, archived: outputs/pcad/archive_adamw_recipe/) --
 # same family/fuse_map as alexnet_tv_3x3/2x2 above, see _ALEXNET_KERNEL_SPECS for the patterns.
 register_model("alexnet_tv_mixed_alt", partial(AlexNetTV, pretrained=False, kernel_size="mixed_alt"),
                fuse_map=FUSE_MAP_ALEXNET_TV, fuse_root_attr="features", lr=3e-4)
@@ -125,7 +125,7 @@ register_model("alexnet_tv_mixed_early3", partial(AlexNetTV, pretrained=False, k
 register_model("alexnet_tv_mixed_early2", partial(AlexNetTV, pretrained=False, kernel_size="mixed_early2"),
                fuse_map=FUSE_MAP_ALEXNET_TV, fuse_root_attr="features", lr=3e-4)
 
-# Phase 11 head/BN ablation (configs/experiments/phase_11_head_bn_ablation.yaml): does GAP vs FC
+# Phase 11 head/BN ablation (phase_11_head_bn_ablation.yaml, archived: outputs/pcad/archive_adamw_recipe/): does GAP vs FC
 # head, or BatchNorm vs none, explain the gap between the mixed-kernel/stacked-3x3 models above? A
 # head or BN swap only changes classifier/features cosmetically -- `features`' Conv-ReLU indices
 # are unchanged for a head-only swap, so those reuse the base model's own fuse_map; a BN swap
@@ -143,7 +143,7 @@ register_model("alexnet_mixed_bn", partial(AlexNetMixed, batch_norm=True),
 register_model("alexnet_mixed_fc_bn", partial(AlexNetMixed, head="fc", batch_norm=True),
                fuse_map=find_fuse_groups(AlexNetMixed(head="fc", batch_norm=True)), lr=3e-4)
 
-# Phase 11 geometry/BN controls (configs/experiments/phase_11_geometry_controls_s*.yaml): the
+# Phase 11 geometry/BN controls (phase_11_geometry_controls_s*.yaml, archived: outputs/pcad/archive_adamw_recipe/): the
 # original 11/5/3/3/3 kernels at AlexNet3x3FC/GAP's adapted geometry (Conv-ReLU only -> same
 # hand-written fuse_map as 3x3FC/GAP), and 3x3-GAP + BN as the BN control for Bottleneck/Fire.
 register_model("alexnet_adapted_orig_fc", partial(AlexNetAdapted, kernels=(11, 5, 3, 3, 3), head="fc"),
@@ -160,7 +160,7 @@ register_model("alexnet_adapted_2x2_gap", partial(AlexNetAdapted, kernels=(2,) *
 register_model("alexnet_3x3_gap_bn", partial(AlexNetAdapted, kernels=(3,) * 5, head="gap", batch_norm=True),
                fuse_map=find_fuse_groups(AlexNetAdapted(kernels=(3,) * 5, head="gap", batch_norm=True)), lr=3e-4)
 
-# Phase 11 geometry factorial (configs/experiments/phase_11_geometry_factorial.yaml and
+# Phase 11 geometry factorial (phase_11_geometry_factorial.yaml, archived: outputs/pcad/archive_adamw_recipe/ and
 # phase_11_geometry_seeds_s*.yaml): walks from the adapted layout (alexnet_adapted_orig_fc) back to
 # torchvision's AlexNet one factor at a time. alexnet_geo_<stem>_<pool>_<head>[_drop|_k3]:
 # s2/s4 = stem stride; p3 = 3x MaxPool(3, 2) (torchvision), p2 = 2x MaxPool(2) (adapted),
@@ -291,7 +291,7 @@ register_model(
     fuse_root_attr="features",
     lr=3e-4,
 )
-# Phase 11 head/BN ablation FC twin (configs/experiments/phase_11_head_bn_ablation.yaml) --
+# Phase 11 head/BN ablation FC twin (phase_11_head_bn_ablation.yaml, archived: outputs/pcad/archive_adamw_recipe/) --
 # features indices are unchanged by the head swap, so this reuses the GAP variant's fuse_map.
 register_model("alexnet_smallkernel_fc", partial(AlexNetSmallKernel, head="fc"),
                fuse_map=FUSE_MAP_ALEXNET_SMALLKERNEL, fuse_root_attr="features", lr=3e-4)
