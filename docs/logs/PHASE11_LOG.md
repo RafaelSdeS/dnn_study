@@ -1104,3 +1104,19 @@ cover mixed kernels at both layouts). The legacy registry names stay, for the ar
 (`plot_kernel_comparison.py`, `analyze_geometry`'s geometry/kernel-seed tables, `factor_effects`' hand-picked contrast
 table) still keys on the legacy names: it gets rebuilt on these blocks when the first results land (core: mean and
 95% CI over the 3 seeds, kernel x head x BN).
+
+## Old runs archived, runs kept apart on every machine (2026-10-03)
+
+The superseded Phase 11 runs sat at the live paths in git (`outputs/pcad/phase_11_*`, 319 tracked files) while PCAD had
+already moved them to `outputs/pcad/archive_adamw_recipe/`, and their curated tables/figures sat where the new results
+will land (`results/phase_11_*`, `results/figures_generated/phase_11_kernel_size_comparison/`). Now:
+- git and PCAD hold them at the same path, `outputs/pcad/archive_adamw_recipe/` (+ `results/archive_adamw_recipe/`), each
+  with a `SUPERSEDED.md`; PCAD's older superseded states (`archive_old_init`, `archive_unfused_qat`,
+  `archive_quantized_logits_qat`) got one too. `.gitignore`'s one-off vgg16 QAT exception follows the move, plus a
+  pattern for every VGG16 FC-head cell of the new design (~134M params, INT8 artifact over GitHub's 100 MB limit).
+- `build_runs_index` indexes runs under a `SUPERSEDED.md` with `superseded=<archive>` and no phase (54 rows);
+  `build_cross_phase_results` reads one label per live `results/phase_11_*` dir (seed replicates share model names) and
+  never the archive; both CSVs regenerated -- the only rows that left are the 5 old Phase 11 ones.
+- `scripts/train.py:refuse_foreign_run_dir`: a run dir whose `resolved_config.json` differs in data/training/qat/seed
+  (the dataset path excepted) stops the run instead of being resumed or skipped -- a restored archive, an rsync to the
+  wrong path or a reused experiment name can no longer mix two protocols. A Slurm requeue passes.

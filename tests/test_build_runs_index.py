@@ -43,3 +43,17 @@ def test_build_index_covers_all_four_layouts(tmp_path):
     assert by_model["alexnet_fire"]["stage"] == "fp32"
     assert by_model["alexnet_2x2_gap"]["top1"] == 33.24
     assert by_model["(sweep)"]["host"] == "RTX 4090"
+
+
+def test_runs_under_a_superseded_archive_get_no_phase(tmp_path):
+    """A run moved under an archive holding SUPERSEDED.md keeps its experiment name but loses its phase, so a
+    phase_11 filter returns only the current runs; the same layout outside the archive is a normal phase_11 row."""
+    root = tmp_path / "outputs"
+    for parent in (root / "pcad" / "archive_adamw_recipe", root / "pcad"):
+        d = parent / "phase_11_kernel_head_bn" / "alexnet_k3x3_stride2_2pool2x2_map8_gap_bn" / "results"
+        d.mkdir(parents=True)
+        (d / "alexnet_k3x3_stride2_2pool2x2_map8_gap_bn_summary.json").write_text(json.dumps({"best_val_top1": 1.0}))
+    (root / "pcad" / "archive_adamw_recipe" / "SUPERSEDED.md").write_text("old recipe\n")
+
+    rows = sorted(build_index(root), key=lambda r: r["superseded"])
+    assert [(r["phase"], r["superseded"]) for r in rows] == [("phase_11", ""), ("", "archive_adamw_recipe")]

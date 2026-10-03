@@ -14,7 +14,10 @@ import re
 from pathlib import Path
 from typing import Any
 
-FIELDS = ["phase", "experiment", "model", "stage", "runtime", "host", "git_hash", "path", "top1", "size_mb"]
+FIELDS = ["phase", "experiment", "model", "stage", "runtime", "host", "git_hash", "path", "top1", "size_mb", "superseded"]
+# An archive dir holding a SUPERSEDED.md (e.g. outputs/pcad/archive_adamw_recipe/) keeps runs another protocol replaced:
+# they are indexed with superseded=<that dir> and no phase, so no per-phase filter can mix them with current runs.
+SUPERSEDED_MARKER = "SUPERSEDED.md"
 
 DET_SEG_RUN_ID_RE = re.compile(
     r"^(?P<prefix>ssd|seg)_(?P<model>.+?)_(?P<stage>fp32|qat|int8)(?P<pretrained>_pretrained)?(?:_(?P<experiment>.+))?$"
@@ -30,10 +33,17 @@ def _runtime_of(path: Path, outputs_root: Path) -> str:
     return path.relative_to(outputs_root).parts[0]
 
 
+def _superseded_by(path: Path, outputs_root: Path) -> str:
+    return next((p.name for p in path.parents if p != outputs_root and p.is_relative_to(outputs_root)
+                 and (p / SUPERSEDED_MARKER).exists()), "")
+
+
 def _row(outputs_root: Path, path: Path, **kwargs: Any) -> dict[str, Any]:
     experiment = kwargs.get("experiment", "")
+    superseded = _superseded_by(path, outputs_root)
     return {
-        "phase": _phase_of(experiment),
+        "phase": "" if superseded else _phase_of(experiment),
+        "superseded": superseded,
         "experiment": experiment,
         "model": "",
         "stage": "",

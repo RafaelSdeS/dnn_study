@@ -27,6 +27,14 @@ gitignored; provenance records (`metrics.json`, `config.yaml`, `git_hash.txt`,
 the analysis notebooks read them. The word "results" never appears at the top of an `outputs/`
 runtime — that roll-up dir is `outputs/<runtime>/aggregates/`.
 
+**Superseded runs are archived, never left beside current ones (2026-10-03).** A protocol change moves the old runs to
+`outputs/<runtime>/archive_<what>/` (and their curated tables/figures to `results/archive_<what>/`), each with a
+`SUPERSEDED.md` saying what replaced them -- the same path on the laptop (git) and PCAD. `build_runs_index` gives runs
+under such a dir `superseded=<dir>` and no phase; `build_cross_phase_results` and `scripts/phase11/*` only read the live
+`phase_*` dirs; `scripts/train.py:refuse_foreign_run_dir` stops instead of resuming a run dir whose
+`resolved_config.json` has another protocol (data/training/qat/seed). New experiments and models get new names, so no
+current run ever shares a path with an archived one. Phase 11's old recipe: `outputs/pcad/archive_adamw_recipe/`.
+
 **The laptop keeps no gitignored artifacts (since 2026-09-16).** PCAD is the only copy of every
 `*.pth`/log from all three runtimes, at the same relative path under `~/dnn_study`. Fetch one when
 needed: `rsync -avP rsdsouza@gppd-hpc.inf.ufrgs.br:dnn_study/<relpath> <relpath>`. Before deleting

@@ -29,7 +29,9 @@ venv/
 *_best.pth.gz
 # VGG16's qat_*.pth.gz breaks the "small" assumption above (105.78 MB, over GitHub's
 # 100 MB hard limit and blocked the push) -- gitignored as a one-off exception.
-outputs/pcad/phase_11_kernel_size_comparison/vgg16/checkpoints/qat_vgg16.pth.gz
+outputs/pcad/archive_adamw_recipe/phase_11_kernel_size_comparison/vgg16/checkpoints/qat_vgg16.pth.gz
+# Same for every VGG16 FC-head cell of the current design (torchvision's 7x7x512 -> 4096 classifier, ~134M params):
+outputs/*/phase_11_vgg_kernel_head*/vgg16_*_fc*/checkpoints/qat_*.pth.gz
 
 # =========================
 # Weights & Biases (local cache only)

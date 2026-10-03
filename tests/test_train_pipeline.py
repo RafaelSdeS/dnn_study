@@ -150,3 +150,16 @@ def test_evaluate_reports_the_standard_micro_top1(tmp_path):
     loader = DataLoader(TensorDataset(torch.zeros(4, 1), torch.tensor([0, 0, 0, 1])), batch_size=4)
     trainer = Trainer(Always0(), loader, loader, TrainerConfig(), torch.device("cpu"), tmp_path, "t", num_classes=5)
     assert trainer.evaluate(topk=(1,))["top1"] == pytest.approx(75.0)
+
+
+def test_a_run_dir_of_another_protocol_is_refused_not_resumed(tmp_path):
+    """refuse_foreign_run_dir: same protocol (a requeue, another machine's dataset path) passes; another lr or seed in
+    the saved resolved_config.json stops the run before any checkpoint in that dir is reused."""
+    cfg = {"experiment": {"seed": 42}, "data": {"dataset_path": "/laptop/train", "batch_size": 128},
+           "training": {"lr": 0.01, "optimizer": "sgd"}, "qat": {"lr": 1e-4}, "provenance": {"git_hash": "a"}}
+    train.save_resolved_config(tmp_path, cfg)
+    train.refuse_foreign_run_dir(tmp_path, {**cfg, "data": {**cfg["data"], "dataset_path": "/pcad/train"},
+                                            "provenance": {"git_hash": "b"}})
+    for other in ({**cfg, "training": {"lr": 3e-4, "optimizer": "adamw"}}, {**cfg, "experiment": {"seed": 43}}):
+        with pytest.raises(SystemExit, match="another protocol"):
+            train.refuse_foreign_run_dir(tmp_path, other)

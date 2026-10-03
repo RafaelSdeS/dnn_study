@@ -28,7 +28,9 @@ PHASE_DIRS = [
     ("Phase 3 — Compensation", "phase_3_compensation_and_hybrids"),
     ("Phase 4 — Final Architecture", "phase_4_compression_and_final_architecture"),
     ("Phase 9 — PCAD Bypass Ablation", "phase_9_bypass_ablation"),
-    ("Phase 11 — Kernel Size Comparison", "phase_11_kernel_size_comparison"),
+    # one results/ dir per Phase 11 experiment (seed replicates share model names, so each dir is its own label);
+    # a non-recursive glob, so results/archive_adamw_recipe/ (superseded runs) never matches
+    ("Phase 11 — Kernel restriction", "phase_11_*"),
 ]
 
 PHASE_8_LABEL = "Phase 8 — Efficient ViT / Hybrid-Attention"
@@ -104,8 +106,9 @@ def _collect_rows() -> dict[tuple[str, str], dict[str, Any]]:
             rows[key] = summary
 
     for label, subdir in PHASE_DIRS:
-        for summary in _load_phase_summaries(RESULTS_DIR / subdir):
-            _add(label, summary)
+        for phase_dir in sorted(RESULTS_DIR.glob(subdir)):
+            for summary in _load_phase_summaries(phase_dir):
+                _add(label if phase_dir.name == subdir else f"{label} / {phase_dir.name}", summary)
     for summary in _load_phase8_rows():
         _add(PHASE_8_LABEL, summary)
     return rows

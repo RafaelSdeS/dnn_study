@@ -198,6 +198,33 @@ def _stop_requested(trainer: Trainer, stage: str, model_name: str, writer, wandb
     return True
 
 
+PROTOCOL_KEYS = ("data", "training", "qat")  # what every stage a run dir resumes or skips was trained with
+MACHINE_KEYS = {"dataset_path"}  # the same dataset sits at a different path on each machine
+
+
+def _protocol(cfg: dict[str, Any]) -> dict[str, Any]:
+    cfg = json.loads(json.dumps(cfg, default=str))  # the on-disk form (tuples -> lists), so the two compare as equals
+    return {"seed": cfg["experiment"].get("seed"),
+            **{k: {f: v for f, v in cfg[k].items() if f not in MACHINE_KEYS} for k in PROTOCOL_KEYS}}
+
+
+def refuse_foreign_run_dir(run_root: Path, resolved_config: dict[str, Any]) -> None:
+    """Stop if run_root already holds a run trained under another protocol. Its checkpoints are found by name, so
+    without this a restored archive, an rsync to the wrong path or a reused experiment name would be resumed or skipped
+    silently and mixed into this run. A Slurm requeue of the same run passes (same protocol)."""
+    prior = run_root / "resolved_config.json"
+    if not prior.exists():
+        return
+    old, new = _protocol(json.loads(prior.read_text())), _protocol(resolved_config)
+    if old != new:
+        diff = {f"{k}.{f}": (old.get(k, {}).get(f), new[k].get(f)) for k in PROTOCOL_KEYS
+                for f in set(old.get(k, {})) | set(new[k]) if old.get(k, {}).get(f) != new[k].get(f)}
+        if old["seed"] != new["seed"]:
+            diff["seed"] = (old["seed"], new["seed"])
+        raise SystemExit(f"{run_root} holds a run of another protocol (old, new): {diff} -- move it to an "
+                         f"outputs/<runtime>/archive_*/ dir or use another experiment name")
+
+
 def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) -> list[dict[str, Any]]:
     runtime_root = expand_path(runtime_cfg.get("root"), default="outputs/local") or Path("outputs/local")
     runtime_paths = build_runtime_paths(runtime_root)
@@ -257,6 +284,7 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
             "stage_list": stage_list,
             "provenance": provenance,
         }
+        refuse_foreign_run_dir(run_root, resolved_config)
         save_resolved_config(run_root, resolved_config)
 
         log_file = logs_dir / f"{model_name}.log"
