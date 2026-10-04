@@ -1,15 +1,17 @@
-"""Phase 11 — isolate one factor at a time: paired contrasts (A -> B, everything else identical).
+"""Phase 11 -- isolate one factor at a time: paired contrasts (A -> B, everything else identical).
 
-Each contrast compares two runs that differ in exactly one factor (kernel, head, conv1 stride, pooling, Dropout,
-pretraining, BN, compensation block). Where seeds 42/43/44 exist for both runs the delta is per seed (paired);
-otherwise it is a single seed-42 pair. The grey band is the noise floor: 2*sqrt(2)*pooled seed-to-seed SD of
-the replicated cells (a single-seed delta inside it is not distinguishable from re-drawing the seed).
-"layout original" / "layout 64px" are defined in scripts/phase11/analyze_geometry.py's docstring.
+The pairs are every matched pair of the design's cells (ml/model_registrations.py:CELL_FACTORS, the phase_11_*.yaml
+models): two cells equal in all factors but one -- plus the few family contrasts the cell grid can't express
+(FAMILY_CONTRASTS). Where seeds 42/43/44 exist for both runs the delta is per seed (paired); otherwise it is a single
+seed-42 pair. The grey band is the noise floor: 2*sqrt(2)*pooled seed-to-seed SD of the replicated cells (a single-seed
+delta inside it is not distinguishable from re-drawing the seed). "layout original" / "layout 64px" are defined in
+scripts/phase11/analyze_geometry.py's docstring.
 
-    05..11_*.png                  one figure per factor (absolute top-1 of A and B, baseline line)
-    12_factor_effects_forest.png  every contrast's delta at once
-    13_interactions.png           conv1 stride x pooling, kernel x head
-    14_factorial_matched_pairs.png every matched pair of the factorial cells (CELL_FACTORS)
+    05..11_*.png                    one figure per factor (absolute top-1 of A and B, baseline line)
+    14_factorial_matched_pairs.png  every matched pair, per contrast: the deltas, their median and its bootstrap CI
+
+Figures 12 (one row per pair: ~100 rows with every matched pair) and 13 (interactions) are retired: 14 summarizes every
+pair with the noise band, 17/18 (scripts/phase11/design_figures.py) show kernel x head x BN and kernel x geometry.
 
     python -m scripts.phase11.factor_effects
 """
@@ -21,69 +23,88 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
+from configs.loader import load_config
 from ml.plotting import AMBER, BLUE, GREEN, NEUTRAL, RED, apply_report_style
 from ml.reporting import holm, mcnemar_p, wilson_ci
-from scripts.phase11.analyze_geometry import (LAYOUTS, OLD_INT8, TABLES, int8_bar, load, noise_band, precision_handles,
-                                              reference_lines, savefig)
+from scripts.phase11.analyze_geometry import (LAYOUTS, TABLES, int8_bar, noise_band, precision_handles, reference_lines,
+                                              savefig)
+from scripts.phase11.design_figures import cell_label, frame
 
 PURPLE = "#7b3fa0"
+COMP = "Compensação (profundidade e blocos)"
+PRE = "Pré-treino ImageNet (não → sim)"
 FACTOR_COLOR = {"Kernel": GREEN, "Cabeça (FC → GAP)": RED, "Stride da conv1 (4 → 2)": BLUE, "Pooling": AMBER,
-                "Dropout (0 → 0,5)": "#8d6e63", "Pré-treino ImageNet (não → sim)": PURPLE, "BatchNorm (sem → com)": "#0d8b8b",
-                "Bloco de compensação (sobre 3×3 + BN + GAP)": "#c2185b"}
+                "Dropout (0 → 0,5)": "#8d6e63", PRE: PURPLE, "BatchNorm (sem → com)": "#0d8b8b", COMP: "#c2185b"}
 FACTOR_FIG = {"Cabeça (FC → GAP)": "05_head_fc_vs_gap.png", "Stride da conv1 (4 → 2)": "06_conv1_stride.png",
-              "Pooling": "07_pooling.png", "Dropout (0 → 0,5)": "08_dropout.png",
-              "Pré-treino ImageNet (não → sim)": "09_pretraining.png", "BatchNorm (sem → com)": "10_batchnorm.png",
-              "Bloco de compensação (sobre 3×3 + BN + GAP)": "11_compensation_block.png"}  # Kernel: figures 02-04
+              "Pooling": "07_pooling.png", "Dropout (0 → 0,5)": "08_dropout.png", PRE: "09_pretraining.png",
+              "BatchNorm (sem → com)": "10_batchnorm.png", COMP: "11_compensation_block.png"}  # Kernel: figures 02-04
 
-# (factor, label, A, B, note). † in label = a second variable changes too (see note). "64px"/"original" = layout.
-C = [
-    ("Kernel", "64px · FC: 11-5-3-3-3 → 3×3", "alexnet_adapted_orig_fc", "alexnet_3x3_fc", ""),
-    ("Kernel", "64px · GAP: 11-5-3-3-3 → 3×3", "alexnet_adapted_orig_gap", "alexnet_3x3_gap", ""),
-    ("Kernel", "64px · FC: 3×3 → 2×2", "alexnet_3x3_fc", "alexnet_adapted_2x2_fc", ""),
-    ("Kernel", "64px · GAP: 3×3 → 2×2", "alexnet_3x3_gap", "alexnet_adapted_2x2_gap", ""),
-    ("Kernel", "original sem Dropout · FC: 11-5-3-3-3 → 3×3", "alexnet_geo_s4_p3_fc", "alexnet_geo_s4_p3_fc_k3", ""),
-    ("Cabeça (FC → GAP)", "64px · 3×3", "alexnet_3x3_fc", "alexnet_3x3_gap", ""),
-    ("Cabeça (FC → GAP)", "64px · 11-5-3-3-3", "alexnet_adapted_orig_fc", "alexnet_adapted_orig_gap", ""),
-    ("Cabeça (FC → GAP)", "64px · 2×2", "alexnet_adapted_2x2_fc", "alexnet_adapted_2x2_gap", ""),
-    ("Cabeça (FC → GAP)", "64px · misto 3-2-3-2-3 · sem BN", "alexnet_mixed_fc", "alexnet_mixed", ""),
-    ("Cabeça (FC → GAP)", "64px · misto 3-2-3-2-3 · com BN", "alexnet_mixed_fc_bn", "alexnet_mixed_bn", ""),
-    ("Cabeça (FC → GAP)", "64px · 3×3 empilhado (2 convs/estágio) · com BN", "alexnet_stacked", "alexnet_stacked_gap", ""),
-    ("Cabeça (FC → GAP)", "3×3 estreito, conv1 stride 1", "alexnet_smallkernel_fc", "alexnet_smallkernel",
-     "AlexNetSmallKernel (canais 64→256)"),
-    ("Cabeça (FC → GAP)", "original sem Dropout · 11-5-3-3-3", "alexnet_geo_s4_p3_fc", "alexnet_geo_s4_p3_gap", ""),
-    ("Cabeça (FC → GAP)", "original · misto 3-3-3-2-2†", "alexnet_tv_mixed_early3", "alexnet_tv_mixed_early3_gap",
-     "a FC do torchvision tem Dropout, que sai junto"),
-    ("Cabeça (FC → GAP)", "original · misto 2-3-2-3-2†", "alexnet_tv_mixed_alt", "alexnet_tv_mixed_alt_gap",
-     "a FC do torchvision tem Dropout, que sai junto"),
-    ("Cabeça (FC → GAP)", "original · misto 2-2-2-3-3†", "alexnet_tv_mixed_early2", "alexnet_tv_mixed_early2_gap",
-     "a FC do torchvision tem Dropout, que sai junto"),
-    ("Stride da conv1 (4 → 2)", "com 3 max-pools 3×3/2 (os do layout original)", "alexnet_geo_s4_p3_fc", "alexnet_geo_s2_p3_fc", ""),
-    ("Stride da conv1 (4 → 2)", "com 2 max-pools 2×2 (os do layout 64px)", "alexnet_geo_s4_p2_fc", "alexnet_adapted_orig_fc", ""),
-    ("Pooling", "conv1 stride 4: 3 pools 3×3 → 2 pools 2×2", "alexnet_geo_s4_p3_fc", "alexnet_geo_s4_p2_fc", ""),
-    ("Pooling", "conv1 stride 2: 3 pools 3×3 → 2 pools 2×2", "alexnet_geo_s2_p3_fc", "alexnet_adapted_orig_fc", ""),
-    ("Pooling", "conv1 stride 2, 3 pools: janela 3×3 → 2×2", "alexnet_geo_s2_p3_fc", "alexnet_geo_s2_pk2n3_fc", ""),
-    ("Pooling", "conv1 stride 2, janela 2×2: 3 → 2 pools", "alexnet_geo_s2_pk2n3_fc", "alexnet_adapted_orig_fc", ""),
-    ("Pooling", "conv1 stride 2, janela 3×3: 3 → 2 pools", "alexnet_geo_s2_p3_fc", "alexnet_geo_s2_pk3n2_fc", ""),
-    ("Dropout (0 → 0,5)", "64px · 11-5-3-3-3 · FC", "alexnet_adapted_orig_fc", "alexnet_geo_s2_p2_drop_fc", ""),
-    ("Dropout (0 → 0,5)", "original · 11-5-3-3-3 · FC†", "alexnet_geo_s4_p3_fc", "alexnet_tv_scratch",
-     "B é a AlexNet original do torchvision (com Dropout)"),
-    ("Pré-treino ImageNet (não → sim)", "original · 11-5-3-3-3 · FC + Dropout†", "alexnet_tv_scratch", "alexnet_tv",
-     "A é a AlexNet original do torchvision (com Dropout)"),
-    ("Pré-treino ImageNet (não → sim)", "64px · 11-5-3-3-3 · FC†", "alexnet_adapted_orig_fc", "alexnet_adapted_orig_fc_pt",
-     ""),
-    ("BatchNorm (sem → com)", "64px · 3×3 · GAP", "alexnet_3x3_gap", "alexnet_3x3_gap_bn", ""),
-    ("BatchNorm (sem → com)", "64px · misto 3-2-3-2-3 · GAP", "alexnet_mixed", "alexnet_mixed_bn", ""),
-    ("BatchNorm (sem → com)", "64px · misto 3-2-3-2-3 · FC", "alexnet_mixed_fc", "alexnet_mixed_fc_bn", ""),
-    ("BatchNorm (sem → com)", "64px · 3×3 empilhado (2 convs/estágio) · GAP", "alexnet_stacked_gap_nobn", "alexnet_stacked_gap", ""),
-    ("Bloco de compensação (sobre 3×3 + BN + GAP)", "64px · 3×3 + BN + GAP → Bottleneck", "alexnet_3x3_gap_bn",
-     "alexnet_bottleneck", ""),
-    ("Bloco de compensação (sobre 3×3 + BN + GAP)", "64px · 3×3 + BN + GAP → Fire†", "alexnet_3x3_gap_bn", "alexnet_fire",
-     "o Fire usa conv1 stride 1 (mapas 16×16)"),
+# The factors a matched pair holds fixed. pooling = '<n>pool<k>x<k>' (count and window always change together here);
+# map_side follows from kernels + geometry, so it is not a pairing key.
+FACTORS = ["family", "kernels", "stride", "pooling", "head", "bn", "dropout", "pretrained"]
+# (factor, level a, level b, label): delta = b - a over every pair of cells equal in all other factors
+PAIRS = [("kernels", "k11-5-3", "k3x3", "Kernel 11-5-3-3-3 → 3×3"), ("kernels", "k3x3", "k2x2", "Kernel 3×3 → 2×2"),
+         ("kernels", "k11-5-3", "k2x2", "Kernel 11-5-3-3-3 → 2×2"), ("kernels", "k3x3", "kalt3-2", "Kernel 3×3 → alternado 3-2"),
+         ("kernels", "k3x3", "k3x3stacked", "3×3 → dois 3×3 empilhados por estágio"),
+         ("kernels", "k2x2", "k2x2stacked", "2×2 → dois 2×2 empilhados por estágio"),
+         ("head", "fc", "gap", "Cabeça FC → GAP"), ("bn", False, True, "BatchNorm não → sim"),
+         ("stride", 4, 2, "Stride da conv1 4 → 2"), ("pooling", "3pool3x3", "2pool2x2", "3 max-pools 3×3 → 2 max-pools 2×2"),
+         ("dropout", False, True, "Dropout 0 → 0,5 (só cabeça FC)"), ("pretrained", False, True, "Pré-treino ImageNet")]
+FIGURE_OF = {"head": "Cabeça (FC → GAP)", "stride": "Stride da conv1 (4 → 2)", "pooling": "Pooling", "dropout": "Dropout (0 → 0,5)",
+             "pretrained": PRE, "bn": "BatchNorm (sem → com)"}
+K3_GAP_BN = "alexnet_k3x3_stride2_2pool2x2_map8_gap_bn"
+FAMILY_CONTRASTS = [  # (factor, label, A, B, note): what the cell grid can't express. † = a second variable changes too
+    (COMP, "64px · 3×3 + BN + GAP → Bottleneck", K3_GAP_BN, "alexnet_bottleneck", ""),
+    (COMP, "64px · 3×3 + BN + GAP → Fire†", K3_GAP_BN, "alexnet_fire", "o Fire usa conv1 stride 1 (mapas 16×16)"),
+    (PRE, "MobileNetV2 (torchvision)", "mobilenetv2_scratch", "mobilenetv2", ""),
+    (PRE, "ResNet-18 (torchvision)", "resnet18tv_scratch", "resnet18tv", ""),
 ]
 
 
+def with_pooling(cells):
+    return cells.assign(pooling=cells.pool_count.astype(int).astype(str) + "pool" + cells.pool_kernel.astype(int).astype(str)
+                        + "x" + cells.pool_kernel.astype(int).astype(str))
+
+
+def design_cells():
+    """Every cell the phase_11_*.yaml files train (trained yet or not), with its factors."""
+    from pathlib import Path
+    from ml.model_registrations import CELL_FACTORS
+
+    models = {m for p in (Path(__file__).resolve().parents[2] / "configs/experiments").glob("phase_11_*.yaml")
+              for m in load_config(f"experiments/{p.name}")["models"]}
+    return with_pooling(pd.DataFrame([{"cell": k, **f} for k, f in CELL_FACTORS.items() if k in models]))
+
+
+def pairs_of(cells):
+    """Every (a, b) of cells equal in all FACTORS but the one a PAIRS entry varies; the other columns of a and b come
+    along with _a / _b suffixes, the shared factors as plain columns."""
+    out = []
+    for f, a, b, label in PAIRS:
+        others = [x for x in FACTORS if x != f]
+        j = cells[cells[f] == a].set_index(others).join(cells[cells[f] == b].set_index(others), lsuffix="_a", rsuffix="_b", how="inner")
+        out.append(j.reset_index().assign(factor=f, contrast=label))
+    return pd.concat(out, ignore_index=True)
+
+
+def contrast_list():
+    """(factor, label, A, B, note) for every matched pair of the design, then the family contrasts."""
+    from ml.model_registrations import CELL_FACTORS
+
+    rows = []
+    for r in pairs_of(design_cells()).itertuples():
+        context = cell_label(CELL_FACTORS[r.cell_a], skip=(r.factor,))
+        if r.factor == "kernels":
+            factor = COMP if "stacked" in r.cell_b else "Kernel"
+            label = f"{r.contrast.removeprefix('Kernel ')} · {context}"
+        else:
+            factor, label = FIGURE_OF[r.factor], context
+        rows.append((factor, label, r.cell_a, r.cell_b, ""))
+    return rows + FAMILY_CONTRASTS
+
+
 def _test_hits(results, key, stage):
-    """Per-image top-1 hits on the held-out test set, or None before the run's current-protocol rerun wrote them."""
+    """Per-image top-1 hits on the held-out test set, or None if the run did not write its test logits."""
     p = results / f"{key}_{stage}_test_logits.npz"
     if not p.exists():
         return None
@@ -107,26 +128,25 @@ def _pair_stats(idx, a, b):
 
 
 def contrasts(df):
-    # the default-init alexnet_tv_3x3 re-QAT (phase_11_reuse_old_init) shares key+seed with the he_init run
-    idx = df[df.exp != "reuse_old_init"].set_index(["key", "seed"])
+    """One row per contrast both of whose runs have finished (a pending pair is left out until then)."""
+    idx = df.set_index(["key", "seed"])
     assert idx.index.is_unique, idx.index[idx.index.duplicated()]
     rows = []
-    for factor, label, a, b, note in C:
+    for factor, label, a, b, note in contrast_list():
         seeds = sorted({s for k, s in idx.index if k == a} & {s for k, s in idx.index if k == b})
-        assert seeds, (a, b)
-        va, vb = ({c: np.array([idx.loc[(k, s), c] for s in seeds]) for c in ["fp32", "int8", "int8_raw", "macs_m", "params_m"]}
-                  for k in (a, b))
+        if 42 not in seeds:
+            continue
+        va, vb = ({c: np.array([idx.loc[(k, s), c] for s in seeds]) for c in ["fp32", "int8", "macs_m", "params_m"]} for k in (a, b))
         d = {c: vb[c] - va[c] for c in va}
         rows.append(dict(
             factor=factor, contrast=label, A=a, B=b, n_seeds=len(seeds), **_pair_stats(idx, a, b),
             d_fp32=d["fp32"].mean(), d_fp32_seeds=" / ".join(f"{x:+.2f}" for x in d["fp32"]),
-            d_int8=d["int8"].mean(), d_int8_seeds=" / ".join(f"{x:+.2f}" for x in d["int8"]), d_int8_raw=d["int8_raw"].mean(),
-            **{f"{c}_{side}": v[c].mean() for side, v in [("A", va), ("B", vb)] for c in ["fp32", "int8", "int8_raw"]},
+            d_int8=d["int8"].mean(), d_int8_seeds=" / ".join(f"{x:+.2f}" for x in d["int8"]),
+            **{f"{c}_{side}": v[c].mean() for side, v in [("A", va), ("B", vb)] for c in ["fp32", "int8"]},
             macs_change_pct=100 * (vb["macs_m"][0] / va["macs_m"][0] - 1),
-            params_change_pct=100 * (vb["params_m"][0] / va["params_m"][0] - 1), note=note,
-            pts_fp32=list(d["fp32"]), pts_int8=list(d["int8"]), pts_int8_raw=list(d["int8_raw"])))
+            params_change_pct=100 * (vb["params_m"][0] / va["params_m"][0] - 1), note=note))
     t = pd.DataFrame(rows)
-    for stage in ("fp32", "int8"):  # ~35 tests in one table: family-wise correction (Holm 1979)
+    for stage in ("fp32", "int8"):  # many tests in one table: family-wise correction (Holm 1979)
         if f"p_{stage}" in t:
             t[f"p_{stage}_holm"] = holm(t[f"p_{stage}"].tolist())
     return t
@@ -135,17 +155,21 @@ def contrasts(df):
 def fig_factor(t, df, factor, per_row=6):
     """Absolute top-1 of A and B for every contrast of one factor: A grey, B in the factor's colour, + baseline."""
     g, color = t[t.factor == factor], FACTOR_COLOR[factor]
+    if g.empty:
+        print(f"{FACTOR_FIG[factor]}: no finished pair yet")
+        return
     chunks = [g.iloc[k:k + per_row] for k in range(0, len(g), per_row)]
     width = min(len(g), per_row)
     fig, axes = plt.subplots(len(chunks), 1, figsize=(max(11.0, 2.5 * width + 1.5), 5.2 * len(chunks) + 1.2), squeeze=False,
                              sharey=True, layout="constrained")
     w = 0.19
+    ref = []
     for ax, chunk in zip(axes[:, 0], chunks):
         for i, r in enumerate(chunk.itertuples()):
             for j, (side, c) in enumerate([("A", NEUTRAL), ("B", color)]):
                 fp32 = getattr(r, f"fp32_{side}")
                 ax.bar(i + (2 * j - 1.5) * w, fp32, w, color=c, edgecolor="white")
-                int8_bar(ax, i + (2 * j - 0.5) * w, getattr(r, f"int8_{side}"), getattr(r, f"int8_raw_{side}"), w, c)
+                int8_bar(ax, i + (2 * j - 0.5) * w, getattr(r, f"int8_{side}"), w, c)
                 ax.text(i + (2 * j - 1.5) * w, fp32 + 0.4, f"{fp32:.1f}", ha="center", va="bottom", fontsize=7.5, zorder=6,
                         bbox=dict(facecolor="white", edgecolor="none", pad=0.3))
         ax.set_xticks(range(len(chunk)))
@@ -154,7 +178,7 @@ def fig_factor(t, df, factor, per_row=6):
         ax.set_xlim(-0.6, width - 0.4)  # same bar width in every row
         ax.set_ylabel("Top-1 (%)")
         ax.margins(y=0.08)
-        ref = reference_lines(ax, df)
+        ref = reference_lines(ax, df) or ref
     notes = {}
     for r in g.itertuples():
         if r.note:
@@ -166,115 +190,28 @@ def fig_factor(t, df, factor, per_row=6):
     savefig(fig, FACTOR_FIG[factor])
 
 
-def fig_forest(t, band):
-    fig, axes = plt.subplots(1, 2, figsize=(14, 0.33 * len(t) + 4), sharey=True)
-    ypos, headers, cur = [], [], 0.0  # one blank header row above each factor group, rows run top -> bottom
-    for f, g in t.groupby("factor", sort=False):
-        headers.append((f, cur)); cur += 1
-        for _ in range(len(g)):
-            ypos.append(cur); cur += 1
-        cur += 0.4
-    y = [cur - p for p in ypos]
-    for ax, col, title in [(axes[0], "fp32", "Δ top-1 FP32 (pp)"), (axes[1], "int8", "Δ top-1 INT8 real (pp)")]:
-        if np.isfinite(band[col]):
-            ax.axvspan(-band[col], band[col], color="#d0d0d0", alpha=0.6, zorder=0)
-        ax.axvline(0, color="k", lw=0.8)
-        for yi, r in zip(y, t.itertuples()):
-            c, d, pts = FACTOR_COLOR[r.factor], getattr(r, f"d_{col}"), getattr(r, f"pts_{col}")
-            old = col == "int8" and np.isnan(d)
-            if old:  # only the pre-fix INT8 exists: hollow + faded, never drawn like a valid delta
-                d, pts = r.d_int8_raw, r.pts_int8_raw
-            style = dict(facecolors="none", edgecolors=c, alpha=0.5) if old else dict(color=c, edgecolors="white")
-            if len(pts) > 1:
-                ax.scatter(pts, [yi] * len(pts), s=16, zorder=3, **(style if old else dict(color=c, alpha=0.6)))
-            ax.scatter(d, yi, s=90, zorder=4, **style)
-            ax.annotate(f"{d:+.1f}", (max(pts + [d]) if d >= 0 else min(pts + [d]), yi), xytext=(8 if d >= 0 else -8, 0),
-                        textcoords="offset points", va="center", ha="left" if d >= 0 else "right", fontsize=7.5, color=c,
-                        alpha=0.5 if old else 1)
-        for f, hy in headers:
-            ax.text(0.005, cur - hy, f, transform=ax.get_yaxis_transform(), fontsize=9.5, fontweight="bold", color=FACTOR_COLOR[f], va="center")
-        ax.set_xlabel(title); ax.grid(axis="y", alpha=0); ax.set_ylim(-0.6, cur); ax.margins(x=0.12)
-    axes[0].set_yticks(y)
-    axes[0].set_yticklabels([f"{r.contrast}  (FP32 {r.fp32_A:.1f} → {r.fp32_B:.1f}%, n={r.n_seeds})" for r in t.itertuples()],
-                            fontsize=8.5)
-    fig.legend(handles=[Line2D([], [], marker="o", color=NEUTRAL, ls="", ms=9, label="Δ médio do par (cor = fator)"),
-                        Line2D([], [], marker="o", color=NEUTRAL, ls="", ms=4, alpha=0.6, label="Δ de uma seed (42/43/44)"),
-                        Line2D([], [], marker="o", mfc="none", mec=NEUTRAL, ls="", ms=9, label=f"Δ calculado com o {OLD_INT8}"),
-                        Patch(color="#d0d0d0", label=f"ruído entre seeds (±{band['fp32']:.1f}pp FP32"
-                              + (f", ±{band['int8']:.1f}pp INT8)" if np.isfinite(band["int8"]) else "; INT8 após o rerun)"))],
-               loc="upper center", bbox_to_anchor=(0.5, 0), ncol=2, fontsize=9)
-    fig.suptitle("Efeito de cada fator isolado: cada linha compara duas redes idênticas exceto pelo fator do grupo (A → B)\n"
-                 "† = uma segunda variável muda junto (nota nas figuras 05–11)   ·   64px / original = layout:\n" + LAYOUTS, fontsize=10.5)
-    fig.tight_layout(rect=(0.0, 0, 1, 0.95))
-    savefig(fig, "12_factor_effects_forest.png")
-
-
-def fig_interaction(df):
-    v = df[(df.seed == 42) & (df.exp != "reuse_old_init")].set_index("key").fp32
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5.2))
-    ax = axes[0]
-    for lab, ys, c in [("3 max-pools 3×3/2 (os do layout original)", [v.alexnet_geo_s4_p3_fc, v.alexnet_geo_s2_p3_fc], AMBER),
-                       ("2 max-pools 2×2 (os do layout 64px)", [v.alexnet_geo_s4_p2_fc, v.alexnet_adapted_orig_fc], BLUE)]:
-        ax.plot([0, 1], ys, "-o", color=c, lw=2.2, ms=8, label=lab)
-        for x, yv in zip([0, 1], ys):
-            ax.annotate(f"{yv:.1f}", (x, yv), xytext=(-30 if x == 0 else 6, (6 if c == BLUE else -14) if x == 0 else -12), textcoords="offset points", fontsize=9, color=c)
-    ax.set_xticks([0, 1]); ax.set_xticklabels(["conv1 stride 4", "conv1 stride 2"]); ax.set_xlim(-0.3, 1.3)
-    ax.set_ylabel("Top-1 FP32 (%)")
-    ax.legend(handles=ax.get_legend_handles_labels()[0] + reference_lines(ax, df, int8=False), fontsize=8.5, loc="upper center", bbox_to_anchor=(0.5, -0.1))
-    ax.set_title("Interação stride da conv1 × pooling\n(cabeça FC sem Dropout, kernels 11-5-3-3-3, seed 42)\n"
-                 "linhas não paralelas = os efeitos não se somam", fontsize=10)
-    ax = axes[1]
-    for lab, ks, c in [("cabeça FC", ["alexnet_3x3_fc", "alexnet_adapted_orig_fc", "alexnet_adapted_2x2_fc"], "#555555"),
-                       ("cabeça GAP", ["alexnet_3x3_gap", "alexnet_adapted_orig_gap", "alexnet_adapted_2x2_gap"], RED)]:
-        ax.plot(range(3), [v[k] for k in ks], "-o", color=c, lw=2.2, ms=8, label=lab)
-        for i, k in enumerate(ks):
-            ax.annotate(f"{v[k]:.1f}", (i, v[k]), xytext=(6, -12), textcoords="offset points", fontsize=9, color=c)
-    ax.set_xticks(range(3)); ax.set_xticklabels(["3×3", "11-5-3-3-3", "2×2"]); ax.set_xlim(-0.3, 2.3)
-    ax.legend(handles=ax.get_legend_handles_labels()[0] + reference_lines(ax, df, int8=False), fontsize=8.5, loc="upper center", bbox_to_anchor=(0.5, -0.1))
-    ax.set_title("Interação kernel × cabeça\n(layout 64px, sem BN, seed 42)\n"
-                 "linhas ≈ paralelas: kernel e cabeça são quase aditivos", fontsize=10)
-    fig.tight_layout()
-    savefig(fig, "13_interactions.png")
-
-
-# ── Factorial cells (ml/model_registrations.py:CELL_FACTORS): every matched pair, not one hand-picked pair per factor ──
-FACTORS = ["family", "kernels", "stride", "pool_kernel", "pool_count", "head", "bn", "dropout", "pretrained"]  # map_side
-# follows from kernels + geometry, so it is not a pairing key
 METRICS = ["fp32", "int8", "dqat"]  # dqat = INT8 - FP32, the report's ΔQAT (negative = loses under INT8)
-# (factor, level a, level b, label): Δ = b - a over every pair of cells equal in all other factors
-PAIRS = [("kernels", "k11-5-3", "k3x3", "Kernel 11-5-3-3-3 → 3×3"), ("kernels", "k3x3", "k2x2", "Kernel 3×3 → 2×2"),
-         ("kernels", "k11-5-3", "k2x2", "Kernel 11-5-3-3-3 → 2×2"), ("kernels", "k3x3", "kalt3-2", "Kernel 3×3 → alternado 3-2"),
-         ("kernels", "k3x3", "k3x3stacked", "3×3 → dois 3×3 empilhados por estágio"),
-         ("kernels", "k2x2", "k2x2stacked", "2×2 → dois 2×2 empilhados por estágio"),
-         ("head", "fc", "gap", "Cabeça FC → GAP"), ("bn", False, True, "BatchNorm não → sim"),
-         ("stride", 4, 2, "Stride da conv1 4 → 2"), ("pool_kernel", 3, 2, "Janela do max-pool 3×3 → 2×2"),
-         ("pool_count", 3, 2, "Nº de max-pools 3 → 2"), ("dropout", False, True, "Dropout 0 → 0,5 (só cabeça FC)"),
-         ("pretrained", False, True, "Pré-treino ImageNet")]
 
 
 def factorial_cells(df):
-    """Seed-42 table, one row per trained cell of CELL_FACTORS (AlexNet and VGG grids + stacked/narrow)."""
+    """Seed-42 table, one row per trained cell of CELL_FACTORS (AlexNet and VGG grids + stacked)."""
     from ml.model_registrations import CELL_FACTORS
 
-    runs = df[(df.seed == 42) & df.key.isin(CELL_FACTORS)].set_index("key")
-    assert runs.index.is_unique, runs.index[runs.index.duplicated()]
-    cells = pd.DataFrame([{"cell": k, **CELL_FACTORS[k], **r[["fp32", "fp32_val", "int8", "int8_raw", "params_m", "macs_m"]].to_dict()}
-                          for k, r in runs.iterrows()])
+    runs = df[(df.seed == 42) & df.key.isin(CELL_FACTORS)]
+    assert runs.key.is_unique, runs.key[runs.key.duplicated()]
+    if runs.empty:
+        return pd.DataFrame()
+    cells = with_pooling(pd.DataFrame([{"cell": r.key, **CELL_FACTORS[r.key], "fp32": r.fp32, "int8": r.int8,
+                                        "params_m": r.params_m, "macs_m": r.macs_m} for r in runs.itertuples()]))
     cells["dqat"] = cells.int8 - cells.fp32
-    cells["dqat_raw"] = cells.int8_raw - cells.fp32_val
     return cells
 
 
 def matched_pairs(cells):
-    out = []
-    for f, a, b, label in PAIRS:
-        others = [x for x in FACTORS if x != f]
-        j = cells[cells[f] == a].set_index(others).join(cells[cells[f] == b].set_index(others), lsuffix="_a", rsuffix="_b", how="inner")
-        for _, r in j.iterrows():
-            out.append(dict(factor=f, contrast=label, cell_a=r.cell_a, cell_b=r.cell_b,
-                            **{m: r[f"{m}_b"] - r[f"{m}_a"] for m in METRICS + ["int8_raw", "dqat_raw"]},
-                            macs_pct=100 * (r.macs_m_b / r.macs_m_a - 1), params_pct=100 * (r.params_m_b / r.params_m_a - 1)))
-    return pd.DataFrame(out)
+    j = pairs_of(cells)
+    return pd.DataFrame({"factor": j.factor, "contrast": j.contrast, "cell_a": j.cell_a, "cell_b": j.cell_b,
+                         **{m: j[f"{m}_b"] - j[f"{m}_a"] for m in METRICS},
+                         "macs_pct": 100 * (j.macs_m_b / j.macs_m_a - 1), "params_pct": 100 * (j.params_m_b / j.params_m_a - 1)})
 
 
 def bootstrap_median_ci(v, n_boot=10_000):
@@ -302,39 +239,33 @@ def summarize_pairs(pairs):
     return pd.DataFrame(rows)
 
 
-def fig_matched_pairs(pairs, summary, n_cells):
+def fig_matched_pairs(pairs, summary, n_cells, band):
     titles = {"fp32": "Δ top-1 FP32 (pp)", "int8": "Δ top-1 INT8 (pp)", "dqat": "Δ ΔQAT (pp; >0 = mais robusto)"}
     fig, axes = plt.subplots(1, 3, figsize=(15, 0.55 * len(summary) + 3), sharey=True)
     y = {c: i for i, c in enumerate(summary.contrast[::-1])}
     for ax, m in zip(axes, METRICS):
+        if np.isfinite(band.get(m, np.nan)):
+            ax.axvspan(-band[m], band[m], color="#d0d0d0", alpha=0.6, zorder=0)
         ax.axvline(0, color="k", lw=0.8)
-        drawn = False
         for s in summary.itertuples():
-            g = pairs[pairs.contrast == s.contrast]
-            v, old = g[m].dropna(), False
-            if v.empty and m != "fp32":  # only pre-fix INT8 so far: hollow + faded
-                v, old = g[f"{m}_raw"].dropna(), True
+            v = pairs[pairs.contrast == s.contrast][m].dropna()
             if v.empty:
                 continue
-            drawn = True
             yy = y[s.contrast] + np.random.default_rng(0).uniform(-0.18, 0.18, len(v))
-            ax.scatter(v, yy, s=10 if not old else 16, alpha=0.5, **(dict(facecolors="none", edgecolors=BLUE) if old else dict(color=BLUE)))
-            ax.scatter(v.median(), y[s.contrast], marker="D", s=50, zorder=3,
-                       **(dict(facecolors="none", edgecolors=RED, alpha=0.6) if old else dict(color=RED)))
-            if not old:
-                ax.hlines(y[s.contrast], *bootstrap_median_ci(v), color=RED, lw=2, zorder=2)
-            ax.text(1.01, y[s.contrast], f"{int((v > 0).sum())}/{len(v)}", transform=ax.get_yaxis_transform(), va="center",
-                    fontsize=8, alpha=0.5 if old else 1)
-        if not drawn:
-            ax.text(0.5, 0.5, "pendente (rerun na fila)", transform=ax.transAxes, ha="center", color=NEUTRAL)
+            ax.scatter(v, yy, s=10, alpha=0.5, color=BLUE)
+            ax.scatter(v.median(), y[s.contrast], marker="D", s=50, zorder=3, color=RED)
+            ax.hlines(y[s.contrast], *bootstrap_median_ci(v), color=RED, lw=2, zorder=2)
+            ax.text(1.01, y[s.contrast], f"{int((v > 0).sum())}/{len(v)}", transform=ax.get_yaxis_transform(), va="center", fontsize=8)
         ax.set_title(titles[m], fontsize=10)
     axes[0].set_yticks(list(y.values()))
     axes[0].set_yticklabels(list(y.keys()), fontsize=9)
-    fig.legend(handles=[Line2D([], [], marker="o", color=BLUE, ls="", ms=4, alpha=0.5, label="um par de células iguais em todo o resto"),
-                        Line2D([], [], marker="D", color=RED, ls="-", ms=7, label="mediana dos pares (barra: IC 95% bootstrap)"),
-                        Line2D([], [], marker="o", mfc="none", mec=BLUE, ls="", ms=5, label=f"par com {OLD_INT8}"),
-                        Line2D([], [], ls="", label="k/n à direita = pares em que o 2º nível ganha")],
-               loc="upper center", bbox_to_anchor=(0.5, 0), ncol=2, fontsize=9)
+    handles = [Line2D([], [], marker="o", color=BLUE, ls="", ms=4, alpha=0.5, label="um par de células iguais em todo o resto"),
+               Line2D([], [], marker="D", color=RED, ls="-", ms=7, label="mediana dos pares (barra: IC 95% bootstrap)"),
+               Line2D([], [], ls="", label="k/n à direita = pares em que o 2º nível ganha")]
+    if np.isfinite(band.get("fp32", np.nan)):
+        handles.append(Patch(color="#d0d0d0", label=f"ruído entre seeds (±{band['fp32']:.1f} pp FP32"
+                             + (f", ±{band['int8']:.1f} pp INT8)" if np.isfinite(band.get("int8", np.nan)) else ")")))
+    fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0), ncol=2, fontsize=9)
     fig.suptitle(f"Células do desenho da Fase 11 (seed 42; {n_cells} treinadas até agora): cada ponto compara "
                  "duas células que só diferem no fator da linha", fontsize=11)
     fig.tight_layout(rect=(0, 0, 1, 0.95))
@@ -343,26 +274,32 @@ def fig_matched_pairs(pairs, summary, n_cells):
 
 def main():
     apply_report_style()
-    df = load()
+    df = frame()
+    if df.empty:
+        print("no Phase 11 run has a summary yet")
+        return
     t = contrasts(df)
     TABLES.mkdir(parents=True, exist_ok=True)
-    t.drop(columns=[c for c in t if c.startswith("pts_")]).to_csv(TABLES / "factor_effects.csv", index=False)
+    t.to_csv(TABLES / "factor_effects.csv", index=False)
     band = noise_band(df)
+    band["dqat"] = float("nan")  # no seed band of its own for the INT8 - FP32 difference
     print("noise band (pp):", {k: round(v, 2) for k, v in band.items()})
-    for factor in FACTOR_FIG:
-        fig_factor(t, df, factor)
-    fig_forest(t, band)
-    fig_interaction(df)
-    pd.set_option("display.width", 250, "display.max_colwidth", 45)
-    print(t[["factor", "contrast", "n_seeds", "d_fp32", "d_int8", "macs_change_pct", "params_change_pct"]].round(2).to_string(index=False))
+    if not t.empty:
+        for factor in FACTOR_FIG:
+            fig_factor(t, df, factor)
+        pd.set_option("display.width", 250, "display.max_colwidth", 45)
+        print(t[["factor", "contrast", "n_seeds", "d_fp32", "d_int8", "macs_change_pct", "params_change_pct"]].round(2).to_string(index=False))
 
     cells = factorial_cells(df)
-    pairs = matched_pairs(cells)
+    pairs = matched_pairs(cells) if len(cells) else pd.DataFrame()
+    if pairs.empty:
+        print("14: no finished matched pair yet")
+        return
     summary = summarize_pairs(pairs)
     cells.to_csv(TABLES / "factorial_cells.csv", index=False)
     pairs.to_csv(TABLES / "factorial_pairs.csv", index=False)
     summary.to_csv(TABLES / "factorial_pair_summary.csv", index=False)
-    fig_matched_pairs(pairs, summary, len(cells))
+    fig_matched_pairs(pairs, summary, len(cells), band)
     print(f"\n{len(cells)} factorial cells trained (seed 42)")
     print(summary[["contrast", "n_pairs", "fp32_median", "fp32_n_positive", "int8_n", "int8_median", "dqat_median", "dqat_n_positive",
                    "macs_pct"]].round(2).to_string(index=False))
