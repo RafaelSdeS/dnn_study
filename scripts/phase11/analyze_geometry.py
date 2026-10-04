@@ -184,10 +184,10 @@ def bn_block(df):
 
 
 def noise_band(df):
-    """2*sqrt(2)*pooled SD across seeds, for the 4 models replicated at seeds 42-44: the training-noise floor a
-    single-seed difference has to clear (Bouthillier et al., MLSys 2021: seed variance is a first-order source of
-    variance in benchmark comparisons)."""
-    rep = df[df.key.isin(["alexnet_3x3_fc", "alexnet_adapted_orig_fc", "alexnet_3x3_gap", "alexnet_adapted_orig_gap"])]
+    """2*sqrt(2)*pooled SD across seeds, for the cells replicated at seeds 42-44 (phase_11_kernel_head_bn_seed43/44):
+    the training-noise floor a single-seed difference has to clear (Bouthillier et al., MLSys 2021: seed variance is a
+    first-order source of variance in benchmark comparisons)."""
+    rep = df[df.key.isin(["alexnet_k3x3_stride2_2pool2x2_map8_gap_bn", "alexnet_k2x2_stride2_2pool2x2_map8_gap_bn"])]
     g = rep.groupby("key")
     return {c: 2 * np.sqrt(2) * np.sqrt((g[c].var(ddof=1)).mean()) for c in ["fp32", "int8"]}
 

@@ -8,6 +8,7 @@ import torch
 
 import ml.model_registrations  # noqa: F401 — populates MODEL_REGISTRY as a side effect
 from ml.registry import MODEL_REGISTRY
+from models.baselines import SymmetricPad2d
 
 EXPECTED_MODELS = {
     "alexnet_tv", "vgg_style", "mobilenetv2", "resnet18tv",
@@ -94,7 +95,7 @@ def test_pretrained_adapted_model_loads_the_imagenet_convs_and_first_two_linears
 
 def test_geometry_control_models_survive_the_qat_to_int8_path():
     """The controls run FP32 -> QAT -> INT8 (Phase 11 protocol), so the hand-written fuse maps must
-    fuse every conv and the 2x2 ZeroPad2d must survive a real INT8 convert (quantized input)."""
+    fuse every conv and the 2x2 SymmetricPad2d must survive a real INT8 convert (quantized input)."""
     from ml.quantization import build_qat_from_model, convert_to_int8
 
     for name in CONTROL_MODELS + list(GEO_MAPS):
@@ -115,7 +116,7 @@ def _layout(m):
     for x in m.modules():
         if isinstance(x, torch.nn.Conv2d):
             out.append(("conv", x.in_channels, x.out_channels, x.kernel_size, x.stride, x.padding))
-        elif isinstance(x, (torch.nn.MaxPool2d, torch.nn.AdaptiveAvgPool2d, torch.nn.ZeroPad2d)):
+        elif isinstance(x, (torch.nn.MaxPool2d, torch.nn.AdaptiveAvgPool2d, torch.nn.ZeroPad2d, SymmetricPad2d)):
             out.append((type(x).__name__, getattr(x, "kernel_size", None), getattr(x, "stride", None),
                         getattr(x, "output_size", None), getattr(x, "padding", None)))
         elif isinstance(x, torch.nn.Linear):
@@ -158,6 +159,8 @@ def test_every_cell_name_says_what_the_net_is():
         pools = [x for x in m.features if isinstance(x, torch.nn.MaxPool2d)]
         if f["kernels"] in kernels:
             assert tuple(c.kernel_size[0] for c in convs) == kernels[f["kernels"]], name
+        elif f["kernels"].endswith("stacked"):  # k3x3stacked / k2x2stacked: every conv that size, two per stage
+            assert {c.kernel_size[0] for c in convs} == {int(f["kernels"][1])} and len(convs) == 10, name
         assert convs[0].stride[0] == f["stride"] and side == f["map_side"], name
         assert len(pools) == f["pool_count"] and {p.kernel_size for p in pools} == {f["pool_kernel"]}, name
         assert any(isinstance(x, torch.nn.BatchNorm2d) for x in m.modules()) == f["bn"], name
@@ -295,3 +298,12 @@ def test_pretrained_vgg_cell_loads_vgg16_bn_and_matches_it_in_eval():
     assert torch.equal(model.classifier[0].weight, tv.classifier[0].weight)
     assert torch.equal(model.classifier[3].weight, tv.classifier[3].weight)
     assert tuple(model.classifier[6].weight.shape) == (200, 4096)
+
+
+def test_symmetric_pad_has_no_net_shift():
+    """C2sp (Wu et al. 2019): the four channel groups pad four different corners, so averaged over channels the padded
+    map is symmetric under a 180-degree turn -- one-sided padding is not -- and the 2x2 conv after it keeps the size."""
+    y = SymmetricPad2d()(torch.ones(1, 8, 5, 5))
+    assert y.shape == (1, 8, 6, 6)
+    assert torch.equal(y.mean(1), y.mean(1).flip(-1, -2))
+    assert SymmetricPad2d()(torch.ones(1, 3, 5, 5)).shape == (1, 3, 6, 6)  # VGG's RGB stem: 3 groups, 3 corners

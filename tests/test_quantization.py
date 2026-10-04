@@ -21,7 +21,7 @@ from models.baselines import ResNet18TV
 from models.final_architecture import AlexNetFinalBottleneckResidual, AlexNetFinalFireResidual
 
 # One model per family the report trains (phase_11_families.yaml + the Phase 11 comparisons), plus the factorial's
-# cell types: FC/GAP heads, BN, Dropout, 2x2 + ZeroPad2d, stride 4, torchvision's AlexNet head. No FC-head VGG
+# cell types: FC/GAP heads, BN, Dropout, 2x2 + SymmetricPad2d, stride 4, torchvision's AlexNet head. No FC-head VGG
 # (~130M params: too much RAM for a laptop test); vgg16's Linear-ReLU pairs go through the same Sequential pass.
 REPORT_MODELS = [
     "alexnet_3x3_fc", "alexnet_3x3_gap", "alexnet_tv_scratch", "alexnet_tv_mixed_alt_gap", "alexnet_mixed_fc_bn",
@@ -31,7 +31,8 @@ REPORT_MODELS = [
     "alexnet_dilated_fc", "alexnet_dilated_gap", "alexnet_small_kernel_with_bn", "tinyhybridnet", "tinymobilenetv2",
     "alexnet_final_bottleneck_fire", "alexnet_final_fire_residual", "alexnet_final_bottleneck_residual",
     "alexnet_final_depthwise_fire", "alexnet_fire_bypass", "vgg_style", "mobilenetv2", "resnet18tv",
-    "vgg16_kalt3-2_stride2_4pool2x2_map2_gap_bn",
+    "vgg16_kalt3-2_stride2_4pool2x2_map2_gap_bn", "vgg16_k2x2_stride1_5pool2x2_map2_gap_bn",  # the latter: C2sp on RGB
+    "alexnet_k2x2stacked_stride2_2pool2x2_map8_gap_bn", "mobilenetv2_scratch", "resnet18tv_scratch",
 ]
 
 

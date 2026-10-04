@@ -12,7 +12,7 @@ from .registry import MODEL_REGISTRY
 LOGITS_PROBE_SHAPE = (1, 3, 64, 64)
 
 # INT8 as the literature defines it -- 8-bit per-tensor affine activations with EMA min/max ranges (Jacob et al.,
-# CVPR 2018) and 8-bit per-channel symmetric weights in [-127, 127] (Wu et al. 2020, Sec. 6 / LiteRT int8 spec).
+# CVPR 2018; affine costs activations nothing over scale quantization, Wu et al. 2020 Sec. 3.3) and 8-bit per-channel symmetric weights in [-127, 127] (Wu et al. 2020, Sec. 6 / LiteRT int8 spec).
 # PyTorch's onednn QAT qconfig is exactly the first part; fbgemm's default instead sets reduce_range=True, i.e. 7-bit
 # activations (0..127), to dodge int16 saturation on CPUs without AVX-512 VNNI -- what every run used until 2026-10-03.
 _ONEDNN_QAT = tq.get_default_qat_qconfig("onednn")
@@ -252,7 +252,7 @@ def requantize_avg_pools(model: nn.Module) -> nn.Module:
     step and round to 0 -- the gate's fused alexnet_3x3_gap lost 2.4pp fake-quant -> INT8 (46.55 -> 44.21)
     to this alone; float pool + a fitted requant scale recovered 46.45 (docs/logs/PHASE11_LOG.md, "Quantized
     GAP"). The pool now runs in float and its output gets its own observer, i.e. INT8 hardware's int32
-    accumulate + requantize: the quantizer sits at the input of the next compute layer, Wu et al. 2020's placement
+    accumulate + requantize: the quantizer sits at the input of the next compute layer, Wu et al. 2020's placement (Sec. 4)
     (ONNX Runtime's QLinear(Global)AveragePool likewise takes its own y_scale). Functional pooling (torchvision's
     quantizable MobileNetV2) is not covered.
     """
@@ -282,7 +282,7 @@ def keep_logits_float(model: nn.Module, probe: torch.Tensor) -> nn.Module:
 
     Its output used to get the same 8-bit fake-quant as every activation, so QAT/INT8 logits sat on a grid of 8-31
     distinct values per image: 14-31% of val images tied for top-1, top-5 depended on the tie-break, and FC heads lost
-    ~0.4pp top-1 to the grid alone (docs/logs/PHASE11_LOG.md, "Float logits layer"). Wu et al. 2020 quantize a layer's
+    ~0.4pp top-1 to the grid alone (docs/logs/PHASE11_LOG.md, "Float logits layer"). Wu et al. 2020 (Sec. 4) quantize a layer's
     inputs and weights and requantize its int32 accumulator only where another quantized layer reads it -- the logits
     have no such reader. The logits layer is the last Conv/Linear to run on `probe` -- execution order, not
     registration order (quantizable ResNet18 registers its input QuantStub after fc). Any other head shape fails here.

@@ -75,6 +75,12 @@ register_model("vgg_style", VGGStyleCNN, fuse_map=FUSE_MAP_VGG, fuse_root_attr="
 # torchvision's quantizable variants (FloatFunctional residual adds); fuse maps found on an unpretrained twin
 register_model("mobilenetv2", MobileNetV2TV, fuse_map=find_fuse_groups(MobileNetV2TV(pretrained=False)), lr=1e-4)
 register_model("resnet18tv", ResNet18TV, fuse_map=find_fuse_groups(ResNet18TV(pretrained=False)), lr=1e-4)
+# from-scratch twins (Phase 11 families: every pretrained net has one, tests/test_config.py); the names above keep their
+# Phase 1 meaning (ImageNet-pretrained)
+register_model("mobilenetv2_scratch", partial(MobileNetV2TV, pretrained=False),
+               fuse_map=MODEL_REGISTRY["mobilenetv2"]["fuse_map"], lr=1e-4)
+register_model("resnet18tv_scratch", partial(ResNet18TV, pretrained=False),
+               fuse_map=MODEL_REGISTRY["resnet18tv"]["fuse_map"], lr=1e-4)
 
 # notebooks/phase_2_kernel_restriction/alexnet_qat.ipynb
 # FUSE_MAP_ALEXNET_TV is the same Conv-ReLU (no BN) pattern the notebook calls FUSE_CONV_RELU,
@@ -186,7 +192,8 @@ register_model("alexnet_adapted_orig_fc_pt", partial(AlexNetAdapted, pretrained=
 # kernels: k11-5-3 = AlexNet's own 11-5-3-3-3; k3x3 / k2x2 = every conv; kalt3-2 / kalt2-3 = alternating, starting with
 # the first; k3x3then2x2 / k2x2then3x3 (VGG) = first 7 convs one size, last 6 the other; k3x3stacked = two 3x3 per
 # AlexNet stage; k3x3narrow = AlexNetSmallKernel (5 convs, 64-128-256 channels). stride = conv1's; <n>pool<k>x<k> = n
-# max-pools of k x k; map = side of the last conv map at a 64x64 input (what the head sees; computed, not assumed);
+# max-pools of k x k; map = side of the last conv map at a 64x64 input (computed, not assumed) -- a GAP head averages
+# it, an FC head resamples it to 6x6 (VGG: 7x7) with AdaptiveAvgPool as torchvision's AlexNet/VGG do (map 1 = 36 copies);
 # fcdrop = FC head + Dropout 0.5; pretrained = ImageNet weights (AlexNet: only the 11-5-3 FC no-BN shape fits; VGG:
 # vgg16_bn on the 3x3 cells). Every cell of both grids is registered with its factors in CELL_FACTORS (analysis groups by
 # them); the phase_11_*.yaml files list the cells that run. Same channels and He init within a family.
@@ -228,9 +235,12 @@ def _conv_groups(seq: nn.Sequential) -> list:
 _FX_FUSE = {(kn, bn): _conv_groups(AlexNetAdapted(kernels=ks, head="gap", batch_norm=bn).features)
             for kn, ks in FX_KERNELS.items() for bn in (False, True)}
 for (kn, ks), s, pk, pn in product(FX_KERNELS.items(), (2, 4), (2, 3), (2, 3)):
+    # torchvision's own conv1 (11x11, stride 4, pad 2) only in torchvision's own layout (three 3x3 pools), where every
+    # kernel ends on a 1x1 map anyway; elsewhere 'same' padding (k // 2) gives every kernel the same maps (pad 2 left
+    # the 11-5-3 cells at 3x3 vs 4x4 for the small kernels with two 2x2 pools, until 2026-10-04)
     geo = dict(kernels=ks, stem_stride=s, pool_kernel=pk, pool_count=pn,
-               **({"stem_padding": 2} if kn == "k11-5-3" and s == 4 else {}))  # torchvision's own conv1
-    with torch.device("meta"):  # the map can depend on the kernel (stride 4: 11x11 pad 2 vs 3x3 pad 1)
+               **({"stem_padding": 2} if kn == "k11-5-3" and s == 4 and (pk, pn) == (3, 3) else {}))
+    with torch.device("meta"):
         side = _map_side(AlexNetAdapted(head="gap", **geo).features)
     for head, bn, d in product(("gap", "fc"), (False, True), (False, True)):
         if d and head == "gap":  # the GAP head has no Dropout
@@ -306,6 +316,13 @@ for _old, _head, _bn in (("alexnet_stacked_gap", "gap", True), ("alexnet_stacked
     _register_cell(_spec["ctor"], _spec["fuse_map"], _spec["lr"], family="alexnet",
                    kernels="k3x3stacked" if "stacked" in _old else "k3x3narrow", stride=1 if "smallkernel" in _old else 2,
                    pool_kernel=2, pool_count=2, map_side=_side, head=_head, dropout=False, bn=_bn, pretrained=False)
+# k2x2stacked: the same depth compensation for the 2x2 cells (two 2x2 per stage, C2sp), BN only
+for _head in ("gap", "fc"):
+    _ctor = partial(AlexNetStacked, head=_head, kernel_size=2)
+    with torch.device("meta"):
+        _f = _ctor().features
+    _register_cell(_ctor, _conv_groups(_f), 1e-3, family="alexnet", kernels="k2x2stacked", stride=2, pool_kernel=2,
+                   pool_count=2, map_side=_map_side(_f), head=_head, dropout=False, bn=True, pretrained=False)
 # models/compensation.py — exists since the Phase 2 QAT-drop investigation, never
 # trained (Winograd-FPGA plano_avaliacao_redes_winograd.md Fase 1). No `features`
 # Sequential (named conv/bn/relu attrs instead), so find_fuse_groups like the

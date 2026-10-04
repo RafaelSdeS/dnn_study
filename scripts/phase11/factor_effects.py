@@ -3,7 +3,7 @@
 Each contrast compares two runs that differ in exactly one factor (kernel, head, conv1 stride, pooling, Dropout,
 pretraining, BN, compensation block). Where seeds 42/43/44 exist for both runs the delta is per seed (paired);
 otherwise it is a single seed-42 pair. The grey band is the noise floor: 2*sqrt(2)*pooled seed-to-seed SD of
-the 4 replicated models (a single-seed delta inside it is not distinguishable from re-drawing the seed).
+the replicated cells (a single-seed delta inside it is not distinguishable from re-drawing the seed).
 "layout original" / "layout 64px" are defined in scripts/phase11/analyze_geometry.py's docstring.
 
     05..11_*.png                  one figure per factor (absolute top-1 of A and B, baseline line)
@@ -245,6 +245,7 @@ METRICS = ["fp32", "int8", "dqat"]  # dqat = INT8 - FP32, the report's ΔQAT (ne
 PAIRS = [("kernels", "k11-5-3", "k3x3", "Kernel 11-5-3-3-3 → 3×3"), ("kernels", "k3x3", "k2x2", "Kernel 3×3 → 2×2"),
          ("kernels", "k11-5-3", "k2x2", "Kernel 11-5-3-3-3 → 2×2"), ("kernels", "k3x3", "kalt3-2", "Kernel 3×3 → alternado 3-2"),
          ("kernels", "k3x3", "k3x3stacked", "3×3 → dois 3×3 empilhados por estágio"),
+         ("kernels", "k2x2", "k2x2stacked", "2×2 → dois 2×2 empilhados por estágio"),
          ("head", "fc", "gap", "Cabeça FC → GAP"), ("bn", False, True, "BatchNorm não → sim"),
          ("stride", 4, 2, "Stride da conv1 4 → 2"), ("pool_kernel", 3, 2, "Janela do max-pool 3×3 → 2×2"),
          ("pool_count", 3, 2, "Nº de max-pools 3 → 2"), ("dropout", False, True, "Dropout 0 → 0,5 (só cabeça FC)"),

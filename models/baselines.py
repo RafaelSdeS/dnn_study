@@ -2,11 +2,28 @@
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.ao.quantization as tq
 from torchvision.models import alexnet, mobilenet_v2, vgg16_bn
 from torchvision.models.quantization import mobilenet_v2 as mobilenet_v2_qat
 from torchvision.models.quantization import resnet18 as resnet18_qat
 from torchvision.models.vgg import VGG, cfgs as VGG_CFGS
+
+
+class SymmetricPad2d(nn.Module):
+    """C2sp (Wu et al., "Convolution with even-sized kernels and symmetric padding", NeurIPS 2019, Sec. 3.3): before a
+    stride-1 2x2 conv, split the channels into four groups and pad one pixel on a different corner of each (left-top,
+    right-top, left-bottom, right-bottom), so the conv keeps the map size with no net shift. One-sided padding (what
+    every Phase 11 2x2 cell used until 2026-10-04) shifts the map 0.5 px per layer toward one corner; their C2sp beats
+    it by 2.5% on ImageNet, an artifact the size of the kernel effect measured here. Still a plain 2x2 conv
+    (Winograd F(m, 2)-eligible). A 3-channel input (VGG's stride-1 stem) fills only three corners: Wu's exact symmetry
+    needs channels % 4 == 0. No observer: the cat of slices of one tensor keeps its quantization parameters."""
+
+    PADS = ((1, 0, 1, 0), (0, 1, 1, 0), (1, 0, 0, 1), (0, 1, 0, 1))  # F.pad order: (left, right, top, bottom)
+
+    def forward(self, x):
+        groups = torch.tensor_split(x, 4, dim=1)
+        return torch.cat([F.pad(g, p) for g, p in zip(groups, self.PADS) if g.size(1)], dim=1)
 
 
 def _fix_relu_inplace(module: nn.Module) -> None:
@@ -265,8 +282,8 @@ class VGG16(nn.Module):
 # ─── VGGAdapted ───────────────────────────────────────────────────────────────
 
 def _vgg_adapted_features(kernels: tuple, stem_stride: int, pool_kernel: int, pool_count: int) -> nn.Sequential:
-    """VGG16's 13 convs (cfgs["D"]) + BN, one kernel (3 or 2) per conv. 3x3 pads 1; 2x2 gets an asymmetric
-    right/bottom ZeroPad2d (as models.alexnet_variants.AlexNetAdapted does), except a strided stem, which pads 0.
+    """VGG16's 13 convs (cfgs["D"]) + BN, one kernel (3 or 2) per conv. 3x3 pads 1; 2x2 gets SymmetricPad2d (C2sp,
+    as models.alexnet_variants.AlexNetAdapted does), except a strided stem, which pads 0.
     So every stride-1 conv keeps its map and every kernel pattern reaches the same pooled sizes under either pool
     -- VGG16(kernel_size=2)'s 1/0 padding alternation only does that with MaxPool 2x2."""
     layers: list[nn.Module] = []
@@ -276,7 +293,7 @@ def _vgg_adapted_features(kernels: tuple, stem_stride: int, pool_kernel: int, po
             k, stride = kernels[i], stem_stride if i == 0 else 1
             assert k in (2, 3), k
             if k == 2 and stride == 1:
-                layers.append(nn.ZeroPad2d((0, 1, 0, 1)))
+                layers.append(SymmetricPad2d())
             layers += [nn.Conv2d(in_ch, out_ch, k, stride=stride, padding=1 if k == 3 else 0, bias=False),
                        nn.BatchNorm2d(out_ch), nn.ReLU(inplace=False)]
             in_ch, i = out_ch, i + 1

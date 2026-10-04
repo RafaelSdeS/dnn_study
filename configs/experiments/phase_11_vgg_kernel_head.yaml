@@ -1,7 +1,7 @@
-# Phase 11 reduced design (docs/logs/PHASE11_LOG.md "Reduced design, descriptive names"). Does the kernel effect replicate in a deeper
-# net with BN? VGG16 + BN at its own geometry (stride 1, five 2x2 pools, 2x2 map): the 6 kernel patterns x head {GAP, FC}
-# = 12, + VGG16's own head (FC + Dropout) for 3x3 (= torchvision's VGG16) and 2x2, + the pretrained (vgg16_bn) twin of
-# the 3x3 one = 15. Seeds 43/44 of the 3x3-vs-2x2 contrast: _seed43 / _seed44.
+# Phase 11 minimal design (docs/logs/PHASE11_LOG.md "Minimal design, symmetric 2x2 padding, scratch twins"). Does the
+# kernel effect replicate in a deeper net with BN? VGG16 + BN at its own geometry (stride 1, five 2x2 pools, 2x2 map):
+# kernels {3x3, 2x2, alternating 3-2} x head {GAP, FC} = 6, + VGG16's own head (FC + Dropout) for 3x3 (= torchvision's
+# VGG16) and 2x2 = 2, + the pretrained (vgg16_bn) twin of the 3x3 one = 9 (figures 04, 05, 09).
 # Same protocol as every Phase 11 run (_protocols/no_patience.yaml), enforced by tests/test_config.py. Model names:
 # ml/model_registrations.py (CELL_FACTORS). Queued one job per model on PCAD (scripts/pcad/feed_queue.sh):
 #   python -m scripts.cluster submit --experiment phase_11_vgg_kernel_head --runtime pcad --slurm tupi_4090 --model <m>
@@ -14,12 +14,6 @@ models:
   - vgg16_k2x2_stride1_5pool2x2_map2_fc_bn
   - vgg16_kalt3-2_stride1_5pool2x2_map2_gap_bn
   - vgg16_kalt3-2_stride1_5pool2x2_map2_fc_bn
-  - vgg16_kalt2-3_stride1_5pool2x2_map2_gap_bn
-  - vgg16_kalt2-3_stride1_5pool2x2_map2_fc_bn
-  - vgg16_k3x3then2x2_stride1_5pool2x2_map2_gap_bn
-  - vgg16_k3x3then2x2_stride1_5pool2x2_map2_fc_bn
-  - vgg16_k2x2then3x3_stride1_5pool2x2_map2_gap_bn
-  - vgg16_k2x2then3x3_stride1_5pool2x2_map2_fc_bn
   - vgg16_k3x3_stride1_5pool2x2_map2_fcdrop_bn
   - vgg16_k2x2_stride1_5pool2x2_map2_fcdrop_bn
   - vgg16_k3x3_stride1_5pool2x2_map2_fcdrop_bn_pretrained

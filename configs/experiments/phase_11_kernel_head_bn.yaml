@@ -1,7 +1,7 @@
-# Phase 11 reduced design (docs/logs/PHASE11_LOG.md "Reduced design, descriptive names"). MAIN QUESTION: what restricting the kernel
-# costs, and whether the head or BN changes that. Kernel {11-5-3, 3x3, 2x2, alternating 3-2} x head {GAP, FC} x BN, at
-# the 64px geometry (conv1 stride 2, two 2x2 pools, 8x8 map) = 16 cells, x 3 seeds (42 here, 43/44 in _seed43/_seed44): kernel effects are
-# ~1-3 pp, about the seed-to-seed noise band, so they need replicates (Bouthillier et al., MLSys 2021).
+# Phase 11 minimal design (docs/logs/PHASE11_LOG.md "Minimal design, symmetric 2x2 padding, scratch twins"). MAIN
+# QUESTION: what restricting the kernel costs, and whether the head or BN changes that. Kernel {11-5-3, 3x3, 2x2,
+# alternating 3-2} x head {GAP, FC} x BN, at the 64px geometry (conv1 stride 2, two 2x2 pools, 8x8 map) = 16 cells,
+# seed 42 (figures 03, 05, 10, 13, 14). Two of them run again at seeds 43/44 (_seed43/_seed44) for the noise floor.
 # Same protocol as every Phase 11 run (_protocols/no_patience.yaml), enforced by tests/test_config.py. Model names:
 # ml/model_registrations.py (CELL_FACTORS). Queued one job per model on PCAD (scripts/pcad/feed_queue.sh):
 #   python -m scripts.cluster submit --experiment phase_11_kernel_head_bn --runtime pcad --slurm tupi_4090 --model <m>

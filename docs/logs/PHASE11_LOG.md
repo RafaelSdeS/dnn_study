@@ -934,12 +934,12 @@ retrained, not only the 49 QATs):
 
 | Choice | Reference |
 |---|---|
-| 8-bit per-tensor affine activations, EMA min/max, BN folding (`INT8_QAT_QCONFIG`, onednn's QAT qconfig) | Jacob et al., CVPR 2018; Krishnamoorthi 2018 |
+| 8-bit per-tensor affine activations, EMA min/max, BN folding (`INT8_QAT_QCONFIG`, onednn's QAT qconfig) | Jacob et al., CVPR 2018; Krishnamoorthi 2018; affine costs activations nothing over scale quantization (Wu et al. 2020 Sec. 3.3) |
 | Per-channel symmetric weights in [-127, 127] | Wu et al. 2020 Sec. 6; LiteRT int8 spec |
-| Inputs and weights of every Conv/Linear quantized; logits output FP32 (`_FloatLogits`: INT8 input + weights, stored as int8); pools requantized as the next layer's input | Wu et al. 2020 Sec. 3, 5.1 |
+| Inputs and weights of every Conv/Linear quantized; logits output FP32 (`_FloatLogits`: INT8 input + weights, stored as int8); pools requantized as the next layer's input | Wu et al. 2020 Sec. 4 ("An operation is quantized by quantizing all of its inputs (e.g. weights and activations). The output of a quantized operation is not quantized to int8 because the operation that follows it may require higher precision") and Sec. 3.3 (Eq. 10: integer GEMM, then a floating-point rescale). Not Sec. 5.1 (Partial Quantization: inputs and computation left in float), cited here until 2026-10-04 |
 | Activation fused into its producer (`fuse_sequential_relus`, `FloatFunctional.add_relu`) | Jacob 2018; PyTorch `fuse_modules`; LiteRT fused activations |
 | QAT 50 ep (1/10 of FP32's 500 ep), same optimizer, lr 1e-4 (1/100 of FP32's 0.01) cosine to 1e-6 (1/100 of that) (`_protocols/no_patience.yaml`) | Wu et al. 2020 App. A.2 |
-| Observers frozen after epoch 4, BN stats after epoch 3 | torchvision `references/classification/train_quantization.py` |
+| Observers update during the first 4 QAT epochs, BN stats during the first 3 | torchvision `references/classification/train_quantization.py` defaults (`--num-observer-update-epochs 4`, `--num-batch-norm-update-epochs 3`, "number of total epochs to update"); its loop freezes after epoch N, i.e. one epoch later (5 and 4) |
 | Best epoch on the 90/10 split, reported on Tiny ImageNet's official val (`create_test_loader`, 10k) | Cawley & Talbot, JMLR 2010 |
 | 95% Wilson CI; exact McNemar between two models on the same test images (`ml/reporting.py`) | Wilson 1927; Dietterich, Neural Computation 1998 |
 | Seed-to-seed spread as the noise floor (`noise_band`); bootstrap CI of the factorial's matched-pair medians | Bouthillier et al., MLSys 2021; Efron & Tibshirani 1993 |
@@ -983,14 +983,14 @@ gated by a pilot of the cells most likely to break.
 | Choice | Value | Reference |
 |---|---|---|
 | Optimizer | SGD, momentum 0.9, L2 weight decay 5e-4 | Krizhevsky et al., NeurIPS 2012 (AlexNet); same values in Simonyan & Zisserman, ICLR 2015 (VGG) |
-| LR, batch | 0.01, 128 | Krizhevsky et al. 2012 (VGG: 0.01 at batch 256) |
+| LR, batch | 0.01, 128, for every net | Krizhevsky et al. 2012 (VGG's paper: the same 0.01 at batch 256) |
 | Schedule | cosine annealing to 0, no warmup | Loshchilov & Hutter, ICLR 2017 (replaces AlexNet's /10 on plateau); warmup is for large-minibatch LR scaling (Goyal et al. 2017), AlexNet used none at this lr/batch |
-| Budget | 500 epochs, fixed, no early stopping; best epoch picked on the 90/10 split | Li, Yumer & Ramanan, ICLR 2020 (fixed budget, LR decayed to zero by its end); Cawley & Talbot, JMLR 2010 |
+| Budget | 500 epochs, fixed, no early stopping; best epoch picked on the 90/10 split | Li, Yumer & Ramanan, ICLR 2020 (fixed budget, LR decayed to zero by its end); Cawley & Talbot, JMLR 2010; the 90/10 hold-out of the train set: He et al., CVPR 2016 Sec. 4.2 ("determined on a 45k/5k train/val split") |
 | Augmentation | 4-px pad + random crop + horizontal flip, then AutoAugment's ImageNet policy | He et al., CVPR 2016 Sec. 4.2; Cubuk et al., CVPR 2019 |
 | Init | He normal (fan_out) on convs, N(0, 0.01) on Linears, in every from-scratch model | He et al., ICCV 2015; Krizhevsky et al. 2012 (the Linear std); torchvision's VGG init |
 | Loss | cross-entropy, label smoothing 0.1 | Szegedy et al., CVPR 2016 |
 | Precision | mixed-precision training, FP32 evaluation | Micikevicius et al., ICLR 2018 |
-| Pretrained cells (`_pt`) | the same recipe -- pretraining is the only variable of their contrast | design choice of the factorial |
+| Pretrained cells (`_pt`) | the same recipe -- pretraining is the only variable of their contrast | design choice of the factorial; at lr 0.01 x 500 epochs it is retraining from a pretrained init, where a long from-scratch schedule closes the gap (He, Girshick & Dollar, ICCV 2019, "Rethinking ImageNet Pre-training") |
 
 QAT, INT8 and evaluation: the table of the previous section (QAT = Wu et al. 2020 App. A.2 applied to this recipe:
 50 ep, SGD, lr 1e-4 cosine to 1e-6).
@@ -998,7 +998,7 @@ QAT, INT8 and evaluation: the table of the previous section (QAT = Wu et al. 202
 **What no single reference fixes.** The 500-epoch budget: no Tiny ImageNet paper prescribes one. 500 epochs = 352k
 iterations at batch 128, between CIFAR's long schedules (WRN 200 ep = 78k, DenseNet 300 ep = 234k) and ImageNet's
 (ResNet 600k at batch 256, AlexNet ~844k at batch 128); returns diminish with budget (Wightman et al. 2021: 100/300/600
-ep -> 78.1/79.8/80.4%). Under the old recipe all 51 finished FP32 runs had converged (median best epoch 423, median
+ep -> 78.1/79.8/80.4%, though their A3/A2/A1 procedures differ in more than epochs, e.g. A3 trains at 160 px). Under the old recipe all 51 finished FP32 runs had converged (median best epoch 423, median
 gain of the last 100 epochs +0.09 pp, max +0.53). Under the new one this is re-checked per run, not assumed:
 `analyze_geometry.convergence()` flags any run whose last-20%-of-epochs gain exceeds the seed noise band
 (Bouthillier et al., MLSys 2021). Batch size, `num_workers` (4) and the 90/10 split are protocol constants, identical
@@ -1120,3 +1120,54 @@ will land (`results/phase_11_*`, `results/figures_generated/phase_11_kernel_size
 - `scripts/train.py:refuse_foreign_run_dir`: a run dir whose `resolved_config.json` differs in data/training/qat/seed
   (the dataset path excepted) stops the run instead of being resumed or skipped -- a restored archive, an rsync to the
   wrong path or a reused experiment name can no longer mix two protocols. A Slurm requeue passes.
+
+## Minimal design, symmetric 2x2 padding, scratch twins (2026-10-04)
+
+**Why.** A review of the 2026-10-03 program found: two pretrained nets with no from-scratch twin, a 2x2 padding artifact
+the size of the kernel effect, text that cited the wrong sections, and a 130-run program that would take weeks. User:
+the fewest runs that still draw every figure, no seed replicates beyond a noise floor, every pretrained net with a
+from-scratch twin, the 21 families kept, and the queue held until the pilot's full gate passes.
+
+**2x2 padding: fixed, not only cited.** Every stride-1 2x2 conv of `AlexNetAdapted`/`VGGAdapted` was padded right/bottom
+only (`ZeroPad2d((0, 1, 0, 1))`). Wu et al., NeurIPS 2019 ("Convolution with even-sized kernels and symmetric padding")
+show that this shifts the map 0.5 px per layer toward one corner ("the shift problem", Sec. 3.1-3.2: the post-ReLU
+values drift to the top-left), that such C2 nets fall behind C3 and saturate as depth grows (Sec. 4.1), and that their
+symmetric padding (C2sp: four channel groups padded at four different corners, Sec. 3.3) gains 2.5% on ImageNet over C2
+(Sec. 6). The kernel effects measured here are 1-3 pp, so the old padding would bias the 2x2 cost upward by about the
+effect itself. `models/baselines.py:SymmetricPad2d` is C2sp; it replaces the old pad 1:1 (same Sequential indices, so the
+fuse maps hold), stems with stride > 1 stay unpadded, and the conv after it is still a plain 2x2 conv (Winograd
+F(m, 2)-eligible). VGG's stride-1 RGB stem has 3 channels, so it fills 3 of the 4 corners (Wu's exact symmetry needs
+channels % 4 == 0). INT8: the cat of slices of one quantized tensor keeps its qparams, so no observer is needed;
+converted and run in tests. The archived 2x2 runs used the old pad (their git_hash points at that code).
+
+**Scratch twins.** `mobilenetv2` / `resnet18tv` load ImageNet weights by default (their Phase 1 meaning), so
+`phase_11_families` trained them pretrained next to from-scratch compensation nets. `mobilenetv2_scratch` /
+`resnet18tv_scratch` join the families. `tests/test_config.py::test_every_pretrained_phase_11_net_has_a_scratch_twin` reads
+`pretrained` off each Phase 11 ctor (explicit or class default) and requires the twin.
+
+**Same maps for every kernel.** At conv1 stride 4 with two 2x2 pools, torchvision's 11x11 pad-2 conv1 ended the 11-5-3
+cells on 3x3 against 4x4 for the small kernels. That pad is now kept only in torchvision's own layout (three 3x3 pools,
+1x1 map for every kernel); elsewhere k // 2, so `alexnet_k11-5-3_stride4_2pool2x2_map3_*` became `..._map4_*`.
+
+**Design: 76 runs (seed 42 + a 4-run noise floor), ~560 GPU-h** (from the old logs: ~7 h per AlexNet / family run,
+~10 h per VGG16 run on a 4090), down from 130 / ~1,000:
+
+| Block | Runs | Figures |
+|---|---|---|
+| `phase_11_kernel_head_bn`: kernel {11-5-3, 3x3, 2x2, alt 3-2} x head {GAP, FC} x BN, 64px layout | 16 | 03, 05, 10, 13, 14 |
+| `phase_11_kernel_geometry`: torchvision's layout x 4 kernels x {GAP, FC} (8) + stride 4 / two 2x2 pools and stride 2 / three 3x3 pools, FC, x 4 kernels (8) | 16 | 02, 06, 07, 13 |
+| `phase_11_vgg_kernel_head`: {3x3, 2x2, alt 3-2} x {GAP, FC} (6) + FC + Dropout 3x3 (= VGG16) and 2x2 (2) + pretrained 3x3 (1) | 9 | 04, 05, 09 |
+| `phase_11_dropout_pretraining`: FC + Dropout x 4 kernels at torchvision's layout (incl. AlexNet from scratch) + 2 pretrained | 6 | 02, 08, 09 |
+| `phase_11_stacked`: {3x3, 2x2} two convs per stage x {GAP, FC}, BN | 4 | 11, 14 |
+| `phase_11_families`: the 19 + 2 scratch twins | 21 | 01, 11 |
+| `phase_11_kernel_head_bn_seed43/44`: k3x3 and k2x2, GAP + BN (`noise_band`) | 4 | noise floor |
+
+Out: the VGG kalt2-3 / k3x3then2x2 / k2x2then3x3 cells (no factor figure reads them), FC + Dropout at 64px (Dropout's
+effect is measured where the real AlexNet has it), the no-BN stacked nets, the "narrow" AlexNetSmallKernel cells (width,
+stride and map change together -- not a one-factor contrast), and the seed replicates of the rest (40 runs); the
+`_vgg_kernel_head_seed43/44` files are deleted, `phase_11_stacked_narrow` is now `phase_11_stacked`. New:
+`alexnet_k2x2stacked_*` (`AlexNetStacked(kernel_size=2)`), the 2x2 counterpart of the depth compensation.
+
+**Rollout.** The k2x2 pilot cell (828513) was held until PCAD pulled this commit; the other four pilot cells contain no
+2x2 conv, so they are unchanged. Queue file regenerated (71 lines, without the 5 pilot cells); the feeder stays stopped
+until the pilot's full gate passes.

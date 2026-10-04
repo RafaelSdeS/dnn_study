@@ -105,13 +105,33 @@ def test_every_phase_11_experiment_shares_the_protocol_exactly():
     assert reference["stages"] == ["fp32", "qat", "int8"]
 
     names = [n for n in _experiment_names() if n.startswith("phase_11_")]
-    assert len(names) >= 10, names
+    assert len(names) >= 8, names  # the 8 files of the minimal design (2026-10-04)
     for name in names:
         cfg = load_config(f"experiments/{name}.yaml")
         seed = cfg.pop("seed")
         assert seed == (int(name.rsplit("_seed", 1)[1]) if "_seed" in name else 42), name  # replicates: <exp>_seed<N>
         cfg.pop("name"), cfg.pop("models")
         assert cfg == reference, f"{name} differs from the Phase 11 protocol: {cfg} vs {reference}"
+
+
+def test_every_pretrained_phase_11_net_has_a_scratch_twin():
+    """Pretraining is a contrast, never a silent default: every Phase 11 net whose ctor loads ImageNet weights (an
+    explicit pretrained=True, or a class that defaults to it) runs next to its from-scratch twin -- the same name
+    without "_pretrained", or <name>_scratch."""
+    import inspect
+
+    from ml import model_registrations  # noqa: F401 -- populates the registry
+    from ml.registry import MODEL_REGISTRY
+
+    def pretrained(ctor):
+        p = inspect.signature(getattr(ctor, "func", ctor)).parameters.get("pretrained")
+        return getattr(ctor, "keywords", {}).get("pretrained", p.default if p else False)
+
+    models = {m for n in _experiment_names() if n.startswith("phase_11_") for m in load_config(f"experiments/{n}.yaml")["models"]}
+    for m in models:
+        if pretrained(MODEL_REGISTRY[m]["ctor"]):
+            twin = m.removesuffix("_pretrained") if m.endswith("_pretrained") else f"{m}_scratch"
+            assert twin in models and not pretrained(MODEL_REGISTRY[twin]["ctor"]), (m, twin)
 
 
 def test_no_model_overrides_the_uniform_protocol():

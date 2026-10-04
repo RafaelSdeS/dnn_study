@@ -3,7 +3,9 @@
 # geometry, Dropout, pretraining and stacked/narrow comparisons live in the other phase_11_*.yaml files (descriptive
 # names). Left out: alexnet_se (its SE block can't convert to INT8 -- "empty_strided not supported on quantized
 # tensors"), the ViTs (own recipe, Eixo 7), alexnet_2x2_fc (legacy unpadded 2x2, superseded by the k2x2 cells).
-# Lowest priority of the Phase 11 queue (docs/logs/PHASE11_LOG.md "Reduced design, descriptive names").
+# mobilenetv2/resnet18tv are ImageNet-pretrained (their Phase 1 meaning); *_scratch are their from-scratch twins --
+# every pretrained net of Phase 11 has one (tests/test_config.py).
+# Lowest priority of the Phase 11 queue (docs/logs/PHASE11_LOG.md "Minimal design, symmetric 2x2 padding, scratch twins").
 # Same protocol as every Phase 11 run, enforced by tests/test_config.py.
 # Submit (clean tree, pulled): python -m scripts.cluster submit-sweep --experiment phase_11_families --runtime pcad --slurm tupi_4090
 extends: _protocols/no_patience
@@ -28,3 +30,5 @@ models:
   - vgg_style
   - mobilenetv2
   - resnet18tv
+  - mobilenetv2_scratch
+  - resnet18tv_scratch
