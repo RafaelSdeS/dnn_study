@@ -1171,3 +1171,27 @@ stride and map change together -- not a one-factor contrast), and the seed repli
 **Rollout.** The k2x2 pilot cell (828513) was held until PCAD pulled this commit; the other four pilot cells contain no
 2x2 conv, so they are unchanged. Queue file regenerated (71 lines, without the 5 pilot cells); the feeder stays stopped
 until the pilot's full gate passes.
+
+## Figures by factor; the pilot overflows to beagle (2026-10-04)
+
+**Pilot.** tupi's six 4090s had ~23 day-long jobs of other users queued ahead (~3-4 days of wait), so the four AlexNet
+pilot cells became eligible for `tupi,beagle` (beagle: 2x GTX 1080 Ti, node-exclusive, 32 GB -- memory lowered to 16/15
+GB); 828512 (`alexnet_k11-5-3_stride2_2pool2x2_map8_fc_nobn`) started there at once, at ~116 s/epoch, off ln(200) from
+epoch 1. 828513 (the 2x2 cell) was held until PCAD pulled the C2sp commit. Caveat: beagle's GPU/CPU latencies and its INT8
+kernel path (Sandy Bridge, no AVX2) differ from tupi's; if INT8 crawls or crashes there, only the INT8 stage is redone on
+tupi (scripts/train.py skips stages whose best checkpoint exists). The vgg16 pilot stays on tupi.
+
+**Figures.** Every Phase 11 figure now picks its runs by their factors (`CELL_FACTORS`, via `design_figures.frame`),
+never by name, so the 76-run design needs no per-name tables:
+- new (`scripts/phase11/design_figures.py`): 16 accuracy x cost Pareto front, 17 kernel x head x BN grid (delta vs
+  11-5-3-3-3, inside the seed band greyed out), 18 kernel x geometry, 19 INT8 robustness (+ the worst layer-input
+  max/p99.9 from `*_layer_stats.json`), 20 measured batch-1 latency vs MACs, 21 training curves. Previewed first on the
+  superseded runs (`--archive`, `results/archive_adamw_recipe/figures_generated/phase_11_preview/`; validation split,
+  pre-fix INT8, approximate twins marked †) and approved;
+- adapted: 02-04 (kernel per layout/head/BN), 05-11 (one figure per factor over every matched pair of the design, plus
+  `FAMILY_CONTRASTS`: Bottleneck/Fire vs 3x3 + BN + GAP, MobileNetV2/ResNet-18 scratch vs pretrained), 14 (every
+  matched pair per contrast, now with the seed noise band), 15 and the tables (`main_grid.csv`, `kernel_geometry.csv`);
+- retired: 01 (16 plots every run against MACs and size), 12 (~100 rows with every matched pair; 14 summarizes them), 13
+  (17/18 show the interactions with more data).
+`tests/test_phase11_figures.py` renders all 18 on a fake run tree -- the whole design and a half-finished queue (the 5
+pilot cells) -- since no real run had finished yet.
