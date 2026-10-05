@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Keeps the Slurm queue fed under PCAD's QOS per-user submit limit (MaxSubmitJobs 50, pending + running;
+# Keeps the Slurm queue fed under PCAD's QOS per-user submit limit (MaxSubmitJobsPerUser 10 on `normal` as of 2026-10-05, was 50 on 2026-09-30; pending + running;
 # found 2026-09-30 -- sacctmgr's association shows no limit, the QOS does). QUEUE holds one shell command per
 # line, each submitting ONE job (`python -m scripts.cluster submit ... --model m`, or
 # `scripts/pcad/rerun_qat_fused.sh <experiment>/<model>`). Every 10 min, while fewer than MAX jobs are queued,
@@ -14,7 +14,7 @@ if [[ -z "${FEED_QUEUE_NICED:-}" ]]; then
   export FEED_QUEUE_NICED=1
   exec nice -n 19 ionice -c3 bash "$(realpath "$0")" "$@"
 fi
-QUEUE=$(realpath "$1"); MAX=${MAX:-48}; SLEEP=${SLEEP:-600}; GAP=${GAP:-60}  # 2 slots left for manual submits
+QUEUE=$(realpath "$1"); MAX=${MAX:-8}; SLEEP=${SLEEP:-600}; GAP=${GAP:-60}  # 2 slots left for manual submits
 cd "$(dirname "$(realpath "$0")")/../.." && source .venv/bin/activate
 
 while [[ -s "$QUEUE" ]]; do
