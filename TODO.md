@@ -330,6 +330,12 @@ plan: `docs/plans/PHASE9_PLAN.md`.
 
 ---
 
+## Phase 11 — Kernel size comparison (running on PCAD/tupi, 76 runs)
+
+- [ ] After all 76 runs finish: `build_runs_index`, `aggregate_results` per `phase_11_<block>`, rsync the tracked provenance files from PCAD, rerun `scripts/phase11/*` figures.
+- [ ] (Optional, only once all runs are done) Group the 8 flat `outputs/<runtime>/phase_11_*` dirs under one parent, e.g. `outputs/pcad/phase_11/<block>/<model>/`: needs `ml/runtime.py:make_model_runs`, `scripts/build_runs_index.py`, `scripts/phase11/*` and the tests changed, plus a `mv` on PCAD. Not done mid-queue: the submitted jobs write to the flat paths and `refuse_foreign_run_dir` keys on them.
+- [ ] Pilot 828512/828513/828514 ran with `tupi,beagle` eligibility (beagle's GPU/CPU latency and INT8 kernel path differ from tupi's): check which node each run used (`SLURM_JOB_ID` in provenance) before comparing latencies.
+
 ## Phase 10 — Extended Architecture Search (Future)
 
 Note: Phase 9 is already executed — see `docs/plans/PHASE9_PLAN.md` (bypass ablation, structured pruning, compression measurement). This section was originally numbered "Phase 9" before that work existed; renumbered to avoid collision.
