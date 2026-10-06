@@ -6,8 +6,10 @@ results or crashed. Fixed by switching to torchvision's quantizable resnet18. Th
 converts to INT8 for every residual-bearing model in the sweep and asserts the forward pass still works.
 """
 import copy
+from pathlib import Path
 
 import pytest
+import yaml
 import torch
 import torch.nn as nn
 
@@ -15,8 +17,8 @@ import torch.ao.nn.intrinsic.qat as nniqat
 import torch.ao.quantization as tq
 
 import ml.model_registrations  # noqa: F401 -- populates MODEL_REGISTRY
-from ml.quantization import (build_qat_from_model, convert_to_int8, find_fuse_groups, int8_kernel_error_steps,
-                             make_qat_callback, prepare_qat_model)
+from ml.quantization import (_FloatLogits, build_qat_from_model, convert_to_int8, find_fuse_groups,
+                             int8_kernel_error_steps, make_qat_callback, prepare_qat_model)
 from ml.registry import MODEL_REGISTRY
 from models.baselines import ResNet18TV
 from models.final_architecture import AlexNetFinalBottleneckResidual, AlexNetFinalFireResidual
@@ -61,26 +63,20 @@ def test_residual_models_quantize_to_int8_without_crashing():
         assert out.shape == (2, 200), f"{name} produced the wrong output shape after INT8 convert"
 
 
-def test_prepare_qat_attaches_weight_and_activation_fake_quant():
-    model = AlexNetFinalBottleneckResidual()
-    fuse_map = find_fuse_groups(model)
-    qat_model = prepare_qat_model(model, fuse_map)
-
-    has_weight_fake_quant = any(hasattr(m, "weight_fake_quant") for m in qat_model.modules())
-    has_activation_fake_quant = any(
-        hasattr(m, "activation_post_process")
-        and type(m.activation_post_process).__name__ != "Identity"
-        for m in qat_model.modules()
-    )
-
-    assert has_weight_fake_quant, "no weight fake-quantizer found after prepare_qat"
-    assert has_activation_fake_quant, "no activation fake-quantizer found after prepare_qat"
+PHASE11_MODELS = sorted({m for p in (Path(__file__).parents[1] / "configs/experiments").glob("phase_11_*.yaml")
+                         for m in yaml.safe_load(p.read_text())["models"]})
 
 
-def test_int8_definition_is_8bit_activations_and_symmetric_per_channel_weights():
-    """The literature's INT8 (Jacob et al. 2018; Wu et al. 2020 Sec. 6): activations 0..255 -- not fbgemm's default
-    reduce_range, which made them 7-bit until 2026-10-03 -- and weights per-channel symmetric in [-127, 127]."""
-    qat = _qat("alexnet_3x3_fc")
+@pytest.mark.parametrize("name", PHASE11_MODELS)
+def test_every_phase_11_model_is_the_literature_int8_through_qat_and_convert(name):
+    """Every model the Phase 11 design trains (read from its yamls, so a new cell is covered as it is added), through
+    the real QAT -> INT8 path. QAT: weights 8-bit symmetric per-channel in [-127, 127], activations 8-bit affine 0..255
+    -- not fbgemm's default reduce_range, which made them 7-bit until 2026-10-03 (Jacob et al. 2018; Wu et al. 2020
+    Sec. 6) -- every ReLU fused into its producer. INT8: every Conv/Linear but the logits layer runs as an int8 kernel
+    with codes in [-127, 127], no float Conv/Linear and no BatchNorm (folded) left; the logits layer keeps int8 weights
+    and an FP32 output. The structure is code, the same on every machine; what the CPU computes is
+    int8_kernel_error_steps' job, and whether the trained model's INT8 reproduces its QAT is scripts/train.py's."""
+    qat = _qat(name)
     weights = [m.weight_fake_quant for m in qat.modules() if hasattr(m, "weight_fake_quant")]
     acts = [m for m in qat.modules() if isinstance(m, tq.FakeQuantizeBase) and all(m is not w for w in weights)]
     assert weights and acts
@@ -90,6 +86,27 @@ def test_int8_definition_is_8bit_activations_and_symmetric_per_channel_weights()
     for fq in acts:
         obs = fq.activation_post_process
         assert (obs.quant_min, obs.quant_max, obs.reduce_range) == (0, 255, False), type(obs)
+    assert sum(isinstance(m, _FloatLogits) for m in qat.modules()) == 1
+    ran = []
+    for m in qat.modules():
+        if type(m) is nn.ReLU:
+            m.register_forward_hook(lambda mod, i, o: ran.append(mod))
+    qat.eval()
+    with torch.no_grad():
+        qat(torch.randn(4, 3, 64, 64))  # also calibrates the observers convert reads
+    assert not ran, f"{len(ran)} unfused ReLU(s)"
+    qat.apply(tq.disable_observer)
+    int8 = convert_to_int8(qat)
+    with torch.no_grad():
+        assert int8(torch.randn(2, 3, 64, 64)).shape == (2, 200)
+    logits = next(m.linear for m in int8.modules() if isinstance(m, _FloatLogits))
+    assert not [type(m).__name__ for m in int8.modules()
+                if type(m) in (nn.Conv2d, nn.Linear, nn.BatchNorm2d, nn.BatchNorm1d) and m is not logits]
+    kernels = [m for m in int8.modules() if "quantized" in type(m).__module__ and hasattr(m, "weight")]
+    assert len(kernels) == len(weights) - 1  # every fake-quantized Conv/Linear but the logits layer
+    for m in kernels:
+        q = m.weight().int_repr()
+        assert -127 <= q.min() and q.max() <= 127
 
 
 @pytest.mark.parametrize("name", REPORT_MODELS)

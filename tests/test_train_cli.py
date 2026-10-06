@@ -90,3 +90,17 @@ def test_recover_fit_from_prior_summary_pulls_fp32_and_qat_fields():
 def test_recover_fit_from_prior_summary_missing_keys_become_none():
     # an older summary.json written before some field existed shouldn't crash the recovery
     assert _recover_fit_from_prior_summary({}, _FP32_FIT_FIELDS) == dict.fromkeys(_FP32_FIT_FIELDS, None)
+
+
+@pytest.mark.parametrize("agreement, fails", [(0.64, True), (0.975, False), (None, False)])
+def test_a_run_whose_int8_does_not_reproduce_its_qat_fails_the_job(monkeypatch, agreement, fails):
+    """0.64 is what onednn's saturating kernels gave (2026-10-06); None = no INT8 stage, nothing to check."""
+    import scripts.train as train
+
+    monkeypatch.setattr(train, "run_experiment", lambda e, r: [{"model_name": "m", "agreement_qat_int8": agreement}])
+    monkeypatch.setattr("sys.argv", ["train", "--experiment", "default"])
+    if fails:
+        with pytest.raises(SystemExit, match="does not reproduce QAT"):
+            train.main()
+    else:
+        assert train.main() == 0

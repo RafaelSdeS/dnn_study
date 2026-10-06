@@ -56,6 +56,11 @@ from ml import (
 from ml.winograd_bridge import bridge_provenance, dump_wino_calibration, load_qat_wino_model
 
 DEFAULT_BENCHMARK_BS1_IMAGES = 1000
+# QAT's premise (Jacob et al. 2018): the integer model computes what the fake-quant one simulated. On the test set, exact
+# int32 kernels reproduced QAT's top-1 prediction on 97.5% of images, onednn's saturating ones on 64% (2026-10-06,
+# docs/logs/PHASE11_LOG.md "Machine independence"). A run below this fails its job, its summary kept for diagnosis.
+# ponytail: an empirical cut between those two, not a literature number; tighten it if a broken INT8 ever lands above
+MIN_QAT_INT8_AGREEMENT = 0.90
 
 
 def _bs1_loader(dataset, n: int = DEFAULT_BENCHMARK_BS1_IMAGES) -> DataLoader:
@@ -689,8 +694,12 @@ def main() -> int:
         with tempfile.TemporaryDirectory(prefix="smoke_") as tmp_root:
             runtime_cfg["root"] = tmp_root
             run_experiment(experiment_cfg, runtime_cfg)
-    else:
-        run_experiment(experiment_cfg, runtime_cfg)
+    else:  # not on --smoke: a 1-epoch model's near-flat logits can't reproduce anything at 90%
+        rows = run_experiment(experiment_cfg, runtime_cfg)
+        off = {r["model_name"]: r["agreement_qat_int8"] for r in rows
+               if r.get("agreement_qat_int8") is not None and r["agreement_qat_int8"] < MIN_QAT_INT8_AGREEMENT}
+        if off:
+            raise SystemExit(f"INT8 does not reproduce QAT (agreement_qat_int8 < {MIN_QAT_INT8_AGREEMENT}): {off}")
     return 0
 
 

@@ -408,8 +408,10 @@ QAT cfg is typically `replace(fp32_cfg, epochs=20, lr=1e-5, use_amp=False)`.
 **Reproducibility:** seed `random`/`numpy`/`torch`/`cuda` at notebook top; `cudnn.deterministic=True`; do **not** set `cudnn.benchmark`.
 **Machine independence (2026-10-06, PHASE11_LOG "Machine independence and reproducibility"):** runs may land on tupi, beagle
 or the laptop, and a number must not depend on which. `scripts/train.py` turns TF32 off (FP32 eval/QAT = FP32 on Ampere+ GPUs
-too; Phase 6 profiling keeps TF32 on purpose), checks the INT8 kernels against exact int32 before every INT8 evaluation, and
-summaries record the machine (provenance `cpu_model`, `gpu_name`) plus `benchmark_num_threads` and latency IQRs -- latency is
+too; Phase 6 profiling keeps TF32 on purpose), checks the INT8 kernels (first conv, depthwise, FC Linear) against exact int32
+before every INT8 evaluation, fails the job if `agreement_qat_int8` < `MIN_QAT_INT8_AGREEMENT` (0.90), and
+`tests/test_quantization.py` puts every model of the Phase 11 yamls through QAT -> INT8 against the literature's definition
+(PHASE11_LOG "INT8 correctness: every stage, every model, every machine"). Summaries record the machine (provenance `cpu_model`, `gpu_name`) plus `benchmark_num_threads` and latency IQRs -- latency is
 compared only within a machine. Phase 11 analysis reads `outputs/pcad` and `outputs/local`. Same seed + same GPU + same
 code retrains a GAP cell bit for bit (measured); FC cells are not bitwise reproducible (`AdaptiveAvgPool2d(6/7)`'s backward
 uses atomics, no deterministic kernel) -- the seed noise floor measures that, with seed and machine.

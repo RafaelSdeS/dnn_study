@@ -408,32 +408,41 @@ def load_int8_model(arch_name: str, save_dir: str | Path, engine: str = ACCURACY
 
 
 def int8_kernel_error_steps(engine: str = ACCURACY_ENGINE) -> int:
-    """Max distance, in output quantization steps, between `engine`'s INT8 conv on this CPU and the exact int32
-    arithmetic (Jacob et al. 2018), on the case onednn saturates without VNNI: a first conv whose input carries an
-    image's zero point (~114) against weights at the +127 end of the grid (oneDNN dev guide, "Nuances of int8
-    computations"; pytorch/pytorch#103646). Exact kernels give <= 1 (one rounding step). Measured 2026-10-06 on the
-    laptop's i7-13650HX (AVX-VNNI): qnnpack 1, onednn 0, fbgemm 103 (98% of outputs >= 2 off); beagle and tupi1/2 have
-    no VNNI, so there onednn saturates too. scripts/train.py runs this before every INT8 evaluation, so a CPU whose
-    kernels are not exact stops the run instead of reporting a wrong INT8 number. Global RNG state is left untouched."""
-    with torch.random.fork_rng(devices=[]):
-        torch.manual_seed(0)
-        model = nn.Sequential(tq.QuantStub(), nn.Conv2d(3, 8, 3), tq.DeQuantStub())
+    """Max distance, in output quantization steps, between `engine`'s INT8 kernels on this CPU and the exact int32
+    arithmetic (Jacob et al. 2018), over the three int8 GEMM kernel kinds the Phase 11 design runs: a first conv whose
+    input carries an image's zero point (~114), the case onednn saturates without VNNI (oneDNN dev guide, "Nuances of
+    int8 computations"; pytorch/pytorch#103646); a depthwise conv (MobileNet-style families); a Linear with an FC head's
+    9216 fan-in -- each against weights at the +127 end of the grid. (Residual add_relu was exact on every engine.)
+    Exact kernels give <= 1 (one rounding step). Measured 2026-10-06 on the laptop's i7-13650HX (AVX-VNNI): qnnpack 1,
+    onednn 1, fbgemm 103 (first conv; depthwise 97, Linear 12); beagle and tupi1/2 have no VNNI, so there onednn
+    saturates too. scripts/train.py runs this before every INT8 evaluation, so a CPU whose kernels are not exact stops
+    the run instead of reporting a wrong INT8 number. Global RNG state is left untouched."""
+    cases = [(lambda: nn.Conv2d(3, 8, 3), (8, 3, 16, 16), 4.7, -2.1),  # the ImageNet-normalized pixel range
+             (lambda: nn.Conv2d(32, 32, 3, groups=32), (8, 32, 16, 16), 6.0, 0.0),  # post-ReLU input, zero point 0
+             (lambda: nn.Linear(9216, 64), (16, 9216), 6.0, 0.0)]
+    worst = 0
+    for layer, shape, span, low in cases:
+        with torch.random.fork_rng(devices=[]):
+            torch.manual_seed(0)
+            model = nn.Sequential(tq.QuantStub(), layer(), tq.DeQuantStub())
+            with torch.no_grad():
+                model[1].weight.uniform_(-1, 1)
+                model[1].weight[:, :2] = 1  # input channels 0 and 1 at the +127 end of each filter's grid
+            qat = prepare_qat_model(model, [])
+            x = torch.rand(*shape) * span + low
         with torch.no_grad():
-            model[1].weight.uniform_(-1, 1)
-            model[1].weight[:, :2] = 1  # input channels 0 and 1 at the +127 end of each filter's grid
-        qat = prepare_qat_model(model, [])
-        x = torch.rand(8, 3, 16, 16) * 4.7 - 2.1  # the ImageNet-normalized pixel range
-    with torch.no_grad():
-        qat(x)
-    qat.eval().apply(tq.disable_observer)
-    int8, seen = convert_to_int8(qat, engine=engine), {}
-    int8[1].register_forward_hook(lambda m, i, o: seen.update(x=i[0], y=o))
-    with torch.no_grad():
-        int8(x)
-    conv = int8[1]
-    y = F.conv2d(seen["x"].dequantize().double(), conv.weight().dequantize().double(), conv.bias().double())
-    exact = torch.clamp(torch.round(y / conv.scale) + conv.zero_point, 0, 255)
-    return int((seen["y"].int_repr().double() - exact).abs().max())
+            qat(x)
+        qat.eval().apply(tq.disable_observer)
+        int8, seen = convert_to_int8(qat, engine=engine), {}
+        int8[1].register_forward_hook(lambda m, i, o: seen.update(x=i[0], y=o))
+        with torch.no_grad():
+            int8(x)
+        k = int8[1]
+        xd, wd, b = seen["x"].dequantize().double(), k.weight().dequantize().double(), k.bias().double()
+        y = F.conv2d(xd, wd, b, groups=k.groups) if xd.dim() == 4 else F.linear(xd, wd, b)
+        exact = torch.clamp(torch.round(y / k.scale) + k.zero_point, 0, 255)
+        worst = max(worst, int((seen["y"].int_repr().double() - exact).abs().max()))
+    return worst
 
 
 def make_qat_callback(freeze_bn_epoch: int = 3, disable_observer_epoch: int | None = 5):

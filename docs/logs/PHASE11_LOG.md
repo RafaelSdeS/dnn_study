@@ -1283,7 +1283,7 @@ its protocol, not of the node. What can depend on the machine, and how each is h
 | Data | Same files (dataset sha256 `932bfab8...` on the laptop and PCAD), split from `torch.Generator(seed)`, workers seeded (`ml/data.py:_seed_worker`), `persistent_workers: false` on both runtimes | Pineau et al., JMLR 2021 (record the dataset version) |
 | Software | torch 2.5.1+cu121 / torchvision / numpy / pillow identical on both; torch loads cuDNN 9.1.0 on both. Provenance records torch/torchvision/CUDA/cuDNN/Python, git hash + dirty files, host, GPU, CPU model, Slurm job | PyTorch "Reproducibility" notes (no guarantee across releases or platforms) |
 | FP32 arithmetic | `scripts/train.py` turns TF32 off (`cudnn.allow_tf32`, `cuda.matmul.allow_tf32`): cuDNN defaults to TF32 convs (10-bit mantissa) on Ampere and later (4090, 4060), never on Pascal (1080 Ti), so evaluation and QAT (no AMP) would depend on the GPU. AMP's FP16 training is unaffected. Phase 6 profiling keeps TF32 (it measures it). | PyTorch "CUDA semantics: TF32 on Ampere"; Micikevicius et al., ICLR 2018 (FP16 compute, FP32 evaluation) |
-| INT8 arithmetic | Accuracy on qnnpack (exact int32 on any CPU). `ml/quantization.py:int8_kernel_error_steps` measures the kernel against exact int32 on the saturating first-conv case; `scripts/train.py` runs it before every INT8 evaluation, records `int8_kernel_max_err_steps`, and stops the run if > 1 step (resubmit elsewhere; FP32/QAT are saved) | Jacob et al., CVPR 2018; oneDNN dev guide, "Nuances of int8 computations" |
+| INT8 arithmetic | Accuracy on qnnpack (exact int32 on any CPU). `ml/quantization.py:int8_kernel_error_steps` measures the kernels against exact int32 on the saturating first-conv case, a depthwise conv and an FC-head Linear; `scripts/train.py` runs it before every INT8 evaluation, records `int8_kernel_max_err_steps`, and stops the run if > 1 step (resubmit elsewhere; FP32/QAT are saved) | Jacob et al., CVPR 2018; oneDNN dev guide, "Nuances of int8 computations" |
 | Latency | Machine-bound by nature: compared only within a machine (figure 20, GPU + CPU model), with `benchmark_num_threads` and IQRs recorded | Hoefler & Belli, SC 2015 (report the system and threads; medians with nonparametric spread) |
 | GPU nondeterminism | GAP cells: none -- same seed, same machine retrains bit for bit (measured below). FC cells: `AdaptiveAvgPool2d`'s CUDA backward uses atomics whenever the map does not divide the 6x6/7x7 output (8->6, 1->6, 4->6, VGG 2->7: all FC heads here), and PyTorch has no deterministic kernel for it, so a same-seed retrain differs. Not chased bit by bit; the seed noise floor (`_seed43/_seed44`, on whatever nodes they land) measures seed + machine + nondeterminism together | PyTorch "Reproducibility"; Zhuang et al., MLSys 2022 (tooling variance comparable to seed variance); Bouthillier et al., MLSys 2021 |
 | Where runs live | `analyze_geometry.RUNS` reads `outputs/pcad` and `outputs/local`; the same cell in both stops the analysis (one canonical result per cell) | -- |
@@ -1334,4 +1334,24 @@ set:
 One pair each, early in training, so indicative only -- but it agrees with Zhuang et al. (MLSys 2022): nondeterminism
 alone moves accuracy about as much as a new seed, while the weights stay much closer. Consequence for the design: the
 noise floor (`_seed43/_seed44`) reruns two GAP cells, which are deterministic, so it measures seed variance only; an FC
-cell's run-to-run spread adds nondeterminism of comparable size, and the GAP-based band can understate it.
+cell's run-to-run spread adds nondeterminism of comparable size, and the GAP-based band can understate it. Not acted
+on (decided 2026-10-06): differences of this size don't matter here; what has to reproduce is the macro -- every
+quantization stage the literature's, correctly applied, on any machine (next section).
+
+## INT8 correctness: every stage, every model, every machine (2026-10-06)
+
+What must hold for a reported INT8 number, and what now enforces it:
+
+| Stage | Definition | Enforced by |
+|---|---|---|
+| QAT graph | weights 8-bit symmetric per-channel in [-127, 127], activations 8-bit affine 0..255 (Jacob et al., CVPR 2018; Wu et al. 2020 Sec. 6); Conv-BN(-ReLU) folded (Jacob Sec. 3.2; Krishnamoorthi 2018); every ReLU fused into its producer | `tests/test_quantization.py::test_every_phase_11_model_is_the_literature_int8_through_qat_and_convert`, over every model the design trains (72, read from the phase_11_*.yaml, so a new cell is covered when added) |
+| Conversion | every Conv/Linear but the logits layer an int8 kernel with codes in [-127, 127]; no float Conv/Linear, no BatchNorm left; the logits layer int8 weights + FP32 output | the same test (72/72 pass; 79 s) |
+| Kernels on this CPU | int32-exact accumulation (Jacob et al. 2018) for the three int8 GEMM kinds the design runs: first conv (image zero point, the saturating case), depthwise conv, FC-head Linear | `int8_kernel_error_steps()` before every INT8 evaluation in `scripts/train.py`; the run stops if > 1 step |
+| The trained model | its INT8 reproduces its QAT (the premise of QAT, Jacob et al. 2018) | `scripts/train.py` fails the job if `agreement_qat_int8` < `MIN_QAT_INT8_AGREEMENT` = 0.90, summary kept (`tests/test_train_cli.py`) |
+
+Kernel exactness measured on the laptop (i7-13650HX, AVX-VNNI), max steps off exact int32: qnnpack 1 / 1 / 0 (first
+conv / depthwise / Linear 9216), onednn 0 / 1 / 0, fbgemm 69-103 / 97 / 12; residual `add_relu` 0 on all three. The
+0.90 agreement cut is empirical, not a literature number: exact kernels reproduced QAT on 97.5% of test predictions,
+saturating onednn on 64% (the beagle run above). The structure is code, the same on every machine; the kernels and
+the trained model's agreement are what a machine could change, and both are now checked on the machine the job runs on.
+Replaces two single-model tests (the QAT-definition and fake-quant-present checks) that the 72-model test covers.
