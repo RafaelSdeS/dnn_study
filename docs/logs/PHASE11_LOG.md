@@ -1237,4 +1237,10 @@ on "2026-10-03" until it is re-evaluated.
 
 **Reruns.** Training is unaffected (FP32 and QAT train on GPU with fake-quant), so nothing is retrained: a 2026-10-03
 run is resubmitted, FP32 and QAT "resume" at 500/500 and 50/50 (no-ops), and only the evaluations run again. Their old
-summaries and INT8 logits go to `outputs/pcad/archive_saturated_int8/<experiment>/<model>/` first.
+summaries and INT8 logits go to `outputs/pcad/archive_saturated_int8/<experiment>/<model>/` first. A probe of that path
+found two records a rerun overwrote, both fixed with a test that resubmits a finished run and allows only the
+re-measured latencies to change (`test_resubmitting_a_finished_run_reevaluates_it_without_touching_its_training_record`):
+`qat_total_training_time_s` (the no-op resume added its reload time; now kept like the FP32 training fields) and the
+provenance of the job that trained the checkpoints (`resolved_config.json` was rewritten; its `provenance_history` now
+keeps every earlier job). The four reruns go to `--slurm beagle`, where they trained (GTX 1080 Ti, whole node), so
+their FP32/QAT evaluations must reproduce the archived numbers exactly -- the check that reuse changed nothing.

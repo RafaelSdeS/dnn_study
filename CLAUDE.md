@@ -34,6 +34,9 @@ under such a dir `superseded=<dir>` and no phase; `build_cross_phase_results` an
 `phase_*` dirs (`design_figures --archive` excepted: a preview of figures 16-21 on the archive, written under it); `scripts/train.py:refuse_foreign_run_dir` stops instead of resuming a run dir whose
 `resolved_config.json` has another protocol (data/training/qat/seed). New experiments and models get new names, so no
 current run ever shares a path with an archived one. Phase 11's old recipe: `outputs/pcad/archive_adamw_recipe/`.
+Resubmitting a finished run only re-evaluates it (FP32/QAT resume as no-ops; checkpoints, training fields and log kept,
+`resolved_config.json`'s `provenance_history` keeps every earlier job -- `tests/test_train_pipeline.py`); run it on the
+partition that trained it so its FP32/QAT numbers reproduce exactly. Phase 11's saturated-INT8 evaluations: `outputs/pcad/archive_saturated_int8/`.
 
 **The laptop keeps no gitignored artifacts (since 2026-09-16).** PCAD is the only copy of every
 `*.pth`/log from all three runtimes, at the same relative path under `~/dnn_study`. Fetch one when

@@ -118,6 +118,26 @@ class _TinyQuantizable(nn.Module):
         return self.dequant(self.net(self.quant(x)))
 
 
+def test_resubmitting_a_finished_run_reevaluates_it_without_touching_its_training_record(tmp_path, monkeypatch):
+    """How a finished run is re-evaluated (2026-10-06, INT8 accuracy engine): resubmitted as is, FP32 and QAT resume as
+    no-ops and only the evaluations run again. Same checkpoints, every training/eval field the same -- only the
+    re-measured latencies may move -- the log appended to, and the provenance of the job that trained it kept."""
+    import json
+    import logging
+    for name in ("tiny", "qat_tiny"):  # Trainer attaches its log file once per process and name; earlier tests did
+        logging.getLogger(f"{train.Trainer.LOGGER_PREFIX}.{name}").handlers.clear()
+    rows, run_root = _run(tmp_path, monkeypatch, ["fp32", "qat", "int8"], ctor=_TinyQuantizable)
+    ckpts = {p.name: p.read_bytes() for p in (run_root / "checkpoints").glob("*_best.pth")}
+    log = (run_root / "logs" / "tiny.log").read_text()
+    first = json.loads((run_root / "resolved_config.json").read_text())["provenance"]
+    again, _ = _run(tmp_path, monkeypatch, ["fp32", "qat", "int8"], ctor=_TinyQuantizable)
+    changed = {k for k in rows[0].keys() | again[0].keys() if rows[0].get(k) != again[0].get(k)}
+    assert all(k.endswith(("_latency_ms_per_image", "_throughput_img_per_s")) for k in changed), changed
+    assert {p.name: p.read_bytes() for p in (run_root / "checkpoints").glob("*_best.pth")} == ckpts
+    assert (run_root / "logs" / "tiny.log").read_text().startswith(log)
+    assert json.loads((run_root / "resolved_config.json").read_text())["provenance_history"] == [first]
+
+
 def test_saved_int8_artifact_reloads_and_reproduces_the_reported_int8_logits(tmp_path, monkeypatch):
     """The INT8 checkpoint used to be torch.save(module): quantized convs can't be unpickled, so no INT8 artifact
     could ever be loaded back. It is now a state_dict, rebuilt by ml.quantization.load_int8_model."""

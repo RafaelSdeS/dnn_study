@@ -176,6 +176,9 @@ _FP32_TRAINING_FIELDS = (
     "avg_batch_time_s", "avg_cpu_percent", "avg_ram_used_mb", "avg_gpu_power_w", "avg_gpu_utilization_pct",
     "avg_gpu_temp_c", "total_gpu_energy_wh",
 )
+# Same for QAT: a rerun whose QAT trains no new epoch (its resume is a no-op, or its best checkpoint is reused) keeps the
+# original time and energy -- the no-op resume would add its own reload time, the reuse has no history for the energy.
+_QAT_TRAINING_FIELDS = ("qat_total_training_time_s", "qat_total_gpu_energy_wh")
 # A run without the fp32 stage (e.g. qat_wino on a reused FP32 checkpoint) rewrites
 # {model}_summary.json; without this its fp32_* fields would be overwritten with None.
 _FP32_EVAL_FIELDS = {"top1": "fp32_top1", "top5": "fp32_top5", "loss": "fp32_loss", "ece": "fp32_ece"}
@@ -286,6 +289,12 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
             "provenance": provenance,
         }
         refuse_foreign_run_dir(run_root, resolved_config)
+        # every earlier job on this run dir (the training, its Slurm requeues, re-evaluations): rewriting the config
+        # must not erase which commit/host/job trained the checkpoints a rerun reuses
+        prior_config_path = run_root / "resolved_config.json"
+        prior_config = json.loads(prior_config_path.read_text()) if prior_config_path.exists() else {}
+        resolved_config["provenance_history"] = prior_config.get("provenance_history", []) + (
+            [prior_config["provenance"]] if "provenance" in prior_config else [])
         save_resolved_config(run_root, resolved_config)
 
         log_file = logs_dir / f"{model_name}.log"
@@ -553,6 +562,7 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
 
         fp32_logits_path = results_dir / f"{model_name}_fp32_val_logits.npz"
         no_new_fp32_epoch = bool(prior_summary) and fp32_fit.get("epochs_used") == prior_summary.get("epochs_used")
+        no_new_qat_epoch = bool(prior_summary) and qat_fit.get("epochs_used") == prior_summary.get("qat_epochs_used")
         extra = {
             **({k: prior_summary.get(k) for k in _FP32_TRAINING_FIELDS} if no_new_fp32_epoch else {}),
             "fp32_ece": fp32_eval.get("ece") if fp32_eval else None,
@@ -588,6 +598,7 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
                 results_dir / f"{model_name}_qat_test_logits.npz", results_dir / f"{model_name}_int8_test_logits.npz"),
             # which QAT/INT8 definition built these numbers (ml/quantization.py); analysis treats any other as superseded
             "quant_protocol": QUANT_PROTOCOL,
+            **({k: prior_summary.get(k) for k in _QAT_TRAINING_FIELDS} if no_new_qat_epoch else {}),
         }
 
         summary = make_run_summary(
