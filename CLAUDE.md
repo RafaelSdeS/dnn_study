@@ -472,5 +472,11 @@ python -m scripts.winograd_fpga.dump_layer_configs   # emit layer_configs JSONs 
 ```
 Edit `configs/runtime/pcad.yaml` (dataset root) and `configs/slurm/single_gpu.yaml` (partition/GPU/wall-time) for cluster settings; duplicate `configs/experiments/default.yaml` for a new reproducible run.
 When tupi's six 4090s are full, a pending job can overflow to `beagle` (2× GTX 1080 Ti, but node-exclusive: one job at a time; 32086 MB RAM, so a tupi job's 32G never fits): `scontrol update JobId=<id> MinMemoryNode=16384` (MB, "16G" is rejected), then `Partition=tupi,beagle`. Its GPU/CPU latency and INT8 kernel path then come from a 1080 Ti / Sandy Bridge without AVX2 (~2-3× slower per epoch); the accuracy protocol is the same.
+The laptop (RTX 4060 Laptop, i7-13650HX) can run Phase 11 cells too, results identical in protocol (PHASE11_LOG "Machine
+independence and reproducibility"), measured 2026-10-06: loader ~5900 img/s (~15 s/epoch), an AlexNet cell ~3-4 h for
+500+50 epochs (beagle: ~16 h), VGG16 ~13-16 h (fits 8 GB at batch 128). Take the cell's line out of
+`~/queue_phase11_full.txt` first (the analysis stops on a cell in both `outputs/pcad` and `outputs/local`), run
+`setsid python -m scripts.train --experiment <exp> --runtime local --model <cell>` with the laptop plugged in and awake,
+then commit the tracked outputs and rsync the `.pth` files to PCAD (the laptop keeps no gitignored artifacts).
 
 **Tests:** `pytest tests/`
