@@ -1285,7 +1285,7 @@ its protocol, not of the node. What can depend on the machine, and how each is h
 | FP32 arithmetic | `scripts/train.py` turns TF32 off (`cudnn.allow_tf32`, `cuda.matmul.allow_tf32`): cuDNN defaults to TF32 convs (10-bit mantissa) on Ampere and later (4090, 4060), never on Pascal (1080 Ti), so evaluation and QAT (no AMP) would depend on the GPU. AMP's FP16 training is unaffected. Phase 6 profiling keeps TF32 (it measures it). | PyTorch "CUDA semantics: TF32 on Ampere"; Micikevicius et al., ICLR 2018 (FP16 compute, FP32 evaluation) |
 | INT8 arithmetic | Accuracy on qnnpack (exact int32 on any CPU). `ml/quantization.py:int8_kernel_error_steps` measures the kernel against exact int32 on the saturating first-conv case; `scripts/train.py` runs it before every INT8 evaluation, records `int8_kernel_max_err_steps`, and stops the run if > 1 step (resubmit elsewhere; FP32/QAT are saved) | Jacob et al., CVPR 2018; oneDNN dev guide, "Nuances of int8 computations" |
 | Latency | Machine-bound by nature: compared only within a machine (figure 20, GPU + CPU model), with `benchmark_num_threads` and IQRs recorded | Hoefler & Belli, SC 2015 (report the system and threads; medians with nonparametric spread) |
-| GPU nondeterminism | Not removable: `AdaptiveAvgPool2d`'s CUDA backward (every head here) uses atomics, so even one machine is not bitwise reproducible. Not chased bit by bit; the seed noise floor (`_seed43/_seed44`, on whatever nodes they land) measures seed + machine + nondeterminism together | PyTorch "Reproducibility"; Zhuang et al., MLSys 2022 (tooling variance comparable to seed variance); Bouthillier et al., MLSys 2021 |
+| GPU nondeterminism | GAP cells: none -- same seed, same machine retrains bit for bit (measured below). FC cells: `AdaptiveAvgPool2d`'s CUDA backward uses atomics whenever the map does not divide the 6x6/7x7 output (8->6, 1->6, 4->6, VGG 2->7: all FC heads here), and PyTorch has no deterministic kernel for it, so a same-seed retrain differs. Not chased bit by bit; the seed noise floor (`_seed43/_seed44`, on whatever nodes they land) measures seed + machine + nondeterminism together | PyTorch "Reproducibility"; Zhuang et al., MLSys 2022 (tooling variance comparable to seed variance); Bouthillier et al., MLSys 2021 |
 | Where runs live | `analyze_geometry.RUNS` reads `outputs/pcad` and `outputs/local`; the same cell in both stops the analysis (one canonical result per cell) | -- |
 
 **Measured: one beagle run re-evaluated on the laptop** (`alexnet_k11-5-3_stride2_2pool2x2_map8_fc_nobn`, same
@@ -1311,3 +1311,12 @@ without VNNI. `/proc/cpuinfo` says i7-13650HX with AVX-VNNI (as the 2026-10-03 e
 The "onednn 35.0 on 500 images" above does not reproduce on this machine (the full test set gives onednn 38.17).
 Saturation needs a CPU without VNNI (beagle, tupi1/2); tupi3-6 (AVX-VNNI, same generation as the laptop) are probably
 exact under onednn too, so the archived runs' INT8 depended on tupi1/2 vs tupi3-6 as well as beagle.
+
+**Measured: same seed, same machine, twice** (the identical-seed replica design of Pham et al., ASE 2020 and Zhuang et
+al., MLSys 2022). `alexnet_k3x3_stride2_2pool2x2_map8_gap_bn` on the laptop, Phase 11's protocol cut to 10 FP32 epochs,
+two runs of `scripts/train.py` from scratch (TF32 off, `cudnn.deterministic`): every epoch's train loss and val accuracy
+equal, all 32 weight tensors of the last epoch bitwise equal, val and test logits bitwise equal (test top-1 23.32 both).
+The op alone, 30 backward passes on the GPU: `AdaptiveAvgPool2d(1)` on 8x8 is bitwise stable; `AdaptiveAvgPool2d(6)` on
+8x8, 4x4 or 1x1 and `AdaptiveAvgPool2d(7)` on 2x2 are not, and `torch.use_deterministic_algorithms(True)` rejects them
+("adaptive_avg_pool2d_backward_cuda does not have a deterministic implementation"). So a GAP cell retrained on the same
+GPU and code reproduces exactly; an FC cell reproduces within its nondeterminism, which a same-seed FC pair would size.

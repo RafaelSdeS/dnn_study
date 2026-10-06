@@ -410,8 +410,9 @@ QAT cfg is typically `replace(fp32_cfg, epochs=20, lr=1e-5, use_amp=False)`.
 or the laptop, and a number must not depend on which. `scripts/train.py` turns TF32 off (FP32 eval/QAT = FP32 on Ampere+ GPUs
 too; Phase 6 profiling keeps TF32 on purpose), checks the INT8 kernels against exact int32 before every INT8 evaluation, and
 summaries record the machine (provenance `cpu_model`, `gpu_name`) plus `benchmark_num_threads` and latency IQRs -- latency is
-compared only within a machine. Phase 11 analysis reads `outputs/pcad` and `outputs/local`. GPU training is not bitwise
-reproducible (atomics in `AdaptiveAvgPool2d`'s backward); the seed noise floor measures that, with seed and machine.
+compared only within a machine. Phase 11 analysis reads `outputs/pcad` and `outputs/local`. Same seed + same GPU + same
+code retrains a GAP cell bit for bit (measured); FC cells are not bitwise reproducible (`AdaptiveAvgPool2d(6/7)`'s backward
+uses atomics, no deterministic kernel) -- the seed noise floor measures that, with seed and machine.
 
 **Reporting:** `make_run_summary(..., extra=dict)` builds a 30+ field dict per model → save one JSON each (crash-safe); `extra` merges in per-run additions without inflating the signature. `build_comparison_table` → `final_comparison.csv`; `create_results_summary` → `experiment_summary.json`. `compute_flops(model, input_size=(1,3,64,64))` → `{macs, flops}`. W&B: `wandb.init(project=..., config=asdict(cfg), mode="offline")`, sync later with `wandb sync --sync-all`; no auto-sync.
 
