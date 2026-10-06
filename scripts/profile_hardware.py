@@ -31,7 +31,7 @@ from ml.profiling import (
     profile_layer_conv_fft,
     profile_layer_conv_winograd,
 )
-from ml.quantization import build_qat_from_model, convert_to_int8
+from ml.quantization import QUANT_ENGINE, build_qat_from_model, convert_to_int8
 from ml.reporting import compute_flops
 from ml.registry import MODEL_REGISTRY
 from ml.runtime import load_runtime_root, set_global_seed
@@ -517,7 +517,7 @@ def profile_model_sweep(
                     with torch.no_grad():
                         for _ in range(10):
                             model_qat(calib_input)
-                    model = convert_to_int8(model_qat)
+                    model = convert_to_int8(model_qat, engine=QUANT_ENGINE)  # latency only: x86-optimized kernels
                     model = model.to("cpu")  # INT8 inference on CPU
                     profile_device = torch.device("cpu")
                 else:

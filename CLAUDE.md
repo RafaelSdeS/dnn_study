@@ -99,8 +99,10 @@ ml/                       # Core package — notebooks and scripts import everyt
                           #   rebuilds the INT8 state_dict train.py saves (the pickled module saved before 2026-09-30 can't load);
                           #   INT8_QAT_QCONFIG (2026-10-03) is the ONE INT8 definition, literature-standard: 8-bit per-tensor
                           #   affine activations (Jacob 2018; fbgemm's default reduce_range made them 7-bit before) +
-                          #   per-channel symmetric weights in [-127,127] (Wu 2020); QUANT_ENGINE="onednn" runs it, set by
-                          #   convert_to_int8 itself (no runtime yaml key any more). fuse_sequential_relus fuses every
+                          #   per-channel symmetric weights in [-127,127] (Wu 2020); convert_to_int8/load_int8_model run it on
+                          #   ACCURACY_ENGINE="qnnpack" (exact int32 accumulation on any CPU) -- onednn (QUANT_ENGINE, kept for
+                          #   INT8 latency only) saturates u8*s8 pairs in int16 on CPUs without VNNI (beagle, tupi1/2, laptop),
+                          #   which cost 1-5pp INT8 until 2026-10-06 (PHASE11_LOG "INT8 accuracy engine"). fuse_sequential_relus fuses every
                           #   Conv/Linear-ReLU left in a Sequential (FC heads were unfused, except vgg16's), residual blocks use
                           #   FloatFunctional.add_relu. The logits Linear (keep_logits_float/_FloatLogits) has INT8 input and
                           #   weights and an FP32 output (Wu 2020: no quantized layer reads it; an 8-bit logits grid tied 14-31%
@@ -349,7 +351,7 @@ After a `git pull` on a machine that still has artifacts under old folder names,
 
 Python 3.12 · PyTorch 2.5.1+cu121 · torchvision 0.20.1 · torchmetrics · torchinfo · fvcore (FLOPs) · wandb (offline-first) · kagglehub · optuna (not yet wired) · CUDA 12.1 on RTX 4060 Laptop (8.2 GB).
 
-Quantization backend: **onednn** (`ml.quantization.QUANT_ENGINE`, set by `convert_to_int8` itself) — the kernels that run the literature's full 8-bit activations; fbgemm needs `reduce_range` (7-bit) on CPUs without AVX-512 VNNI, which every run used until 2026-10-03. INT8 convert + inference are **CPU-only**.
+Quantization backend: INT8 **accuracy** on **qnnpack** (`ml.quantization.ACCURACY_ENGINE`, `convert_to_int8`'s default), INT8 **latency** on **onednn** (`QUANT_ENGINE`). Both run the literature's full 8-bit activations, but onednn and fbgemm sum u8×s8 pairs in int16 and saturate on CPUs without VNNI (oneDNN dev guide "Nuances of int8 computations"; pytorch/pytorch#103646) — beagle, tupi1/2 and this laptop (tupi3–6 have AVX-VNNI, unverified); fbgemm's `reduce_range` (7-bit, every run until 2026-10-03) avoided it. INT8 convert + inference are **CPU-only**.
 
 ---
 

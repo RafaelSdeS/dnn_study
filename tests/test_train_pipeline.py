@@ -77,7 +77,7 @@ def test_rerun_with_only_the_qat_best_left_converts_the_trained_qat_model(tmp_pa
 
     captured = {}
 
-    def capture(qat_model):
+    def capture(qat_model, **_):
         captured.update({k: v.detach().clone() for k, v in qat_model.state_dict().items()})
         raise Converted  # the tiny test model has no QuantStub, so a real int8 eval can't run
 

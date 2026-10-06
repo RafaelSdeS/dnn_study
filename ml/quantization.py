@@ -14,15 +14,22 @@ LOGITS_PROBE_SHAPE = (1, 3, 64, 64)
 # INT8 as the literature defines it -- 8-bit per-tensor affine activations with EMA min/max ranges (Jacob et al.,
 # CVPR 2018; affine costs activations nothing over scale quantization, Wu et al. 2020 Sec. 3.3) and 8-bit per-channel symmetric weights in [-127, 127] (Wu et al. 2020, Sec. 6 / LiteRT int8 spec).
 # PyTorch's onednn QAT qconfig is exactly the first part; fbgemm's default instead sets reduce_range=True, i.e. 7-bit
-# activations (0..127), to dodge int16 saturation on CPUs without AVX-512 VNNI -- what every run used until 2026-10-03.
+# activations (0..127), to dodge int16 saturation on CPUs without VNNI -- what every run used until 2026-10-03.
 _ONEDNN_QAT = tq.get_default_qat_qconfig("onednn")
 INT8_QAT_QCONFIG = tq.QConfig(activation=_ONEDNN_QAT.activation, weight=_ONEDNN_QAT.weight.with_args(quant_min=-127))
-# Kernels that run INT8_QAT_QCONFIG's full 8-bit activation range as is; set by every convert below.
+# Kernels every INT8 *accuracy* comes from: QNNPACK accumulates u8*s8 products exactly in int32 on any CPU (Jacob et al.
+# 2018's arithmetic). oneDNN does that only with VNNI; without it (beagle, tupi1/2, the laptop) VPMADDUBSW sums u8*s8
+# pairs in int16 and saturates -- the user's job to avoid, per oneDNN's dev guide ("Nuances of int8 computations";
+# pytorch/pytorch#103646) -- which left the first conv (input zero point ~114) wrong in 7-13% of its outputs and INT8
+# 1-5pp under QAT (docs/logs/PHASE11_LOG.md, "INT8 accuracy engine").
+ACCURACY_ENGINE = "qnnpack"
+# x86-optimized kernels for INT8 *latency* only: the saturation above changes their results, not their speed.
 QUANT_ENGINE = "onednn"
 # Written into every run summary; analysis treats a QAT/INT8 number without the current value as superseded.
 # 2026-10-03: the INT8 definition above, fused Linear/add + ReLU, W8 logits layer, Wu et al. 2020's QAT schedule --
 # and, for Phase 11, the new FP32 recipe that landed the same day, so analyze_geometry.load drops FP32 without it too.
-QUANT_PROTOCOL = "2026-10-03"
+# 2026-10-06: INT8 accuracy on ACCURACY_ENGINE; nothing retrained, a 2026-10-03 run is re-evaluated by resubmitting it.
+QUANT_PROTOCOL = "2026-10-06"
 
 
 def find_fuse_groups(module: nn.Module, prefix: str = "") -> list:
@@ -377,10 +384,12 @@ def build_qat(arch_name: str, save_dir: str | Path, device: torch.device) -> nn.
     return build_qat_from_model(model, arch_name, device)
 
 
-def convert_to_int8(qat_model: nn.Module, inplace: bool = False) -> nn.Module:
-    """Convert a trained QAT model to real INT8 ops (CPU-only), on QUANT_ENGINE's kernels. The logits layer is
-    frozen first: convert() strips every fake-quant's observer, which an uncalibrated one still needs."""
-    torch.backends.quantized.engine = QUANT_ENGINE
+def convert_to_int8(qat_model: nn.Module, inplace: bool = False, engine: str = ACCURACY_ENGINE) -> nn.Module:
+    """Convert a trained QAT model to real INT8 ops (CPU-only), on `engine`'s kernels: ACCURACY_ENGINE (exact) unless
+    only latency is measured (QUANT_ENGINE). The engine is process-global for some ops (add, pooling), so run the model
+    before converting another on a different engine. The logits layer is frozen first: convert() strips every
+    fake-quant's observer, which an uncalibrated one still needs."""
+    torch.backends.quantized.engine = engine
     model = (qat_model if inplace else copy.deepcopy(qat_model)).to("cpu").eval()
     for m in model.modules():
         if isinstance(m, _FloatLogits):
@@ -388,11 +397,12 @@ def convert_to_int8(qat_model: nn.Module, inplace: bool = False) -> nn.Module:
     return torch.ao.quantization.convert(model, inplace=True)
 
 
-def load_int8_model(arch_name: str, save_dir: str | Path) -> nn.Module:
+def load_int8_model(arch_name: str, save_dir: str | Path, engine: str = ACCURACY_ENGINE) -> nn.Module:
     """Rebuild the INT8 model scripts/train.py saved as a state_dict (qat_<arch>.pth): same QAT graph -> convert ->
-    load. Until 2026-09-30 it saved the pickled module instead, which can't be loaded back at all -- quantized
-    convs don't unpickle their nn.Module internals ('ConvReLU2d' object has no attribute '_modules')."""
-    model = convert_to_int8(build_qat_from_model(MODEL_REGISTRY[arch_name]["ctor"](), arch_name, torch.device("cpu")))
+    load, on any engine (the state_dict holds unpacked int8 weights). Until 2026-09-30 it saved the pickled module
+    instead, which can't be loaded back at all -- quantized convs don't unpickle their nn.Module internals."""
+    model = convert_to_int8(build_qat_from_model(MODEL_REGISTRY[arch_name]["ctor"](), arch_name, torch.device("cpu")),
+                            engine=engine)
     model.load_state_dict(torch.load(Path(save_dir) / f"qat_{arch_name}.pth", map_location="cpu", weights_only=True))
     return model
 

@@ -19,6 +19,7 @@ import ml.model_registrations  # noqa: F401 — populates MODEL_REGISTRY
 from configs.loader import load_config
 from ml import (
     MODEL_REGISTRY,
+    QUANT_ENGINE,
     QUANT_PROTOCOL,
     DataConfig,
     TrainerConfig,
@@ -507,17 +508,15 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
             create_results_summary(wino_summary, resolved_config, results_dir / f"{model_name}_qat_wino_summary.json")
 
         if "int8" in stage_list:
-            int8_model = None
+            for split in ("val", "test"):  # this summary must never read an earlier INT8 evaluation's logits
+                (results_dir / f"{model_name}_int8_{split}_logits.npz").unlink(missing_ok=True)
             if qat_model is not None:
-                int8_model = convert_to_int8(qat_model)
-                torch.save(int8_model.state_dict(), int8_path)  # a pickled quantized module can't be loaded back
-            elif int8_path.exists():
-                int8_model = load_int8_model(model_name, checkpoints_dir)
+                # a pickled quantized module can't be loaded back; the state_dict loads on any engine
+                torch.save(convert_to_int8(qat_model, engine=QUANT_ENGINE).state_dict(), int8_path)
 
-            if int8_model is not None:
-                int8_model = int8_model.to("cpu")
+            if int8_path.exists():
                 int8_trainer = Trainer(
-                    int8_model,
+                    load_int8_model(model_name, checkpoints_dir),  # the saved artifact on exact int32 kernels
                     train_loader,
                     val_loader,
                     replace(model_cfg, use_amp=False),
@@ -531,6 +530,7 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
                 int8_eval = int8_trainer.evaluate(
                     topk=(1, 5), save_logits=results_dir / f"{model_name}_int8_val_logits.npz")
                 _test_eval(int8_trainer, "int8")
+                int8_trainer.model = load_int8_model(model_name, checkpoints_dir, engine=QUANT_ENGINE)  # latency only
                 int8_benchmark = int8_trainer.benchmark()
                 int8_bs1_benchmark = int8_trainer.benchmark(loader=bs1_loader)
 

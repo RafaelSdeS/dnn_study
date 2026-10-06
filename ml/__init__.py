@@ -18,6 +18,7 @@ from .quantization import (
     convert_to_int8,
     make_qat_callback,
     exclude_attention_from_qat,
+    QUANT_ENGINE,
     QUANT_PROTOCOL,
 )
 from .reporting import (

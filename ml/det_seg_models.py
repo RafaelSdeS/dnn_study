@@ -19,7 +19,7 @@ from torchvision.ops import nms
 
 from models.compensation import AlexNetBottleneck, AlexNetFire
 from models.baselines import AlexNetTV
-from .quantization import INT8_QAT_QCONFIG, QUANT_ENGINE, find_fuse_groups
+from .quantization import INT8_QAT_QCONFIG, ACCURACY_ENGINE, find_fuse_groups
 
 
 BACKBONE_FEATURE_CONFIG = {
@@ -227,7 +227,7 @@ def build_qat_deeplabv3_segmenter(model_fp32: DeepLabV3Segmenter, device: torch.
 def convert_deeplabv3_to_int8(qat_model: DeepLabV3Segmenter) -> DeepLabV3Segmenter:
     """Convert a QAT-trained DeepLabV3 segmenter's backbone to real INT8 ops. CPU-only
     (project convention); head stays FP32 to match build_qat_deeplabv3_segmenter's design."""
-    torch.backends.quantized.engine = QUANT_ENGINE
+    torch.backends.quantized.engine = ACCURACY_ENGINE
     qat_model = qat_model.to("cpu").eval()
     qat_model.backbone = tq.convert(qat_model.backbone, inplace=False)
     return qat_model
@@ -356,7 +356,7 @@ def build_qat_ssd_detector(model_fp32: SSD, device: torch.device) -> SSD:
 def convert_ssd_to_int8(qat_model: SSD) -> SSD:
     """Convert a QAT-trained SSD's backbone to real INT8 ops. CPU-only (project convention);
     head stays FP32 to match build_qat_ssd_detector's design."""
-    torch.backends.quantized.engine = QUANT_ENGINE
+    torch.backends.quantized.engine = ACCURACY_ENGINE
     qat_model = qat_model.to("cpu").eval()
     qat_model.backbone = tq.convert(qat_model.backbone, inplace=False)
     return qat_model
