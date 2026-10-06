@@ -1320,3 +1320,18 @@ The op alone, 30 backward passes on the GPU: `AdaptiveAvgPool2d(1)` on 8x8 is bi
 8x8, 4x4 or 1x1 and `AdaptiveAvgPool2d(7)` on 2x2 are not, and `torch.use_deterministic_algorithms(True)` rejects them
 ("adaptive_avg_pool2d_backward_cuda does not have a deterministic implementation"). So a GAP cell retrained on the same
 GPU and code reproduces exactly; an FC cell reproduces within its nondeterminism, which a same-seed FC pair would size.
+
+**Measured: how large the FC nondeterminism is.** Its GAP twin `alexnet_k3x3_stride2_2pool2x2_map8_fc_bn`, same setup
+(laptop, 10 FP32 epochs), three runs: seed 42, seed 42 again, seed 43. The same-seed pair already differs in epoch 1
+(train loss 4.9005 vs 4.8995) and its val accuracy differs by up to 0.46 pp at equal epochs. After 10 epochs, on the test
+set:
+
+| Pair | Test predictions that differ | Test top-1 difference | Median relative weight distance |
+|---|---|---|---|
+| same seed (nondeterminism only) | 17.9% | 0.23 pp (36.02 vs 36.25) | 0.19 |
+| different seed (42 vs 43) | 32.8% | 0.21 pp (36.02 vs 35.81) | 1.41 |
+
+One pair each, early in training, so indicative only -- but it agrees with Zhuang et al. (MLSys 2022): nondeterminism
+alone moves accuracy about as much as a new seed, while the weights stay much closer. Consequence for the design: the
+noise floor (`_seed43/_seed44`) reruns two GAP cells, which are deterministic, so it measures seed variance only; an FC
+cell's run-to-run spread adds nondeterminism of comparable size, and the GAP-based band can understate it.
