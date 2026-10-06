@@ -28,8 +28,8 @@ from ml.plotting import BLUE, RED, TEXT_SECONDARY, apply_report_style
 ROOT = Path(__file__).resolve().parents[2]
 TABLES = ROOT / "results/phase_11_geometry_analysis"
 FIGS = ROOT / "results/figures_generated/phase_11_kernel_size_comparison"
-RUNS = ROOT / "outputs/pcad"
-ARCHIVE = RUNS / "archive_adamw_recipe"  # the superseded AdamW-recipe runs, same phase_11_*/<model>/results layout
+RUNS = (ROOT / "outputs/pcad", ROOT / "outputs/local")  # every runtime a run can come from (CLAUDE.md "Layout")
+ARCHIVE = RUNS[0] / "archive_adamw_recipe"  # the superseded AdamW-recipe runs, same phase_11_*/<model>/results layout
 
 BASE_KEY = "alexnet_k11-5-3_stride4_3pool3x3_map1_fcdrop_nobn"  # the original AlexNet (torchvision layout), from scratch
 BASE_LABEL = "AlexNet original do zero (baseline)"
@@ -37,17 +37,18 @@ LAYOUTS = ("layout original = o do AlexNet torchvision: conv1 stride 4 + 3 max-p
            "layout 64px = adaptado a 64×64: conv1 stride 2 + 2 max-pools 2×2 → mapa final 8×8, sem Dropout")
 
 
-def load(root: Path | None = None) -> pd.DataFrame:
+def load(*roots: Path) -> pd.DataFrame:
     """One row per run, accuracies on the held-out test set (Tiny ImageNet's official val split; the 90/10 split of
     train/ only picked each run's best epoch). fp32/qat/int8 are NaN for a run without the current quant_protocol
     (ml/quantization.py:QUANT_PROTOCOL); qat_raw/int8_raw/fp32_val are its validation-split numbers, all the superseded
     runs have (design_figures --archive draws those). `results` is the run's results dir, where the per-image
-    *_test_logits.npz live (factor_effects' McNemar tests). root defaults to RUNS; ARCHIVE reads the superseded runs.
+    *_test_logits.npz live (factor_effects' McNemar tests). roots default to RUNS (every runtime: a cell may have run on
+    PCAD or the laptop, never on both); ARCHIVE reads the superseded runs.
     lat_* = forward latency per image at batch 1 (ms): FP32 on the training GPU and on CPU, INT8 on CPU."""
     from ml.quantization import QUANT_PROTOCOL
 
     rows = []
-    for p in sorted((root or RUNS).glob("phase_11_*/*/results/*_summary.json")):
+    for p in sorted(q for r in (roots or RUNS) for q in r.glob("phase_11_*/*/results/*_summary.json")):
         d = json.loads(p.read_text())
         prov, key = d["config"]["provenance"], p.parents[1].name
         post_fix = d.get("quant_protocol") == QUANT_PROTOCOL
@@ -59,12 +60,18 @@ def load(root: Path | None = None) -> pd.DataFrame:
             qat_raw=d["qat_top1"], int8_raw=d["int8_top1"],
             params_m=d["params_m"], macs_m=d["macs"] / 1e6, fp32_mb=d["fp32_size_mb"], int8_mb=d["int8_size_mb"], best_ep=d["epochs"],
             ece=d.get("test_fp32_ece") if post_fix else nan, post_fix=post_fix, git_hash=prov.get("git_hash", "")[:7],
-            git_dirty=prov.get("git_dirty"), gpu=prov.get("gpu_name"), lat_gpu=d.get("fp32_bs1_latency_ms_per_image"),
+            git_dirty=prov.get("git_dirty"), gpu=prov.get("gpu_name"),
+            # where the latencies were measured: same GPU name, different CPUs on tupi1/2 vs tupi3-6 (no cpu_model
+            # before 2026-10-06 -> hostname)
+            machine=f"{prov.get('gpu_name')} / {prov.get('cpu_model') or prov.get('hostname')}",
+            lat_gpu=d.get("fp32_bs1_latency_ms_per_image"),
             lat_cpu=d.get("fp32_cpu_bs1_latency_ms_per_image"), lat_int8=d.get("int8_bs1_latency_ms_per_image")))
     df = pd.DataFrame(rows)
     if df.empty:
         return df
     assert not df[df.post_fix & df.git_dirty].shape[0], df[df.post_fix & df.git_dirty][["exp", "key", "git_hash"]]
+    twice = df[df.duplicated(["exp", "key"], keep=False)]  # one canonical result per cell (CLAUDE.md): archive the other
+    assert twice.empty, twice[["exp", "key", "results"]]
     df["drop_qat"] = df.fp32 - df.qat      # FP32 -> fake-quant (what QAT costs)
     df["drop_convert"] = df.qat - df.int8  # fake-quant -> real INT8 (what convert_to_int8 costs)
     df["drop_total"] = df.fp32 - df.int8

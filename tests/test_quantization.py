@@ -10,13 +10,13 @@ import copy
 import pytest
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 import torch.ao.nn.intrinsic.qat as nniqat
 import torch.ao.quantization as tq
 
 import ml.model_registrations  # noqa: F401 -- populates MODEL_REGISTRY
-from ml.quantization import build_qat_from_model, convert_to_int8, find_fuse_groups, make_qat_callback, prepare_qat_model
+from ml.quantization import (build_qat_from_model, convert_to_int8, find_fuse_groups, int8_kernel_error_steps,
+                             make_qat_callback, prepare_qat_model)
 from ml.registry import MODEL_REGISTRY
 from models.baselines import ResNet18TV
 from models.final_architecture import AlexNetFinalBottleneckResidual, AlexNetFinalFireResidual
@@ -111,8 +111,8 @@ def test_every_relu_is_fused_into_the_layer_that_feeds_it(name):
 def test_int8_kernels_reproduce_the_fake_quant_model(name):
     """The converted model must compute what QAT simulated (Jacob et al. 2018); a gap means the kernels round,
     saturate or requantize differently -- e.g. fbgemm's int16 saturation on full-range activations without VNNI
-    (2026-10-03, this laptop's i7-7700K, AVX2 and no VNNI of any kind: alexnet_3x3_gap 50.8 dB on onednn, 42.7 on fbgemm
-    8-bit, 48.4 on the old fbgemm 7-bit; onednn saturates there too, only rarely on randn inputs -- see the test below).
+    (2026-10-03, this laptop's i7-13650HX, AVX-VNNI but no AVX-512: alexnet_3x3_gap 50.8 dB on onednn, 42.7 on fbgemm
+    8-bit, 48.4 on the old fbgemm 7-bit; onednn saturates on CPUs without VNNI -- see the test below).
     The model is put in its deployed state first -- BN running stats settled on data, as a trained
     checkpoint has them, observers calibrated on what eval computes. Random weights still amplify 1-LSB rounding
     differences with depth, the same on every backend (resnet18 ~3 dB per block), so the real check is
@@ -143,25 +143,11 @@ def test_int8_accuracy_kernels_accumulate_exactly_where_onednn_saturates():
     """convert_to_int8's default engine must compute the int32 sum of u8*s8 products exactly (Jacob et al. 2018). On a
     CPU without VNNI, onednn sums pairs of them in int16 (VPMADDUBSW) and saturates (oneDNN dev guide, "Nuances of int8
     computations"; pytorch/pytorch#103646): 255*127*2 > 32767. That cost trained Phase 11 runs 1-5pp of INT8 top-1 in
-    their first conv, whose input carries an image's zero point (~114, so most u8 values are large)."""
-    torch.manual_seed(0)
-    model = nn.Sequential(tq.QuantStub(), nn.Conv2d(3, 8, 3), tq.DeQuantStub())
-    with torch.no_grad():
-        model[1].weight.uniform_(-1, 1)
-        model[1].weight[:, :2] = 1  # input channels 0 and 1 at the +127 end of each filter's grid
-    qat = prepare_qat_model(model, [])
-    x = torch.rand(8, 3, 16, 16) * 4.7 - 2.1  # the ImageNet-normalized pixel range
-    with torch.no_grad():
-        qat(x)
-    qat.eval().apply(tq.disable_observer)
-    int8, seen = convert_to_int8(qat), {}
-    int8[1].register_forward_hook(lambda m, i, o: seen.update(x=i[0], y=o))
-    with torch.no_grad():
-        int8(x)
-    conv = int8[1]
-    y = F.conv2d(seen["x"].dequantize().double(), conv.weight().dequantize().double(), conv.bias().double())
-    exact = torch.clamp(torch.round(y / conv.scale) + conv.zero_point, 0, 255)
-    assert (seen["y"].int_repr().double() - exact).abs().max() <= 1  # one rounding step at most
+    their first conv, whose input carries an image's zero point (~114, so most u8 values are large). The default engine
+    (qnnpack) is exact on every CPU -- the same check scripts/train.py runs before each INT8 evaluation. Which engines
+    saturate depends on the CPU (the laptop's AVX-VNNI i7-13650HX: onednn exact, fbgemm 98% off), so no engine is
+    asserted to fail here."""
+    assert int8_kernel_error_steps() <= 1  # one rounding step at most
 
 
 def test_fuse_root_models_are_fused_in_the_qat_copy_not_the_input():

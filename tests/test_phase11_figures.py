@@ -56,7 +56,7 @@ def test_every_phase_11_figure_renders(tmp_path, monkeypatch, subset):
 
     runs, figs, tables = tmp_path / "runs", tmp_path / "figs", tmp_path / "tables"
     _fake_runs(runs, (lambda e, m: True) if subset == "design" else (lambda e, m: m in PILOT and "_seed" not in e))
-    for mod, name, value in [(analyze_geometry, "RUNS", runs), (design_figures, "RUNS", runs), (analyze_geometry, "FIGS", figs),
+    for mod, name, value in [(analyze_geometry, "RUNS", (runs,)), (design_figures, "RUNS", (runs,)), (analyze_geometry, "FIGS", figs),
                              (design_figures, "FIGS", figs), (analyze_geometry, "TABLES", tables), (factor_effects, "TABLES", tables)]:
         monkeypatch.setattr(mod, name, value)
     analyze_geometry.main()

@@ -41,6 +41,7 @@ from ml import (
     gzip_mb,
     ensure_dataset_path,
     expand_path,
+    int8_kernel_error_steps,
     layer_stats,
     load_profile,
     make_model_runs,
@@ -245,6 +246,12 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
     seed = int(experiment_cfg.get("seed", data_cfg.seed))
     data_cfg.seed = seed
     set_global_seed(seed)
+    # FP32 means FP32 on every GPU: cuDNN runs FP32 convs as TF32 (10-bit mantissa) by default on Ampere and later (tupi's
+    # 4090, the laptop's 4060), never on Pascal (beagle's 1080 Ti) -- PyTorch, "CUDA semantics: TensorFloat-32 (TF32) on
+    # Ampere (and later) devices". So evaluation and QAT (no AMP) would depend on the GPU a job lands on; AMP's FP16
+    # training is unaffected. Here, not in set_global_seed: Phase 6 profiling measures TF32 on purpose.
+    torch.backends.cudnn.allow_tf32 = False
+    torch.backends.cuda.matmul.allow_tf32 = False
 
     dataset_path = ensure_dataset_path(runtime_cfg)
     data_cfg.dataset_path = str(dataset_path)
@@ -337,6 +344,7 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
         qat_fit = {}
         qat_eval = None
         int8_eval = None
+        int8_kernel_err = None
         int8_benchmark = None
         int8_bs1_benchmark = None
         fp32_benchmark = {"latency_ms_per_image": None, "throughput_img_per_s": None}
@@ -524,6 +532,12 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
                 torch.save(convert_to_int8(qat_model, engine=QUANT_ENGINE).state_dict(), int8_path)
 
             if int8_path.exists():
+                # the INT8 number must be Jacob et al.'s int32 arithmetic on whatever CPU this job landed on; a CPU whose
+                # kernels are not exact stops here (FP32/QAT checkpoints are saved: resubmit elsewhere to evaluate)
+                int8_kernel_err = int8_kernel_error_steps()
+                if int8_kernel_err > 1:
+                    raise SystemExit(f"INT8 kernels off by {int8_kernel_err} steps on this CPU "
+                                     f"({capture_provenance().get('cpu_model')}): INT8 accuracy would be wrong")
                 int8_trainer = Trainer(
                     load_int8_model(model_name, checkpoints_dir),  # the saved artifact on exact int32 kernels
                     train_loader,
@@ -574,6 +588,14 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
             "int8_ece": int8_eval.get("ece") if int8_eval else None,
             "int8_bs1_latency_ms_per_image": int8_bs1_benchmark.get("latency_ms_per_image") if int8_bs1_benchmark else None,
             "int8_bs1_throughput_img_per_s": int8_bs1_benchmark.get("throughput_img_per_s") if int8_bs1_benchmark else None,
+            # what Trainer.benchmark measured the latencies with (OMP_NUM_THREADS = the job's cpus_per_task) and how much
+            # they spread -- without them a latency can't be compared across jobs
+            "benchmark_num_threads": torch.get_num_threads(),
+            "int8_kernel_max_err_steps": int8_kernel_err,  # vs exact int32 on this CPU, <= 1 (ml.quantization)
+            **{f"{name}_latency_iqr_ms_per_image": b.get("latency_iqr_ms_per_image") if b else None
+               for name, b in (("fp32", fp32_benchmark), ("fp32_bs1", fp32_bs1_benchmark), ("fp32_cpu", fp32_cpu_benchmark),
+                               ("fp32_cpu_bs1", fp32_cpu_bs1_benchmark), ("int8", int8_benchmark),
+                               ("int8_bs1", int8_bs1_benchmark))},
             "qat_top1": qat_eval.get("top1") if qat_eval else None,
             "qat_top5": qat_eval.get("top5") if qat_eval else None,
             "qat_ece": qat_eval.get("ece") if qat_eval else None,

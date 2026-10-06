@@ -79,7 +79,7 @@ def frame(archive: bool = False) -> pd.DataFrame:
         facts = LEGACY
     else:
         from ml.model_registrations import CELL_FACTORS
-        df, facts = load(RUNS), CELL_FACTORS
+        df, facts = load(*RUNS), CELL_FACTORS
     if df.empty:
         return df
     families = load_config("experiments/phase_11_families.yaml")["models"]
@@ -318,22 +318,24 @@ def fig_quant(df, figs, note):
 
 def fig_latency(df, figs, note):
     d = seed42(df)
-    gpu = d.gpu.mode().iloc[0] if d.gpu.notna().any() else "?"
+    # one machine = GPU + CPU: batch-1 latency on a GPU is launch-bound, so the host CPU moves all three panels
+    ref = d.machine.mode().iloc[0] if len(d) else None
+    gpu = next(iter(d[d.machine == ref].gpu.dropna()), "?")
     fig, axes = plt.subplots(1, 3, figsize=(17, 5.8))
     for ax, m, title in [(axes[0], "lat_gpu", f"FP32 na GPU ({gpu}), batch 1"), (axes[1], "lat_cpu", "FP32 na CPU, batch 1"),
                          (axes[2], "lat_int8", "INT8 na CPU, batch 1")]:
         for r in d.dropna(subset=[m]).itertuples():
-            same = r.gpu == gpu
+            same = r.machine == ref
             ax.scatter(r.macs_m, getattr(r, m), marker=HMARK[r.hk], s=55, zorder=3,
                        **(dict(color=color(r), edgecolors="white") if same else dict(facecolors="none", edgecolors=color(r), lw=1.2)))
         plain_log(ax, "x", "y")
         ax.set_xlabel("MACs por imagem (milhões, log)")
         ax.set_title(title, fontsize=10)
     axes[0].set_ylabel("Latência por imagem (ms, log)")
-    others = sorted(set(d.gpu.dropna()) - {gpu})
+    others = sorted(set(d.machine) - {ref})
     handles = (legend_kernels(d.kernels)
                + [Line2D([], [], marker=m, color=TEXT_SECONDARY, ls="", ms=8, label=HLABEL[h]) for h, m in HMARK.items() if h in set(d.hk)]
-               + ([Line2D([], [], marker="o", mfc="none", mec=TEXT_SECONDARY, ls="", ms=8, label=f"vazado = treinada em outra máquina ({', '.join(others)})")]
+               + ([Line2D([], [], marker="o", mfc="none", mec=TEXT_SECONDARY, ls="", ms=8, label=f"vazado = medida em outra máquina ({'; '.join(others)})")]
                   if others else []))
     fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=5, fontsize=9)
     fig.suptitle("O MAC prevê o tempo real? Mesma conta, kernels diferentes: pontos acima da nuvem = kernel lento por MAC\n" + note,

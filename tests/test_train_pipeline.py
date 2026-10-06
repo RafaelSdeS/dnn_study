@@ -132,7 +132,8 @@ def test_resubmitting_a_finished_run_reevaluates_it_without_touching_its_trainin
     first = json.loads((run_root / "resolved_config.json").read_text())["provenance"]
     again, _ = _run(tmp_path, monkeypatch, ["fp32", "qat", "int8"], ctor=_TinyQuantizable)
     changed = {k for k in rows[0].keys() | again[0].keys() if rows[0].get(k) != again[0].get(k)}
-    assert all(k.endswith(("_latency_ms_per_image", "_throughput_img_per_s")) for k in changed), changed
+    assert all(k.endswith(("_latency_ms_per_image", "_latency_iqr_ms_per_image", "_throughput_img_per_s"))
+               for k in changed), changed
     assert {p.name: p.read_bytes() for p in (run_root / "checkpoints").glob("*_best.pth")} == ckpts
     assert (run_root / "logs" / "tiny.log").read_text().startswith(log)
     assert json.loads((run_root / "resolved_config.json").read_text())["provenance_history"] == [first]

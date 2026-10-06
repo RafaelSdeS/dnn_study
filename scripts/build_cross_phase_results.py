@@ -89,7 +89,8 @@ def _load_phase8_rows():
 
 def _epochs(summary: dict[str, Any]) -> float:
     try:
-        return float(summary.get("epochs") or 0)
+        # completed epochs; "epochs" is the 0-based BEST epoch (ml/reporting.py), the only proxy old summaries carry
+        return float(summary.get("epochs_used") or summary.get("epochs") or 0)
     except (TypeError, ValueError):
         return 0.0
 

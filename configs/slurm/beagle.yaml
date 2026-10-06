@@ -2,6 +2,6 @@
 partition: beagle
 gres: gpu:1
 nodes: 1
-cpus_per_task: 4
+cpus_per_task: 8  # = tupi_4090: OMP_NUM_THREADS, so CPU/INT8 latency, follows it; the node is exclusive (32 CPUs)
 mem: 16G  # node has 32 GB total DDR3 — leave headroom for the other GPU's job
 time: "08:00:00"  # 8 hours, same budget as tupi_4090 (phase 6 profiling is I/O bound but long)

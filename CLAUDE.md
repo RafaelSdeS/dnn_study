@@ -104,8 +104,10 @@ ml/                       # Core package — notebooks and scripts import everyt
                           #   affine activations (Jacob 2018; fbgemm's default reduce_range made them 7-bit before) +
                           #   per-channel symmetric weights in [-127,127] (Wu 2020); convert_to_int8/load_int8_model run it on
                           #   ACCURACY_ENGINE="qnnpack" (exact int32 accumulation on any CPU) -- onednn (QUANT_ENGINE, kept for
-                          #   INT8 latency only) saturates u8*s8 pairs in int16 on CPUs without VNNI (beagle, tupi1/2, laptop),
-                          #   which cost 1-5pp INT8 until 2026-10-06 (PHASE11_LOG "INT8 accuracy engine"). fuse_sequential_relus fuses every
+                          #   INT8 latency only) saturates u8*s8 pairs in int16 on CPUs without VNNI (beagle, tupi1/2; the laptop's
+                          #   i7-13650HX has AVX-VNNI: only fbgemm saturates there), which cost 1-5pp INT8 until 2026-10-06
+                          #   (PHASE11_LOG "INT8 accuracy engine"); int8_kernel_error_steps() measures the engine against exact
+                          #   int32 and scripts/train.py stops before an INT8 evaluation on a CPU where it is > 1. fuse_sequential_relus fuses every
                           #   Conv/Linear-ReLU left in a Sequential (FC heads were unfused, except vgg16's), residual blocks use
                           #   FloatFunctional.add_relu. The logits Linear (keep_logits_float/_FloatLogits) has INT8 input and
                           #   weights and an FP32 output (Wu 2020: no quantized layer reads it; an 8-bit logits grid tied 14-31%
@@ -118,7 +120,8 @@ ml/                       # Core package — notebooks and scripts import everyt
   pruning.py              # Phase 9: prune_model_channels — structured (whole-channel) pruning, stays Winograd-dense
   runtime.py              # Shared CLI plumbing: set_global_seed, capture_provenance (git_dirty = code_changes() over
                           #   ml/models/scripts/configs only, + git_dirty_files, since 2026-09-30; also records torchvision/CUDA/
-                          #   cuDNN/Python versions, GPU name, cpu_count, SLURM_JOB_ID since 2026-09-13), load_profile
+                          #   cuDNN/Python versions, GPU name, cpu_count, SLURM_JOB_ID since 2026-09-13, cpu_model since
+                          #   2026-10-06), load_profile
                           #   (experiment/runtime yaml by name or path), ensure_dataset_path, make_model_runs
                           #   (<root>/<exp>/<model>/...), save_resolved_config — scripts import these from `ml`, not
                           #   from scripts/train.py's privates
@@ -403,6 +406,12 @@ QAT cfg is typically `replace(fp32_cfg, epochs=20, lr=1e-5, use_amp=False)`.
 **Data:** ImageFolder, deterministic 90/10 split (`torch.Generator`, the run's seed; the train-set hold-out of He et al. 2016 Sec. 4.2's 45k/5k), workers seeded via `worker_init_fn`. ImageNet normalization. Train aug (`DataConfig.train_aug`): `legacy` = `RandomResizedCrop(0.7–1.0)`, hflip, `RandomRotation(15)`, `AutoAugment(ImageNet)` (Phases 1–10); `crop_flip_autoaug` = pad-4 random crop + hflip (He 2016) + `AutoAugment(ImageNet)` (Cubuk 2019), Phase 11 since 2026-10-03. Val: `Resize → CenterCrop`. **Test** (2026-10-03, `create_test_loader`): Tiny ImageNet's official val split (10k, 50/class) — the 90/10 split only picks the best epoch; `scripts/train.py` reports every stage on test too (`test_{fp32,qat,int8}_*`, `{model}_{stage}_test_logits.npz`), and that is the number the paper uses (same images for every seed; the 90/10 split moves with the seed). `num_workers: 4` (`configs/data.yaml`) for every run: the FP32 stage is loader-bound (4–40% GPU on the 4090s), but more workers would change each worker's augmentation random stream against the runs already trained -- kept on purpose (2026-10-02).
 
 **Reproducibility:** seed `random`/`numpy`/`torch`/`cuda` at notebook top; `cudnn.deterministic=True`; do **not** set `cudnn.benchmark`.
+**Machine independence (2026-10-06, PHASE11_LOG "Machine independence and reproducibility"):** runs may land on tupi, beagle
+or the laptop, and a number must not depend on which. `scripts/train.py` turns TF32 off (FP32 eval/QAT = FP32 on Ampere+ GPUs
+too; Phase 6 profiling keeps TF32 on purpose), checks the INT8 kernels against exact int32 before every INT8 evaluation, and
+summaries record the machine (provenance `cpu_model`, `gpu_name`) plus `benchmark_num_threads` and latency IQRs -- latency is
+compared only within a machine. Phase 11 analysis reads `outputs/pcad` and `outputs/local`. GPU training is not bitwise
+reproducible (atomics in `AdaptiveAvgPool2d`'s backward); the seed noise floor measures that, with seed and machine.
 
 **Reporting:** `make_run_summary(..., extra=dict)` builds a 30+ field dict per model → save one JSON each (crash-safe); `extra` merges in per-run additions without inflating the signature. `build_comparison_table` → `final_comparison.csv`; `create_results_summary` → `experiment_summary.json`. `compute_flops(model, input_size=(1,3,64,64))` → `{macs, flops}`. W&B: `wandb.init(project=..., config=asdict(cfg), mode="offline")`, sync later with `wandb sync --sync-all`; no auto-sync.
 

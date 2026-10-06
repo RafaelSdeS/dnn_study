@@ -1223,7 +1223,8 @@ point (~114), so most u8 values are large; post-ReLU inputs have zero point 0. T
 
 PCAD CPUs (the INT8 stage runs on the training node's CPU): beagle Xeon E5-2650 (AVX only), tupi1/tupi2 Xeon E5-2620 v4
 (AVX2, no VNNI), tupi3-6 i9-14900KF (AVX-VNNI, not verified with oneDNN 3.5.3); the laptop's i7-7700K (AVX2, no VNNI)
-saturates identically. So INT8 accuracy depended on the node a job landed on.
+saturates identically. So INT8 accuracy depended on the node a job landed on. *Correction (same day, "Machine
+independence" below): the laptop is an i7-13650HX with AVX-VNNI, where onednn is exact -- only fbgemm saturates there.*
 
 **Change.** INT8 accuracy comes from QNNPACK (`ml/quantization.py:ACCURACY_ENGINE`, `convert_to_int8`'s default): on the
 laptop it has no output off by >=2 steps and agrees 99% with the exact emulation (top-1 40.8 vs 40.6 on 500 test
@@ -1244,3 +1245,69 @@ re-measured latencies to change (`test_resubmitting_a_finished_run_reevaluates_i
 provenance of the job that trained the checkpoints (`resolved_config.json` was rewritten; its `provenance_history` now
 keeps every earlier job). The four reruns go to `--slurm beagle`, where they trained (GTX 1080 Ti, whole node), so
 their FP32/QAT evaluations must reproduce the archived numbers exactly -- the check that reuse changed nothing.
+
+## C2sp receptive field, latency machine, best-epoch tie-break (2026-10-06)
+
+**C2sp receptive field.** Measured from input gradients (all-ones weights, max-pool read as average pool): each C2sp
+channel group sees a different 2x2 of the 3x3 window, so a stack of stride-1 C2sp 2x2 convs has exactly a 3x3 stack's
+receptive field (5x5 after 2 layers, 9x9 after 4, 17x17 after 8; one-sided 2x2: 3x3, 5x5, 9x9). Its gradient-weighted
+width is 0.87x the 3x3 stack's at every depth (one-sided: 0.61x). The centre unit of the 8x8 map sees 60-64 px of the
+64 px image in every AlexNet kernel cell (effective width k11-5-3 12.6 px, k3x3 11.8, kalt3-2 11.3, k2x2 10.4). So in
+this design the kernel factor 2x2 vs 3x3 measures weights/MACs per filter at a near-equal receptive field, not a
+smaller one: a 2x2 cost here must not be explained by receptive field, and the archived one-sided 2x2 runs had a
+different receptive field, so they are not a reference for the current cells. VGG's 3-channel stride-1 stem (three
+corners filled) shifts the map -1/6 px at that layer only (the next layers have >= 64 channels, symmetric) -- negligible
+next to the old 0.5 px per layer.
+
+**Latency machine.** Figure 20 grouped machines by `gpu_name`, but tupi1/2 (Xeon E5-2620 v4, 16 threads) and tupi3-6
+(i9-14900KF) share "RTX 4090": on the archived runs the same model's INT8 batch-1 latency was 1.6-3.7x higher on tupi1/2
+(old benchmark, DataLoader included, so the size is indicative), and ~27% of those runs landed there. Provenance now
+records `cpu_model`, `analyze_geometry.load` builds `machine` = GPU / CPU model (hostname before this), and figure 20
+fills only the most common machine. Summaries now carry `benchmark_num_threads` and each benchmark's
+`*_latency_iqr_ms_per_image` (Trainer.benchmark measured them; train.py dropped them), and `configs/slurm/beagle.yaml`
+asks 8 CPUs like tupi_4090 (it asked 4, so a `--slurm beagle` re-evaluation timed CPU latency at half the threads of
+the overflowed tupi job that trained the run). 829186/829187/829211 were submitted with 4 and keep it, recorded.
+
+**Best-epoch tie-break.** A summary's `epochs` is the 0-based BEST epoch (`ml/reporting.py`), but
+`scripts/build_cross_phase_results.py:_epochs` and `report/generate_figures.py` used it as "completed epochs" to pick
+between duplicate summaries; both now prefer `epochs_used`. No duplicate existed in either tree, so no table changed.
+
+## Machine independence and reproducibility (2026-10-06)
+
+Runs will land on tupi1-6 (RTX 4090; Xeon E5-2620 v4 on tupi1/2, i9-14900KF on tupi3-6), beagle (GTX 1080 Ti, Xeon
+E5-2650 without AVX2) and the laptop (RTX 4060 Laptop, i7-13650HX), maybe others. A cell's numbers must be a function of
+its protocol, not of the node. What can depend on the machine, and how each is handled:
+
+| Factor | Handling | Reference |
+|---|---|---|
+| Data | Same files (dataset sha256 `932bfab8...` on the laptop and PCAD), split from `torch.Generator(seed)`, workers seeded (`ml/data.py:_seed_worker`), `persistent_workers: false` on both runtimes | Pineau et al., JMLR 2021 (record the dataset version) |
+| Software | torch 2.5.1+cu121 / torchvision / numpy / pillow identical on both; torch loads cuDNN 9.1.0 on both. Provenance records torch/torchvision/CUDA/cuDNN/Python, git hash + dirty files, host, GPU, CPU model, Slurm job | PyTorch "Reproducibility" notes (no guarantee across releases or platforms) |
+| FP32 arithmetic | `scripts/train.py` turns TF32 off (`cudnn.allow_tf32`, `cuda.matmul.allow_tf32`): cuDNN defaults to TF32 convs (10-bit mantissa) on Ampere and later (4090, 4060), never on Pascal (1080 Ti), so evaluation and QAT (no AMP) would depend on the GPU. AMP's FP16 training is unaffected. Phase 6 profiling keeps TF32 (it measures it). | PyTorch "CUDA semantics: TF32 on Ampere"; Micikevicius et al., ICLR 2018 (FP16 compute, FP32 evaluation) |
+| INT8 arithmetic | Accuracy on qnnpack (exact int32 on any CPU). `ml/quantization.py:int8_kernel_error_steps` measures the kernel against exact int32 on the saturating first-conv case; `scripts/train.py` runs it before every INT8 evaluation, records `int8_kernel_max_err_steps`, and stops the run if > 1 step (resubmit elsewhere; FP32/QAT are saved) | Jacob et al., CVPR 2018; oneDNN dev guide, "Nuances of int8 computations" |
+| Latency | Machine-bound by nature: compared only within a machine (figure 20, GPU + CPU model), with `benchmark_num_threads` and IQRs recorded | Hoefler & Belli, SC 2015 (report the system and threads; medians with nonparametric spread) |
+| GPU nondeterminism | Not removable: `AdaptiveAvgPool2d`'s CUDA backward (every head here) uses atomics, so even one machine is not bitwise reproducible. Not chased bit by bit; the seed noise floor (`_seed43/_seed44`, on whatever nodes they land) measures seed + machine + nondeterminism together | PyTorch "Reproducibility"; Zhuang et al., MLSys 2022 (tooling variance comparable to seed variance); Bouthillier et al., MLSys 2021 |
+| Where runs live | `analyze_geometry.RUNS` reads `outputs/pcad` and `outputs/local`; the same cell in both stops the analysis (one canonical result per cell) | -- |
+
+**Measured: one beagle run re-evaluated on the laptop** (`alexnet_k11-5-3_stride2_2pool2x2_map8_fc_nobn`, same
+checkpoints, official test set, batch 128; scratchpad script, not part of the pipeline):
+
+| Evaluation | Laptop top-1 | Beagle top-1 | Prediction agreement with beagle | Max logit difference |
+|---|---|---|---|---|
+| FP32, RTX 4060, TF32 off | 38.27 | 38.27 (FP32) | 99.97% | 0.004 (the fp16 the logits are stored in) |
+| FP32, RTX 4060, TF32 on | 38.26 | 38.27 (FP32) | 99.98% | 0.012 |
+| INT8, qnnpack | 38.15 | 38.23 (QAT fake-quant) | 97.5% | 0.36 |
+| INT8, onednn (exact here: AVX-VNNI) | 38.17 | 38.23 (QAT fake-quant) | 97.5% | 0.37 |
+| INT8, qnnpack | 38.15 | 33.06 (onednn, saturated) | 64.0% | 8.9 |
+
+The FP32 number reproduces across GPU generations; TF32 triples the logit deviation but moved top-1 by 0.01 pp on this
+run, so turning it off costs little and closes the one GPU-dependent arithmetic path. Exact INT8 reproduces QAT to 97.5%
+of predictions, as the float64 emulation did; qnnpack and onednn agree on 99.1% of predictions, which is the rounding gap
+between two exact engines and why the engine is part of the protocol (`QUANT_PROTOCOL`). The beagle re-evaluation
+(829186) should match the laptop's qnnpack logits up to the float logits layer's CPU rounding; check when it finishes.
+
+**The laptop's CPU, corrected.** The section above and the 2026-10-06 test docstrings called the laptop an i7-7700K
+without VNNI. `/proc/cpuinfo` says i7-13650HX with AVX-VNNI (as the 2026-10-03 entry has it). There
+`int8_kernel_error_steps` gives qnnpack 1, onednn 0, fbgemm 103 (98% of outputs >= 2 steps off): only fbgemm saturates.
+The "onednn 35.0 on 500 images" above does not reproduce on this machine (the full test set gives onednn 38.17).
+Saturation needs a CPU without VNNI (beagle, tupi1/2); tupi3-6 (AVX-VNNI, same generation as the laptop) are probably
+exact under onednn too, so the archived runs' INT8 depended on tupi1/2 vs tupi3-6 as well as beagle.

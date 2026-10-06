@@ -471,7 +471,9 @@ def _load_summary_jsons(root: Path, group_label: str) -> pd.DataFrame:
         return df
     df["phase"] = group_label
     if "model_name" in df.columns and "epochs" in df.columns:
-        df = df.sort_values("epochs").drop_duplicates(subset="model_name", keep="last").reset_index(drop=True)
+        # keep the run with the most completed epochs ("epochs" is the 0-based best epoch, for summaries without epochs_used)
+        df = (df.sort_values([c for c in ("epochs_used", "epochs") if c in df], na_position="first")
+              .drop_duplicates(subset="model_name", keep="last").reset_index(drop=True))
     return df
 
 

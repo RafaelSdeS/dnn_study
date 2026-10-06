@@ -77,7 +77,7 @@ def code_changes() -> str:
 
 def capture_provenance() -> dict[str, Any]:
     """Git hash, code-dirty flag (+ which files), hostname, UTC timestamp, and the training environment
-    (torch/torchvision/CUDA/cuDNN versions, GPU name, Python, CPU count, SLURM job id) -- so a run is
+    (torch/torchvision/CUDA/cuDNN versions, GPU name, Python, CPU model and count, SLURM job id) -- so a run is
     still reproducible months later without re-deriving what it ran on."""
     import torchvision
 
@@ -102,6 +102,10 @@ def capture_provenance() -> dict[str, Any]:
         "gpu_name": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
         "python_version": platform.python_version(),
         "cpu_count": os.cpu_count(),
+        # CPU/INT8 latency depends on it: tupi1/2 (Xeon E5-2620 v4) and tupi3-6 (i9-14900KF) share the same GPU name
+        # ponytail: Linux /proc/cpuinfo (laptop, tupi, beagle); None elsewhere rather than failing the run
+        "cpu_model": next((ln.split(":", 1)[1].strip() for ln in (Path("/proc/cpuinfo").read_text().splitlines()
+                           if Path("/proc/cpuinfo").exists() else []) if ln.startswith("model name")), None),
         "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
     }
 

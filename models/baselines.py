@@ -16,8 +16,10 @@ class SymmetricPad2d(nn.Module):
     right-top, left-bottom, right-bottom), so the conv keeps the map size with no net shift. One-sided padding (what
     every Phase 11 2x2 cell used until 2026-10-04) shifts the map 0.5 px per layer toward one corner; their C2sp beats
     it by 2.5% on ImageNet, an artifact the size of the kernel effect measured here. Still a plain 2x2 conv
-    (Winograd F(m, 2)-eligible). A 3-channel input (VGG's stride-1 stem) fills only three corners: Wu's exact symmetry
-    needs channels % 4 == 0. No observer: the cat of slices of one tensor keeps its quantization parameters."""
+    (Winograd F(m, 2)-eligible), but each group sees a different 2x2 of the 3x3 window: a stack has a 3x3 stack's
+    receptive field (effective width 0.87x; docs/logs/PHASE11_LOG.md "C2sp receptive field"). A 3-channel input (VGG's
+    stride-1 stem) fills only three corners, a net -1/6 px shift at that layer only: Wu's exact symmetry needs
+    channels % 4 == 0. No observer: the cat of slices of one tensor keeps its quantization parameters."""
 
     PADS = ((1, 0, 1, 0), (0, 1, 1, 0), (1, 0, 0, 1), (0, 1, 0, 1))  # F.pad order: (left, right, top, bottom)
 

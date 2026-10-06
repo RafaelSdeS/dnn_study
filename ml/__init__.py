@@ -16,6 +16,7 @@ from .quantization import (
     load_best_model,
     load_int8_model,
     convert_to_int8,
+    int8_kernel_error_steps,
     make_qat_callback,
     exclude_attention_from_qat,
     QUANT_ENGINE,
