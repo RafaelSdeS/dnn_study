@@ -349,6 +349,7 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
 
         fp32_fit = {}
         fp32_eval = {}
+        new_epochs = {"fp32": 0, "qat": 0}  # epochs this job trained; 0 = the record of an earlier job is kept
         if "fp32" not in stage_list and prior_summary:
             fp32_eval = _recover_fit_from_prior_summary(prior_summary, _FP32_EVAL_FIELDS)
         qat_fit = {}
@@ -427,6 +428,7 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
                     log_file=log_file,
                 )
                 fp32_fit = trainer.fit(resume_from=resume_from)
+                new_epochs["fp32"] = trainer.epochs_run
                 if _stop_requested(trainer, "fp32", model_name, writer, wandb_run):
                     break
                 fp32_eval, fp32_benchmark, fp32_bs1_benchmark, fp32_cpu_benchmark, fp32_cpu_bs1_benchmark = _fp32_extra(trainer)
@@ -461,6 +463,7 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
                     log_file=logs_dir / f"qat_{model_name}.log",
                 )
                 qat_fit = trainer.fit(resume_from=resume_from)
+                new_epochs["qat"] = trainer.epochs_run
                 if _stop_requested(trainer, "qat", model_name, writer, wandb_run):
                     break
                 trainer.logger.info("QAT training complete for %s", model_name)
@@ -588,8 +591,12 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
             layer_stats_path = None
 
         fp32_logits_path = results_dir / f"{model_name}_fp32_val_logits.npz"
-        no_new_fp32_epoch = bool(prior_summary) and fp32_fit.get("epochs_used") == prior_summary.get("epochs_used")
-        no_new_qat_epoch = bool(prior_summary) and qat_fit.get("epochs_used") == prior_summary.get("qat_epochs_used")
+        # equal epoch counts alone are not enough: a QAT redone on archived artifacts trains its 50 epochs anew, and until
+        # 2026-10-07 it inherited the old QAT's time and energy
+        no_new_fp32_epoch = (bool(prior_summary) and not new_epochs["fp32"]
+                             and fp32_fit.get("epochs_used") == prior_summary.get("epochs_used"))
+        no_new_qat_epoch = (bool(prior_summary) and not new_epochs["qat"]
+                            and qat_fit.get("epochs_used") == prior_summary.get("qat_epochs_used"))
         extra = {
             **({k: prior_summary.get(k) for k in _FP32_TRAINING_FIELDS} if no_new_fp32_epoch else {}),
             "fp32_ece": fp32_eval.get("ece") if fp32_eval else None,

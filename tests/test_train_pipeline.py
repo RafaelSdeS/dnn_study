@@ -109,6 +109,22 @@ def test_qat_rerun_keeps_the_fp32_training_record(tmp_path, monkeypatch, keep_fp
     assert rows[0]["qat_epochs_used"] == 1
 
 
+def test_a_qat_redone_on_archived_artifacts_records_its_own_training_time(tmp_path, monkeypatch):
+    """A new QAT protocol on a finished run (2026-10-07): its qat_* artifacts are archived and QAT trains again, with
+    the same epoch count. Its time is this job's, not the archived QAT's (inherited until the fix); FP32's is kept."""
+    import json
+    rows, run_root = _run(tmp_path, monkeypatch, ["fp32", "qat"])
+    summary = run_root / "results" / "tiny_summary.json"
+    old = json.loads(summary.read_text())
+    summary.write_text(json.dumps({**old, "qat_total_training_time_s": -1.0}))  # a marker the archived QAT left
+    for p in (run_root / "checkpoints").glob("qat_*"):
+        p.unlink()
+    rows, _ = _run(tmp_path, monkeypatch, ["fp32", "qat"])
+    assert rows[0]["qat_epochs_used"] == old["qat_epochs_used"] == 1
+    assert rows[0]["qat_total_training_time_s"] > 0
+    assert rows[0]["total_training_time_s"] == old["total_training_time_s"]
+
+
 class _TinyQuantizable(nn.Module):
     def __init__(self):
         super().__init__()

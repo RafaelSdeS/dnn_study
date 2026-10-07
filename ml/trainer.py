@@ -275,6 +275,7 @@ class BaseTrainer:
             self.logger.info("Restored best checkpoint (epoch %d) into the model", best_epoch + 1)
 
         total_training_time_s = elapsed_time_s + (time.monotonic() - train_start)
+        self.epochs_run = epoch + 1 - start_epoch  # this call's epochs: 0 for a resume of a finished run
         return self._shape_result(history, best_epoch, epoch + 1, total_training_time_s, wandb_run_id)
 
 
