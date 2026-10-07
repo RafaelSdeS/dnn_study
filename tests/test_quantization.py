@@ -14,7 +14,9 @@ import torch
 import torch.nn as nn
 
 import torch.ao.nn.intrinsic.qat as nniqat
+import torch.ao.nn.quantized as nnq
 import torch.ao.quantization as tq
+import torch.nn.functional as F
 
 import ml.model_registrations  # noqa: F401 -- populates MODEL_REGISTRY
 from ml.quantization import (_FloatLogits, build_qat_from_model, convert_to_int8, find_fuse_groups,
@@ -107,6 +109,49 @@ def test_every_phase_11_model_is_the_literature_int8_through_qat_and_convert(nam
     for m in kernels:
         q = m.weight().int_repr()
         assert -127 <= q.min() and q.max() <= 127
+
+
+@pytest.mark.parametrize("name", PHASE11_MODELS)
+def test_every_int8_layer_computes_what_its_qat_layer_simulated(name):
+    """Layer by layer, on the same quantized input: every INT8 Conv/Linear (fused ReLU included) is within one output
+    step of exact int32 arithmetic on its own int8 weights and bias (Jacob et al. 2018), and so is the QAT layer it was
+    converted from -- INT8 computes what QAT trained. End to end, 1-LSB rounding differences compound with depth and
+    hide a wrong definition (mobilenetv2: 13 dB logit SQNR with every layer exact); per layer they cannot. Catches the
+    fused fake-quant's weight-scale mismatch (2026-10-07) and onednn/fbgemm's int16 saturation (2026-10-06). The logits
+    layer (_FloatLogits): the same float output on the same input."""
+    torch.manual_seed(0)
+    fp = MODEL_REGISTRY[name]["ctor"]().train()
+    with torch.no_grad():
+        for m in fp.modules():
+            if isinstance(m, nn.BatchNorm2d):
+                m.momentum = None  # settled running stats, as a trained checkpoint has them
+        for _ in range(3):
+            fp(torch.randn(8, 3, 64, 64))
+    qat = build_qat_from_model(fp, name, torch.device("cpu")).eval()
+    with torch.no_grad():
+        for _ in range(2):
+            qat(torch.randn(8, 3, 64, 64))
+    qat.apply(tq.disable_observer)
+    int8, seen = convert_to_int8(copy.deepcopy(qat)), {}
+    for n, m in int8.named_modules():
+        if isinstance(m, (nnq.Conv2d, nnq.Linear, _FloatLogits)):  # the fused ConvReLU2d/LinearReLU subclass them
+            m.register_forward_hook(lambda mod, i, o, n=n: seen.__setitem__(n, (i[0], o)))
+    with torch.no_grad():
+        int8(torch.randn(4, 3, 64, 64))
+        assert seen
+        for n, (x, y) in seen.items():
+            k, fq = int8.get_submodule(n), qat.get_submodule(n)(x.dequantize() if x.is_quantized else x)
+            if isinstance(k, _FloatLogits):
+                assert torch.allclose(y, fq, rtol=1e-4, atol=1e-5), n
+                continue
+            xd, wd, b = x.dequantize().double(), k.weight().dequantize().double(), k.bias().double()
+            ref = (F.conv2d(xd, wd, b, k.stride, k.padding, k.dilation, k.groups) if isinstance(k, nnq.Conv2d)
+                   else F.linear(xd, wd, b))
+            ref = F.relu(ref) if "ReLU" in type(k).__name__ else ref
+            exact = torch.clamp(torch.round(ref / k.scale) + k.zero_point, 0, 255)
+            assert (y.int_repr().double() - exact).abs().max() <= 1, f"{n}: INT8 kernel off exact int32"
+            fq_codes = torch.round(fq.double() / k.scale) + k.zero_point  # fake-quant output: fp32 values on the same grid
+            assert (fq_codes - exact).abs().max() <= 1, f"{n}: QAT != INT8 definition"
 
 
 @pytest.mark.parametrize("name", REPORT_MODELS)

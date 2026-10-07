@@ -69,3 +69,26 @@ def test_every_phase_11_figure_renders(tmp_path, monkeypatch, subset):
         assert {p.name for p in tables.glob("*.csv")} >= {"all_runs.csv", "main_grid.csv", "kernel_geometry.csv", "factor_effects.csv"}
     else:  # a half-finished queue: whatever has data renders, the rest is skipped, nothing crashes
         assert {"02_kernel_original_layout.png", "16_pareto_accuracy_cost.png", "17_main_factorial_grid.png"} <= written
+
+
+# The design, contrast by contrast (docs/logs/PHASE11_LOG.md "Minimal design" + "Protocol audit", 2026-10-07): how many
+# matched pairs the yamls give each one. A yaml edit that drops or breaks a contrast fails here instead of in a figure
+# months later -- as the 2026-10-07 FC -> FC + Dropout swap did (the head contrast fell from 17 pairs to 6 until
+# factor_effects paired GAP with the real FC head). Change these numbers only with the design.
+DESIGN_PAIRS = {"Kernel 11-5-3-3-3 → 3×3": 9, "Kernel 3×3 → 2×2": 12, "Kernel 11-5-3-3-3 → 2×2": 9,
+                "Kernel 3×3 → alternado 3-2": 11, "3×3 → dois 3×3 empilhados por estágio": 2,
+                "2×2 → dois 2×2 empilhados por estágio": 2, "Cabeça FC (+ Dropout) → GAP": 17, "BatchNorm não → sim": 8,
+                "Stride da conv1 4 → 2": 8, "3 max-pools 3×3 → 2 max-pools 2×2": 8, "Dropout 0 → 0,5 (só cabeça FC)": 6,
+                "Pré-treino ImageNet": 3}
+
+
+def test_the_design_has_every_contrast_and_no_orphan_cell():
+    from scripts.phase11.factor_effects import design_cells, pairs_of
+
+    cells, pairs = design_cells(), pairs_of(design_cells())
+    assert pairs.groupby("contrast").size().to_dict() == DESIGN_PAIRS
+    assert set(cells.cell) == set(pairs.cell_a) | set(pairs.cell_b), "a design cell no contrast reads: compute for nothing"
+    seeds = [set(load_config(f"experiments/phase_11_kernel_head_bn_seed{s}.yaml")["models"]) for s in (43, 44)]
+    assert seeds[0] == seeds[1] == set(cells[(cells.family == "alexnet") & (cells.stride == 2) & (cells.pooling == "2pool2x2")
+                                             & (cells["head"] == "gap") & cells.bn & cells.kernels.isin(
+                                                 ["k11-5-3", "k3x3", "k2x2", "kalt3-2"])].cell)  # 4 kernels x 3 seeds

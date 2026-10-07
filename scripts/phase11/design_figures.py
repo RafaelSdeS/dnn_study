@@ -228,7 +228,7 @@ def fig_grid(df, figs, note, band):
                     c = NEUTRAL if small else "k"
                 ax.text(j, i, txt, ha="center", va="center", fontsize=9, color="white" if c == "k" and on_dark[i, j] else c)
         ax.set_xticks(range(len(cols)))
-        ax.set_xticklabels([f"{'GAP' if h == 'gap' else 'FC'}\n{'com BN' if bn else 'sem BN'}" for h, bn in cols])
+        ax.set_xticklabels([f"{'GAP' if h == 'gap' else 'FC + Dropout'}\n{'com BN' if bn else 'sem BN'}" for h, bn in cols])
         approx = {k for k in K4 if d[d.kernels == k].approx.any()}
         ax.set_yticks(range(len(K4)))
         ax.set_yticklabels([KLABEL[k] + "†" * (k in approx) for k in K4])

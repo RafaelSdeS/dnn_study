@@ -1429,3 +1429,22 @@ frozen: the per-channel symmetric grid of W*gamma/sigma is gamma/sigma times the
 picked on one cell. The BN-intact run, criteria fixed before it ran: test FP32 53.50 (= PCAD's, the FP32 reuse is exact),
 QAT 53.68, INT8 53.64; `agreement_qat_int8` 0.9892 (0.9617 with the fused fake-quant and the old QAT; >= 0.98 required);
 best QAT epoch 16; `int8_kernel_max_err_steps` 1.
+
+**Tests that look for the errors that would invalidate a result** (2026-10-07, after a review of the code the runs
+execute). The review found one more bug: the head contrast had vanished from the analysis. `factor_effects.pairs_of`
+pairs cells equal in every other factor, and after the FC -> FC + Dropout swap GAP (no Dropout) and the FC head (Dropout)
+differ in two -- the head contrast fell from 17 matched pairs to the 6 no-Dropout ones. Fixed: a PAIRS level may move two
+columns, and the head contrast is GAP vs FC + Dropout (`FC_HEAD`/`GAP_HEAD`). New tests, each shown to fail on the bug
+it is for:
+
+| Test | Checks | Shown to catch |
+|---|---|---|
+| `test_quantization.py::test_every_int8_layer_computes_what_its_qat_layer_simulated` (72 models) | per layer, same quantized input: INT8 kernel within 1 step of exact int32, the QAT layer within 1 step of it, logits layer equal | the fused fake-quant (version=1): "QAT != INT8 definition"; fbgemm's int16 saturation: "INT8 kernel off exact int32" |
+| `test_phase11_figures.py::test_the_design_has_every_contrast_and_no_orphan_cell` | matched pairs per contrast pinned to the design; every cell in some contrast; the noise floor's 4 cells in both seed yamls | the head contrast above (6 pairs vs 17) |
+| `test_phase11_runs.py` (new) | every synced run on the current QUANT_PROTOCOL: protocol == its yaml's, every job clean and in this branch's history, 500/50 epochs, alive (top-1 >> chance, finite loss), INT8 kernel and agreement guards, all logits; one dataset; older-protocol runs listed as a warning | a run on uncommitted code (the laptop diagnostic run) |
+| `test_phase11_runs.py::test_the_test_set_and_the_split_are_what_the_protocol_says` | test set 50 per class through the train class indices; 90/10 split disjoint and fixed by the seed | -- (holds on the real data) |
+| `test_train_pipeline.py::test_two_fresh_runs_with_the_same_seed_train_the_same_weights` | two runs from scratch, bit-identical FP32 and QAT weights | `set_global_seed` removed: QAT weights differ |
+| `test_train_pipeline.py::test_a_qat_redone_on_archived_artifacts_records_its_own_training_time` | a re-QAT records its own time, FP32's kept | the bug fixed in 01349d2 |
+
+`test_phase11_runs.py` reads the tracked outputs, so it checks the real runs once they are synced from PCAD into git.
+Full suite: 309 passed, 1 skipped (no current-protocol run synced yet).

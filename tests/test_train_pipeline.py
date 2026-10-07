@@ -212,3 +212,16 @@ def test_a_run_dir_of_another_protocol_is_refused_not_resumed(tmp_path):
     train.refuse_foreign_run_dir(tmp_path, new_qat)
     with pytest.raises(SystemExit, match="another protocol"):  # FP32 still guarded
         train.refuse_foreign_run_dir(tmp_path, {**new_qat, "experiment": {"seed": 43}})
+
+
+def test_two_fresh_runs_with_the_same_seed_train_the_same_weights(tmp_path, monkeypatch):
+    """Seeding is the whole pipeline's (data order, init, QAT): two runs from scratch end bit-identical on CPU. Catches a
+    seeding regression (e.g. cudnn.benchmark, an unseeded RNG) before it splits a seed's runs across machines."""
+    states = []
+    for d in ("a", "b"):
+        _, run_root = _run(tmp_path / d, monkeypatch, ["fp32", "qat"])
+        states.append({p.name: torch.load(p, weights_only=False)["model_state_dict"]
+                       for p in (run_root / "checkpoints").glob("*_best.pth")})
+    assert states[0].keys() == states[1].keys() == {"tiny_best.pth", "qat_tiny_best.pth"}
+    for name in states[0]:
+        assert all(torch.equal(v, states[1][name][k]) for k, v in states[0][name].items()), name

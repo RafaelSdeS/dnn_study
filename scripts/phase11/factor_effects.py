@@ -42,12 +42,15 @@ FACTOR_FIG = {"Cabeça (FC → GAP)": "05_head_fc_vs_gap.png", "Stride da conv1 
 # The factors a matched pair holds fixed. pooling = '<n>pool<k>x<k>' (count and window always change together here);
 # map_side follows from kernels + geometry, so it is not a pairing key.
 FACTORS = ["family", "kernels", "stride", "pooling", "head", "bn", "dropout", "pretrained"]
-# (factor, level a, level b, label): delta = b - a over every pair of cells equal in all other factors
+# (factor, level a, level b, label): delta = b - a over every pair of cells equal in all other factors. A level may be a
+# {column: value} dict when the factor moves two columns: the head contrast is GAP vs the reference nets' FC head, which
+# has Dropout (2026-10-07) -- a GAP head has none, so head and dropout change together
+FC_HEAD, GAP_HEAD = {"head": "fc", "dropout": True}, {"head": "gap", "dropout": False}
 PAIRS = [("kernels", "k11-5-3", "k3x3", "Kernel 11-5-3-3-3 → 3×3"), ("kernels", "k3x3", "k2x2", "Kernel 3×3 → 2×2"),
          ("kernels", "k11-5-3", "k2x2", "Kernel 11-5-3-3-3 → 2×2"), ("kernels", "k3x3", "kalt3-2", "Kernel 3×3 → alternado 3-2"),
          ("kernels", "k3x3", "k3x3stacked", "3×3 → dois 3×3 empilhados por estágio"),
          ("kernels", "k2x2", "k2x2stacked", "2×2 → dois 2×2 empilhados por estágio"),
-         ("head", "fc", "gap", "Cabeça FC → GAP"), ("bn", False, True, "BatchNorm não → sim"),
+         ("head", FC_HEAD, GAP_HEAD, "Cabeça FC (+ Dropout) → GAP"), ("bn", False, True, "BatchNorm não → sim"),
          ("stride", 4, 2, "Stride da conv1 4 → 2"), ("pooling", "3pool3x3", "2pool2x2", "3 max-pools 3×3 → 2 max-pools 2×2"),
          ("dropout", False, True, "Dropout 0 → 0,5 (só cabeça FC)"), ("pretrained", False, True, "Pré-treino ImageNet")]
 FIGURE_OF = {"head": "Cabeça (FC → GAP)", "stride": "Stride da conv1 (4 → 2)", "pooling": "Pooling", "dropout": "Dropout (0 → 0,5)",
@@ -77,12 +80,14 @@ def design_cells():
 
 
 def pairs_of(cells):
-    """Every (a, b) of cells equal in all FACTORS but the one a PAIRS entry varies; the other columns of a and b come
+    """Every (a, b) of cells equal in all FACTORS but the one(s) a PAIRS entry varies; the other columns of a and b come
     along with _a / _b suffixes, the shared factors as plain columns."""
     out = []
     for f, a, b, label in PAIRS:
-        others = [x for x in FACTORS if x != f]
-        j = cells[cells[f] == a].set_index(others).join(cells[cells[f] == b].set_index(others), lsuffix="_a", rsuffix="_b", how="inner")
+        a, b = (lv if isinstance(lv, dict) else {f: lv} for lv in (a, b))
+        others = [x for x in FACTORS if x not in a]
+        side = lambda lv: cells[np.logical_and.reduce([cells[c] == v for c, v in lv.items()])].set_index(others)  # noqa: E731
+        j = side(a).join(side(b), lsuffix="_a", rsuffix="_b", how="inner")
         out.append(j.reset_index().assign(factor=f, contrast=label))
     return pd.concat(out, ignore_index=True)
 
@@ -93,7 +98,7 @@ def contrast_list():
 
     rows = []
     for r in pairs_of(design_cells()).itertuples():
-        context = cell_label(CELL_FACTORS[r.cell_a], skip=(r.factor,))
+        context = cell_label(CELL_FACTORS[r.cell_a], skip=(r.factor,) + (("dropout",) if r.factor == "head" else ()))
         if r.factor == "kernels":
             factor = COMP if "stacked" in r.cell_b else "Kernel"
             label = f"{r.contrast.removeprefix('Kernel ')} · {context}"
