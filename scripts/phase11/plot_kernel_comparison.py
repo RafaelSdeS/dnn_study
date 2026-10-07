@@ -1,8 +1,8 @@
 """Phase 11 figures 02-04 -- the kernel pattern, one network/layout per figure. Cells are picked by their factors
 (ml/model_registrations.py:CELL_FACTORS, via design_figures.frame); within one panel only the kernel changes.
 
-    02_kernel_original_layout.png  AlexNet, torchvision's layout: FC + Dropout (= AlexNet) | FC | GAP
-    03_kernel_64px_layout.png      AlexNet, 64px layout: {GAP, FC} x {no BN, BN} (dots = seeds, where replicated)
+    02_kernel_original_layout.png  AlexNet, torchvision's layout: FC + Dropout (= AlexNet) | GAP
+    03_kernel_64px_layout.png      AlexNet, 64px layout: {GAP, FC + Dropout} x {no BN, BN} (dots = seeds, where replicated)
     04_kernel_vgg16.png            VGG16 + BN at its own geometry: GAP | FC | FC + Dropout (= VGG16)
 
 Figure 01 (accuracy x size) is retired: figure 16 (scripts/phase11/design_figures.py) plots every run against MACs and
@@ -20,20 +20,20 @@ from scripts.phase11.analyze_geometry import BASE_KEY, BASE_LABEL, int8_bar, pre
 from scripts.phase11.design_figures import K4, KCOLOR, KLABEL, frame
 
 ORIGINAL = dict(family="alexnet", stride=4, pooling="3pool3x3", bn=False)
-PX64 = dict(family="alexnet", stride=2, pooling="2pool2x2", dropout=False)
+PX64 = dict(family="alexnet", stride=2, pooling="2pool2x2")
 VGG = dict(family="vgg16")
 FIGURES = {  # file: (title, [(panel title, factor filter)], baseline key, baseline label)
     "02_kernel_original_layout.png": (
         "Kernel no AlexNet de layout original (o do torchvision: conv1 stride 4 + 3 max-pools 3×3/2 → mapa final 1×1 em 64×64)\n"
         "em cada painel só o kernel muda; treino do zero, sem BN, seed 42",
         [("FC + Dropout 0,5 (a cabeça do AlexNet original)", {**ORIGINAL, "head": "fc", "dropout": True}),
-         ("FC sem Dropout", {**ORIGINAL, "head": "fc", "dropout": False}), ("GAP (média global + 1 linear)", {**ORIGINAL, "head": "gap"})],
+         ("GAP (média global + 1 linear)", {**ORIGINAL, "head": "gap"})],
         BASE_KEY, BASE_LABEL),
     "03_kernel_64px_layout.png": (
-        "Kernel no AlexNet de layout 64px (adaptado a 64×64: conv1 stride 2 + 2 max-pools 2×2 → mapa final 8×8, sem Dropout)\n"
+        "Kernel no AlexNet de layout 64px (adaptado a 64×64: conv1 stride 2 + 2 max-pools 2×2 → mapa final 8×8)\n"
         "em cada painel só o kernel muda; treino do zero, seed 42 (pontos = seeds, onde replicada)",
-        [(f"{'GAP' if h == 'gap' else 'FC'} · {'com' if bn else 'sem'} BatchNorm", {**PX64, "head": h, "bn": bn})
-         for h in ("gap", "fc") for bn in (False, True)],
+        [(f"{'GAP' if h == 'gap' else 'FC + Dropout'} · {'com' if bn else 'sem'} BatchNorm",
+          {**PX64, "head": h, "bn": bn, "dropout": h == "fc"}) for h in ("gap", "fc") for bn in (False, True)],
         BASE_KEY, BASE_LABEL),
     "04_kernel_vgg16.png": (
         "Kernel na VGG16 (13 convs + BatchNorm, stride 1, 5 max-pools 2×2 → mapa 2×2), treino do zero, seed 42\n"
@@ -74,7 +74,7 @@ def fig_kernel(df, filename, title, panels, base_key, base_label):
                 seeded = True
                 ax.scatter([i - 0.19] * len(runs), runs.fp32, color="k", s=12, zorder=5)
                 ax.scatter([i + 0.19] * len(runs), runs.int8, color="k", s=12, zorder=5)
-            ticks.append(f"{KLABEL[k]}\n{runs.macs_m.iloc[0]:.0f}M MACs" + (f"\nmédia de {len(runs)} seeds" if len(runs) > 1 else ""))
+            ticks.append(f"{KLABEL[k]}\n{runs.macs_eff_m.iloc[0]:.0f}M MACs" + (f"\nmédia de {len(runs)} seeds" if len(runs) > 1 else ""))
         ax.set_xticks(range(len(ticks)))
         ax.set_xticklabels(ticks, fontsize=9)
         ax.set_title(panel, fontsize=10)

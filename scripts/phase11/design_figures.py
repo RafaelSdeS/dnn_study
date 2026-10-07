@@ -146,10 +146,11 @@ def seed42(df):
 
 
 def grid_cells(df, family="alexnet", geom=(2, 2, 2)):
-    """The from-scratch, no-Dropout cells of one geometry (the main factorial's slice)."""
+    """The from-scratch cells of one geometry with each head as the reference nets have it -- GAP, or FC with AlexNet's
+    Dropout 0.5 (since 2026-10-07; the FC cells without Dropout are only the Dropout contrast): the main factorial's slice."""
     g = seed42(df)
     return g[(g.family == family) & (g.stride == geom[0]) & (g.pool_kernel == geom[1]) & (g.pool_count == geom[2])
-             & ~g.dropout.astype(bool) & ~g.pretrained.astype(bool)]
+             & ((g["head"] == "gap") | g.dropout.astype(bool)) & ~g.pretrained.astype(bool)]
 
 
 def baseline(df):
@@ -167,7 +168,7 @@ def legend_kernels(kernels):
 def fig_pareto(df, figs, note):
     d = seed42(df).dropna(subset=["int8"])
     fig, axes = plt.subplots(1, 2, figsize=(16, 7), sharey=True)
-    for ax, x, xlabel in [(axes[0], "macs_m", "MACs por imagem (milhões, escala log)"), (axes[1], "int8_mb", "Tamanho do modelo INT8 (MB, escala log)")]:
+    for ax, x, xlabel in [(axes[0], "macs_eff_m", "MACs por imagem (milhões, escala log)"), (axes[1], "int8_eff_mb", "Tamanho do modelo INT8 (MB, escala log)")]:
         for r in d.itertuples():
             ax.scatter(getattr(r, x), r.fp32, marker=HMARK[r.hk], s=28, color=color(r), alpha=0.22, edgecolors="none", zorder=2)
             ax.scatter(getattr(r, x), r.int8, marker=HMARK[r.hk], s=75, color=color(r), zorder=3,
@@ -263,7 +264,7 @@ def fig_geometry(df, figs, note):
                                     Line2D([], [], color=TEXT_SECONDARY, marker="o", ls="--", lw=1.4, label="cabeça GAP (tracejada, só nos 2 layouts)"),
                                     Line2D([], [], color="#333333", ls=":", lw=1.3, label="AlexNet original do zero (com Dropout)")]
     fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=4, fontsize=9)
-    fig.suptitle("O custo do kernel depende da geometria? Mesmas redes (sem BN, sem Dropout), só muda como a rede reduz o mapa\n"
+    fig.suptitle("O custo do kernel depende da geometria? Mesmas redes (sem BN; FC = cabeça do AlexNet, com Dropout), só muda como a rede reduz o mapa\n"
                  "da esquerda (layout 64px) para a direita (layout do AlexNet original); linhas não paralelas = interação kernel × geometria\n"
                  + note, fontsize=11)
     fig.tight_layout()
@@ -326,7 +327,7 @@ def fig_latency(df, figs, note):
                          (axes[2], "lat_int8", "INT8 na CPU, batch 1")]:
         for r in d.dropna(subset=[m]).itertuples():
             same = r.machine == ref
-            ax.scatter(r.macs_m, getattr(r, m), marker=HMARK[r.hk], s=55, zorder=3,
+            ax.scatter(r.macs_eff_m, getattr(r, m), marker=HMARK[r.hk], s=55, zorder=3,
                        **(dict(color=color(r), edgecolors="white") if same else dict(facecolors="none", edgecolors=color(r), lw=1.2)))
         plain_log(ax, "x", "y")
         ax.set_xlabel("MACs por imagem (milhões, log)")

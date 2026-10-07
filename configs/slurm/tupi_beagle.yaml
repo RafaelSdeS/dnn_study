@@ -1,0 +1,13 @@
+# PCAD SLURM config: a job eligible for tupi (RTX 4090) AND beagle (GTX 1080 Ti), starting on whichever frees first --
+# the overflow that used to be done by hand (scontrol update ... Partition=tupi,beagle MinMemoryNode=16384). Same protocol
+# on both: INT8 accuracy is exact on any CPU (ml.quantization.ACCURACY_ENGINE) and TF32 is off (scripts/train.py); only
+# latency is machine-bound (compared within one machine). For the AlexNet / family cells; VGG16 stays on tupi_4090.
+partition: tupi,beagle
+gres: gpu:1
+nodes: 1
+cpus_per_task: 8
+mem: 15G  # fits beagle's 32086 MB node; the Phase 11 AlexNet cells ran with it there
+time: "24:00:00"
+requeue: true
+signal: "B:USR1@900"  # see tupi_4090.yaml
+open_mode: append

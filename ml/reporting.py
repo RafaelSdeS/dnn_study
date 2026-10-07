@@ -214,6 +214,23 @@ def compute_flops(model, input_size: tuple = (1, 3, 64, 64)) -> dict:
     return {"macs": macs, "flops": macs * 2}
 
 
+def replicated_fc_weights(model, input_size: tuple = (1, 3, 64, 64)) -> int:
+    """Weights of a Linear fed by an upsampling AdaptiveAvgPool2d -- a k x k map resampled to more cells, as torchvision's
+    AlexNet/VGG heads do at 64 px (1x1 -> 6x6 is 36 copies) -- that only multiply copies. The pool is linear, so that
+    Linear folds exactly into one on min(k*k, cells) positions: these weights (= MACs per image, = bytes at INT8) are
+    cost the function does not need. 0 without such a head. Works on the meta device (shapes only)."""
+    order = []
+    hooks = [m.register_forward_hook(lambda mod, i, o: order.append((mod, i[0].shape, o.shape)))
+             for m in model.modules() if isinstance(m, (nn.AdaptiveAvgPool2d, nn.Linear))]
+    with torch.no_grad():
+        model.eval()(torch.zeros(input_size, device=next(model.parameters()).device))
+    for h in hooks:
+        h.remove()
+    return sum((y[-2] * y[-1] - x[-2] * x[-1]) * y[1] * lin.out_features
+               for (pool, x, y), (lin, _, _) in zip(order, order[1:])
+               if isinstance(pool, nn.AdaptiveAvgPool2d) and isinstance(lin, nn.Linear) and x[-2] * x[-1] < y[-2] * y[-1])
+
+
 def expected_calibration_error(logits: torch.Tensor, labels: torch.Tensor, n_bins: int = 15) -> float:
     """ECE: mean |accuracy - confidence| over n_bins equal-width softmax-confidence bins,
     weighted by bin occupancy. Standard calibration metric (Guo et al. 2017)."""

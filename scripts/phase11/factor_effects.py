@@ -136,15 +136,15 @@ def contrasts(df):
         seeds = sorted({s for k, s in idx.index if k == a} & {s for k, s in idx.index if k == b})
         if 42 not in seeds:
             continue
-        va, vb = ({c: np.array([idx.loc[(k, s), c] for s in seeds]) for c in ["fp32", "int8", "macs_m", "params_m"]} for k in (a, b))
+        va, vb = ({c: np.array([idx.loc[(k, s), c] for s in seeds]) for c in ["fp32", "int8", "macs_eff_m", "params_eff_m"]} for k in (a, b))
         d = {c: vb[c] - va[c] for c in va}
         rows.append(dict(
             factor=factor, contrast=label, A=a, B=b, n_seeds=len(seeds), **_pair_stats(idx, a, b),
             d_fp32=d["fp32"].mean(), d_fp32_seeds=" / ".join(f"{x:+.2f}" for x in d["fp32"]),
             d_int8=d["int8"].mean(), d_int8_seeds=" / ".join(f"{x:+.2f}" for x in d["int8"]),
             **{f"{c}_{side}": v[c].mean() for side, v in [("A", va), ("B", vb)] for c in ["fp32", "int8"]},
-            macs_change_pct=100 * (vb["macs_m"][0] / va["macs_m"][0] - 1),
-            params_change_pct=100 * (vb["params_m"][0] / va["params_m"][0] - 1), note=note))
+            macs_change_pct=100 * (vb["macs_eff_m"][0] / va["macs_eff_m"][0] - 1),  # effective cost (analyze_geometry.load)
+            params_change_pct=100 * (vb["params_eff_m"][0] / va["params_eff_m"][0] - 1), note=note))
     t = pd.DataFrame(rows)
     for stage in ("fp32", "int8"):  # many tests in one table: family-wise correction (Holm 1979)
         if f"p_{stage}" in t:
@@ -202,7 +202,7 @@ def factorial_cells(df):
     if runs.empty:
         return pd.DataFrame()
     cells = with_pooling(pd.DataFrame([{"cell": r.key, **CELL_FACTORS[r.key], "fp32": r.fp32, "int8": r.int8,
-                                        "params_m": r.params_m, "macs_m": r.macs_m} for r in runs.itertuples()]))
+                                        "params_m": r.params_eff_m, "macs_m": r.macs_eff_m} for r in runs.itertuples()]))  # effective cost
     cells["dqat"] = cells.int8 - cells.fp32
     return cells
 

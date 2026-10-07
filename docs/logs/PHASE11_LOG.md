@@ -1355,3 +1355,77 @@ conv / depthwise / Linear 9216), onednn 0 / 1 / 0, fbgemm 69-103 / 97 / 12; resi
 saturating onednn on 64% (the beagle run above). The structure is code, the same on every machine; the kernels and
 the trained model's agreement are what a machine could change, and both are now checked on the machine the job runs on.
 Replaces two single-model tests (the QAT-definition and fake-quant-present checks) that the 72-model test covers.
+
+## Protocol audit (2026-10-07)
+
+**Why.** The user asked for an audit of the whole infrastructure after the qnnpack fix: no choice without a reference
+(or, if unavoidable, justified and written down), and no hidden trap that could invalidate a result. Focus on what can
+change a conclusion, not on run-to-run noise.
+
+**The INT8 fix holds.** The k3x3 gap_bn pilot's QAT checkpoint re-evaluated on the laptop: qnnpack INT8 = beagle's
+qnnpack INT8 on 99.98% of test predictions (max logit difference 0.008), the local GPU fake-quant = the pilot's QAT
+logits on 99.87%; INT8 0.06 pp under QAT. The 4 pilots: INT8 within 0.22 pp of QAT and 0.3 pp of FP32. 229 tests pass.
+Why `agreement_qat_int8` was 0.96-0.975 and not the pilot gate's 0.99: PyTorch's fused fake-quant (qconfig version 1,
+the default -- also torch's own `get_default_qat_qconfig`) computes per-channel symmetric weight scales in C++ (255/254
+of the observer's, ±0.39%), while `convert()` quantizes with the observer's `calculate_qparams()`: the INT8 weights left
+the grid QAT trained on. Converting with the fused scales lifted the agreement 0.9614 -> 0.9850 (top-1 +0.01 pp); the rest
+is fp32 rounding (fake-quant on GPU vs CPU agree on 98.6%). Fixed: `INT8_QAT_QCONFIG` from `version=0` (plain
+FakeQuantize, scale == calculate_qparams, mismatch 0 measured), and `scripts/train.py` switches the trained QAT model's
+observers off before converting (convert runs each weight through its fake-quant; an observer still on moved the grid).
+
+**Decisions** (references in `_protocols/no_patience.yaml`'s header):
+
+| Choice | Value | Reference / reason |
+|---|---|---|
+| Optimizer | SGD m0.9, lr 0.01, wd 5e-4, bs 128, every net | Krizhevsky et al. 2012 Sec. 5; Simonyan & Zisserman 2015 Sec. 3.1 used the same values |
+| Schedule, loss | cosine to 0, label smoothing 0.1 | He, T. et al. CVPR 2019 ("Bag of Tricks") Sec. 5, the two together across ResNet/Inception/MobileNet. The original AlexNet recipe was considered (2012 + its author's fixed schedule, x 250^(-1/3) at 25/50/75%, Krizhevsky 2014) and rejected: its regularization was set for 1.2M images x 90 epochs, here ~100k x 500, so FC heads would be compared by how they overfit |
+| One recipe for every net | controlled comparison | Radosavovic et al. ICCV 2019. Limitation stated: not MobileNetV2's (wd 4e-5) or ResNet's (lr 0.1, wd 1e-4) own recipe; recipes can reorder architectures (Bello et al. 2021; Wightman et al. 2021) |
+| Data | Tiny ImageNet 64x64 (speed); shifts up to 4 px + flip + AutoAugment | Chrabaszcz et al. 2017 Sec. 3 (ImageNet 64x64: "random image shifts (up to 4 pixels)"; downsampled-ImageNet hyperparameter conclusions carry over); = AlexNet's crop range relative to the image (32/256 = 8/64); Cubuk et al. 2019 |
+| Budget | 500 epochs | the author's choice, so every model converges (352k iterations, < AlexNet's ~844k); checked per run (`convergence()`) |
+| Init | He | deviation from AlexNet's fixed N(0, 0.01), whose starting signal scale grows with sqrt(fan-in) -- with the kernel size this study varies; He et al. 2015 Eq. 10 normalizes by the fan |
+| FC head | with Dropout 0.5 | AlexNet's and VGG's own head (Krizhevsky 2012 Sec. 4.2; Simonyan 2015). The FC-without-Dropout level (every main-grid FC cell until today) is a head no reference uses: the FC pilots memorized the training set (train 99.87% / val 38.5%). It stays only as the Dropout contrast: 64px no-BN x 4 kernels (2 already trained) and VGG 3x3/2x2. Total runs unchanged |
+| Noise floor | 4 kernels x GAP + BN x seeds 42/43/44 (+4 runs) | Bouthillier et al. MLSys 2021. The kernel effect (1-3 pp in the old runs) was the size of the seed band; now every kernel has 3 replicates in one cell |
+| Sanity guard | `MIN_QAT_INT8_AGREEMENT` 0.90 | a check that the code is right, not a reported metric |
+
+**Effective cost of FC heads.** `AdaptiveAvgPool2d(6)` (VGG: 7) upsamples small maps: a 1x1 map becomes 36 copies, and
+fc1 multiplies each with its own weights. The pool is linear, so fc1 folds exactly into a Linear on min(k*k, 36) positions
+(`tests/test_registry.py::test_replicated_fc_weights_fold_away_exactly`). In 18 of the 34 FC cells 36-74% of the
+parameters (and the same number of MACs and INT8 bytes) are such copies -- torchvision's AlexNet at 64 px: 57.8M
+parameters, 21M of which compute the function; VGG16 at a 2x2 map: 94M of 135M. `ml.reporting.replicated_fc_weights`
+counts them; `analyze_geometry.load` adds `params_eff_m`/`macs_eff_m`/`int8_eff_mb`, which figures 03, 16, 20 and the
+factor contrasts' cost changes use; the as-built numbers stay in the tables.
+
+**Operations.** `configs/slurm/tupi_beagle.yaml` (partition `tupi,beagle`, 15G): AlexNet/family jobs start on whichever
+frees first, replacing the manual `scontrol update`; `beagle.yaml` gets 24 h + requeue/signal (8 h without requeue
+before, shorter than a 16 h beagle run). `scripts.cluster` passes `exclude`. `refuse_foreign_run_dir` lets a run dir take
+a new QAT protocol on its FP32 once its `qat_*` checkpoints are archived. Latency: once every run is done, all are
+re-evaluated on one machine type (`exclude: tupi1,tupi2` -> tupi3-6), so figure 20 compares every cell; Phase 11 cells no
+longer run on the laptop (everything in `outputs/pcad`). PCAD is the only copy of the checkpoints: tracked outputs are
+rsynced to the laptop and committed, and the final checkpoints get a second copy.
+
+**Pre-registered analysis** (written before the results):
+- Primary endpoint: top-1 on the test set (Tiny ImageNet's official val), FP32 and INT8.
+- Kernel effect: GAP + BN cell, 3 seeds per kernel; each kernel vs 11-5-3-3-3 as the mean difference with a 95% CI from
+  the pooled replicate SD (pure error, 8 df; Montgomery, Design and Analysis of Experiments).
+- Every other single-seed contrast (matched pairs, `factor_effects`): judged against the noise band
+  2*sqrt(2)*pooled SD; inside it = "no evidence of a difference", never a ranking.
+- Per pair, exact McNemar on the test images (Dietterich 1998), Holm across the contrast table (Holm 1979).
+
+**QAT and BN, measured** (laptop, the k3x3 gap_bn pilot's FP32 checkpoint from PCAD, the real `scripts/train.py` with a
+scratch runtime root; validation top-1 per QAT epoch, FP32 = 54.62):
+
+| QAT BN handling | Epochs 1-3 | Rest of the run |
+|---|---|---|
+| updated, frozen after 3 epochs (protocol until today) | 54.07 / 54.27 / 54.25 | 52.8-53.6 after the freeze |
+| statically folded from the start (Nagel 2021, the first plan) | 53.03 / 53.08 / 53.30 | 52.5-53.3 (stopped at epoch 10) |
+| **intact, never frozen (Wu 2020; Nagel 2021 per-channel)** | 53.93 / 54.08 / 53.99 | 53.9-54.5 for all 50 epochs |
+
+Training with BN frozen at lr 1e-4 costs ~1.5 pp whenever it starts -- not the freeze event. So the protocol keeps BN
+intact (`freeze_bn_epoch: null`), which also takes the whole QAT stage from one reference: Wu et al. leave BN an
+unquantized layer during QAT, and Nagel et al. (Sec. 4.2, eq. 41, Table 7) show that with per-channel weights it folds
+into each channel's scale afterwards, on par or better than static folding. In PyTorch that is the fused Conv-BN never
+frozen: the per-channel symmetric grid of W*gamma/sigma is gamma/sigma times the grid of W. Lr 1e-5 with static folding
+(Krishnamoorthi 2018's fine-tuning step) was the alternative, rejected as a second source for one stage and a value
+picked on one cell. The BN-intact run, criteria fixed before it ran: test FP32 53.50 (= PCAD's, the FP32 reuse is exact),
+QAT 53.68, INT8 53.64; `agreement_qat_int8` 0.9892 (0.9617 with the fused fake-quant and the old QAT; >= 0.98 required);
+best QAT epoch 16; `int8_kernel_max_err_steps` 1.

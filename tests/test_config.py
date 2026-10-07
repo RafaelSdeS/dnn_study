@@ -96,11 +96,13 @@ def test_every_phase_11_experiment_shares_the_protocol_exactly():
     reference = load_config("experiments/phase_11_kernel_head_bn.yaml")
     for key in ("name", "models", "seed"):
         reference.pop(key, None)
-    # AlexNet's recipe (Krizhevsky et al. 2012), cosine to 0, 500 ep; QAT per Wu et al. 2020 App. A.2
+    # AlexNet's optimizer (Krizhevsky et al. 2012), cosine to 0, 500 ep; QAT per Wu et al. 2020 App. A.2, BN intact
+    # (never frozen; Wu 2020, Nagel et al. 2021 Sec. 4.2), EMA ranges throughout (Jacob et al. 2018)
     assert reference["training"] == {"epochs": 500, "early_stopping_patience": None, "optimizer": "sgd", "momentum": 0.9,
                                      "lr": 0.01, "weight_decay": 5e-4}
     assert reference["data"] == {"batch_size": 128, "train_aug": "crop_flip_autoaug"}
-    assert reference["qat"] == {"epochs": 50, "lr": 1e-4, "eta_min": 1e-6, "weight_decay": 5e-4, "disable_observer_epoch": 4}
+    assert reference["qat"] == {"epochs": 50, "lr": 1e-4, "eta_min": 1e-6, "weight_decay": 5e-4, "freeze_bn_epoch": None,
+                                "disable_observer_epoch": None}
     assert reference["uniform_hparams"] is True
     assert reference["stages"] == ["fp32", "qat", "int8"]
 

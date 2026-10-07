@@ -52,8 +52,8 @@ class QATConfig:
     weight_decay: float = 5e-4
     eta_min: float = 0.0
     # ── observer / BN freeze schedule ────────────────────────────────
-    freeze_bn_epoch: int = 3     # freeze BN running stats after this epoch
-    disable_observer_epoch: int = 5  # disable fake-quant observers after this
+    freeze_bn_epoch: Optional[int] = 3  # freeze BN running stats from this epoch on (None: never, Phase 11)
+    disable_observer_epoch: Optional[int] = 5  # disable fake-quant observers from this epoch on (None: never)
 
 
 @dataclass

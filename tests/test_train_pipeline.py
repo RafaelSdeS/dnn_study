@@ -85,7 +85,9 @@ def test_rerun_with_only_the_qat_best_left_converts_the_trained_qat_model(tmp_pa
     with pytest.raises(Converted):
         _run(tmp_path, monkeypatch, ["fp32", "qat", "int8"])
     qat_best = torch.load(ckpts / "qat_tiny_best.pth", weights_only=False)["model_state_dict"]
-    assert all(torch.equal(captured[k], v) for k, v in qat_best.items())
+    # the trained QAT model, observers switched off for the conversion (scripts/train.py)
+    assert all(torch.equal(captured[k], v) for k, v in qat_best.items() if not k.endswith("observer_enabled"))
+    assert not any(captured[k].any() for k in captured if k.endswith("observer_enabled"))
 
 
 FP32_TRAINING_FIELDS = ("epochs", "epochs_used", "best_val_top1", "best_val_loss", "final_train_loss", "avg_epoch_time_s",
@@ -184,3 +186,13 @@ def test_a_run_dir_of_another_protocol_is_refused_not_resumed(tmp_path):
     for other in ({**cfg, "training": {"lr": 3e-4, "optimizer": "adamw"}}, {**cfg, "experiment": {"seed": 43}}):
         with pytest.raises(SystemExit, match="another protocol"):
             train.refuse_foreign_run_dir(tmp_path, other)
+    # a new QAT protocol on the same FP32: refused while the old QAT checkpoints sit there, passes once archived
+    new_qat = {**cfg, "qat": {"lr": 1e-4, "freeze_bn_epoch": 0}}
+    (tmp_path / "checkpoints").mkdir()
+    (tmp_path / "checkpoints" / "qat_m_best.pth").touch()
+    with pytest.raises(SystemExit, match="another protocol"):
+        train.refuse_foreign_run_dir(tmp_path, new_qat)
+    (tmp_path / "checkpoints" / "qat_m_best.pth").unlink()
+    train.refuse_foreign_run_dir(tmp_path, new_qat)
+    with pytest.raises(SystemExit, match="another protocol"):  # FP32 still guarded
+        train.refuse_foreign_run_dir(tmp_path, {**new_qat, "experiment": {"seed": 43}})

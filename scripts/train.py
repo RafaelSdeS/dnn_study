@@ -59,7 +59,8 @@ DEFAULT_BENCHMARK_BS1_IMAGES = 1000
 # QAT's premise (Jacob et al. 2018): the integer model computes what the fake-quant one simulated. On the test set, exact
 # int32 kernels reproduced QAT's top-1 prediction on 97.5% of images, onednn's saturating ones on 64% (2026-10-06,
 # docs/logs/PHASE11_LOG.md "Machine independence"). A run below this fails its job, its summary kept for diagnosis.
-# ponytail: an empirical cut between those two, not a literature number; tighten it if a broken INT8 ever lands above
+# ponytail: a sanity guard on the code, not a reported metric -- an empirical cut between those two; tighten it if a
+# broken INT8 ever lands above
 MIN_QAT_INT8_AGREEMENT = 0.90
 
 
@@ -221,14 +222,18 @@ def _protocol(cfg: dict[str, Any]) -> dict[str, Any]:
 def refuse_foreign_run_dir(run_root: Path, resolved_config: dict[str, Any]) -> None:
     """Stop if run_root already holds a run trained under another protocol. Its checkpoints are found by name, so
     without this a restored archive, an rsync to the wrong path or a reused experiment name would be resumed or skipped
-    silently and mixed into this run. A Slurm requeue of the same run passes (same protocol)."""
+    silently and mixed into this run. A Slurm requeue of the same run passes (same protocol), and so does a new QAT
+    protocol on the same FP32 once the old QAT artifacts were archived (no qat_* checkpoint left): QAT is then redone
+    from the FP32 checkpoint, which that protocol change does not touch."""
     prior = run_root / "resolved_config.json"
     if not prior.exists():
         return
     old, new = _protocol(json.loads(prior.read_text())), _protocol(resolved_config)
+    if not any((run_root / "checkpoints").glob("qat_*")):
+        old.pop("qat"), new.pop("qat")
     if old != new:
-        diff = {f"{k}.{f}": (old.get(k, {}).get(f), new[k].get(f)) for k in PROTOCOL_KEYS
-                for f in set(old.get(k, {})) | set(new[k]) if old.get(k, {}).get(f) != new[k].get(f)}
+        diff = {f"{k}.{f}": (old.get(k, {}).get(f), new.get(k, {}).get(f)) for k in PROTOCOL_KEYS
+                for f in set(old.get(k, {})) | set(new.get(k, {})) if old.get(k, {}).get(f) != new.get(k, {}).get(f)}
         if old["seed"] != new["seed"]:
             diff["seed"] = (old["seed"], new["seed"])
         raise SystemExit(f"{run_root} holds a run of another protocol (old, new): {diff} -- move it to an "
@@ -533,7 +538,10 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
             for split in ("val", "test"):  # this summary must never read an earlier INT8 evaluation's logits
                 (results_dir / f"{model_name}_int8_{split}_logits.npz").unlink(missing_ok=True)
             if qat_model is not None:
-                # a pickled quantized module can't be loaded back; the state_dict loads on any engine
+                # a pickled quantized module can't be loaded back; the state_dict loads on any engine. Observers off, as
+                # in the QAT evaluation above: convert() runs each weight through its fake-quant, and an observer still
+                # on (the protocol keeps them on through QAT) would move the INT8 grid off the evaluated one
+                qat_model.apply(tq.disable_observer)
                 torch.save(convert_to_int8(qat_model, engine=QUANT_ENGINE).state_dict(), int8_path)
 
             if int8_path.exists():

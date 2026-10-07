@@ -307,3 +307,21 @@ def test_symmetric_pad_has_no_net_shift():
     assert y.shape == (1, 8, 6, 6)
     assert torch.equal(y.mean(1), y.mean(1).flip(-1, -2))
     assert SymmetricPad2d()(torch.ones(1, 3, 5, 5)).shape == (1, 3, 6, 6)  # VGG's RGB stem: 3 groups, 3 corners
+
+
+def test_replicated_fc_weights_fold_away_exactly():
+    """ml.reporting.replicated_fc_weights counts the FC-head weights that only multiply AdaptiveAvgPool copies (the
+    figures' effective cost, 2026-10-07): folding the pool into fc1 gives the same output with exactly that many fewer
+    weights. A 4x4 map resampled to 6x6 -- overlapping windows, the non-trivial case."""
+    from ml.reporting import replicated_fc_weights
+
+    torch.manual_seed(0)
+    m = MODEL_REGISTRY["alexnet_k3x3_stride4_2pool2x2_map4_fcdrop_nobn"]["ctor"]().eval()
+    pool, fc1 = m.features[-1], next(layer for layer in m.classifier if isinstance(layer, torch.nn.Linear))
+    with torch.no_grad():
+        feats = m.features[:-1](torch.randn(2, 3, 64, 64))
+        c, h, w = feats.shape[1:]
+        pooling = pool(torch.eye(h * w).view(h * w, 1, h, w)).flatten(1)  # map position -> pooled cells
+        folded = torch.einsum("ocp,ip->oci", fc1.weight.view(fc1.out_features, c, -1), pooling).reshape(fc1.out_features, -1)
+        assert torch.allclose(fc1(pool(feats).flatten(1)), feats.flatten(1) @ folded.T + fc1.bias, atol=1e-4)
+    assert fc1.weight.numel() - folded.numel() == replicated_fc_weights(m) > 0

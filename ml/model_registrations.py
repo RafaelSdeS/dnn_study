@@ -323,6 +323,13 @@ for _head in ("gap", "fc"):
         _f = _ctor().features
     _register_cell(_ctor, _conv_groups(_f), 1e-3, family="alexnet", kernels="k2x2stacked", stride=2, pool_kernel=2,
                    pool_count=2, map_side=_map_side(_f), head=_head, dropout=False, bn=True, pretrained=False)
+# FC + Dropout 0.5, AlexNet's own head (Krizhevsky et al. 2012 Sec. 4.2): the stacked twins of the grid's fcdrop_bn cells
+for _k in (3, 2):
+    _ctor = partial(AlexNetStacked, head="fc", kernel_size=_k, dropout=0.5)
+    with torch.device("meta"):
+        _f = _ctor().features
+    _register_cell(_ctor, _conv_groups(_f), 1e-3, family="alexnet", kernels=f"k{_k}x{_k}stacked", stride=2,
+                   pool_kernel=2, pool_count=2, map_side=_map_side(_f), head="fc", dropout=True, bn=True, pretrained=False)
 # models/compensation.py — exists since the Phase 2 QAT-drop investigation, never
 # trained (Winograd-FPGA plano_avaliacao_redes_winograd.md Fase 1). No `features`
 # Sequential (named conv/bn/relu attrs instead), so find_fuse_groups like the

@@ -1,7 +1,10 @@
-# PCAD SLURM config: 2x GTX 1080 Ti node on beagle partition
+# PCAD SLURM config: 2x GTX 1080 Ti node on beagle partition (node-exclusive: one job at a time, the 2nd GPU idles)
 partition: beagle
 gres: gpu:1
 nodes: 1
 cpus_per_task: 8  # = tupi_4090: OMP_NUM_THREADS, so CPU/INT8 latency, follows it; the node is exclusive (32 CPUs)
-mem: 16G  # node has 32 GB total DDR3 — leave headroom for the other GPU's job
-time: "08:00:00"  # 8 hours, same budget as tupi_4090 (phase 6 profiling is I/O bound but long)
+mem: 15G  # node has 32086 MB RAM; 15G is what the Phase 11 AlexNet cells ran with there
+time: "24:00:00"  # = tupi_4090; an AlexNet cell takes ~16 h here (FP32 ~2-3x slower than a 4090)
+requeue: true
+signal: "B:USR1@900"  # see tupi_4090.yaml: pre-timeout stop + requeue, resumed from the per-epoch checkpoint
+open_mode: append

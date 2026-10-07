@@ -9,17 +9,19 @@ Runs are picked by their factors (ml/model_registrations.py:CELL_FACTORS, via de
 
 Figure vocabulary (every Phase 11 figure): "layout original" = torchvision's AlexNet geometry (conv1 stride 4, three
 3x3/2 max-pools -> 1x1 map before the classifier at 64x64); "layout 64px" = the adapted one (conv1 stride 2, two 2x2
-max-pools -> 8x8 map, no Dropout). Baseline = BASE_KEY, the original AlexNet trained from scratch.
+max-pools -> 8x8 map). Baseline = BASE_KEY, the original AlexNet trained from scratch.
 
     python -m scripts.phase11.analyze_geometry
 """
 import json
 import re
+from functools import lru_cache
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import yaml
 
 from matplotlib.patches import Patch
 
@@ -34,7 +36,7 @@ ARCHIVE = RUNS[0] / "archive_adamw_recipe"  # the superseded AdamW-recipe runs, 
 BASE_KEY = "alexnet_k11-5-3_stride4_3pool3x3_map1_fcdrop_nobn"  # the original AlexNet (torchvision layout), from scratch
 BASE_LABEL = "AlexNet original do zero (baseline)"
 LAYOUTS = ("layout original = o do AlexNet torchvision: conv1 stride 4 + 3 max-pools 3×3/2 → mapa final 1×1 em 64×64\n"
-           "layout 64px = adaptado a 64×64: conv1 stride 2 + 2 max-pools 2×2 → mapa final 8×8, sem Dropout")
+           "layout 64px = adaptado a 64×64: conv1 stride 2 + 2 max-pools 2×2 → mapa final 8×8")
 
 
 def load(*roots: Path) -> pd.DataFrame:
@@ -44,7 +46,9 @@ def load(*roots: Path) -> pd.DataFrame:
     runs have (design_figures --archive draws those). `results` is the run's results dir, where the per-image
     *_test_logits.npz live (factor_effects' McNemar tests). roots default to RUNS (every runtime: a cell may have run on
     PCAD or the laptop, never on both); ARCHIVE reads the superseded runs.
-    lat_* = forward latency per image at batch 1 (ms): FP32 on the training GPU and on CPU, INT8 on CPU."""
+    lat_* = forward latency per image at batch 1 (ms): FP32 on the training GPU and on CPU, INT8 on CPU.
+    params_eff_m/macs_eff_m/int8_eff_mb = the same costs without the FC-head weights that only multiply AdaptiveAvgPool
+    copies (replicated_weights): the cost axes of the figures; the as-built ones stay for the tables."""
     from ml.quantization import QUANT_PROTOCOL
 
     rows = []
@@ -72,10 +76,28 @@ def load(*roots: Path) -> pd.DataFrame:
     assert not df[df.post_fix & df.git_dirty].shape[0], df[df.post_fix & df.git_dirty][["exp", "key", "git_hash"]]
     twice = df[df.duplicated(["exp", "key"], keep=False)]  # one canonical result per cell (CLAUDE.md): archive the other
     assert twice.empty, twice[["exp", "key", "results"]]
+    rep = df.key.map(replicated_weights) / 1e6  # one int8 byte per weight; int8_mb is MiB (ml.reporting.disk_mb)
+    df["params_eff_m"], df["macs_eff_m"], df["int8_eff_mb"] = df.params_m - rep, df.macs_m - rep, df.int8_mb - rep * 1e6 / 2**20
     df["drop_qat"] = df.fp32 - df.qat      # FP32 -> fake-quant (what QAT costs)
     df["drop_convert"] = df.qat - df.int8  # fake-quant -> real INT8 (what convert_to_int8 costs)
     df["drop_total"] = df.fp32 - df.int8
     return df
+
+
+@lru_cache(maxsize=None)
+def replicated_weights(key: str) -> int:
+    """ml.reporting.replicated_fc_weights of a run's architecture, built on the meta device: shapes only, and a
+    pretrained net is measured on its from-scratch twin's identical architecture, so no weights are downloaded."""
+    import torch
+    import ml.model_registrations  # noqa: F401
+    from ml.registry import MODEL_REGISTRY
+    from ml.reporting import replicated_fc_weights
+
+    arch = next((k for k in (key.removesuffix("_pretrained"), f"{key}_scratch", key) if k in MODEL_REGISTRY), None)
+    if arch is None:  # ponytail: an archived run whose name left the registry -- as built, only the --archive preview
+        return 0
+    with torch.device("meta"):
+        return replicated_fc_weights(MODEL_REGISTRY[arch]["ctor"]())
 
 
 def savefig(fig, name, figs=None):
@@ -121,7 +143,8 @@ def main_grid_table(df):
 
 
 def kernel_geometry_table(df):
-    """Top-1 of every AlexNet cell without BN, Dropout or pretraining, by kernel x geometry x head (seed 42)."""
+    """Top-1 of every AlexNet cell without BN or pretraining (FC = AlexNet's head, with Dropout), by kernel x geometry x
+    head (seed 42)."""
     from scripts.phase11.design_figures import GEOMS, grid_cells
 
     d = pd.concat([grid_cells(df, geom=g).assign(geometry=GEOMS[g].replace("\n", " ")) for g in GEOMS])
@@ -163,7 +186,8 @@ def fig_convert(df):
     savefig(fig, "15_quantization_drop_where.png")
 
 
-NOISE_KEYS = ["alexnet_k3x3_stride2_2pool2x2_map8_gap_bn", "alexnet_k2x2_stride2_2pool2x2_map8_gap_bn"]
+# the cells replicated at seeds 43/44: read off their yaml, so the noise floor is whatever the design reruns
+NOISE_KEYS = yaml.safe_load((ROOT / "configs/experiments/phase_11_kernel_head_bn_seed43.yaml").read_text())["models"]
 
 
 def noise_band(df, keys=NOISE_KEYS):

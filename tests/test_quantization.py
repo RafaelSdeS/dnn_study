@@ -198,6 +198,16 @@ def test_qat_callback_with_no_observer_freeze_keeps_ranges_adapting():
     assert fake_quants and all(int(m.observer_enabled[0]) == 1 for m in fake_quants)
 
 
+def test_phase_11_qat_keeps_bn_intact_and_ranges_adapting():
+    """The Phase 11 QAT (2026-10-07): BN never frozen (Wu et al. 2020; Nagel et al. 2021 Sec. 4.2 -- per-channel weight
+    scales absorb it at conversion), EMA ranges throughout (Jacob et al. 2018): nothing changes at any epoch."""
+    qat = prepare_qat_model(nn.Sequential(nn.Conv2d(3, 4, 3), nn.BatchNorm2d(4), nn.ReLU(inplace=False)),
+                            [["0", "1", "2"]])
+    make_qat_callback(freeze_bn_epoch=None, disable_observer_epoch=None)(49, qat)
+    assert not qat[0].freeze_bn and qat[0].bn.training
+    assert all(int(m.observer_enabled[0]) == 1 for m in qat.modules() if isinstance(m, tq.FakeQuantizeBase))
+
+
 def test_int8_avg_pool_requantizes_instead_of_inheriting_its_input_scale():
     """Regression test for the quantized-GAP gap (docs/logs/PHASE11_LOG.md): eager INT8 avg pooling keeps its
     input's scale, and QAT had no observer after the pool, so fake-quant and INT8 disagreed on every GAP model.

@@ -1,28 +1,37 @@
 # The Phase 11 protocol -- every phase_11_*.yaml extends it, and tests/test_config.py fails any that drifts. Every
 # model from scratch (a pretrained cell is a contrast, each with its from-scratch twin -- tests/test_config.py) on the
-# same fixed budget (no early stopping: epochs_used == epochs_budget for every run), the
-# same recipe for all (uniform_hparams bypasses the registry's per-model lr), every value from a reference
-# (docs/logs/PHASE11_LOG.md, "One recipe, every number from a reference", 2026-10-03):
-#   optimizer  SGD, momentum 0.9, lr 0.01, L2 weight decay 5e-4, batch 128 -- AlexNet's own recipe (Krizhevsky et al.,
-#              NeurIPS 2012), for every net; VGG's paper used the same values at batch 256 (Simonyan & Zisserman, ICLR 2015)
-#   schedule   cosine annealing to 0 (Loshchilov & Hutter, ICLR 2017) in place of AlexNet's /10 on plateau; no warmup,
-#              like AlexNet at this lr/batch (warmup is for large-minibatch lr scaling, Goyal et al. 2017); a fixed
-#              budget with the LR decayed to zero (Li, Yumer & Ramanan, ICLR 2020). 500 epochs = 352k iterations at batch 128: between CIFAR's
-#              long schedules (WRN 200 ep ~78k, DenseNet 300 ep ~234k) and ImageNet's (ResNet 600k at batch 256,
-#              AlexNet ~844k at batch 128: 90 epochs x 1.2M / 128); per-run convergence: scripts/phase11/analyze_geometry.py convergence()
-#   data       4-px pad + random crop + flip (He et al., CVPR 2016), AutoAugment ImageNet policy (Cubuk et al., CVPR 2019)
+# same fixed budget (no early stopping: epochs_used == epochs_budget for every run), the same recipe for every net
+# (uniform_hparams bypasses the registry's per-model lr; one fixed setup to compare architectures: Radosavovic et al.,
+# ICCV 2019 -- limitation: it is not MobileNetV2's or ResNet's own recipe, and the recipe can reorder architectures,
+# Bello et al., NeurIPS 2021; Wightman et al. 2021). Every value from a reference (docs/logs/PHASE11_LOG.md, "One
+# recipe, every number from a reference", 2026-10-03, and "Protocol audit", 2026-10-07):
+#   optimizer  SGD, momentum 0.9, lr 0.01, L2 weight decay 5e-4, batch 128 -- AlexNet's (Krizhevsky et al., NeurIPS 2012
+#              Sec. 5); VGG used the same values (Simonyan & Zisserman, ICLR 2015 Sec. 3.1, batch 256)
+#   schedule   cosine annealing to 0, label smoothing 0.1 (configs/training.yaml) -- the two training refinements He, T.
+#              et al. ("Bag of Tricks", CVPR 2019 Sec. 5) apply together across ResNet, Inception and MobileNet; no
+#              warmup (it is for large-batch lr scaling, Goyal et al. 2017)
+#   budget     500 epochs (the author's choice, so every model converges; 352k iterations, fewer than AlexNet's ~844k),
+#              checked per run by scripts/phase11/analyze_geometry.py convergence()
+#   data       Tiny ImageNet, 64x64 (chosen for speed; hyperparameter conclusions carry over between downsampled and
+#              full ImageNet, Chrabaszcz et al. 2017). Random shifts up to 4 px (pad 4 + random crop) + horizontal flip:
+#              Chrabaszcz et al. 2017 Sec. 3 on ImageNet 64x64 -- also AlexNet's own translation range relative to the
+#              image (224 crops of 256: 32/256 = 8/64 = 12.5%); AutoAugment's ImageNet policy on top (Cubuk et al., CVPR 2019)
 #   split      a 90/10 train/validation hold-out of train/ picks the best epoch (He et al., CVPR 2016 Sec. 4.2: CIFAR-10's
 #              45k/5k); every number is reported on Tiny ImageNet's official val, kept as the test set (Cawley & Talbot,
 #              JMLR 2010)
-#   init       He et al. (ICCV 2015) in every from-scratch model (models/baselines.py:he_init)
-#   loss       label smoothing 0.1 (Szegedy et al., CVPR 2016), configs/training.yaml; mixed-precision training,
-#              FP32 evaluation (Micikevicius et al., ICLR 2018)
+#   init       He et al. (ICCV 2015) in every from-scratch model (models/baselines.py:he_init) -- in place of AlexNet's
+#              fixed N(0, 0.01): a fixed std makes the starting signal scale grow with sqrt(fan-in), i.e. with the
+#              kernel size this study varies; He's std is normalized by the fan (He et al. 2015 Eq. 10)
+#   precision  mixed-precision training, FP32 evaluation (Micikevicius et al., ICLR 2018)
 #   QAT        Wu et al. 2020 App. A.2 ("around 1/10th of the original training steps ... starts at 1/100th of the
 #              initial value ... decayed down to 1/100th of the initial fine-tuning learning rate", cosine, only the lr
-#              and its schedule change): 50 ep, lr 1e-4 -> 1e-6, same SGD; BN stats update during the first 3 QAT epochs
-#              (qat.yaml), observers during the first 4 -- torchvision's references/classification/train_quantization.py
-#              defaults as its help states them ("number of total epochs to update"); its loop applies each one epoch
-#              later (5 and 4)
+#              and its schedule change): 50 ep, lr 1e-4 -> 1e-6, same SGD. BN kept intact through QAT -- Wu et al. leave it
+#              an unquantized layer, folded only for inference; with per-channel weights its scale folds into each
+#              channel's quantization scale afterwards, "on par or better" than static folding (Nagel et al. 2021
+#              Sec. 4.2, Table 7) -- which is PyTorch's fused Conv-BN never frozen. Activation ranges by EMA throughout
+#              QAT (Jacob et al., CVPR 2018 Sec. 3.1). No freeze epoch to choose. Until 2026-10-07: BN frozen after 3
+#              epochs, observers after 4 (torchvision's train_quantization.py defaults); training with BN frozen at this lr
+#              cost a BN net ~1.5 pp val (PHASE11_LOG "Protocol audit").
 # The QAT stage inherits early_stopping_patience and the optimizer from `training:` (scripts/train.py builds its config
 # with replace()).
 seed: 42
@@ -46,4 +55,5 @@ qat:
   lr: 1.0e-4
   eta_min: 1.0e-6
   weight_decay: 5.0e-4
-  disable_observer_epoch: 4
+  freeze_bn_epoch: null
+  disable_observer_epoch: null

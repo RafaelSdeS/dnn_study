@@ -1,7 +1,8 @@
-# Phase 11 minimal design (docs/logs/PHASE11_LOG.md "Minimal design, symmetric 2x2 padding, scratch twins"). Does the
-# kernel effect replicate in a deeper net with BN? VGG16 + BN at its own geometry (stride 1, five 2x2 pools, 2x2 map):
-# kernels {3x3, 2x2, alternating 3-2} x head {GAP, FC} = 6, + VGG16's own head (FC + Dropout) for 3x3 (= torchvision's
-# VGG16) and 2x2 = 2, + the pretrained (vgg16_bn) twin of the 3x3 one = 9 (figures 04, 05, 09).
+# Phase 11 minimal design (docs/logs/PHASE11_LOG.md "Minimal design, symmetric 2x2 padding, scratch twins" and
+# "Protocol audit", 2026-10-07). Does the kernel effect replicate in a deeper net with BN? VGG16 + BN at its own geometry
+# (stride 1, five 2x2 pools, 2x2 map): kernels {3x3, 2x2, alternating 3-2} x head {GAP, FC + Dropout -- VGG16's own head,
+# Simonyan & Zisserman 2015} = 6 (the 3x3 FC one = torchvision's VGG16), + the FC head without Dropout for 3x3 and 2x2
+# = 2 (the Dropout contrast), + the pretrained (vgg16_bn) twin of the 3x3 one = 9 (figures 04, 05, 08, 09).
 # Same protocol as every Phase 11 run (_protocols/no_patience.yaml), enforced by tests/test_config.py. Model names:
 # ml/model_registrations.py (CELL_FACTORS). Queued one job per model on PCAD (scripts/pcad/feed_queue.sh):
 #   python -m scripts.cluster submit --experiment phase_11_vgg_kernel_head --runtime pcad --slurm tupi_4090 --model <m>
@@ -9,11 +10,11 @@ extends: _protocols/no_patience
 name: phase_11_vgg_kernel_head
 models:
   - vgg16_k3x3_stride1_5pool2x2_map2_gap_bn
-  - vgg16_k3x3_stride1_5pool2x2_map2_fc_bn
-  - vgg16_k2x2_stride1_5pool2x2_map2_gap_bn
-  - vgg16_k2x2_stride1_5pool2x2_map2_fc_bn
-  - vgg16_kalt3-2_stride1_5pool2x2_map2_gap_bn
-  - vgg16_kalt3-2_stride1_5pool2x2_map2_fc_bn
   - vgg16_k3x3_stride1_5pool2x2_map2_fcdrop_bn
+  - vgg16_k2x2_stride1_5pool2x2_map2_gap_bn
   - vgg16_k2x2_stride1_5pool2x2_map2_fcdrop_bn
+  - vgg16_kalt3-2_stride1_5pool2x2_map2_gap_bn
+  - vgg16_kalt3-2_stride1_5pool2x2_map2_fcdrop_bn
+  - vgg16_k3x3_stride1_5pool2x2_map2_fc_bn
+  - vgg16_k2x2_stride1_5pool2x2_map2_fc_bn
   - vgg16_k3x3_stride1_5pool2x2_map2_fcdrop_bn_pretrained

@@ -1,28 +1,25 @@
-# Phase 11 minimal design (docs/logs/PHASE11_LOG.md "Minimal design, symmetric 2x2 padding, scratch twins"). Does the
-# kernel effect depend on how the net downsamples? torchvision's AlexNet layout (conv1 stride 4, three 3x3 pools, 1x1 map
-# at 64px) x the 4 kernels x head {GAP, FC} = 8 (figure 02), plus the two one-factor steps between it and the 64px layout
-# of phase_11_kernel_head_bn -- stride 4 with two 2x2 pools, stride 2 with three 3x3 pools -- FC only (the original
-# AlexNet's head) x the 4 kernels = 8 (figures 06, 07, 13), no BN. A 2x2 kernel at stride 4 reads only 25% of the pixels:
-# the kernel x stride interaction. Same protocol as every Phase 11 run (_protocols/no_patience.yaml), enforced by
-# tests/test_config.py. Model names: ml/model_registrations.py (CELL_FACTORS). Queued one job per model on PCAD
-# (scripts/pcad/feed_queue.sh):
-#   python -m scripts.cluster submit --experiment phase_11_kernel_geometry --runtime pcad --slurm tupi_4090 --model <m>
+# Phase 11 minimal design (docs/logs/PHASE11_LOG.md "Minimal design, symmetric 2x2 padding, scratch twins" and
+# "Protocol audit", 2026-10-07). Does the kernel effect depend on how the net downsamples? torchvision's AlexNet layout
+# (conv1 stride 4, three 3x3 pools, 1x1 map at 64px) x the 4 kernels with the GAP head = 4 (their FC-head twins, AlexNet's
+# own head with Dropout, are in phase_11_dropout_pretraining; figure 02), plus the two one-factor steps between it and the
+# 64px layout of phase_11_kernel_head_bn -- stride 4 with two 2x2 pools, stride 2 with three 3x3 pools -- FC + Dropout
+# (AlexNet's head, Krizhevsky et al. 2012 Sec. 4.2) x the 4 kernels = 8 (figures 06, 07, 13), no BN. A 2x2 kernel at
+# stride 4 reads only 25% of the pixels: the kernel x stride interaction. Same protocol as every Phase 11 run
+# (_protocols/no_patience.yaml), enforced by tests/test_config.py. Model names: ml/model_registrations.py
+# (CELL_FACTORS). Queued one job per model on PCAD (scripts/pcad/feed_queue.sh):
+#   python -m scripts.cluster submit --experiment phase_11_kernel_geometry --runtime pcad --slurm tupi_beagle --model <m>
 extends: _protocols/no_patience
 name: phase_11_kernel_geometry
 models:
   - alexnet_k11-5-3_stride4_3pool3x3_map1_gap_nobn
-  - alexnet_k11-5-3_stride4_3pool3x3_map1_fc_nobn
   - alexnet_k3x3_stride4_3pool3x3_map1_gap_nobn
-  - alexnet_k3x3_stride4_3pool3x3_map1_fc_nobn
   - alexnet_k2x2_stride4_3pool3x3_map1_gap_nobn
-  - alexnet_k2x2_stride4_3pool3x3_map1_fc_nobn
   - alexnet_kalt3-2_stride4_3pool3x3_map1_gap_nobn
-  - alexnet_kalt3-2_stride4_3pool3x3_map1_fc_nobn
-  - alexnet_k11-5-3_stride4_2pool2x2_map4_fc_nobn
-  - alexnet_k3x3_stride4_2pool2x2_map4_fc_nobn
-  - alexnet_k2x2_stride4_2pool2x2_map4_fc_nobn
-  - alexnet_kalt3-2_stride4_2pool2x2_map4_fc_nobn
-  - alexnet_k11-5-3_stride2_3pool3x3_map3_fc_nobn
-  - alexnet_k3x3_stride2_3pool3x3_map3_fc_nobn
-  - alexnet_k2x2_stride2_3pool3x3_map3_fc_nobn
-  - alexnet_kalt3-2_stride2_3pool3x3_map3_fc_nobn
+  - alexnet_k11-5-3_stride4_2pool2x2_map4_fcdrop_nobn
+  - alexnet_k3x3_stride4_2pool2x2_map4_fcdrop_nobn
+  - alexnet_k2x2_stride4_2pool2x2_map4_fcdrop_nobn
+  - alexnet_kalt3-2_stride4_2pool2x2_map4_fcdrop_nobn
+  - alexnet_k11-5-3_stride2_3pool3x3_map3_fcdrop_nobn
+  - alexnet_k3x3_stride2_3pool3x3_map3_fcdrop_nobn
+  - alexnet_k2x2_stride2_3pool3x3_map3_fcdrop_nobn
+  - alexnet_kalt3-2_stride2_3pool3x3_map3_fcdrop_nobn

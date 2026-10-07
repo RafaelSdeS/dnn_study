@@ -15,7 +15,11 @@ LOGITS_PROBE_SHAPE = (1, 3, 64, 64)
 # CVPR 2018; affine costs activations nothing over scale quantization, Wu et al. 2020 Sec. 3.3) and 8-bit per-channel symmetric weights in [-127, 127] (Wu et al. 2020, Sec. 6 / LiteRT int8 spec).
 # PyTorch's onednn QAT qconfig is exactly the first part; fbgemm's default instead sets reduce_range=True, i.e. 7-bit
 # activations (0..127), to dodge int16 saturation on CPUs without VNNI -- what every run used until 2026-10-03.
-_ONEDNN_QAT = tq.get_default_qat_qconfig("onednn")
+# version=0: plain FakeQuantize, whose scale is the observer's calculate_qparams() -- what convert() quantizes with. The
+# default fused FakeQuantize (version=1) computes per-channel symmetric weight scales in C++ 255/254 off that (+-0.39%,
+# torch 2.5.1), so the INT8 weights left the grid QAT trained on: 2.4 pp of the QAT/INT8 prediction disagreement
+# (2026-10-07, docs/logs/PHASE11_LOG.md "Protocol audit"). Jacob et al. 2018: inference must compute what training simulated.
+_ONEDNN_QAT = tq.get_default_qat_qconfig("onednn", version=0)
 INT8_QAT_QCONFIG = tq.QConfig(activation=_ONEDNN_QAT.activation, weight=_ONEDNN_QAT.weight.with_args(quant_min=-127))
 # Kernels every INT8 *accuracy* comes from: QNNPACK accumulates u8*s8 products exactly in int32 on any CPU (Jacob et al.
 # 2018's arithmetic). oneDNN does that only with VNNI; without it (beagle, tupi1/2, the laptop) VPMADDUBSW sums u8*s8
@@ -29,7 +33,10 @@ QUANT_ENGINE = "onednn"
 # 2026-10-03: the INT8 definition above, fused Linear/add + ReLU, W8 logits layer, Wu et al. 2020's QAT schedule --
 # and, for Phase 11, the new FP32 recipe that landed the same day, so analyze_geometry.load drops FP32 without it too.
 # 2026-10-06: INT8 accuracy on ACCURACY_ENGINE; nothing retrained, a 2026-10-03 run is re-evaluated by resubmitting it.
-QUANT_PROTOCOL = "2026-10-06"
+# 2026-10-07: non-fused fake-quant (above); QAT keeps BN intact (never frozen; folded into the per-channel weight scale
+# only at conversion: Wu et al. 2020, Nagel et al. 2021 Sec. 4.2) and EMA activation ranges throughout (Jacob et al. 2018
+# Sec. 3.1) -- _protocols/no_patience.yaml; QAT is redone on the FP32 checkpoints, which stay valid.
+QUANT_PROTOCOL = "2026-10-07"
 
 
 def find_fuse_groups(module: nn.Module, prefix: str = "") -> list:
@@ -315,7 +322,7 @@ def keep_logits_float(model: nn.Module, probe: torch.Tensor) -> nn.Module:
 class _FloatLogits(nn.Module):
     """DeQuantStub -> the logits Linear with INT8 weights and an FP32 output. The Linear has qconfig=None, so
     prepare_qat/convert leave the module itself alone; its input arrives dequantized from the previous layer's 8-bit
-    grid, and its weight goes through INT8_QAT_QCONFIG's per-channel fake-quant (frozen with every other observer).
+    grid, and its weight goes through INT8_QAT_QCONFIG's per-channel fake-quant (observed like every other weight).
     freeze(), run by convert_to_int8, keeps that weight as int8 codes + the fake-quant's scales, so the INT8 model
     holds no FP32 weight copy and computes exactly what the fake-quant did."""
 
@@ -388,7 +395,9 @@ def convert_to_int8(qat_model: nn.Module, inplace: bool = False, engine: str = A
     """Convert a trained QAT model to real INT8 ops (CPU-only), on `engine`'s kernels: ACCURACY_ENGINE (exact) unless
     only latency is measured (QUANT_ENGINE). The engine is process-global for some ops (add, pooling), so run the model
     before converting another on a different engine. The logits layer is frozen first: convert() strips every
-    fake-quant's observer, which an uncalibrated one still needs."""
+    fake-quant's observer, which an uncalibrated one still needs. convert() runs each weight through its fake-quant, so
+    a TRAINED model's observers must be off before this (scripts/train.py) or its grid moves off the one QAT was
+    evaluated on; load_int8_model's fresh graph needs them on, to take its weight shapes."""
     torch.backends.quantized.engine = engine
     model = (qat_model if inplace else copy.deepcopy(qat_model)).to("cpu").eval()
     for m in model.modules():
@@ -445,13 +454,12 @@ def int8_kernel_error_steps(engine: str = ACCURACY_ENGINE) -> int:
     return worst
 
 
-def make_qat_callback(freeze_bn_epoch: int = 3, disable_observer_epoch: int | None = 5):
-    """Return an epoch_callback that freezes BN stats then disables observers (never, if
-    disable_observer_epoch is None)."""
+def make_qat_callback(freeze_bn_epoch: int | None = 3, disable_observer_epoch: int | None = 5):
+    """Return an epoch_callback that freezes BN stats then disables observers (each never, if None)."""
     # >= (idempotent), not ==: a run resumed past either epoch must re-apply it -- freeze_bn is a
     # plain module attribute, not state_dict, so the resumed model would train with BN unfrozen
     def cb(epoch: int, model: nn.Module) -> None:
-        if epoch >= freeze_bn_epoch:
+        if freeze_bn_epoch is not None and epoch >= freeze_bn_epoch:
             model.apply(torch.nn.intrinsic.qat.freeze_bn_stats)
         if disable_observer_epoch is not None and epoch >= disable_observer_epoch:
             model.apply(torch.ao.quantization.disable_observer)

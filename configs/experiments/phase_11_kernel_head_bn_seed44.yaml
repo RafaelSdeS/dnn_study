@@ -1,12 +1,16 @@
-# Phase 11 minimal design (docs/logs/PHASE11_LOG.md "Minimal design, symmetric 2x2 padding, scratch twins"). The noise
-# floor: two cells of phase_11_kernel_head_bn (3x3 and 2x2, GAP + BN, the cheapest) again at seed 44, so the seed-to-seed
-# spread of this recipe (scripts/phase11/analyze_geometry.py noise_band) tells which single-seed differences of the
-# other blocks are real (Bouthillier et al., MLSys 2021). The seed also moves the 90/10 split.
+# Phase 11 minimal design (docs/logs/PHASE11_LOG.md "Minimal design, symmetric 2x2 padding, scratch twins" and "Protocol
+# audit", 2026-10-07). The noise floor: the 4 kernel cells of phase_11_kernel_head_bn with GAP + BN (the cheapest) again
+# at seed 44 -- with seeds 42/43/44 every kernel has 3 replicates, so the kernel effect itself is tested against replicate
+# variance (pure error, 8 df) and the seed-to-seed spread (scripts/phase11/analyze_geometry.py noise_band) tells which
+# single-seed differences of the other blocks are real (Bouthillier et al., MLSys 2021). The seed also moves the 90/10
+# split. Two cells until 2026-10-07 (3x3, 2x2).
 # Same protocol as every Phase 11 run (_protocols/no_patience.yaml), enforced by tests/test_config.py. Queued last on PCAD:
-#   python -m scripts.cluster submit --experiment phase_11_kernel_head_bn_seed44 --runtime pcad --slurm tupi_4090 --model <m>
+#   python -m scripts.cluster submit --experiment phase_11_kernel_head_bn_seed44 --runtime pcad --slurm tupi_beagle --model <m>
 extends: _protocols/no_patience
 seed: 44
 name: phase_11_kernel_head_bn_seed44
 models:
+  - alexnet_k11-5-3_stride2_2pool2x2_map8_gap_bn
   - alexnet_k3x3_stride2_2pool2x2_map8_gap_bn
   - alexnet_k2x2_stride2_2pool2x2_map8_gap_bn
+  - alexnet_kalt3-2_stride2_2pool2x2_map8_gap_bn

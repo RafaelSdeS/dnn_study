@@ -38,6 +38,7 @@ def _build_sbatch_command(
     flag_map = {
         "job_name": "--job-name",
         "partition": "--partition",
+        "exclude": "--exclude",
         "account": "--account",
         "qos": "--qos",
         "gres": "--gres",

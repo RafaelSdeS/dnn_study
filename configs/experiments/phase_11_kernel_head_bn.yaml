@@ -1,26 +1,34 @@
-# Phase 11 minimal design (docs/logs/PHASE11_LOG.md "Minimal design, symmetric 2x2 padding, scratch twins"). MAIN
-# QUESTION: what restricting the kernel costs, and whether the head or BN changes that. Kernel {11-5-3, 3x3, 2x2,
-# alternating 3-2} x head {GAP, FC} x BN, at the 64px geometry (conv1 stride 2, two 2x2 pools, 8x8 map) = 16 cells,
-# seed 42 (figures 03, 05, 10, 13, 14). Two of them run again at seeds 43/44 (_seed43/_seed44) for the noise floor.
+# Phase 11 minimal design (docs/logs/PHASE11_LOG.md "Minimal design, symmetric 2x2 padding, scratch twins" and
+# "Protocol audit", 2026-10-07). MAIN QUESTION: what restricting the kernel costs, and whether the head or BN changes
+# that. Kernel {11-5-3, 3x3, 2x2, alternating 3-2} x head {GAP, FC} x BN, at the 64px geometry (conv1 stride 2, two 2x2
+# pools, 8x8 map) = 16 cells, seed 42 (figures 03, 05, 10, 13, 14). The FC head is AlexNet's own, with Dropout 0.5
+# (Krizhevsky et al. 2012 Sec. 4.2) -- until 2026-10-07 it had none, a head no reference uses. Plus the 4 no-BN cells
+# without Dropout: the Dropout contrast, kept at this geometry, where the main grid is (figure 08). The GAP + BN cells
+# run again at seeds 43/44 (_seed43/_seed44) for the noise floor.
 # Same protocol as every Phase 11 run (_protocols/no_patience.yaml), enforced by tests/test_config.py. Model names:
 # ml/model_registrations.py (CELL_FACTORS). Queued one job per model on PCAD (scripts/pcad/feed_queue.sh):
-#   python -m scripts.cluster submit --experiment phase_11_kernel_head_bn --runtime pcad --slurm tupi_4090 --model <m>
+#   python -m scripts.cluster submit --experiment phase_11_kernel_head_bn --runtime pcad --slurm tupi_beagle --model <m>
 extends: _protocols/no_patience
 name: phase_11_kernel_head_bn
 models:
   - alexnet_k11-5-3_stride2_2pool2x2_map8_gap_nobn
   - alexnet_k11-5-3_stride2_2pool2x2_map8_gap_bn
-  - alexnet_k11-5-3_stride2_2pool2x2_map8_fc_nobn
-  - alexnet_k11-5-3_stride2_2pool2x2_map8_fc_bn
+  - alexnet_k11-5-3_stride2_2pool2x2_map8_fcdrop_nobn
+  - alexnet_k11-5-3_stride2_2pool2x2_map8_fcdrop_bn
   - alexnet_k3x3_stride2_2pool2x2_map8_gap_nobn
   - alexnet_k3x3_stride2_2pool2x2_map8_gap_bn
-  - alexnet_k3x3_stride2_2pool2x2_map8_fc_nobn
-  - alexnet_k3x3_stride2_2pool2x2_map8_fc_bn
+  - alexnet_k3x3_stride2_2pool2x2_map8_fcdrop_nobn
+  - alexnet_k3x3_stride2_2pool2x2_map8_fcdrop_bn
   - alexnet_k2x2_stride2_2pool2x2_map8_gap_nobn
   - alexnet_k2x2_stride2_2pool2x2_map8_gap_bn
-  - alexnet_k2x2_stride2_2pool2x2_map8_fc_nobn
-  - alexnet_k2x2_stride2_2pool2x2_map8_fc_bn
+  - alexnet_k2x2_stride2_2pool2x2_map8_fcdrop_nobn
+  - alexnet_k2x2_stride2_2pool2x2_map8_fcdrop_bn
   - alexnet_kalt3-2_stride2_2pool2x2_map8_gap_nobn
   - alexnet_kalt3-2_stride2_2pool2x2_map8_gap_bn
+  - alexnet_kalt3-2_stride2_2pool2x2_map8_fcdrop_nobn
+  - alexnet_kalt3-2_stride2_2pool2x2_map8_fcdrop_bn
+  # Dropout contrast (FC without Dropout, no BN)
+  - alexnet_k11-5-3_stride2_2pool2x2_map8_fc_nobn
+  - alexnet_k3x3_stride2_2pool2x2_map8_fc_nobn
+  - alexnet_k2x2_stride2_2pool2x2_map8_fc_nobn
   - alexnet_kalt3-2_stride2_2pool2x2_map8_fc_nobn
-  - alexnet_kalt3-2_stride2_2pool2x2_map8_fc_bn

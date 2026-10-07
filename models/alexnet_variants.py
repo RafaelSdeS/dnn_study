@@ -353,9 +353,11 @@ class AlexNetStacked(nn.Module):
     swap the GAP head in and/or drop BatchNorm, holding the stacked-3x3 backbone fixed.
     kernel_size=2 (the k2x2stacked cells): every conv 2x2 -- the stride-2 stem unpadded, the rest behind
     SymmetricPad2d, as in AlexNetAdapted -- so the same maps (8x8 at the end) with two 2x2 per stage.
+    dropout (FC head only): Dropout before the first two Linears, AlexNet's head (the *_fcdrop_bn cells).
     """
 
-    def __init__(self, num_classes: int = 200, head: str = "fc", batch_norm: bool = True, kernel_size: int = 3):
+    def __init__(self, num_classes: int = 200, head: str = "fc", batch_norm: bool = True, kernel_size: int = 3,
+                 dropout: float = 0.0):
         super().__init__()
         self.quant = tq.QuantStub()
         self.dequant = tq.DeQuantStub()
@@ -379,7 +381,7 @@ class AlexNetStacked(nn.Module):
         layers += conv(256, 256)
         layers += conv(256, 256)
         layers += conv(256, 256)
-        pool, classifier = _pool_and_classifier(head, 256, 6, num_classes)
+        pool, classifier = _pool_and_classifier(head, 256, 6, num_classes, dropout=dropout)
         layers.append(pool)
         self.features = nn.Sequential(*layers)
         self.classifier = classifier
