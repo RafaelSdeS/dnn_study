@@ -1448,3 +1448,20 @@ it is for:
 
 `test_phase11_runs.py` reads the tracked outputs, so it checks the real runs once they are synced from PCAD into git.
 Full suite: 309 passed, 1 skipped (no current-protocol run synced yet).
+
+## Three jobs dropped by a Slurm outage; the feeder now waits one out (2026-10-08)
+
+**What happened.** On 2026-10-07 at 15:55 PCAD's Slurm controller was unreachable for about a minute. `squeue` failed,
+`scripts/pcad/feed_queue.sh` read that as 0 jobs queued and kept popping lines, and each `sbatch` ("Unable to contact
+slurm controller") sent its line to `~/queue_phase11_full.txt.failed`, which is never retried. Dropped: the 2026-10-07
+QAT redo of two pilots, `alexnet_k3x3_stride2_2pool2x2_map8_gap_bn` (seed 42, the noise floor's reference cell) and
+`alexnet_k2x2_stride2_2pool2x2_map8_fc_nobn`, and the new cell `alexnet_k11-5-3_stride2_2pool2x2_map8_fcdrop_nobn`. The
+other two pilots' redo (829369, 829370) had been submitted at 11:22. Found 2026-10-08 while auditing the synced runs: the
+4 pilots' live summaries are still on QUANT_PROTOCOL 2026-10-06 (their QAT in `archive_qat_bnfreeze/`) and none of the 3
+was queued anywhere.
+
+**Fix.** A failing `squeue` now waits `SLEEP` instead of counting 0 jobs, and a submit that fails with a transient Slurm
+error (controller unreachable, socket timeout, "temporarily unable") goes back to the head of the queue like the QOS
+limit, logged as `RETRY`. `tests/test_feed_queue.py::test_feed_queue_waits_out_a_slurm_controller_outage` replays the
+outage and fails on the old script (both lines in `.failed`). The 3 lines went back to the head of the queue file and the
+feeder was restarted on this commit.
