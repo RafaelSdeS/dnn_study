@@ -1304,6 +1304,8 @@ run, so turning it off costs little and closes the one GPU-dependent arithmetic 
 of predictions, as the float64 emulation did; qnnpack and onednn agree on 99.1% of predictions, which is the rounding gap
 between two exact engines and why the engine is part of the protocol (`QUANT_PROTOCOL`). The beagle re-evaluation
 (829186) should match the laptop's qnnpack logits up to the float logits layer's CPU rounding; check when it finishes.
+**Checked 2026-10-09:** 829186's summary (now in `archive_qat_bnfreeze/`) has test INT8 38.15, `agreement_qat_int8`
+0.9749 and 1 kernel error step, the laptop's numbers; the logits themselves were not compared.
 
 **The laptop's CPU, corrected.** The section above and the 2026-10-06 test docstrings called the laptop an i7-7700K
 without VNNI. `/proc/cpuinfo` says i7-13650HX with AVX-VNNI (as the 2026-10-03 entry has it). There
@@ -1465,3 +1467,21 @@ error (controller unreachable, socket timeout, "temporarily unable") goes back t
 limit, logged as `RETRY`. `tests/test_feed_queue.py::test_feed_queue_waits_out_a_slurm_controller_outage` replays the
 outage and fails on the old script (both lines in `.failed`). The 3 lines went back to the head of the queue file and the
 feeder was restarted on this commit.
+
+## First 9 runs checked; the observer warning is harmless (2026-10-09)
+
+**Runs.** The 9 finished runs on PCAD (7 on QUANT_PROTOCOL 2026-10-07; the pilots `alexnet_k3x3_stride2_2pool2x2_map8_gap_bn`
+and `alexnet_k2x2_stride2_2pool2x2_map8_fc_nobn` still on 2026-10-06, their QAT redo queued as 829694/829744) were checked
+from their logs and test logits. Curves: 500/500 FP32 and 50/50 QAT epochs, no duplicate or missing epoch, no NaN, LR on
+the cosine (0.01 -> 0, QAT 1e-4 -> 1e-6), best FP32 epoch 445-485. Top-1/top-5/ECE recomputed from the logits match the
+summaries to 0.03 pp; the labels are the same in every run (50 per class), no class goes unpredicted, and per-class accuracy
+correlates 0.80-0.88 between runs. The ~10% of test predictions FP32 and QAT disagree on are low-margin images (73-87% of
+them in the lowest-margin fifth) and cancel out (right->wrong ~ wrong->right). The best QAT epoch on the validation split
+is 1-20: 8-bit QAT costs these nets ~0, so the 50 epochs barely move it.
+
+**The warning.** Every job that reaches INT8 logs the torch UserWarning "must run observer before calling
+calculate_qparams" right after "QAT training complete". It comes from
+`load_int8_model` (`scripts/train.py:558`): it converts a freshly built QAT graph whose observers never ran (by design, to
+get the weight shapes) and then loads the saved `state_dict`, which overwrites every scale and zero point. Reproduced
+locally on `alexnet_k3x3_stride2_2pool2x2_map8_gap_nobn`: 7 warnings, and the loaded INT8 model's output equals the
+directly converted one bit for bit. `int8_kernel_error_steps` and `convert_to_int8` on a trained graph raise none.
