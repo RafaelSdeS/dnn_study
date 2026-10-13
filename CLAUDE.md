@@ -238,6 +238,9 @@ scripts/                  # CLI entry points (used instead of notebooks for PCAD
     # stride-4/three 3x3 pools, 1x1 map at 64px) vs "layout 64px" (stride 2, two 2x2 pools, 8x8 map). 01/12/13 retired
     # (16, 14 and 17/18 cover them). tests/test_phase11_figures.py renders all of them on a fake run tree (whole design
     # and the 5 pilot cells) -- run the scripts again whenever runs land; a pair or panel without data is skipped.
+    # A run whose best FP32 epoch falls before 80% of its budget (analyze_geometry.EARLY_FRAC, `early_best`) gets its INT8
+    # marked (ring / hatch / *): QAT started from an un-annealed checkpoint, so its FP32 -> INT8 is not quantization
+    # (PHASE11_LOG "Early best FP32 epoch", 2026-10-13); kept in every figure, never dropped.
     plot_kernel_comparison.py  # 02-04 kernel per layout/head/BN (AlexNet original, 64px; VGG16)
     factor_effects.py          # 05-11 one figure per factor over every matched pair of the design (+ FAMILY_CONTRASTS),
                                #   14 every matched pair per contrast with the seed noise band

@@ -16,7 +16,8 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
 from ml.plotting import NEUTRAL, apply_report_style
-from scripts.phase11.analyze_geometry import BASE_KEY, BASE_LABEL, int8_bar, precision_handles, reference_lines, savefig
+from scripts.phase11.analyze_geometry import (BASE_KEY, BASE_LABEL, early_handle, int8_bar, precision_handles, reference_lines,
+                                              savefig)
 from scripts.phase11.design_figures import K4, KCOLOR, KLABEL, frame
 
 ORIGINAL = dict(family="alexnet", stride=4, pooling="3pool3x3", bn=False)
@@ -53,7 +54,7 @@ def fig_kernel(df, filename, title, panels, base_key, base_label):
     sizes = [max(1, select(df, f).kernels.nunique()) for _, f in panels]
     fig, axes = plt.subplots(1, len(panels), figsize=(1.6 * sum(sizes) + 3, 6.2), sharey=True, squeeze=False,
                              gridspec_kw={"width_ratios": sizes})
-    shown, seeded, ref = set(), False, []
+    shown, seeded, flagged, ref = set(), False, False, []
     for ax, (panel, filt) in zip(axes[0], panels):
         sel = select(df, filt)
         kernels = [k for k in K4 if k in set(sel.kernels)]
@@ -65,7 +66,9 @@ def fig_kernel(df, filename, title, panels, base_key, base_label):
             shown.add(k)
             fp32, int8 = runs.fp32.mean(), runs.int8.mean()
             ax.bar(i - 0.19, fp32, 0.38, color=color, edgecolor="white")
-            int8_bar(ax, i + 0.19, int8, 0.38, color)
+            early = runs.early_best.any()
+            flagged |= early
+            int8_bar(ax, i + 0.19, int8, 0.38, color, early=early)
             value = dict(ha="center", va="bottom", fontsize=8, zorder=6, bbox=dict(facecolor="white", edgecolor="none", pad=0.3))
             ax.text(i - 0.19, runs.fp32.max() + 0.5, f"{fp32:.1f}", **value)
             if np.isfinite(int8):
@@ -81,7 +84,7 @@ def fig_kernel(df, filename, title, panels, base_key, base_label):
         ax.margins(y=0.08)
         ref = reference_lines(ax, df, base_key, base_label) or ref
     axes[0][0].set_ylabel("Top-1 (%)")
-    rest = precision_handles() + ref
+    rest = precision_handles() + ref + ([early_handle("hatch")] if flagged else [])
     if seeded:
         rest.append(Line2D([], [], marker="o", color="k", ls="", ms=4, label="uma seed (42/43/44)"))
     fig.legend(handles=[Patch(color=KCOLOR[k], label=KLABEL[k]) for k in K4 if k in shown], loc="upper right",

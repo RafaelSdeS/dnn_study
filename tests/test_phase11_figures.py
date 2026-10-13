@@ -23,6 +23,10 @@ FIGURES = {f"{n}.png" for n in ["02_kernel_original_layout", "03_kernel_64px_lay
                                 "19_quantization_robustness", "20_latency_vs_macs", "21_training_curves"]}
 
 
+def _early(m):  # the fake runs whose best FP32 epoch comes early, so every figure draws its early-best mark
+    return m.endswith("_fcdrop_nobn")
+
+
 def _fake_runs(root, keep):
     rng = np.random.default_rng(0)
     for exp in EXPERIMENTS:
@@ -39,7 +43,7 @@ def _fake_runs(root, keep):
                        "quant_protocol": QUANT_PROTOCOL, "test_fp32_top1": fp32, "test_qat_top1": fp32 - 0.5,
                        "test_int8_top1": fp32 - 1, "fp32_top1": fp32, "qat_top1": fp32 - 0.5, "int8_top1": fp32 - 1,
                        "params_m": 1 + rng.random(), "macs": 1e8 * (1 + rng.random()), "fp32_size_mb": 10.0, "int8_size_mb": 2.5,
-                       "epochs": 400, "test_fp32_ece": 0.05, "fp32_bs1_latency_ms_per_image": 1.0,
+                       "epochs": 50 if _early(m) else 400, "epochs_budget": 500, "test_fp32_ece": 0.05, "fp32_bs1_latency_ms_per_image": 1.0,
                        "fp32_cpu_bs1_latency_ms_per_image": 5.0, "int8_bs1_latency_ms_per_image": 3.0}
             (run / "results" / f"{m}_summary.json").write_text(json.dumps(summary))
             stats = {"features.0": {"activation_in": {"max": 2.6, "p999": 2.6}},
@@ -64,6 +68,8 @@ def test_every_phase_11_figure_renders(tmp_path, monkeypatch, subset):
     factor_effects.main()
     design_figures.main([])
     written = {p.name for p in figs.glob("*.png")}
+    df = design_figures.frame()
+    assert set(df[df.early_best].key) == {k for k in df.key if _early(k)}  # epoch 51 of 500 is flagged, 401 is not
     if subset == "design":
         assert written == FIGURES, (FIGURES - written, written - FIGURES)
         assert {p.name for p in tables.glob("*.csv")} >= {"all_runs.csv", "main_grid.csv", "kernel_geometry.csv", "factor_effects.csv"}

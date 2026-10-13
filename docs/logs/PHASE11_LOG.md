@@ -1485,3 +1485,56 @@ calculate_qparams" right after "QAT training complete". It comes from
 get the weight shapes) and then loads the saved `state_dict`, which overwrites every scale and zero point. Reproduced
 locally on `alexnet_k3x3_stride2_2pool2x2_map8_gap_nobn`: 7 warnings, and the loaded INT8 model's output equals the
 directly converted one bit for bit. `int8_kernel_error_steps` and `convert_to_int8` on a trained graph raise none.
+
+## Early best FP32 epoch in no-BN cells: runs kept, shown in figures and text (2026-10-13)
+
+**Finding.** Of the 44 runs finished on PCAD, 9 no-BN cells have their best FP32 epoch on the 90/10 split at 56-197 of
+500 (LR 6.6e-3-9.7e-3), and their test top-1 rises 2.3-3.6 pp from FP32 to QAT; in the other 35 the best epoch is
+396-499 and FP32 -> QAT is -0.34 to +0.51 pp. The 9: `alexnet_{k11-5-3,kalt3-2,k2x2}_stride2_2pool2x2_map8_fcdrop_nobn`,
+`alexnet_{k11-5-3,k3x3,k2x2,kalt3-2}_stride4_2pool2x2_map4_fcdrop_nobn`, `alexnet_{k3x3,kalt3-2}_stride4_3pool3x3_map1_gap_nobn`.
+Borderline: `alexnet_kalt3-2_stride2_2pool2x2_map8_fc_nobn` (best epoch 396, LR 1e-3, +0.51 pp).
+
+**Mechanism.** These nets overfit while the LR is still high: val top-1 peaks early, falls as train top-1 climbs to ~98%,
+and comes back to a second, nearly equal peak as the cosine anneals. The early peak won by 0.05-0.5 pp, below the 90/10
+split's own sampling error (~0.5 pp at 10k images and ~44%); in `alexnet_k3x3_stride2_2pool2x2_map8_fcdrop_nobn` the late
+one won by 0.31 pp and QAT gains +0.08. QAT loads only the weights (fresh optimizer, its own lr 1e-4 -> 1e-6; it inherits
+no LR from FP32), so from an early, unannealed checkpoint its 50 epochs also do the LR decay the FP32 stage had not done
+at that point. Evidence, from the existing artifacts only (nothing retrained):
+- Spearman(LR at the best FP32 epoch, FP32 -> QAT test gain) = 0.74 over the 44 runs;
+- the early best epochs are spikes: 0.7-1.05 pp above the median of their +-5 epochs (0.05-0.5 pp in the other runs);
+- QAT's first epoch already gains 0.8-2.1 pp on val (-0.7 to +0.1 elsewhere, the usual fake-quant cost) and training
+  loss falls (2.64 -> 2.10 in `k11-5-3` s2 fcdrop): the net fits better, where a regularizer would do the opposite;
+- FP32/QAT test agreement 0.66-0.70 (0.88-0.95 elsewhere); QAT moves the weights ~3% (relative L2) while the epoch-500
+  model is ~100% away: QAT settles the early solution in place;
+- no-BN cells that overfit as much but peaked late (`alexnet_k3x3_stride2_2pool2x2_map8_fcdrop_nobn` and the three
+  finished `stride2_3pool3x3_map3_fcdrop_nobn`) gain -0.13 to +0.10: fake-quant alone does not produce the gain.
+
+Not old runs: every data/training/qat key of `resolved_config.json` is identical across the 44, the 9 trained on d5c76e1
+(2026-10-10/11) on both 4090 and 1080 Ti. QAT -> INT8 <= 0.1 pp and `agreement_qat_int8` >= 0.98 in every run.
+
+**Decision.** The runs stay as they are: FP32, QAT and INT8 are valid under the protocol (best epoch on the 90/10 split,
+reported on test, the same pipeline for every cell), and nothing in `scripts/train.py`, `ml/` or the protocol changes.
+Rejected: QAT from the epoch-500 model (drops the best-epoch selection the protocol chose), more seeds (each one flips
+the early/late coin again), dropping these runs' INT8 from the analysis. Only the reading changes, in figures and text:
+- in these cells FP32 -> INT8 is extra low-LR training, not quantization: QAT -> INT8 is their conversion cost, and
+  FP32 -> INT8 is not quantization robustness (figures 15 and 19, `factor_effects.py`'s `dqat`); a conclusion like
+  "no BN / Dropout is more robust to INT8" would be spurious;
+- INT8 kernel rankings in the s2 map8 fcdrop_nobn, s4 map4 fcdrop_nobn and s4 map1 gap_nobn blocks partly reflect which
+  peak won (s4 map1 gap_nobn: k2x2 ahead of k3x3 by 1.4 pp in FP32, behind it by 1.1 pp in INT8);
+- the cells are marked by best epoch (`epochs`, 0-based, against `epochs_budget` in each summary); the two peaks' values
+  need the per-epoch logs, which live only on PCAD (rsync in `analyze_geometry.convergence()`'s docstring).
+
+`convergence()` does not catch this case: it flags gains in the last 20% of the epochs, and here the best epoch is early.
+No-BN cells still queued (`alexnet_{k3x3,k2x2,kalt3-2}_stride4_3pool3x3_map1_fcdrop_nobn` and the two `_pretrained`)
+may add cases.
+
+**In the figures.** `analyze_geometry.load` gives every run `early_best` = best FP32 epoch before `EARLY_FRAC` (80%) of
+its `epochs_budget` -- the 9 plus the borderline `kalt3-2_stride2_2pool2x2_map8_fc_nobn`, 10 runs. Nothing is dropped;
+the INT8 of these runs is marked wherever it is drawn: a grey ring (14, 16, 18's INT8 panel, 19), a hatched bar (02-04,
+05-11's INT8 bars, 15's FP32 -> QAT bar), an asterisk on the INT8 value (17, also on a Δ whose reference is marked), with
+a legend entry (or, in 17, a title line) only when the figure has a marked run. `all_runs.csv`, `main_grid.csv` and
+`kernel_geometry.csv` carry the column; `analyze_geometry` prints the list. Checked: with no run marked, every figure is
+byte-identical to before (the test's fake tree without `epochs_budget`, and `design_figures --archive`, which never marks
+the old AdamW runs); `tests/test_phase11_figures.py` marks its `*_fcdrop_nobn` fake runs so every mark is drawn. Figures
+regenerated from the 44 runs synced from PCAD (summaries, layer stats, FP32/INT8 test logits, logs, resolved configs);
+09 and 11 wait for their first pairs.

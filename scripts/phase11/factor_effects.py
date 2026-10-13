@@ -26,8 +26,8 @@ from matplotlib.patches import Patch
 from configs.loader import load_config
 from ml.plotting import AMBER, BLUE, GREEN, NEUTRAL, RED, apply_report_style
 from ml.reporting import holm, mcnemar_p, wilson_ci
-from scripts.phase11.analyze_geometry import (LAYOUTS, TABLES, int8_bar, noise_band, precision_handles, reference_lines,
-                                              savefig)
+from scripts.phase11.analyze_geometry import (LAYOUTS, TABLES, early_handle, early_ring, int8_bar, noise_band,
+                                              precision_handles, reference_lines, savefig)
 from scripts.phase11.design_figures import cell_label, frame
 
 PURPLE = "#7b3fa0"
@@ -145,6 +145,7 @@ def contrasts(df):
         d = {c: vb[c] - va[c] for c in va}
         rows.append(dict(
             factor=factor, contrast=label, A=a, B=b, n_seeds=len(seeds), **_pair_stats(idx, a, b),
+            **{f"early_{side}": any(idx.loc[(k, s), "early_best"] for s in seeds) for side, k in (("A", a), ("B", b))},
             d_fp32=d["fp32"].mean(), d_fp32_seeds=" / ".join(f"{x:+.2f}" for x in d["fp32"]),
             d_int8=d["int8"].mean(), d_int8_seeds=" / ".join(f"{x:+.2f}" for x in d["int8"]),
             **{f"{c}_{side}": v[c].mean() for side, v in [("A", va), ("B", vb)] for c in ["fp32", "int8"]},
@@ -174,7 +175,7 @@ def fig_factor(t, df, factor, per_row=6):
             for j, (side, c) in enumerate([("A", NEUTRAL), ("B", color)]):
                 fp32 = getattr(r, f"fp32_{side}")
                 ax.bar(i + (2 * j - 1.5) * w, fp32, w, color=c, edgecolor="white")
-                int8_bar(ax, i + (2 * j - 0.5) * w, getattr(r, f"int8_{side}"), w, c)
+                int8_bar(ax, i + (2 * j - 0.5) * w, getattr(r, f"int8_{side}"), w, c, early=getattr(r, f"early_{side}"))
                 ax.text(i + (2 * j - 1.5) * w, fp32 + 0.4, f"{fp32:.1f}", ha="center", va="bottom", fontsize=7.5, zorder=6,
                         bbox=dict(facecolor="white", edgecolor="none", pad=0.3))
         ax.set_xticks(range(len(chunk)))
@@ -191,7 +192,8 @@ def fig_factor(t, df, factor, per_row=6):
     fig.suptitle(f"{factor}: cada grupo compara duas redes idênticas exceto por este fator (seed 42)\n{LAYOUTS}"
                  + "".join(f"\nnota — {'; '.join(cs)}: {note}" for note, cs in notes.items()), fontsize=10)
     fig.legend(handles=[Patch(color=NEUTRAL, label="A = antes (1º nível do fator)"), Patch(color=color, label="B = depois (2º nível)")]
-               + precision_handles() + ref, loc="outside lower center", ncol=2, fontsize=8.5)
+               + precision_handles() + ref + ([early_handle("hatch")] if (g.early_A | g.early_B).any() else []),
+               loc="outside lower center", ncol=2, fontsize=8.5)
     savefig(fig, FACTOR_FIG[factor])
 
 
@@ -206,7 +208,7 @@ def factorial_cells(df):
     assert runs.key.is_unique, runs.key[runs.key.duplicated()]
     if runs.empty:
         return pd.DataFrame()
-    cells = with_pooling(pd.DataFrame([{"cell": r.key, **CELL_FACTORS[r.key], "fp32": r.fp32, "int8": r.int8,
+    cells = with_pooling(pd.DataFrame([{"cell": r.key, **CELL_FACTORS[r.key], "fp32": r.fp32, "int8": r.int8, "early_best": r.early_best,
                                         "params_m": r.params_eff_m, "macs_m": r.macs_eff_m} for r in runs.itertuples()]))  # effective cost
     cells["dqat"] = cells.int8 - cells.fp32
     return cells
@@ -215,7 +217,7 @@ def factorial_cells(df):
 def matched_pairs(cells):
     j = pairs_of(cells)
     return pd.DataFrame({"factor": j.factor, "contrast": j.contrast, "cell_a": j.cell_a, "cell_b": j.cell_b,
-                         **{m: j[f"{m}_b"] - j[f"{m}_a"] for m in METRICS},
+                         **{m: j[f"{m}_b"] - j[f"{m}_a"] for m in METRICS}, "early": j.early_best_a.astype(bool) | j.early_best_b.astype(bool),
                          "macs_pct": 100 * (j.macs_m_b / j.macs_m_a - 1), "params_pct": 100 * (j.params_m_b / j.params_m_a - 1)})
 
 
@@ -258,6 +260,9 @@ def fig_matched_pairs(pairs, summary, n_cells, band):
                 continue
             yy = y[s.contrast] + np.random.default_rng(0).uniform(-0.18, 0.18, len(v))
             ax.scatter(v, yy, s=10, alpha=0.5, color=BLUE)
+            e = pairs.loc[v.index, "early"].to_numpy()
+            if m != "fp32" and e.any():  # INT8 and ΔQAT of a pair with an early-best cell
+                early_ring(ax, v[e], yy[e], s=45)
             ax.scatter(v.median(), y[s.contrast], marker="D", s=50, zorder=3, color=RED)
             ax.hlines(y[s.contrast], *bootstrap_median_ci(v), color=RED, lw=2, zorder=2)
             ax.text(1.01, y[s.contrast], f"{int((v > 0).sum())}/{len(v)}", transform=ax.get_yaxis_transform(), va="center", fontsize=8)
@@ -270,6 +275,8 @@ def fig_matched_pairs(pairs, summary, n_cells, band):
     if np.isfinite(band.get("fp32", np.nan)):
         handles.append(Patch(color="#d0d0d0", label=f"ruído entre seeds (±{band['fp32']:.1f} pp FP32"
                              + (f", ±{band['int8']:.1f} pp INT8)" if np.isfinite(band.get("int8", np.nan)) else ")")))
+    if pairs.early.any():
+        handles.append(early_handle("ring"))
     fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0), ncol=2, fontsize=9)
     fig.suptitle(f"Células do desenho da Fase 11 (seed 42; {n_cells} treinadas até agora): cada ponto compara "
                  "duas células que só diferem no fator da linha", fontsize=11)

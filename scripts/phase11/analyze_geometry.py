@@ -23,6 +23,7 @@ import numpy as np
 import pandas as pd
 import yaml
 
+from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
 from ml.plotting import BLUE, RED, TEXT_SECONDARY, apply_report_style
@@ -37,6 +38,14 @@ BASE_KEY = "alexnet_k11-5-3_stride4_3pool3x3_map1_fcdrop_nobn"  # the original A
 BASE_LABEL = "AlexNet original do zero (baseline)"
 LAYOUTS = ("layout original = o do AlexNet torchvision: conv1 stride 4 + 3 max-pools 3×3/2 → mapa final 1×1 em 64×64\n"
            "layout 64px = adaptado a 64×64: conv1 stride 2 + 2 max-pools 2×2 → mapa final 8×8")
+
+# A run whose best FP32 epoch falls before EARLY_FRAC of its budget was picked while the cosine LR was still high: QAT
+# starts from that un-annealed checkpoint and its own LR decay adds 2-4 pp, so its FP32 -> INT8 is not a quantization
+# effect (docs/logs/PHASE11_LOG.md "Early best FP32 epoch", 2026-10-13). The figures mark these runs; none is dropped.
+EARLY_FRAC = 0.8
+EARLY_GRAY = "#6b6b6b"
+EARLY_LABEL = ("melhor época FP32 cedo (< 80% do treino, LR ainda alto): o QAT parte de um checkpoint sem LR\n"
+               "reduzido, então FP32 → INT8 inclui treino extra, não só quantização (PHASE11_LOG 13/10)")
 
 
 def load(*roots: Path) -> pd.DataFrame:
@@ -63,6 +72,7 @@ def load(*roots: Path) -> pd.DataFrame:
             int8=d["test_int8_top1"] if post_fix else nan, fp32_val=d["fp32_top1"], results=p.parent,
             qat_raw=d["qat_top1"], int8_raw=d["int8_top1"],
             params_m=d["params_m"], macs_m=d["macs"] / 1e6, fp32_mb=d["fp32_size_mb"], int8_mb=d["int8_size_mb"], best_ep=d["epochs"],
+            early_best=bool(d.get("epochs_budget")) and d["epochs"] + 1 < EARLY_FRAC * d["epochs_budget"],  # epochs is 0-based
             ece=d.get("test_fp32_ece") if post_fix else nan, post_fix=post_fix, git_hash=prov.get("git_hash", "")[:7],
             git_dirty=prov.get("git_dirty"), gpu=prov.get("gpu_name"),
             # where the latencies were measured: same GPU name, different CPUs on tupi1/2 vs tupi3-6 (no cpu_model
@@ -108,10 +118,28 @@ def savefig(fig, name, figs=None):
     print(f"wrote {figs / name}")
 
 
-def int8_bar(ax, x, value, width, color):
-    """INT8 bar beside its FP32 one, in a light fill (nothing while the run's INT8 is still missing)."""
+def early_hatch(early):
+    """bar() kwargs that hatch an early-best run's bar; none otherwise, so an unflagged bar is drawn exactly as before."""
+    return dict(hatch="///", edgecolor=EARLY_GRAY) if early else {}
+
+
+def early_ring(ax, x, y, s=170):
+    """Grey ring around an early-best run's point."""
+    ax.scatter(x, y, s=s, facecolors="none", edgecolors=EARLY_GRAY, lw=1.4, zorder=6)
+
+
+def early_handle(kind):
+    """Legend entry for the early-best mark: 'ring' (scatter figures) or 'hatch' (bar figures)."""
+    if kind == "ring":
+        return Line2D([], [], marker="o", mfc="none", mec=EARLY_GRAY, mew=1.4, ms=12, ls="", label=EARLY_LABEL)
+    return Patch(facecolor="white", hatch="///", edgecolor=EARLY_GRAY, label=EARLY_LABEL)
+
+
+def int8_bar(ax, x, value, width, color, early=False):
+    """INT8 bar beside its FP32 one, in a light fill (nothing while the run's INT8 is still missing); hatched for an
+    early-best run."""
     if pd.notna(value):
-        ax.bar(x, value, width, color=color, alpha=0.45, edgecolor="white")
+        ax.bar(x, value, width, color=color, alpha=0.45, **{"edgecolor": "white", **early_hatch(early)})
 
 
 def precision_handles(color=TEXT_SECONDARY):
@@ -139,7 +167,7 @@ def main_grid_table(df):
     return d.groupby(["kernels", "head", "bn"]).agg(
         n_seeds=("seed", "count"), fp32=("fp32", "mean"), fp32_sd=("fp32", "std"), int8=("int8", "mean"), int8_sd=("int8", "std"),
         drop_qat=("drop_qat", "mean"), drop_convert=("drop_convert", "mean"), params_m=("params_m", "first"),
-        macs_m=("macs_m", "first")).reset_index()
+        macs_m=("macs_m", "first"), early_best=("early_best", "any")).reset_index()
 
 
 def kernel_geometry_table(df):
@@ -149,7 +177,7 @@ def kernel_geometry_table(df):
 
     d = pd.concat([grid_cells(df, geom=g).assign(geometry=GEOMS[g].replace("\n", " ")) for g in GEOMS])
     d = d[~d.bn]
-    return d[["kernels", "geometry", "head", "fp32", "int8", "drop_total", "macs_m", "params_m", "key"]]
+    return d[["kernels", "geometry", "head", "fp32", "int8", "drop_total", "early_best", "macs_m", "params_m", "key"]]
 
 
 def fig_convert(df):
@@ -165,7 +193,7 @@ def fig_convert(df):
         return
     fig, ax = plt.subplots(figsize=(13, 6))
     for i, r in enumerate(d.itertuples()):
-        ax.bar(i, r.drop_qat, 0.7, color=BLUE)
+        ax.bar(i, r.drop_qat, 0.7, color=BLUE, **early_hatch(r.early_best))
         ax.bar(i, r.drop_convert, 0.7, bottom=max(r.drop_qat, 0), color=RED)
     if cells.bn.any():
         first_bn = list(d.key).index(cells[cells.bn].key.iloc[0])
@@ -181,7 +209,8 @@ def fig_convert(df):
     ax.set_title("Onde o INT8 perde acurácia: no treino QAT ou na conversão para INT8 real? (seed 42)\n"
                  "fatorial principal, layout 64px (conv1 stride 2, 2 max-pools 2×2)", fontsize=10)
     ax.legend(handles=[Patch(color=BLUE, label="FP32 → QAT (perda no treino com fake-quant)"),
-                       Patch(color=RED, label="QAT → INT8 real (perda na conversão)")],
+                       Patch(color=RED, label="QAT → INT8 real (perda na conversão)")]
+              + ([early_handle("hatch")] if d.early_best.any() else []),
               loc="upper left", bbox_to_anchor=(1.01, 1), fontsize=9)
     savefig(fig, "15_quantization_drop_where.png")
 
@@ -257,6 +286,10 @@ def main():
         print(f"\n== convergence (last 20% of epochs < {band:.2f}pp): {int(done.converged.sum())}/{len(done)} complete runs; "
               f"median best epoch {done.best_epoch.median():.0f}, median last-20% gain {done.gain_last20pct.median():.2f}pp")
         print(done[~done.converged][["exp", "key", "seed", "stage", "best_epoch", "gain_last20pct"]].to_string(index=False))
+    early = df[df.early_best]
+    if len(early):
+        print(f"\n== best FP32 epoch (0-based) before {EARLY_FRAC:.0%} of the budget, marked in the figures: {len(early)} runs")
+        print(early[["exp", "key", "seed", "best_ep", "fp32", "qat", "int8"]].to_string(index=False))
     tables = [("main_grid", main_grid_table(df)), ("kernel_geometry", kernel_geometry_table(df))]
     for name, t in tables:
         t.to_csv(TABLES / f"{name}.csv", index=False)
