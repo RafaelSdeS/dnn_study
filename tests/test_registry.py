@@ -146,10 +146,11 @@ def test_factorial_grid_is_complete_and_every_gap_cell_runs():
 def test_every_cell_name_says_what_the_net_is():
     """The descriptive names are only useful if true: on every registered cell (meta device, shapes only), the kernels,
     conv1 stride, max-pools, last-map side, head, Dropout and BN read off the built net match its name."""
-    from ml.model_registrations import CELL_FACTORS, FX_KERNELS, VGG_FX_KERNELS, _cell_name
+    from ml.model_registrations import CELL_FACTORS, FX_KERNELS, RESNET_FX_KERNELS, VGG_FX_KERNELS, _cell_name
+    from models.baselines import RESNET_STEMS
 
     for name, f in CELL_FACTORS.items():
-        kernels = {"alexnet": FX_KERNELS, "vgg16": VGG_FX_KERNELS}[f["family"]]
+        kernels = {"alexnet": FX_KERNELS, "vgg16": VGG_FX_KERNELS}.get(f["family"], {})
         assert _cell_name(**f) == name, name
         with torch.device("meta"):
             m = MODEL_REGISTRY[name]["ctor"]()
@@ -157,7 +158,11 @@ def test_every_cell_name_says_what_the_net_is():
             side = torch.nn.Sequential(*feats)(torch.zeros(1, 3, 64, 64)).shape[-1]
         convs = [x for x in m.features if isinstance(x, torch.nn.Conv2d)]
         pools = [x for x in m.features if isinstance(x, torch.nn.MaxPool2d)]
-        if f["kernels"] in kernels:
+        if f["family"] == "resnet18":  # every conv but the 1x1 shortcuts: the stem's, then (conv1, conv2) of 8 blocks
+            stem, blocks = RESNET_FX_KERNELS[f["kernels"]]
+            assert [c.kernel_size[0] for c in m.features.modules() if isinstance(c, torch.nn.Conv2d) and c.kernel_size != (1, 1)] \
+                == [k for k, _, _ in RESNET_STEMS[stem]] + list(blocks) * 8, name
+        elif f["kernels"] in kernels:
             assert tuple(c.kernel_size[0] for c in convs) == kernels[f["kernels"]], name
         elif f["kernels"].endswith("stacked"):  # k3x3stacked / k2x2stacked: every conv that size, two per stage
             assert {c.kernel_size[0] for c in convs} == {int(f["kernels"][1])} and len(convs) == 10, name
@@ -183,6 +188,16 @@ def test_named_reference_cells_are_the_reference_nets():
         mine, ref = MODEL_REGISTRY["vgg16_k3x3_stride1_5pool2x2_map2_fcdrop_bn"]["ctor"](), VGG16()
     assert _layout(mine) == _layout(ref)
     assert {k: v.shape for k, v in mine.state_dict().items()} == {k: v.shape for k, v in ref.state_dict().items()}
+    # ResNet-18 (resnet18tv's scratch twin, moved into phase_11_resnet_kernel_stem): the same net, the same initial weights
+    from models import ResNet18TV
+
+    torch.manual_seed(0)
+    mine = MODEL_REGISTRY["resnet18_k7-3_stride2_1pool3x3_map2_gap_bn"]["ctor"]()
+    torch.manual_seed(0)
+    ref = ResNet18TV(pretrained=False)
+    assert _layout(mine) == _layout(ref)
+    weights = lambda m: [x.weight for x in m.modules() if isinstance(x, (torch.nn.Conv2d, torch.nn.BatchNorm2d, torch.nn.Linear))]  # noqa: E731
+    assert all(torch.equal(a, b) for a, b in zip(weights(mine), weights(ref), strict=True))
 
 
 def test_factorial_cells_survive_the_qat_to_int8_path():

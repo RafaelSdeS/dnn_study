@@ -1538,3 +1538,69 @@ byte-identical to before (the test's fake tree without `epochs_budget`, and `des
 the old AdamW runs); `tests/test_phase11_figures.py` marks its `*_fcdrop_nobn` fake runs so every mark is drawn. Figures
 regenerated from the 44 runs synced from PCAD (summaries, layer stats, FP32/INT8 test logits, logs, resolved configs);
 09 and 11 wait for their first pairs.
+
+## Noise floors per regime and a ResNet block (2026-10-13, written before any of these runs)
+
+**Why.** Three weak points of the 80-run design, found reading the 44 finished runs:
+- **No-BN cells were judged by a GAP + BN band.** `noise_band` pooled only the 4 GAP + BN kernel cells (seeds 42-44):
+  pooled SD 0.21 pp, band 2*sqrt(2)*SD = 0.60 pp. The design's 30 no-BN cells were judged against it, but there a run
+  moves 2-4 pp between its own FP32 and QAT (the early best epoch, previous entry): in the s2 map8 fcdrop_nobn cells the
+  3x3 vs 11-5-3 difference is -0.8 pp in FP32 and -4.3 pp in QAT, same seed. "Machine independence" (2026-10-06)
+  already noted that the GAP band can understate an FC cell's spread; not acted on then. The previous entry rejected
+  more seeds *as a fix* for the early/late coin; these seeds do the opposite job: they measure how far that coin moves a
+  single-seed result, which is what a band is. User decision, 2026-10-13.
+- **VGG had no band of its own**, and its headline is an equivalence: at VGG16's own head (FC + Dropout) 2x2 vs 3x3 is
+  +0.23 pp at seed 42 (GAP: -2.51 pp). One seed cannot bound an equivalence. Its seed replicates were cut on 2026-10-04.
+- **The kernel was tested only in plain nets** (AlexNet, VGG16). ResNet-18 is the residual net of the study (families).
+
+**Not added: GAP + BN seeds.** The pre-registered kernel test is resolved at 3 seeds: each kernel vs 11-5-3-3-3 in FP32
+is +0.74 (3x3) / -0.49 (2x2) / +1.51 (alt 3-2) pp against a 95% CI of +-0.40 pp (8 df); INT8 +0.99 / -0.54 / +1.62
+against +-0.46. More seeds there after seeing a result near the edge would be optional stopping.
+
+**Runs (18 new; the design goes from 80 to 98).**
+
+| Block | Cells | Seeds | Runs | Slurm |
+|---|---|---|---|---|
+| `phase_11_kernel_head_bn_seed43/44` (no-BN floor) | `alexnet_{k11-5-3,k3x3,k2x2,kalt3-2}_stride2_2pool2x2_map8_fcdrop_nobn` | 43, 44 | 8 | `tupi_beagle` |
+| `phase_11_vgg_kernel_head_seed43/44` (VGG floor) | `vgg16_{k3x3,k2x2}_stride1_5pool2x2_map2_fcdrop_bn` | 43, 44 | 4 | `tupi_4090` |
+| `phase_11_resnet_kernel_stem` | 8 ResNet-18 cells below (2 moved from families) | 42 | 6 | `tupi_beagle` |
+
+The fcdrop_nobn cell sits in 8 of the design's 12 contrast types (kernel x3, head, BN, Dropout, stride, pooling; the GAP
++ BN cell in 6), has the reference nets' FC + Dropout head (so its spread includes `AdaptiveAvgPool`'s nondeterministic
+backward) and 3 of its 4 kernels had the early best epoch. Four kernels, not two: 8 df like the GAP + BN floor, and a
+spread per kernel (the 3x3 one was the only cell of the four without the QAT jump).
+
+**ResNet-18 block** (`models/baselines.py:ResNetAdapted`, `ml/model_registrations.py:RESNET_FX_KERNELS`). torchvision's
+geometry for every cell (stem stride 2, MaxPool 3x3/s2, 2x2 map at 64px, GAP + BN), as VGG keeps its own; one seed,
+since GAP + BN is the regime of the reference floor. Blocks are torchvision's `QuantizableBasicBlock` (FloatFunctional
+add_relu), 2x2 convs with C2sp before every stride-1 one and none before a stride-2 one.
+
+| Cell `resnet18_<k>_stride2_1pool3x3_map2_gap_bn` | Stem | Blocks (conv1, conv2) | Why |
+|---|---|---|---|
+| `k7-3` | 7x7 s2 | 3x3, 3x3 | ResNet-18 itself = `resnet18tv_scratch`, bit for bit at the same seed (`tests/test_registry.py`) |
+| `k7-3 ..._pretrained` | 7x7 s2 | 3x3, 3x3 | = `resnet18tv`: keeps the pretraining contrast (now a `PAIRS` pair, not a `FAMILY_CONTRASTS` row) |
+| `k3x3` | 3x3 s2 | 3x3, 3x3 | 7x7 -> 3x3 in the stem only |
+| `k2x2` | 2x2 s2 | 2x2, 2x2 | the Winograd question, 3x3 -> 2x2 |
+| `kalt3-2` | 3x3 s2 | 2x2, 3x3 | the alternating level of the AlexNet and VGG blocks |
+| `k7-2` | 7x7 s2 | 2x2, 2x2 | stem and blocks apart; an accelerator that runs the first layer outside its Winograd engine |
+| `k3x3deepstem` | 3x3 s2, 3x3, 3x3 (32-32-64) | 3x3, 3x3 | ResNet-C (He, T. et al., CVPR 2019 "Bag of Tricks" Sec. 4.2): the literature's small-kernel stem |
+| `k2x2deepstem` | 2x2 s2, 2x2, 2x2 (C2sp) | 2x2, 2x2 | the same depth compensation in 2x2 |
+
+`resnet18tv` / `resnet18tv_scratch` leave `phase_11_families.yaml` (21 -> 19 nets) for the block, before either ran:
+the same nets under cell names, no duplicate run. Stems left out: the stride-1 / no-pool 64px stem (a geometry change,
+~16x the MACs; geometry is the AlexNet geometry block's question), patchify stems (a 4x4/s4 conv is not a Winograd
+candidate), ResNet-D (a shortcut change, not a stem). New contrasts: 7-3 -> 3x3, 7-3 -> 2x2, blocks 3x3 -> 2x2 under
+the 7x7 stem, stem 7x7 -> 2x2 under 2x2 blocks, 3x3 -> 2x2 with deep stems, and single -> deep stem in 3x3 and 2x2 (the
+two last ones in the compensation figure, with stacked); 3x3 -> 2x2, 3x3 -> alt and pretraining gain one pair each.
+
+**Analysis rule, fixed now.** `analyze_geometry.noise_bands`: one floor per regime (family, BN) from the cells of every
+`phase_11_*_seed43.yaml` -- AlexNet with BN (the reference), AlexNet without BN, VGG16. A cell's band is its regime's,
+or the reference's when its regime has none (families, ResNet). A single-seed difference between cells a and b is
+judged against `pair_band` = sqrt((band_a^2 + band_b^2)/2) = 2*sqrt(sd_a^2 + sd_b^2) -- the old 2*sqrt(2)*sd when both
+share a regime. Until a floor's replicates run its band is NaN and nothing in that regime is judged: the 0.6 pp is no
+longer applied to no-BN cells. Figure 17 greys each column by its own band; figure 14 draws one span per regime and
+draws a pair hollow when it falls inside its own band; `factor_effects.csv` gets `band_fp32` / `band_int8` per
+contrast. `convergence()` keeps the reference (strictest) band.
+
+Open, not done here: the pre-registered kernel-effect CI (mean difference, pooled replicate SD, 8 df; "Protocol audit")
+has no code yet -- the numbers above were computed by hand from the summaries.

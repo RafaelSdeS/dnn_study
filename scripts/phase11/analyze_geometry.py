@@ -215,11 +215,35 @@ def fig_convert(df):
     savefig(fig, "15_quantization_drop_where.png")
 
 
-# the cells replicated at seeds 43/44: read off their yaml, so the noise floor is whatever the design reruns
-NOISE_KEYS = yaml.safe_load((ROOT / "configs/experiments/phase_11_kernel_head_bn_seed43.yaml").read_text())["models"]
+# the cells replicated at seeds 43/44: read off every *_seed43 yaml, so the noise floors are whatever the design reruns
+NOISE_KEYS = sorted({m for p in (ROOT / "configs/experiments").glob("phase_11_*_seed43.yaml")
+                     for m in yaml.safe_load(p.read_text())["models"]})
+# One floor per regime (family, BN), since 2026-10-13 (PHASE11_LOG "Noise floors per regime and a ResNet block"): AlexNet
+# GAP + BN (the reference: every cell whose regime has no floor of its own -- families, ResNet, all GAP/BN-like), AlexNet
+# FC + Dropout without BN (every no-BN cell: the early best epochs move a run 2-4 pp), VGG16 FC + Dropout.
+REFERENCE_REGIME = ("alexnet", True)
+REGIME_LABEL = {("alexnet", True): "AlexNet com BN", ("alexnet", False): "AlexNet sem BN", ("vgg16", True): "VGG16"}
 
 
-def noise_band(df, keys=NOISE_KEYS):
+def noise_bands(df) -> dict:
+    """{(family, bn): noise_band} for every regime the seed yamls replicate."""
+    rep = df[df.key.isin(NOISE_KEYS)] if len(df) else df
+    return {(fam, bool(bn)): noise_band(g, set(g.key)) for (fam, bn), g in rep.groupby(["family", "bn"])} if len(rep) else {}
+
+
+def band_for(bands, family, bn) -> dict:
+    """A cell's band: its regime's floor (NaN while that floor's replicates run), else the reference regime's."""
+    nan = {"fp32": float("nan"), "int8": float("nan")}
+    return bands.get((family, bool(bn) if pd.notna(bn) else True), bands.get(REFERENCE_REGIME, nan))
+
+
+def pair_band(a: dict, b: dict) -> dict:
+    """Band of a single-seed difference between two cells with floors a and b: 2*sqrt(sd_a^2 + sd_b^2), i.e. the RMS of
+    their 2*sqrt(2)*sd bands -- the plain band when both share a regime."""
+    return {c: float(np.sqrt((a[c] ** 2 + b[c] ** 2) / 2)) for c in ("fp32", "int8")}
+
+
+def noise_band(df, keys):
     """2*sqrt(2)*pooled SD across seeds, for the cells replicated at seeds 42-44 (phase_11_kernel_head_bn_seed43/44):
     the training-noise floor a single-seed difference has to clear (Bouthillier et al., MLSys 2021: seed variance is a
     first-order source of variance in benchmark comparisons). NaN until the replicates have run."""
@@ -277,7 +301,7 @@ def main():
         return
     TABLES.mkdir(parents=True, exist_ok=True)
     df.drop(columns="results").sort_values(["exp", "key", "seed"]).to_csv(TABLES / "all_runs.csv", index=False)
-    band = noise_band(df)["fp32"]
+    band = band_for(noise_bands(df), *REFERENCE_REGIME)["fp32"]  # the strictest floor
     band = band if np.isfinite(band) else CONVERGED_PP
     conv = convergence(df, band)
     conv.to_csv(TABLES / "convergence.csv", index=False)

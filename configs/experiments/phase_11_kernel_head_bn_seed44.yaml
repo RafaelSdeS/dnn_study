@@ -4,6 +4,10 @@
 # variance (pure error, 8 df) and the seed-to-seed spread (scripts/phase11/analyze_geometry.py noise_band) tells which
 # single-seed differences of the other blocks are real (Bouthillier et al., MLSys 2021). The seed also moves the 90/10
 # split. Two cells until 2026-10-07 (3x3, 2x2).
+# Since 2026-10-13 also the 4 kernel cells with FC + Dropout and no BN: a second noise floor, for the no-BN regime,
+# where a run's ranking moves 2-4 pp between its own FP32 and QAT (the early best epoch), so the GAP + BN band
+# (0.6 pp) cannot judge it. Each single-seed contrast is judged by its cells' regime bands (PHASE11_LOG
+# "Noise floors per regime and a ResNet block").
 # Same protocol as every Phase 11 run (_protocols/no_patience.yaml), enforced by tests/test_config.py. Queued last on PCAD:
 #   python -m scripts.cluster submit --experiment phase_11_kernel_head_bn_seed44 --runtime pcad --slurm tupi_beagle --model <m>
 extends: _protocols/no_patience
@@ -14,3 +18,8 @@ models:
   - alexnet_k3x3_stride2_2pool2x2_map8_gap_bn
   - alexnet_k2x2_stride2_2pool2x2_map8_gap_bn
   - alexnet_kalt3-2_stride2_2pool2x2_map8_gap_bn
+  # the no-BN noise floor (2026-10-13): the FC + Dropout no-BN cell, the regime of the early best epochs
+  - alexnet_k11-5-3_stride2_2pool2x2_map8_fcdrop_nobn
+  - alexnet_k3x3_stride2_2pool2x2_map8_fcdrop_nobn
+  - alexnet_k2x2_stride2_2pool2x2_map8_fcdrop_nobn
+  - alexnet_kalt3-2_stride2_2pool2x2_map8_fcdrop_nobn

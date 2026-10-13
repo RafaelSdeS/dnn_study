@@ -27,8 +27,8 @@ from matplotlib.patches import Patch
 
 from configs.loader import load_config
 from ml.plotting import AMBER, BLUE, GREEN, NEUTRAL, RED, TEXT_SECONDARY, apply_report_style
-from scripts.phase11.analyze_geometry import (ARCHIVE, EARLY_LABEL, FIGS, LOG_EPOCH, NOISE_KEYS, ROOT, RUNS, early_handle,
-                                              early_ring, load, noise_band, savefig)
+from scripts.phase11.analyze_geometry import (ARCHIVE, EARLY_LABEL, FIGS, LOG_EPOCH, REFERENCE_REGIME, ROOT, RUNS, band_for,
+                                              early_handle, early_ring, load, noise_band, noise_bands, savefig)
 
 PREVIEW = ROOT / "results/archive_adamw_recipe/figures_generated/phase_11_preview"
 PREVIEW_NOTE = ("PRÉVIA — runs antigas: receita AdamW, split de validação, INT8 antes das correções de 30/09–03/10; "
@@ -37,8 +37,12 @@ LIVE_NOTE = "seed 42 · top-1 no test set (val oficial do Tiny ImageNet)"
 
 K4 = ["k11-5-3", "k3x3", "k2x2", "kalt3-2"]
 KLABEL = {"k11-5-3": "11-5-3-3-3", "k3x3": "3×3", "k2x2": "2×2", "kalt3-2": "alternado 3-2", "k3x3stacked": "3×3 empilhado",
-          "k2x2stacked": "2×2 empilhado"}
-KCOLOR = {"k11-5-3": AMBER, "k3x3": GREEN, "k2x2": BLUE, "kalt3-2": RED, "k3x3stacked": "#0b6b2e", "k2x2stacked": "#0b3d7a"}
+          "k2x2stacked": "2×2 empilhado", "k7-3": "7×7 + 3×3 (original)", "k7-2": "stem 7×7 + 2×2",
+          "k3x3deepstem": "3×3, stem profundo", "k2x2deepstem": "2×2, stem profundo"}
+KCOLOR = {"k11-5-3": AMBER, "k3x3": GREEN, "k2x2": BLUE, "kalt3-2": RED, "k3x3stacked": "#0b6b2e", "k2x2stacked": "#0b3d7a",
+          "k7-3": AMBER, "k7-2": "#7b3fa0", "k3x3deepstem": "#0b6b2e", "k2x2deepstem": "#0b3d7a"}  # deep stem = depth, as stacked
+RESNET_K = ["k7-3", "k3x3", "k2x2", "kalt3-2", "k7-2", "k3x3deepstem", "k2x2deepstem"]
+FAMILY_TAG = {"vgg16": "VGG16", "resnet18": "ResNet-18"}  # nets kept at their own geometry, always with BN
 HMARK = {"gap": "o", "fc": "s", "fcdrop": "^", "família": "X"}
 HLABEL = {"gap": "cabeça GAP", "fc": "cabeça FC", "fcdrop": "FC + Dropout", "família": "rede de compensação / família"}
 GEOMS = {(2, 2, 2): "layout 64px\nconv1 s2, 2 pools 2×2", (4, 2, 2): "conv1 s4,\n2 pools 2×2",
@@ -132,12 +136,12 @@ def cell_label(f, skip=()):
     if g("family") == "família":
         return g("key").removeprefix("alexnet_")
     s, pk, pn = (int(g(k)) for k in ("stride", "pool_kernel", "pool_count"))
-    vgg = g("family") == "vgg16"
-    geo = ("" if vgg else f"{pn} pools {pk}×{pk}" if "stride" in skip else f"conv1 stride {s}" if "pooling" in skip
+    tag = FAMILY_TAG.get(g("family"), "")
+    geo = ("" if tag else f"{pn} pools {pk}×{pk}" if "stride" in skip else f"conv1 stride {s}" if "pooling" in skip
            else GEO_LABEL.get((s, pk, pn), f"conv1 s{s} · {pn} pools {pk}×{pk}"))
-    tags = ["VGG16" * vgg + ("" if "kernels" in skip else " " * vgg + KLABEL[g("kernels")] + "†" * bool(g("approx", False))), geo,
+    tags = [tag + ("" if "kernels" in skip else " " * bool(tag) + KLABEL[g("kernels")] + "†" * bool(g("approx", False))), geo,
             "" if "head" in skip else {"gap": "GAP", "fc": "FC"}[g("head")], "Dropout" * (bool(g("dropout")) and "dropout" not in skip),
-            "" if "bn" in skip or vgg else ("BN" if g("bn") else "sem BN"), "pré-treino" * (bool(g("pretrained")) and "pretrained" not in skip)]
+            "" if "bn" in skip or tag else ("BN" if g("bn") else "sem BN"), "pré-treino" * (bool(g("pretrained")) and "pretrained" not in skip)]
     return " · ".join(t for t in tags if t)
 
 
@@ -202,7 +206,7 @@ def fig_pareto(df, figs, note):
     savefig(fig, "16_pareto_accuracy_cost.png", figs)
 
 
-def fig_grid(df, figs, note, band):
+def fig_grid(df, figs, note, bands):
     d = grid_cells(df)
     cols = [("gap", False), ("gap", True), ("fc", False), ("fc", True)]
     get = lambda k, h, bn, m: d[(d.kernels == k) & (d["head"] == h) & (d.bn.astype(bool) == bn)][m].mean()  # noqa: E731
@@ -211,9 +215,13 @@ def fig_grid(df, figs, note, band):
     early = np.array([[get(k, h, bn, "early_best") for h, bn in cols] for k in K4]) > 0  # NaN (no run) -> False
     star = early | early[0]  # a Δ against an early-best reference is marked too
     dfp, d8 = fp32 - fp32[0], int8 - int8[0]
+    # each column against its own regime's floor (no BN / BN); NaN while a floor's replicates run -> nothing greyed
+    braw = np.array([band_for(bands, "alexnet", bn)["fp32"] for _, bn in cols])
+    bcol = np.nan_to_num(braw)
+    btxt = lambda b: f"±{b:.1f} pp" if np.isfinite(b) else "pendente"  # noqa: E731
     fig, axes = plt.subplots(1, 2, figsize=(15, 5.8))
     lim = np.nanmax(np.abs(dfp[1:])) if np.isfinite(dfp[1:]).any() else 1
-    shown = np.where(np.abs(dfp) < band["fp32"], np.nan, dfp)  # inside the seed band: no colour, it is not a difference
+    shown = np.where(np.abs(dfp) < bcol, np.nan, dfp)  # inside the seed band: no colour, it is not a difference
     lo, hi = np.nanmin(fp32), np.nanmax(fp32)
     dark = [(fp32 - lo) / (hi - lo + 1e-9) > 0.6, np.abs(shown) / lim > 0.6]  # white text on the darkest cells
     for ax, m, cmap, kw in [(axes[0], fp32, "YlGn", {}), (axes[1], shown, "RdBu", dict(vmin=-lim, vmax=lim))]:
@@ -231,7 +239,7 @@ def fig_grid(df, figs, note, band):
                 elif np.isnan(dfp[i, j]):
                     txt, c = "sem referência", NEUTRAL
                 else:
-                    small = abs(dfp[i, j]) < band["fp32"]
+                    small = abs(dfp[i, j]) < bcol[j]
                     txt = (f"{dfp[i, j]:+.1f} pp" + (" ≈ ruído" if small else "")
                            + (f"\nINT8 {d8[i, j]:+.1f}" + ("*" if star[i, j] else "") if np.isfinite(d8[i, j]) else ""))
                     c = NEUTRAL if small else "k"
@@ -243,7 +251,7 @@ def fig_grid(df, figs, note, band):
         ax.set_yticklabels([KLABEL[k] + "†" * (k in approx) for k in K4])
         ax.grid(False)
     axes[0].set_title("Top-1 (%) de cada célula", fontsize=10)
-    axes[1].set_title(f"Δ FP32 vs 11-5-3-3-3 na mesma coluna (pp); cinza = dentro do ruído entre seeds (±{band['fp32']:.1f} pp)", fontsize=10)
+    axes[1].set_title(f"Δ FP32 vs 11-5-3-3-3 na mesma coluna (pp); cinza = dentro do ruído entre seeds ({btxt(braw[1])} com BN, {btxt(braw[0])} sem BN)", fontsize=10)
     fig.suptitle("Fatorial principal: kernel × cabeça × BatchNorm no layout 64px (conv1 stride 2, 2 max-pools 2×2, mapa 8×8)\n" + note
                  + ("\n* INT8 de " + EARLY_LABEL.replace("\n", " ") if early.any() else ""), fontsize=11)
     fig.tight_layout()
@@ -301,7 +309,7 @@ def fig_quant(df, figs, note):
     d = seed42(df).dropna(subset=["fp32", "int8"]).copy()
     d["dq"] = d.int8 - d.fp32
     d["ratio"] = [worst_input_ratio(r) for r in d.itertuples()]
-    order = [("alexnet", k) for k in KCOLOR] + [("vgg16", k) for k in K4] + [("família", None)]
+    order = [("alexnet", k) for k in KCOLOR] + [("vgg16", k) for k in K4] + [("resnet18", k) for k in RESNET_K] + [("família", None)]
     groups = [g for g in order if len(d[(d.family == g[0]) & ((d.kernels == g[1]) if g[1] else True)])]
     fig, axes = plt.subplots(1, 2, figsize=(16, 6.2), gridspec_kw={"width_ratios": [1.5, 1]})
     rng = np.random.default_rng(0)
@@ -316,7 +324,8 @@ def fig_quant(df, figs, note):
                 if r.early_best:
                     early_ring(ax, x, r.dq)
     axes[0].set_xticks(range(len(groups)))
-    axes[0].set_xticklabels([("VGG16\n" if fam == "vgg16" else "") + (KLABEL[k] if k else "famílias") for fam, k in groups], fontsize=9)
+    axes[0].set_xticklabels([(FAMILY_TAG[fam] + "\n" if fam in FAMILY_TAG else "") + (KLABEL[k] if k else "famílias") for fam, k in groups],
+                            fontsize=9)
     rho = d[["ratio", "dq"]].corr(method="spearman").iloc[0, 1]
     plain_log(axes[1], "x")
     axes[1].set_xlabel("pior razão max / p99,9 entre as entradas das camadas (escala log)")
@@ -414,11 +423,10 @@ def main(argv=None):
         print("no Phase 11 run has a summary yet")
         return
     figs, note = (PREVIEW, PREVIEW_NOTE) if archive else (FIGS, LIVE_NOTE)
-    band = noise_band(df, LEGACY_NOISE if archive else NOISE_KEYS)
-    band = {k: v if np.isfinite(v) else 0.0 for k, v in band.items()}
-    print(f"{len(df)} runs, noise band (pp): {band}")
+    bands = {REFERENCE_REGIME: noise_band(df, LEGACY_NOISE)} if archive else noise_bands(df)
+    print(f"{len(df)} runs, noise bands (pp): {bands}")
     fig_pareto(df, figs, note)
-    fig_grid(df, figs, note, band)
+    fig_grid(df, figs, note, bands)
     fig_geometry(df, figs, note)
     fig_quant(df, figs, note)
     fig_latency(df, figs, note)

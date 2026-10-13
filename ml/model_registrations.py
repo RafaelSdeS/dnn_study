@@ -25,6 +25,7 @@ from models import (
     VGGStyleCNN,
     MobileNetV2TV,
     ResNet18TV,
+    ResNetAdapted,
     AlexNet3x3FC,
     AlexNet3x3GAP,
     AlexNet2x2GAP,
@@ -291,6 +292,20 @@ for (kn, ks), s, pk, pn, head in product(VGG_FX_KERNELS.items(), (1, 2), (2, 3),
                        _VGG_FX_FUSE[kn, s], 1e-3, family="vgg16", kernels=kn, stride=s, pool_kernel=pk, pool_count=pn,
                        map_side=_VGG_MAP[s, pk, pn], head="gap" if head == "gap" else "fc", dropout=head == "fcdrop",
                        bn=True, pretrained=pt)
+
+# Phase 11 ResNet block (configs/experiments/phase_11_resnet_kernel_stem.yaml): ResNetAdapted cells, <kernels> = stem +
+# blocks. k7-3 = ResNet-18 itself (7x7 stem, 3x3 blocks; its _pretrained twin = resnet18tv); k3x3 / k2x2 = every conv;
+# kalt3-2 = 3x3 stem, then 2x2 / 3x3 alternating (each block's conv1 / conv2); k7-2 = the 7x7 stem kept, 2x2 blocks;
+# k3x3deepstem / k2x2deepstem = the stem as three convs (ResNet-C). map 2 = torchvision's geometry at 64px for every cell.
+RESNET_FX_KERNELS = {"k7-3": (7, (3, 3)), "k3x3": (3, (3, 3)), "k2x2": (2, (2, 2)), "kalt3-2": (3, (2, 3)),
+                     "k7-2": (7, (2, 2)), "k3x3deepstem": ("3deep", (3, 3)), "k2x2deepstem": ("2deep", (2, 2))}
+for _kn, (_stem, _blocks) in RESNET_FX_KERNELS.items():
+    with torch.device("meta"):
+        _f = ResNetAdapted(stem=_stem, blocks=_blocks).features
+    for _pt in (False, True) if _kn == "k7-3" else (False,):
+        _register_cell(partial(ResNetAdapted, stem=_stem, blocks=_blocks, pretrained=_pt), find_fuse_groups(_f), 1e-3,
+                       family="resnet18", kernels=_kn, stride=2, pool_kernel=3, pool_count=1, map_side=_map_side(_f),
+                       head="gap", dropout=False, bn=True, pretrained=_pt)
 
 # large-scale sweep (see configs/experiments/large_scale.yaml)
 FUSE_MAP_ALEXNET_SMALLKERNEL = [["0", "1"], ["3", "4"], ["6", "7"], ["8", "9"], ["10", "11"]]

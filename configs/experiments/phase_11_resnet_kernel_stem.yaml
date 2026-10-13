@@ -1,0 +1,23 @@
+# Phase 11 ResNet block (2026-10-13, docs/logs/PHASE11_LOG.md "Noise floors per regime and a ResNet block"). Does the
+# kernel cost replicate in a residual net, and what does its 7x7 stem cost? ResNet-18 (models.baselines.ResNetAdapted)
+# at its own geometry (stem stride 2, MaxPool 3x3, 2x2 map at 64px, GAP + BN -- the regime of the GAP + BN noise floor):
+#   k7-3 = ResNet-18 itself (+ its ImageNet-pretrained twin, = resnet18tv; both moved here from phase_11_families.yaml)
+#   k3x3 / k2x2 / kalt3-2 = every conv 3x3 / 2x2 (C2sp) / alternating, as in the AlexNet and VGG blocks
+#   k7-2 = 2x2 blocks behind the 7x7 stem (an accelerator that runs the first layer outside its Winograd engine)
+#   k3x3deepstem = ResNet-C (He, T. et al., CVPR 2019 Sec. 4.2): the 7x7 as three 3x3; k2x2deepstem = the same in 2x2
+# Out: the stride-1 / no-pool 64px stem (a geometry change, ~16x the MACs; geometry is the AlexNet geometry block's
+# question), patchify stems (not Winograd candidates), ResNet-D (a shortcut change, not a stem).
+# Same protocol as every Phase 11 run (_protocols/no_patience.yaml), enforced by tests/test_config.py. Model names:
+# ml/model_registrations.py (CELL_FACTORS, RESNET_FX_KERNELS). Queued one job per model on PCAD:
+#   python -m scripts.cluster submit --experiment phase_11_resnet_kernel_stem --runtime pcad --slurm tupi_beagle --model <m>
+extends: _protocols/no_patience
+name: phase_11_resnet_kernel_stem
+models:
+  - resnet18_k7-3_stride2_1pool3x3_map2_gap_bn
+  - resnet18_k7-3_stride2_1pool3x3_map2_gap_bn_pretrained
+  - resnet18_k3x3_stride2_1pool3x3_map2_gap_bn
+  - resnet18_k2x2_stride2_1pool3x3_map2_gap_bn
+  - resnet18_kalt3-2_stride2_1pool3x3_map2_gap_bn
+  - resnet18_k7-2_stride2_1pool3x3_map2_gap_bn
+  - resnet18_k3x3deepstem_stride2_1pool3x3_map2_gap_bn
+  - resnet18_k2x2deepstem_stride2_1pool3x3_map2_gap_bn

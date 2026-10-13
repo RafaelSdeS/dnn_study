@@ -81,11 +81,15 @@ def test_every_phase_11_figure_renders(tmp_path, monkeypatch, subset):
 # matched pairs the yamls give each one. A yaml edit that drops or breaks a contrast fails here instead of in a figure
 # months later -- as the 2026-10-07 FC -> FC + Dropout swap did (the head contrast fell from 17 pairs to 6 until
 # factor_effects paired GAP with the real FC head). Change these numbers only with the design.
-DESIGN_PAIRS = {"Kernel 11-5-3-3-3 → 3×3": 9, "Kernel 3×3 → 2×2": 12, "Kernel 11-5-3-3-3 → 2×2": 9,
-                "Kernel 3×3 → alternado 3-2": 11, "3×3 → dois 3×3 empilhados por estágio": 2,
+DESIGN_PAIRS = {"Kernel 11-5-3-3-3 → 3×3": 9, "Kernel 3×3 → 2×2": 13, "Kernel 11-5-3-3-3 → 2×2": 9,
+                "Kernel 3×3 → alternado 3-2": 12, "3×3 → dois 3×3 empilhados por estágio": 2,
                 "2×2 → dois 2×2 empilhados por estágio": 2, "Cabeça FC (+ Dropout) → GAP": 17, "BatchNorm não → sim": 8,
                 "Stride da conv1 4 → 2": 8, "3 max-pools 3×3 → 2 max-pools 2×2": 8, "Dropout 0 → 0,5 (só cabeça FC)": 6,
-                "Pré-treino ImageNet": 3}
+                "Pré-treino ImageNet": 4,
+                # the ResNet-18 block (2026-10-13): +1 each to 3x3 -> 2x2 / alternating / pretraining above, and its own
+                "Kernel 7-3 (ResNet) → 3×3": 1, "Kernel 7-3 (ResNet) → 2×2": 1, "Kernel blocos 3×3 → 2×2, stem 7×7 mantido": 1,
+                "Kernel stem 7×7 → 2×2, blocos 2×2": 1, "Kernel 3×3 → 2×2, stem profundo": 1,
+                "Stem 3×3 → três 3×3 (ResNet-C)": 1, "Stem 2×2 → três 2×2": 1}
 
 
 def test_the_design_has_every_contrast_and_no_orphan_cell():
@@ -94,7 +98,12 @@ def test_the_design_has_every_contrast_and_no_orphan_cell():
     cells, pairs = design_cells(), pairs_of(design_cells())
     assert pairs.groupby("contrast").size().to_dict() == DESIGN_PAIRS
     assert set(cells.cell) == set(pairs.cell_a) | set(pairs.cell_b), "a design cell no contrast reads: compute for nothing"
+    # the noise floors, one per regime (2026-10-13): AlexNet GAP + BN and FC + Dropout without BN, 4 kernels x 3 seeds
+    # each; VGG16's own head (FC + Dropout), 3x3 and 2x2 x 3 seeds
     seeds = [set(load_config(f"experiments/phase_11_kernel_head_bn_seed{s}.yaml")["models"]) for s in (43, 44)]
-    assert seeds[0] == seeds[1] == set(cells[(cells.family == "alexnet") & (cells.stride == 2) & (cells.pooling == "2pool2x2")
-                                             & (cells["head"] == "gap") & cells.bn & cells.kernels.isin(
-                                                 ["k11-5-3", "k3x3", "k2x2", "kalt3-2"])].cell)  # 4 kernels x 3 seeds
+    k64 = cells[(cells.family == "alexnet") & (cells.stride == 2) & (cells.pooling == "2pool2x2")
+                & cells.kernels.isin(["k11-5-3", "k3x3", "k2x2", "kalt3-2"]) & ~cells.pretrained]
+    assert seeds[0] == seeds[1] == set(k64[(k64["head"] == "gap") & k64.bn].cell) | set(k64[k64.dropout & ~k64.bn].cell)
+    vgg = [set(load_config(f"experiments/phase_11_vgg_kernel_head_seed{s}.yaml")["models"]) for s in (43, 44)]
+    assert vgg[0] == vgg[1] == set(cells[(cells.family == "vgg16") & cells.dropout & ~cells.pretrained
+                                         & cells.kernels.isin(["k3x3", "k2x2"])].cell)

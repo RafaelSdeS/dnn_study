@@ -7,6 +7,7 @@ import torch.ao.quantization as tq
 from torchvision.models import alexnet, mobilenet_v2, vgg16_bn
 from torchvision.models.quantization import mobilenet_v2 as mobilenet_v2_qat
 from torchvision.models.quantization import resnet18 as resnet18_qat
+from torchvision.models.quantization.resnet import QuantizableBasicBlock
 from torchvision.models.vgg import VGG, cfgs as VGG_CFGS
 
 
@@ -394,6 +395,85 @@ class ResNet18TV(nn.Module):
 
     def forward(self, x):
         return self.base(x)
+
+
+# ─── ResNetAdapted ────────────────────────────────────────────────────────────
+
+def _resnet_conv(in_ch: int, out_ch: int, k: int, stride: int) -> nn.Conv2d:
+    """Odd kernels pad k // 2 (torchvision's 7x7 pad 3 and 3x3 pad 1); a 2x2 pads 0 -- its C2sp pad is a module."""
+    return nn.Conv2d(in_ch, out_ch, k, stride=stride, padding=k // 2 if k % 2 else 0, bias=False)
+
+
+class _KernelBasicBlock(QuantizableBasicBlock):
+    """torchvision's quantizable BasicBlock with a k1 x k1 conv1 and a k2 x k2 conv2 (3 or 2). A stride-1 2x2 conv gets
+    SymmetricPad2d (C2sp) in front; a stride-2 one none (an even map halves exactly, as the 3x3 pad-1 conv does). The
+    pads register after the block's own modules, so conv1-bn1-relu and conv2-bn2 stay adjacent for find_fuse_groups."""
+
+    def __init__(self, inplanes: int, planes: int, stride: int, downsample, k1: int, k2: int):
+        super().__init__(inplanes, planes, stride, downsample)
+        self.conv1, self.conv2 = _resnet_conv(inplanes, planes, k1, stride), _resnet_conv(planes, planes, k2, 1)
+        self.pad1 = SymmetricPad2d() if k1 == 2 and stride == 1 else nn.Identity()
+        self.pad2 = SymmetricPad2d() if k2 == 2 else nn.Identity()
+
+    def forward(self, x):
+        identity = x if self.downsample is None else self.downsample(x)
+        out = self.relu(self.bn1(self.conv1(self.pad1(x))))
+        out = self.bn2(self.conv2(self.pad2(out)))
+        return self.add_relu.add_relu(out, identity)
+
+
+# stem -> [(kernel, out channels, stride)]; "3deep" = ResNet-C (He, T. et al., CVPR 2019 "Bag of Tricks" Sec. 4.2: the
+# 7x7 replaced by three 3x3, 32-32-64 channels, the first with stride 2), "2deep" = the same with 2x2 (C2sp)
+RESNET_STEMS = {7: [(7, 64, 2)], 3: [(3, 64, 2)], 2: [(2, 64, 2)],
+                "3deep": [(3, 32, 2), (3, 32, 1), (3, 64, 1)], "2deep": [(2, 32, 2), (2, 32, 1), (2, 64, 1)]}
+
+
+class ResNetAdapted(nn.Module):
+    """ResNet-18 (He et al. 2016; torchvision's quantizable one) with the stem and the block kernels as the Phase 11 ResNet
+    factors (configs/experiments/phase_11_resnet_kernel_stem.yaml, docs/logs/PHASE11_LOG.md "Noise floors per regime and
+    a ResNet block"): stem in RESNET_STEMS, blocks = (conv1, conv2) kernel of every BasicBlock (3 or 2; 2x2 with C2sp,
+    Wu et al. NeurIPS 2019). torchvision's own geometry for every cell -- stem stride 2, MaxPool 3x3/s2, map 2x2 at 64px,
+    GAP head -- as VGG keeps its own. stem=7, blocks=(3, 3) is ResNet18TV layer for layer, with the same RNG order and
+    init (tests/test_registry.py); any other cell re-draws every conv with torchvision's ResNet init (Kaiming normal,
+    fan_out). pretrained=True (that cell only) loads its ImageNet weights, logits Linear fresh, as ResNet18TV does."""
+
+    def __init__(self, num_classes: int = 200, stem=7, blocks: tuple = (3, 3), pretrained: bool = False):
+        super().__init__()
+        assert stem in RESNET_STEMS and set(blocks) <= {2, 3}, (stem, blocks)
+        assert not pretrained or (stem, tuple(blocks)) == (7, (3, 3)), "ImageNet weights only fit ResNet-18's own kernels"
+        base = resnet18_qat(weights="IMAGENET1K_V1" if pretrained else None, quantize=False)
+        logits = nn.Linear(512, num_classes)  # drawn here, as ResNet18TV's fc: the same RNG order; registered last
+        if stem == 7:
+            layers = [base.conv1, base.bn1, base.relu]
+        else:
+            layers, in_ch = [], 3
+            for k, out_ch, stride in RESNET_STEMS[stem]:
+                layers += ([SymmetricPad2d()] if k == 2 and stride == 1 else []) + [
+                    _resnet_conv(in_ch, out_ch, k, stride), nn.BatchNorm2d(out_ch), nn.ReLU(inplace=False)]
+                in_ch = out_ch
+        stages = [base.layer1, base.layer2, base.layer3, base.layer4]
+        if tuple(blocks) != (3, 3):
+            for stage in stages:
+                for i, b in enumerate(stage):
+                    stage[i] = _KernelBasicBlock(b.conv1.in_channels, b.conv1.out_channels, b.stride, b.downsample, *blocks)
+        self.quant = tq.QuantStub()
+        self.features = nn.Sequential(*layers, base.maxpool, *stages)
+        self.avgpool, self.classifier = base.avgpool, logits
+        self.dequant = tq.DeQuantStub()
+        if (stem, tuple(blocks)) != (7, (3, 3)):
+            for m in self.features.modules():
+                if isinstance(m, nn.Conv2d):
+                    nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
+        _fix_relu_inplace(self)
+
+    def forward(self, x):
+        x = self.quant(x)
+        x = self.features(x)
+        x = self.avgpool(x)
+        x = torch.flatten(x, 1)
+        x = self.classifier(x)
+        x = self.dequant(x)
+        return x
 
 
 # ─── MobileNetV2TV ────────────────────────────────────────────────────────────

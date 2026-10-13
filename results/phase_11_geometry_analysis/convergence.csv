@@ -7,6 +7,8 @@ kernel_geometry,alexnet_k11-5-3_stride4_2pool2x2_map4_fcdrop_nobn,42,fp32,500,Tr
 kernel_geometry,alexnet_k11-5-3_stride4_2pool2x2_map4_fcdrop_nobn,42,qat,50,True,41.23,50,3,5,0.00999999999999801,15,61.19,True
 kernel_geometry,alexnet_k11-5-3_stride4_3pool3x3_map1_gap_nobn,42,fp32,500,True,35.15,466,203,301,0.3299999999999983,44,86.82,True
 kernel_geometry,alexnet_k11-5-3_stride4_3pool3x3_map1_gap_nobn,42,qat,50,True,35.2,4,1,1,0.0,20,86.84,True
+kernel_geometry,alexnet_k2x2_stride2_3pool3x3_map3_fcdrop_nobn,42,fp32,500,True,40.62,479,50,91,0.3999999999999986,51,95.63,True
+kernel_geometry,alexnet_k2x2_stride2_3pool3x3_map3_fcdrop_nobn,42,qat,50,False,40.83,34,1,1,0.0,3,95.58,False
 kernel_geometry,alexnet_k2x2_stride4_2pool2x2_map4_fcdrop_nobn,42,fp32,500,True,32.13,98,54,66,0.0,61,90.64,True
 kernel_geometry,alexnet_k2x2_stride4_2pool2x2_map4_fcdrop_nobn,42,qat,50,True,34.58,22,2,6,0.0,4,52.55,True
 kernel_geometry,alexnet_k2x2_stride4_3pool3x3_map1_gap_nobn,42,fp32,500,True,33.69,462,304,371,0.35999999999999943,271,44.32,True

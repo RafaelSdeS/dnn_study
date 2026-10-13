@@ -26,8 +26,8 @@ from matplotlib.patches import Patch
 from configs.loader import load_config
 from ml.plotting import AMBER, BLUE, GREEN, NEUTRAL, RED, apply_report_style
 from ml.reporting import holm, mcnemar_p, wilson_ci
-from scripts.phase11.analyze_geometry import (LAYOUTS, TABLES, early_handle, early_ring, int8_bar, noise_band,
-                                              precision_handles, reference_lines, savefig)
+from scripts.phase11.analyze_geometry import (LAYOUTS, REGIME_LABEL, TABLES, band_for, early_handle, early_ring, int8_bar,
+                                              noise_bands, pair_band, precision_handles, reference_lines, savefig)
 from scripts.phase11.design_figures import cell_label, frame
 
 PURPLE = "#7b3fa0"
@@ -52,7 +52,15 @@ PAIRS = [("kernels", "k11-5-3", "k3x3", "Kernel 11-5-3-3-3 → 3×3"), ("kernels
          ("kernels", "k2x2", "k2x2stacked", "2×2 → dois 2×2 empilhados por estágio"),
          ("head", FC_HEAD, GAP_HEAD, "Cabeça FC (+ Dropout) → GAP"), ("bn", False, True, "BatchNorm não → sim"),
          ("stride", 4, 2, "Stride da conv1 4 → 2"), ("pooling", "3pool3x3", "2pool2x2", "3 max-pools 3×3 → 2 max-pools 2×2"),
-         ("dropout", False, True, "Dropout 0 → 0,5 (só cabeça FC)"), ("pretrained", False, True, "Pré-treino ImageNet")]
+         ("dropout", False, True, "Dropout 0 → 0,5 (só cabeça FC)"), ("pretrained", False, True, "Pré-treino ImageNet"),
+         # ResNet-18 (phase_11_resnet_kernel_stem.yaml): its own kernels are k7-3 (7x7 stem, 3x3 blocks); stem and blocks
+         # apart through k7-2; the deep stems (ResNet-C) are a depth compensation, like stacked
+         ("kernels", "k7-3", "k3x3", "Kernel 7-3 (ResNet) → 3×3"), ("kernels", "k7-3", "k2x2", "Kernel 7-3 (ResNet) → 2×2"),
+         ("kernels", "k7-3", "k7-2", "Kernel blocos 3×3 → 2×2, stem 7×7 mantido"),
+         ("kernels", "k7-2", "k2x2", "Kernel stem 7×7 → 2×2, blocos 2×2"),
+         ("kernels", "k3x3deepstem", "k2x2deepstem", "Kernel 3×3 → 2×2, stem profundo"),
+         ("kernels", "k3x3", "k3x3deepstem", "Stem 3×3 → três 3×3 (ResNet-C)"),
+         ("kernels", "k2x2", "k2x2deepstem", "Stem 2×2 → três 2×2")]
 FIGURE_OF = {"head": "Cabeça (FC → GAP)", "stride": "Stride da conv1 (4 → 2)", "pooling": "Pooling", "dropout": "Dropout (0 → 0,5)",
              "pretrained": PRE, "bn": "BatchNorm (sem → com)"}
 K3_GAP_BN = "alexnet_k3x3_stride2_2pool2x2_map8_gap_bn"
@@ -60,7 +68,6 @@ FAMILY_CONTRASTS = [  # (factor, label, A, B, note): what the cell grid can't ex
     (COMP, "64px · 3×3 + BN + GAP → Bottleneck", K3_GAP_BN, "alexnet_bottleneck", ""),
     (COMP, "64px · 3×3 + BN + GAP → Fire†", K3_GAP_BN, "alexnet_fire", "o Fire usa conv1 stride 1 (mapas 16×16)"),
     (PRE, "MobileNetV2 (torchvision)", "mobilenetv2_scratch", "mobilenetv2", ""),
-    (PRE, "ResNet-18 (torchvision)", "resnet18tv_scratch", "resnet18tv", ""),
 ]
 
 
@@ -100,7 +107,8 @@ def contrast_list():
     for r in pairs_of(design_cells()).itertuples():
         context = cell_label(CELL_FACTORS[r.cell_a], skip=(r.factor,) + (("dropout",) if r.factor == "head" else ()))
         if r.factor == "kernels":
-            factor = COMP if "stacked" in r.cell_b else "Kernel"
+            depth = "stacked" in r.cell_b or ("deepstem" in r.cell_b and "deepstem" not in r.cell_a)  # one conv -> several
+            factor = COMP if depth else "Kernel"
             label = f"{r.contrast.removeprefix('Kernel ')} · {context}"
         else:
             factor, label = FIGURE_OF[r.factor], context
@@ -132,8 +140,9 @@ def _pair_stats(idx, a, b):
     return out
 
 
-def contrasts(df):
-    """One row per contrast both of whose runs have finished (a pending pair is left out until then)."""
+def contrasts(df, bands=None):
+    """One row per contrast both of whose runs have finished (a pending pair is left out until then); with bands
+    (analyze_geometry.noise_bands), the noise band its single-seed difference is judged by (band_fp32 / band_int8)."""
     idx = df.set_index(["key", "seed"])
     assert idx.index.is_unique, idx.index[idx.index.duplicated()]
     rows = []
@@ -150,7 +159,9 @@ def contrasts(df):
             d_int8=d["int8"].mean(), d_int8_seeds=" / ".join(f"{x:+.2f}" for x in d["int8"]),
             **{f"{c}_{side}": v[c].mean() for side, v in [("A", va), ("B", vb)] for c in ["fp32", "int8"]},
             macs_change_pct=100 * (vb["macs_eff_m"][0] / va["macs_eff_m"][0] - 1),  # effective cost (analyze_geometry.load)
-            params_change_pct=100 * (vb["params_eff_m"][0] / va["params_eff_m"][0] - 1), note=note))
+            params_change_pct=100 * (vb["params_eff_m"][0] / va["params_eff_m"][0] - 1), note=note,
+            **({f"band_{c}": v for c, v in pair_band(*(band_for(bands, *idx.loc[(k, 42), ["family", "bn"]]) for k in (a, b))).items()}
+               if bands is not None else {})))
     t = pd.DataFrame(rows)
     for stage in ("fp32", "int8"):  # many tests in one table: family-wise correction (Holm 1979)
         if f"p_{stage}" in t:
@@ -216,7 +227,9 @@ def factorial_cells(df):
 
 def matched_pairs(cells):
     j = pairs_of(cells)
+    bn_a, bn_b = ((j[f"bn_{s}"].fillna(j["bn"]) if "bn" in j else j[f"bn_{s}"]) if f"bn_{s}" in j else j["bn"] for s in "ab")
     return pd.DataFrame({"factor": j.factor, "contrast": j.contrast, "cell_a": j.cell_a, "cell_b": j.cell_b,
+                         "family": j.family, "bn_a": bn_a, "bn_b": bn_b,
                          **{m: j[f"{m}_b"] - j[f"{m}_a"] for m in METRICS}, "early": j.early_best_a.astype(bool) | j.early_best_b.astype(bool),
                          "macs_pct": 100 * (j.macs_m_b / j.macs_m_a - 1), "params_pct": 100 * (j.params_m_b / j.params_m_a - 1)})
 
@@ -246,20 +259,25 @@ def summarize_pairs(pairs):
     return pd.DataFrame(rows)
 
 
-def fig_matched_pairs(pairs, summary, n_cells, band):
+def fig_matched_pairs(pairs, summary, n_cells, bands):
     titles = {"fp32": "Δ top-1 FP32 (pp)", "int8": "Δ top-1 INT8 (pp)", "dqat": "Δ ΔQAT (pp; >0 = mais robusto)"}
     fig, axes = plt.subplots(1, 3, figsize=(15, 0.55 * len(summary) + 3), sharey=True)
     y = {c: i for i, c in enumerate(summary.contrast[::-1])}
+    # one grey span per regime floor, widest (lightest) first; each pair is judged by its own cells' band (band_<m>)
+    floors = sorted(((r, b) for r, b in bands.items() if np.isfinite(b["fp32"])), key=lambda rb: -rb[1]["fp32"])
     for ax, m in zip(axes, METRICS):
-        if np.isfinite(band.get(m, np.nan)):
-            ax.axvspan(-band[m], band[m], color="#d0d0d0", alpha=0.6, zorder=0)
+        for n, (_, b) in enumerate(floors):
+            if m in b and np.isfinite(b[m]):
+                ax.axvspan(-b[m], b[m], color="#d0d0d0", alpha=0.35 + 0.25 * n / max(len(floors) - 1, 1), zorder=0)
         ax.axvline(0, color="k", lw=0.8)
         for s in summary.itertuples():
             v = pairs[pairs.contrast == s.contrast][m].dropna()
             if v.empty:
                 continue
             yy = y[s.contrast] + np.random.default_rng(0).uniform(-0.18, 0.18, len(v))
-            ax.scatter(v, yy, s=10, alpha=0.5, color=BLUE)
+            inside = (v.abs() < pairs.loc[v.index, f"band_{m}"]).to_numpy() if f"band_{m}" in pairs else np.zeros(len(v), bool)
+            ax.scatter(v[~inside], yy[~inside], s=10, alpha=0.5, color=BLUE)
+            ax.scatter(v[inside], yy[inside], s=10, alpha=0.7, facecolors="none", edgecolors=BLUE, lw=0.8)
             e = pairs.loc[v.index, "early"].to_numpy()
             if m != "fp32" and e.any():  # INT8 and ΔQAT of a pair with an early-best cell
                 early_ring(ax, v[e], yy[e], s=45)
@@ -272,9 +290,12 @@ def fig_matched_pairs(pairs, summary, n_cells, band):
     handles = [Line2D([], [], marker="o", color=BLUE, ls="", ms=4, alpha=0.5, label="um par de células iguais em todo o resto"),
                Line2D([], [], marker="D", color=RED, ls="-", ms=7, label="mediana dos pares (barra: IC 95% bootstrap)"),
                Line2D([], [], ls="", label="k/n à direita = pares em que o 2º nível ganha")]
-    if np.isfinite(band.get("fp32", np.nan)):
-        handles.append(Patch(color="#d0d0d0", label=f"ruído entre seeds (±{band['fp32']:.1f} pp FP32"
-                             + (f", ±{band['int8']:.1f} pp INT8)" if np.isfinite(band.get("int8", np.nan)) else ")")))
+    for r, b in floors:
+        handles.append(Patch(color="#d0d0d0", label=f"ruído entre seeds, {REGIME_LABEL.get(r, r)}: ±{b['fp32']:.1f} pp FP32"
+                             + (f", ±{b['int8']:.1f} pp INT8" if np.isfinite(b["int8"]) else "")))
+    if floors:
+        handles.append(Line2D([], [], marker="o", ls="", ms=4, mfc="none", color=BLUE,
+                              label="par dentro do ruído das suas duas células (vazado)"))
     if pairs.early.any():
         handles.append(early_handle("ring"))
     fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0), ncol=2, fontsize=9)
@@ -290,12 +311,11 @@ def main():
     if df.empty:
         print("no Phase 11 run has a summary yet")
         return
-    t = contrasts(df)
+    bands = noise_bands(df)  # one floor per regime; no seed band of its own for the INT8 - FP32 difference (dqat)
+    t = contrasts(df, bands)
     TABLES.mkdir(parents=True, exist_ok=True)
     t.to_csv(TABLES / "factor_effects.csv", index=False)
-    band = noise_band(df)
-    band["dqat"] = float("nan")  # no seed band of its own for the INT8 - FP32 difference
-    print("noise band (pp):", {k: round(v, 2) for k, v in band.items()})
+    print("noise bands (pp):", {REGIME_LABEL.get(r, r): {k: round(v, 2) for k, v in b.items()} for r, b in bands.items()})
     if not t.empty:
         for factor in FACTOR_FIG:
             fig_factor(t, df, factor)
@@ -307,11 +327,14 @@ def main():
     if pairs.empty:
         print("14: no finished matched pair yet")
         return
+    for m in ("fp32", "int8"):
+        pairs[f"band_{m}"] = [pair_band(band_for(bands, f, a), band_for(bands, f, b))[m]
+                              for f, a, b in zip(pairs.family, pairs.bn_a, pairs.bn_b)]
     summary = summarize_pairs(pairs)
     cells.to_csv(TABLES / "factorial_cells.csv", index=False)
     pairs.to_csv(TABLES / "factorial_pairs.csv", index=False)
     summary.to_csv(TABLES / "factorial_pair_summary.csv", index=False)
-    fig_matched_pairs(pairs, summary, len(cells), band)
+    fig_matched_pairs(pairs, summary, len(cells), bands)
     print(f"\n{len(cells)} factorial cells trained (seed 42)")
     print(summary[["contrast", "n_pairs", "fp32_median", "fp32_n_positive", "int8_n", "int8_median", "dqat_median", "dqat_n_positive",
                    "macs_pct"]].round(2).to_string(index=False))
