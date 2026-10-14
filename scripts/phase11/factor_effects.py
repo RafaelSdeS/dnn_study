@@ -26,7 +26,7 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
 from configs.loader import load_config
-from ml.plotting import BLUE, NEUTRAL, RED, apply_report_style
+from ml.plotting import AMBER, BLUE, RED, apply_report_style
 from ml.reporting import holm, mcnemar_p, wilson_ci
 from scripts.phase11.analyze_geometry import (LAYOUTS, REGIME_LABEL, TABLES, band_for, early_handle, early_ring, int8_bar,
                                               noise_bands, pair_band, precision_handles, reference_lines, savefig)
@@ -35,7 +35,7 @@ from scripts.phase11.design_figures import cell_label, frame
 COMP = "Compensação (profundidade e blocos)"
 PRE = "Pré-treino ImageNet (não → sim)"
 POOL = "Pooling (3 max-pools 3×3 → 2 max-pools 2×2)"
-B_COLOR = "#0d8b8b"  # one colour for B in every factor figure, none of the kernel colours (KCOLOR), which mean a kernel
+A_COLOR, B_COLOR = BLUE, AMBER  # A and B in every factor figure (report palette); the legend names each, never a kernel
 FACTOR_FIG = {"Cabeça (FC + Dropout → GAP)": "04_head_fc_vs_gap.png", "Stride da conv1 (4 → 2)": "05_conv1_stride.png",
               POOL: "06_pooling.png", "Dropout (0 → 0,5)": "07_dropout.png", PRE: "08_pretraining.png",
               "BatchNorm (sem → com)": "09_batchnorm.png", COMP: "10_compensation_block.png"}  # Kernel: figures 01-03
@@ -171,7 +171,7 @@ def contrasts(df, bands=None):
 
 
 def fig_factor(t, df, factor, per_row=6):
-    """Absolute top-1 of A and B for every contrast of one factor (A grey, B in B_COLOR) + baseline; each group's label
+    """Absolute top-1 of A and B for every contrast of one factor (A_COLOR, B_COLOR) + baseline; each group's label
     states B - A. The legend names A and B from the factor's '(a → b)'."""
     g, color = t[t.factor == factor], B_COLOR
     if g.empty:
@@ -182,10 +182,9 @@ def fig_factor(t, df, factor, per_row=6):
     fig, axes = plt.subplots(len(chunks), 1, figsize=(max(11.0, 2.5 * width + 1.5), 5.2 * len(chunks) + 1.2), squeeze=False,
                              sharey=True, layout="constrained")
     w = 0.19
-    ref = []
     for ax, chunk in zip(axes[:, 0], chunks):
         for i, r in enumerate(chunk.itertuples()):
-            for j, (side, c) in enumerate([("A", NEUTRAL), ("B", color)]):
+            for j, (side, c) in enumerate([("A", A_COLOR), ("B", color)]):
                 fp32 = getattr(r, f"fp32_{side}")
                 ax.bar(i + (2 * j - 1.5) * w, fp32, w, color=c, edgecolor="white")
                 int8_bar(ax, i + (2 * j - 0.5) * w, getattr(r, f"int8_{side}"), w, c, early=getattr(r, f"early_{side}"))
@@ -199,18 +198,18 @@ def fig_factor(t, df, factor, per_row=6):
         ax.set_xlim(-0.6, width - 0.4)  # same bar width in every row
         ax.set_ylabel("Top-1 (%)")
         ax.margins(y=0.08)
-        ref = reference_lines(ax, df) or ref
+        reference_lines(ax, df)
     notes = {}
     for r in g.itertuples():
         if r.note:
             notes.setdefault(r.note, []).append(r.contrast)
     fig.suptitle(f"{factor}: cada grupo compara duas redes idênticas exceto por este fator (seed 42)\n{LAYOUTS}"
-                 + "".join(f"\nnota — {'; '.join(cs)}: {note}" for note, cs in notes.items()), fontsize=10)
+                 + "".join(f"\nnota — {'; '.join(cs)}: {note}" for note, cs in notes.items()), fontsize=11)
     m = re.fullmatch(r"(.+) \((.+) → (.+)\)", factor)
     a, b = (f"{m[1]}: {m[2]}", f"{m[1]}: {m[3]}") if m else ("antes", "depois")
-    fig.legend(handles=[Patch(color=NEUTRAL, label=f"A = {a}"), Patch(color=color, label=f"B = {b}")]
-               + precision_handles() + ref + ([early_handle("hatch")] if (g.early_A | g.early_B).any() else []),
-               loc="outside lower center", ncol=2, fontsize=8.5)
+    fig.legend(handles=[Patch(color=A_COLOR, label=f"A = {a}"), Patch(color=color, label=f"B = {b}")]
+               + precision_handles() + ([early_handle("hatch")] if (g.early_A | g.early_B).any() else []),
+               loc="outside lower center", ncol=2, fontsize=9)
     savefig(fig, FACTOR_FIG[factor])
 
 
@@ -284,7 +283,7 @@ def fig_matched_pairs(pairs, summary, n_cells, bands):
                 continue
             yy = y[s.contrast] + np.random.default_rng(0).uniform(-0.18, 0.18, len(v))
             inside = (v.abs() < pairs.loc[v.index, f"band_{m}"]).to_numpy() if f"band_{m}" in pairs else np.zeros(len(v), bool)
-            ax.scatter(v[~inside], yy[~inside], s=10, alpha=0.5, color=BLUE)
+            ax.scatter(v[~inside], yy[~inside], s=14, alpha=0.8, color=BLUE)
             ax.scatter(v[inside], yy[inside], s=10, alpha=0.7, facecolors="none", edgecolors=BLUE, lw=0.8)
             e = pairs.loc[v.index, "early"].to_numpy()
             if m != "fp32" and e.any():  # INT8 and ΔQAT of a pair with an early-best cell
@@ -297,7 +296,7 @@ def fig_matched_pairs(pairs, summary, n_cells, bands):
     axes[0].text(0, 1.0, "fator trocado: A → B", transform=axes[0].transAxes, ha="right", va="bottom", fontsize=9, weight="bold")
     axes[0].set_yticks(list(y.values()))
     axes[0].set_yticklabels(list(y.keys()), fontsize=9)
-    handles = [Line2D([], [], marker="o", color=BLUE, ls="", ms=4, alpha=0.5, label="um par de redes iguais em tudo menos no fator (valor = B − A)"),
+    handles = [Line2D([], [], marker="o", color=BLUE, ls="", ms=4, alpha=0.8, label="um par de redes iguais em tudo menos no fator (valor = B − A)"),
                Line2D([], [], marker="D", color=RED, ls="-", ms=7, label="mediana dos pares (barra: IC 95% bootstrap)"),
                Line2D([], [], color="k", lw=0.8, label="linha 0 = A e B iguais (sem efeito)"),
                Line2D([], [], ls="", label="k/n à direita = em quantos pares B ficou acima de A")]

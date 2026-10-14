@@ -5,9 +5,9 @@ pre-fix INT8, latencies that still timed the DataLoader, and some only-approxima
 
     13_pareto_accuracy_cost.png     top-1 INT8 vs MACs and vs INT8 size; Pareto front labelled
     14_main_factorial_grid.png      kernel x {GAP, FC} x {no BN, BN} at the 64px layout, and the delta vs 11-5-3-3-3
-    15_kernel_by_geometry.png       one line per kernel across the 4 geometries (FC; GAP at the two layouts)
+    15_kernel_by_geometry.png       one line per kernel across the 4 geometries (FC + Dropout, no BN)
     16_quantization_robustness.png  INT8 - FP32 per kernel / family, and vs each net's worst layer-input max/p99.9
-    17_latency_vs_macs.png          batch-1 latency vs MACs: FP32 GPU, FP32 CPU, INT8 CPU
+    17_latency_vs_macs.png          batch-1 latency vs MACs on one machine, against the AlexNet original's ms per MAC
     18_training_curves.png          val/train top-1 per epoch at the 64px layout, {GAP, FC} x {no BN, BN}
     19_qat_curves.png               the 50 QAT epochs of the same nets: val top-1 with fake-quant, from the FP32 best to INT8
 
@@ -23,13 +23,15 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
+from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
 from configs.loader import load_config
-from ml.plotting import AMBER, BLUE, GREEN, NEUTRAL, RED, TEXT_SECONDARY, apply_report_style
-from scripts.phase11.analyze_geometry import (ARCHIVE, EARLY_LABEL, FIGS, LOG_EPOCH, REFERENCE_REGIME, ROOT, RUNS, band_for,
-                                              early_handle, early_ring, load, noise_band, noise_bands, savefig)
+from ml.plotting import AMBER, BLUE, GREEN, NEUTRAL, PURPLE, RED, TEXT_PRIMARY, TEXT_SECONDARY, apply_report_style, shade
+from scripts.phase11.analyze_geometry import (ARCHIVE, BASE_KEY, BASE_LABEL, EARLY_LABEL, FIGS, LOG_EPOCH, REFERENCE_REGIME, ROOT,
+                                              RUNS, band_for, early_handle, early_ring, load, noise_band, noise_bands,
+                                              reference_lines, savefig)
 
 PREVIEW = ROOT / "results/archive_adamw_recipe/figures_generated/phase_11_preview"
 PREVIEW_NOTE = ("PRÉVIA — runs antigas: receita AdamW, split de validação, INT8 antes das correções de 30/09–03/10; "
@@ -40,8 +42,9 @@ K4 = ["k11-5-3", "k3x3", "k2x2", "kalt3-2"]
 KLABEL = {"k11-5-3": "11-5-3-3-3", "k3x3": "3×3", "k2x2": "2×2", "kalt3-2": "alternado 3-2", "k3x3stacked": "3×3 empilhado",
           "k2x2stacked": "2×2 empilhado", "k7-3": "7×7 + 3×3 (original)", "k7-2": "stem 7×7 + 2×2",
           "k3x3deepstem": "3×3, stem profundo", "k2x2deepstem": "2×2, stem profundo"}
-KCOLOR = {"k11-5-3": AMBER, "k3x3": GREEN, "k2x2": BLUE, "kalt3-2": RED, "k3x3stacked": "#0b6b2e", "k2x2stacked": "#0b3d7a",
-          "k7-3": AMBER, "k7-2": "#7b3fa0", "k3x3deepstem": "#0b6b2e", "k2x2deepstem": "#0b3d7a"}  # deep stem = depth, as stacked
+# every Phase 11 colour comes from ml/plotting.py's report palette; a deeper variant of a kernel = a darker shade of its hue
+KCOLOR = {"k11-5-3": AMBER, "k3x3": GREEN, "k2x2": BLUE, "kalt3-2": RED, "k3x3stacked": shade(GREEN, 0.45), "k2x2stacked": shade(BLUE, 0.45),
+          "k7-3": AMBER, "k7-2": PURPLE, "k3x3deepstem": shade(GREEN, 0.45), "k2x2deepstem": shade(BLUE, 0.45)}  # deep stem = depth, as stacked
 RESNET_K = ["k7-3", "k3x3", "k2x2", "kalt3-2", "k7-2", "k3x3deepstem", "k2x2deepstem"]
 FAMILY_TAG = {"vgg16": "VGG16", "resnet18": "ResNet-18"}  # nets kept at their own geometry, always with BN
 HMARK = {"gap": "o", "fc": "s", "fcdrop": "^", "família": "X"}
@@ -173,6 +176,14 @@ def legend_kernels(kernels):
     return [Patch(color=KCOLOR[k], label=KLABEL[k]) for k in KCOLOR if k in set(kernels)]
 
 
+def base_ring(ax, x, y):
+    """The big black ring that marks the AlexNet original (baseline) wherever it is a point."""
+    ax.scatter(x, y, s=320, facecolors="none", edgecolors="k", lw=1.5, zorder=4)
+
+
+BASE_HANDLE = Line2D([], [], marker="o", mfc="none", mec="k", mew=1.5, ls="", ms=15, label=BASE_LABEL)
+
+
 def fig_pareto(df, figs, note):
     d = seed42(df).dropna(subset=["int8"])
     costs = [("macs_eff_m", "MACs por imagem (milhões, escala log)"), ("int8_eff_mb", "Tamanho do modelo INT8 (MB, escala log)")]
@@ -188,14 +199,14 @@ def fig_pareto(df, figs, note):
             if r.early_best:
                 early_ring(ax, getattr(r, x), r.int8)
         front = d[pareto_front(d[x], d.int8)].sort_values(x)
-        ax.step(front[x], front.int8, where="post", color="#333333", lw=1, ls="--", zorder=1)
+        ax.step(front[x], front.int8, where="post", color=TEXT_PRIMARY, lw=1, ls="--", zorder=1)
         for r in front.itertuples():
             n = num[r.Index]  # odd left, even right: neighbours on the front don't print over each other
             ax.annotate(str(n), (getattr(r, x), r.int8), xytext=(-5, 4) if n % 2 else (5, 4), ha="right" if n % 2 else "left",
                         textcoords="offset points", fontsize=8, weight="bold", zorder=5)
         b = baseline(df)
         if b is not None:
-            ax.scatter(b[x], b.int8, s=320, facecolors="none", edgecolors="k", lw=1.5, zorder=4)
+            base_ring(ax, b[x], b.int8)
         plain_log(ax, "x")
         ax.set_xlabel(xlabel)
     axes[0].set_ylabel("Top-1 INT8 (%)")
@@ -203,8 +214,8 @@ def fig_pareto(df, figs, note):
                + [Line2D([], [], marker=m, color=TEXT_SECONDARY, ls="", ms=8, label=HLABEL[h]) for h, m in HMARK.items() if h in set(d.hk)]
                + [Line2D([], [], marker="o", color=TEXT_SECONDARY, alpha=0.22, ls="", ms=6, label="marcador claro = FP32 da mesma rede"),
                   Line2D([], [], marker="o", mfc="white", mec="k", mew=1.2, ls="", ms=8, label="contorno preto = VGG16"),
-                  Line2D([], [], color="#333333", ls="--", label="fronteira de Pareto (nenhuma rede é mais barata e melhor)"),
-                  Line2D([], [], marker="o", mfc="none", mec="k", mew=1.5, ls="", ms=15, label="AlexNet original do zero")]
+                  Line2D([], [], color=TEXT_PRIMARY, ls="--", label="fronteira de Pareto (nenhuma rede é mais barata e melhor)"),
+                  BASE_HANDLE]
                + ([early_handle("ring")] if d.early_best.any() else []))
     fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=4, fontsize=9)
     fig.legend(handles=[Line2D([], [], ls="", label=f"{n}  {short(d.loc[i])}") for i, n in num.items()], loc="center left",
@@ -232,7 +243,8 @@ def fig_grid(df, figs, note, bands):
     shown = np.where(np.abs(dfp) < bcol, np.nan, dfp)  # inside the seed band: no colour, it is not a difference
     lo, hi = np.nanmin(fp32), np.nanmax(fp32)
     dark = [(fp32 - lo) / (hi - lo + 1e-9) > 0.6, np.abs(shown) / lim > 0.6]  # white text on the darkest cells
-    for ax, m, cmap, kw in [(axes[0], fp32, "YlGn", {}), (axes[1], shown, "RdBu", dict(vmin=-lim, vmax=lim))]:
+    seq, div = (LinearSegmentedColormap.from_list(n, c) for n, c in [("acc", ["white", GREEN]), ("delta", [RED, "white", BLUE])])
+    for ax, m, cmap, kw in [(axes[0], fp32, seq, {}), (axes[1], shown, div, dict(vmin=-lim, vmax=lim))]:
         ax.imshow(np.ma.masked_invalid(m), cmap=cmap, aspect="auto", **kw)
         ax.set_facecolor("#f0f0f0")
         on_dark = dark[ax is axes[1]]
@@ -261,45 +273,53 @@ def fig_grid(df, figs, note, bands):
     axes[0].set_title("Top-1 (%) de cada célula", fontsize=10)
     axes[1].set_title(f"Diferença para o 11-5-3-3-3 da mesma coluna: azul = melhor, vermelho = pior\n"
                       f"cinza = FP32 dentro do ruído entre seeds ({btxt(braw[1])} com BN, {btxt(braw[0])} sem BN)", fontsize=10)
+    b = baseline(df)
     fig.suptitle("Fatorial principal: kernel × cabeça × BatchNorm no layout 64px (conv1 stride 2, 2 max-pools 2×2, mapa 8×8)\n" + note
+                 + (f"\npara comparar, o AlexNet original do zero (layout original, FC + Dropout, sem BN): FP32 {b.fp32:.1f} · INT8 {b.int8:.1f}"
+                    if b is not None else "")
                  + ("\n* = " + EARLY_LABEL if early.any() else ""), fontsize=11)
     fig.tight_layout()
     savefig(fig, "14_main_factorial_grid.png", figs)
 
 
-def fig_geometry(df, figs, note):
+def fig_geometry(df, figs, note, pending=True):
+    """FC + Dropout only: GAP was trained at the two layouts alone (figures 01/02 have it). pending: name the design's
+    cells of this figure that have not run yet (off for --archive, whose cells are not the design's)."""
     fig, axes = plt.subplots(1, 2, figsize=(15, 6), sharey=True)
     xs = list(GEOMS)
     b = baseline(df)
     ringed = False
     for ax, m in zip(axes, ["fp32", "int8"]):
         for k in K4:
-            for head, ls, lw in [("fc", "-", 2.2), ("gap", "none", 1.4)]:  # GAP: no line across the 2 geometries it lacks
-                runs = [grid_cells(df, geom=g).query("kernels == @k and head == @head and ~bn") for g in xs]
-                y = [r[m].mean() for r in runs]
-                if np.isfinite(y).sum() == 0:
-                    continue
-                pts = [(i, v) for i, v in enumerate(y) if np.isfinite(v)]
-                # ponytail: no value labels -- the left column clusters them; the numbers are in figure 14 and the tables
-                ax.plot(*zip(*pts), ls=ls, marker="o" if head == "gap" else "s", color=KCOLOR[k], lw=lw, ms=7, alpha=1 if head == "fc" else 0.7)
-                for i, v in pts:
-                    if m == "int8" and runs[i].early_best.any():
-                        early_ring(ax, i, v)
-                        ringed = True
+            runs = [grid_cells(df, geom=g).query("kernels == @k and head == 'fc' and ~bn") for g in xs]
+            pts = [(i, r[m].mean()) for i, r in enumerate(runs) if np.isfinite(r[m].mean())]
+            if not pts:
+                continue
+            # ponytail: no value labels -- the left column clusters them; the numbers are in figure 14 and the tables
+            ax.plot(*zip(*pts), marker="s", color=KCOLOR[k], lw=2.2, ms=7)
+            for i, v in pts:
+                if m == "int8" and runs[i].early_best.any():
+                    early_ring(ax, i, v)
+                    ringed = True
+        reference_lines(ax, df, stage=m, text="left")
         if b is not None and np.isfinite(b[m]):
-            ax.axhline(b[m], color="#333333", ls=":", lw=1.3, label="AlexNet original do zero (com Dropout)")
+            base_ring(ax, xs.index((4, 3, 3)), b[m])  # the baseline is this figure's 11-5-3-3-3 at the original layout
         ax.set_xticks(range(len(xs)))
         ax.set_xticklabels([GEOMS[g] for g in xs], fontsize=9)
         ax.set_title({"fp32": "FP32", "int8": "INT8"}[m], fontsize=10)
     axes[0].set_ylabel("Top-1 (%)")
-    handles = legend_kernels(K4) + [Line2D([], [], color=TEXT_SECONDARY, marker="s", lw=2.2, label="cabeça FC (linha cheia)"),
-                                    Line2D([], [], color=TEXT_SECONDARY, marker="o", ls="", label="cabeça GAP (só pontos: treinada só nos 2 layouts)"),
-                                    Line2D([], [], color="#333333", ls=":", lw=1.3, label="AlexNet original do zero (com Dropout)")]
-    handles += [early_handle("ring")] if ringed else []
+    missing = {}
+    if pending:
+        from scripts.phase11.factor_effects import design_cells  # imported here: factor_effects imports this module
+        c = design_cells()
+        c = c[(c.family == "alexnet") & (c["head"] == "fc") & c.dropout & ~c.bn & ~c.pretrained & c.kernels.isin(K4)]
+        for r in c[~c.cell.isin(seed42(df).key)].itertuples():
+            missing.setdefault(GEOMS[(r.stride, r.pool_kernel, r.pool_count)].replace("\n", " "), []).append(KLABEL[r.kernels])
+    handles = legend_kernels(K4) + ([BASE_HANDLE] if b is not None else []) + ([early_handle("ring")] if ringed else [])
     fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=4, fontsize=9)
-    fig.suptitle("O custo do kernel depende da geometria? Mesmas redes (sem BN; FC = cabeça do AlexNet, com Dropout), só muda como a rede reduz o mapa\n"
+    fig.suptitle("O custo do kernel depende da geometria? Mesmas redes (AlexNet sem BN, cabeça FC + Dropout), só muda como a rede reduz o mapa\n"
                  "da esquerda (layout 64px) para a direita (layout do AlexNet original); linhas não paralelas = interação kernel × geometria\n"
-                 + note, fontsize=11)
+                 + note + "".join(f"\nainda na fila: {' e '.join(ks)} em {g}" for g, ks in missing.items()), fontsize=11)
     fig.tight_layout()
     savefig(fig, "15_kernel_by_geometry.png", figs)
 
@@ -332,6 +352,8 @@ def fig_quant(df, figs, note):
                                                                             else dict(facecolors="none", edgecolors=c, lw=1.3)))
                 if r.early_best:
                     early_ring(ax, x, r.dq)
+                if r.key == BASE_KEY:
+                    base_ring(ax, x, r.dq)
     axes[0].set_xticks(range(len(groups)))
     axes[0].set_xticklabels([(FAMILY_TAG[fam] + "\n" if fam in FAMILY_TAG else "") + (KLABEL[k] if k else "famílias") for fam, k in groups],
                             fontsize=9)
@@ -347,7 +369,7 @@ def fig_quant(df, figs, note):
                + [Line2D([], [], marker=m, color=TEXT_SECONDARY, ls="", ms=8, label=HLABEL[h]) for h, m in HMARK.items() if h in set(d.hk)]
                + [Line2D([], [], marker="o", color=TEXT_SECONDARY, ls="", ms=8, label="cheio = com BN"),
                   Line2D([], [], marker="o", mfc="none", mec=TEXT_SECONDARY, ls="", ms=8, label="vazado = sem BN")]
-               + ([early_handle("ring")] if d.early_best.any() else []))
+               + ([BASE_HANDLE] if (d.key == BASE_KEY).any() else []) + ([early_handle("ring")] if d.early_best.any() else []))
     fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=5, fontsize=9)
     fig.suptitle("Robustez à quantização: quanto cada rede perde do FP32 ao INT8 real, e um porquê possível\n" + note, fontsize=11)
     fig.tight_layout()
@@ -355,31 +377,44 @@ def fig_quant(df, figs, note):
 
 
 def fig_latency(df, figs, note):
+    """One machine only (GPU + CPU: batch-1 latency on a GPU is launch-bound, so the host CPU moves all three panels):
+    latency is compared within a machine (CLAUDE.md), so the runs measured elsewhere wait for the one-machine
+    re-measurement. The dashed line is the AlexNet original's ms per MAC: above it = slower per MAC than the baseline."""
     d = seed42(df)
-    # one machine = GPU + CPU: batch-1 latency on a GPU is launch-bound, so the host CPU moves all three panels
     ref = d.machine.mode().iloc[0] if len(d) else None
-    gpu = next(iter(d[d.machine == ref].gpu.dropna()), "?")
+    out = d[d.machine != ref]
+    if len(out):
+        print("17: " + str(ref) + "; left out: " + "; ".join(f"{m} ({n})" for m, n in out.machine.value_counts().items()))
+    d = d[d.machine == ref]
+    gpu = next(iter(d.gpu.dropna()), "?")
+    b = baseline(df)
+    b = b if b is not None and b.machine == ref else None
     fig, axes = plt.subplots(1, 3, figsize=(17, 5.8))
+    axes[2].sharey(axes[1])  # FP32 and INT8 on the same CPU, one scale
     for ax, m, title in [(axes[0], "lat_gpu", f"FP32 na GPU ({gpu}), batch 1"), (axes[1], "lat_cpu", "FP32 na CPU, batch 1"),
                          (axes[2], "lat_int8", "INT8 na CPU, batch 1")]:
         for r in d.dropna(subset=[m]).itertuples():
-            same = r.machine == ref
-            ax.scatter(r.macs_eff_m, getattr(r, m), marker=HMARK[r.hk], s=55, zorder=3,
-                       **(dict(color=color(r), edgecolors="white") if same else dict(facecolors="none", edgecolors=color(r), lw=1.2)))
+            ax.scatter(r.macs_eff_m, getattr(r, m), marker=HMARK[r.hk], s=55, zorder=3, color=color(r), edgecolors="white")
         plain_log(ax, "x", "y")
+        if b is not None and pd.notna(b[m]):
+            base_ring(ax, b.macs_eff_m, b[m])
         ax.set_xlabel("MACs por imagem (milhões, log)")
         ax.set_title(title, fontsize=10)
+    for ax, m in zip(axes, ["lat_gpu", "lat_cpu", "lat_int8"]):  # after every point: the shared CPU scale must not grow to fit the line
+        if b is not None and pd.notna(b[m]):
+            ax.autoscale(False)
+            x = np.array(ax.get_xlim())
+            ax.plot(x, b[m] * x / b.macs_eff_m, ls="--", color=TEXT_PRIMARY, lw=1.2, zorder=2)
     axes[0].set_ylabel("Latência por imagem (ms, log)")
-    others = sorted(set(d.machine) - {ref})
     handles = (legend_kernels(d.kernels)
                + [Line2D([], [], marker=m, color=TEXT_SECONDARY, ls="", ms=8, label=HLABEL[h]) for h, m in HMARK.items() if h in set(d.hk)]
-               + ([Line2D([], [], marker="o", mfc="none", mec=TEXT_SECONDARY, ls="", ms=8, label="vazado = medida em outra máquina: não comparar com os cheios")]
-                  if others else []))
-    if others:
-        print(f"20: filled = {ref}; hollow = {'; '.join(others)}")
-    fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=5, fontsize=9)
-    fig.suptitle("O MAC prevê o tempo real? Mesma conta, kernels diferentes: pontos acima da nuvem = kernel lento por MAC\n" + note,
-                 fontsize=11)
+               + ([BASE_HANDLE, Line2D([], [], ls="--", color=TEXT_PRIMARY, lw=1.2,
+                                       label="tempo se crescesse junto com os MACs, a partir do AlexNet original")] if b is not None else []))
+    fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=4, fontsize=9)
+    fig.suptitle("A latência acompanha os MACs? Cada ponto é uma rede; acima da linha tracejada = mais lenta por MAC que o AlexNet "
+                 "original, abaixo = mais rápida\n" + note + f" · {len(d)} redes medidas em {ref}"
+                 + (f"\n{len(out)} redes medidas em outras máquinas ficam de fora: latência só se compara na mesma máquina"
+                    if len(out) else ""), fontsize=11)
     fig.tight_layout()
     savefig(fig, "17_latency_vs_macs.png", figs)
 
@@ -398,6 +433,8 @@ CURVE_PANELS = [("gap", False), ("gap", True), ("fc", False), ("fc", True)]
 
 def fig_curves(df, figs, note):
     d = grid_cells(df)
+    b = baseline(df)
+    cb = curve(b) if b is not None else None  # the baseline's validation curve, in black in every panel
     fig, axes = plt.subplots(2, 2, figsize=(15, 9), sharex=True, sharey=True)
     for ax, (head, bn) in zip(axes.flat, CURVE_PANELS):
         drawn = False
@@ -409,6 +446,8 @@ def fig_curves(df, figs, note):
                 drawn = True
                 ax.plot(c[0], c[2], color=KCOLOR[k], lw=1.6, label=KLABEL[k] + "†" * r.approx)
                 ax.plot(c[0], c[1], color=KCOLOR[k], lw=0.8, ls="--", alpha=0.6)
+        if cb is not None:
+            ax.plot(cb[0], cb[2], color="k", lw=1.2, label=f"{BASE_LABEL}, layout original")
         if not drawn:
             ax.text(0.5, 0.5, "pendente", transform=ax.transAxes, ha="center", color=NEUTRAL, fontsize=12)
         ax.set_title(f"{'GAP' if head == 'gap' else 'FC'} · {'com BN' if bn else 'sem BN'}", fontsize=10)
@@ -481,7 +520,7 @@ def main(argv=None):
     print(f"{len(df)} runs, noise bands (pp): {bands}")
     fig_pareto(df, figs, note)
     fig_grid(df, figs, note, bands)
-    fig_geometry(df, figs, note)
+    fig_geometry(df, figs, note, pending=not archive)
     fig_quant(df, figs, note)
     fig_latency(df, figs, note if archive else "seed 42 · latência por imagem, batch 1")
     curves_note = note if archive else "seed 42 · curvas no split de validação (10% do train), não no test set"

@@ -1632,3 +1632,14 @@ is QAT's best on the validation split (`qat_best_epoch`, now `qat_best_ep` in `a
 on two runs, `qat_top1` = the log's maximum and the INT8 sits 0.05 and 0.11 pp under it. No train curve: ~20 pp above
 validation, it would flatten the 0.1-3 pp the QAT moves. The early-best FC no-BN cells show their +2-3 pp as QAT
 curves climbing from the FP32 line for ~20 epochs.
+
+## The baseline in every figure; latency on one machine (2026-10-14)
+
+The AlexNet original from scratch (`BASE_KEY`) is now the comparison point wherever a figure lacked it, drawn one way:
+one dashed line at its top-1 named on the plot with both numbers (`reference_lines`: its FP32 and INT8 sit ~0.2 pp
+apart, the old dashed + dotted pair overlapped), or a big black ring where it is a point (13, 15, 16, 17), or its
+validation curve in black (18); 14 states its numbers in the title. 11 and 19 stay without (11 plots B - A only; at
+35% it would undo 19's zoom). Figure 17 keeps only the runs of its most common machine (tupi3-6 today; the 15 measured
+on beagle or tupi1/2 wait for the one-machine re-measurement, latency compares within a machine only) and draws the
+baseline's ms per MAC as a slope-1 line: above it = slower per MAC than the AlexNet original. Figure 15 drops GAP
+(trained at the two layouts only; figures 01/02 have it) and names the design's cells still queued.

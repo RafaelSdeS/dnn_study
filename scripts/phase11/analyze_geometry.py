@@ -26,7 +26,7 @@ import yaml
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
-from ml.plotting import BLUE, RED, TEXT_SECONDARY, apply_report_style
+from ml.plotting import BLUE, RED, TEXT_PRIMARY, TEXT_SECONDARY, apply_report_style
 
 ROOT = Path(__file__).resolve().parents[2]
 TABLES = ROOT / "results/phase_11_geometry_analysis"
@@ -35,7 +35,7 @@ RUNS = (ROOT / "outputs/pcad", ROOT / "outputs/local")  # every runtime a run ca
 ARCHIVE = RUNS[0] / "archive_adamw_recipe"  # the superseded AdamW-recipe runs, same phase_11_*/<model>/results layout
 
 BASE_KEY = "alexnet_k11-5-3_stride4_3pool3x3_map1_fcdrop_nobn"  # the original AlexNet (torchvision layout), from scratch
-BASE_LABEL = "AlexNet original do zero (baseline)"
+BASE_LABEL = "AlexNet original (do zero)"
 LAYOUTS = ("layout original = o do AlexNet torchvision: conv1 stride 4 + 3 max-pools 3×3/2 → mapa final 1×1 em 64×64\n"
            "layout 64px = adaptado a 64×64: conv1 stride 2 + 2 max-pools 2×2 → mapa final 8×8")
 
@@ -146,17 +146,20 @@ def precision_handles(color=TEXT_SECONDARY):
     return [Patch(facecolor=color, label="barra cheia = FP32"), Patch(facecolor=color, alpha=0.45, label="barra clara ao lado = INT8")]
 
 
-def reference_lines(ax, df, key=BASE_KEY, label=BASE_LABEL, int8=True):
-    """Dashed (FP32) / dotted (INT8) lines at the baseline run's top-1; returns them as legend handles (none until
-    the baseline has run)."""
+def reference_lines(ax, df, key=BASE_KEY, label=BASE_LABEL, stage="fp32", text="right"):
+    """One dashed line at the baseline run's top-1 (stage), named on the plot with both its numbers -- its FP32 and
+    INT8 sit ~0.2 pp apart, two lines overlapped. text: "right" = outside the axes (bar figures: bars cover the
+    inside), "left" = inside, above the line, None = line only (a middle panel). Nothing until the baseline has run."""
     r = df[(df.key == key) & (df.seed == 42)]
-    if r.empty:
-        return []
+    if r.empty or pd.isna(r.iloc[0][stage]):
+        return
     r = r.iloc[0]
-    lines = [ax.axhline(r.fp32, color="#333333", ls="--", lw=1.3, zorder=4, label=f"{label}: FP32 {r.fp32:.1f}%")]
-    if int8 and pd.notna(r.int8):
-        lines.append(ax.axhline(r.int8, color="#333333", ls=":", lw=1.3, zorder=4, label=f"{label}: INT8 {r.int8:.1f}%"))
-    return lines
+    ax.axhline(r[stage], color=TEXT_PRIMARY, ls="--", lw=1.3, zorder=4)
+    if text:
+        out = text == "right"
+        ax.text(1.01 if out else 0.01, r[stage], f"{label}\n{r.fp32:.1f}% FP32 · {r.int8:.1f}% INT8",
+                transform=ax.get_yaxis_transform(), ha="left", va="center" if out else "bottom", fontsize=8.5, clip_on=False,
+                zorder=6, bbox=dict(facecolor="white", edgecolor="none", alpha=0.85, pad=0.5))
 
 
 def main_grid_table(df):
@@ -202,17 +205,20 @@ def fig_convert(df):
         for x, txt, ha in [(first_bn - 0.6, "sem BatchNorm ←", "right"), (first_bn - 0.4, "→ com BatchNorm", "left")]:
             ax.text(x, 0.97, txt, transform=ax.get_xaxis_transform(), ha=ha, va="top", fontsize=9, color=TEXT_SECONDARY)
     ax.axhline(0, color="k", lw=0.8)
+    if b is not None:
+        ax.axvspan(-0.5, 0.5, color="#e6e6e6", zorder=0)  # the baseline's bar, to compare the others against
     ax.margins(y=0.1)  # headroom for the BN labels above the tallest bar
     ax.set_xticks(range(len(d)))
     ax.set_xticklabels(["AlexNet original\n(baseline)" if r.key == BASE_KEY else cell_label(r, skip=("bn",)) for r in d.itertuples()],
                        rotation=40, ha="right", fontsize=9)
     ax.set_ylabel("INT8 − FP32 (pp; negativo = perde no INT8)")
     ax.set_title("De onde vem a diferença INT8 − FP32: do treino QAT ou da conversão para INT8 real? (seed 42)\n"
-                 "fatorial principal, layout 64px (conv1 stride 2, 2 max-pools 2×2); a barra termina em INT8 − FP32", fontsize=10)
-    ax.legend(handles=[Patch(color=BLUE, label="QAT − FP32 (treino com fake-quant)"),
-                       Patch(color=RED, label="INT8 − QAT (conversão para INT8 real)")]
-              + ([early_handle("hatch")] if d.early_best.any() else []),
-              loc="upper left", bbox_to_anchor=(1.01, 1), fontsize=9)
+                 "fatorial principal, layout 64px (conv1 stride 2, 2 max-pools 2×2); a barra termina em INT8 − FP32", fontsize=11)
+    fig.tight_layout()
+    fig.legend(handles=[Patch(color=BLUE, label="QAT − FP32 (treino com fake-quant)"),
+                        Patch(color=RED, label="INT8 − QAT (conversão para INT8 real)")]
+               + ([early_handle("hatch")] if d.early_best.any() else []),
+               loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=3, fontsize=9)
     savefig(fig, "12_quantization_drop_where.png")
 
 

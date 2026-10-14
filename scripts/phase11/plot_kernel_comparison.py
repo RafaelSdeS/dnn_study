@@ -54,7 +54,7 @@ def fig_kernel(df, filename, title, panels, base_key, base_label):
     sizes = [max(1, select(df, f).kernels.nunique()) for _, f in panels]
     fig, axes = plt.subplots(1, len(panels), figsize=(1.6 * sum(sizes) + 3, 6.2), sharey=True, squeeze=False,
                              gridspec_kw={"width_ratios": sizes})
-    shown, seeded, flagged, ref = set(), False, False, []
+    shown, seeded, flagged = set(), False, False
     for ax, (panel, filt) in zip(axes[0], panels):
         sel = select(df, filt)
         kernels = [k for k in K4 if k in set(sel.kernels)]
@@ -82,9 +82,9 @@ def fig_kernel(df, filename, title, panels, base_key, base_label):
         ax.set_xticklabels(ticks, fontsize=9)
         ax.set_title(panel, fontsize=10)
         ax.margins(y=0.08)
-        ref = reference_lines(ax, df, base_key, base_label) or ref
+        reference_lines(ax, df, base_key, base_label, text="right" if ax is axes[0][-1] else None)  # sharey: one label
     axes[0][0].set_ylabel("Top-1 (%)")
-    rest = precision_handles() + ref + ([early_handle("hatch")] if flagged else [])
+    rest = precision_handles() + ([early_handle("hatch")] if flagged else [])
     if seeded:
         rest.append(Line2D([], [], marker="o", color="k", ls="", ms=4, label="uma seed (42/43/44)"))
     fig.legend(handles=[Patch(color=KCOLOR[k], label=KLABEL[k]) for k in K4 if k in shown], loc="upper right",
