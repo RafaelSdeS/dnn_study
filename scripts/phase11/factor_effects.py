@@ -9,6 +9,8 @@ scripts/phase11/analyze_geometry.py's docstring.
 
     04..10_*.png                    one figure per factor (absolute top-1 of A and B, baseline line)
     11_factorial_matched_pairs.png  every matched pair, per contrast: the deltas, their median and its bootstrap CI
+    21_kernel_rank_critical_difference.png  the 4 kernels' mean rank over the AlexNet configurations that have all four,
+                                            beside the table of positions per configuration it averages
 
 The old figures 12 (one row per pair: ~100 rows with every matched pair) and 13 (interactions) are retired: 11 summarizes
 every pair with the noise band, 14/15 (scripts/phase11/design_figures.py) show kernel x head x BN and kernel x geometry.
@@ -22,15 +24,16 @@ import textwrap
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.colors import to_rgba
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
 from configs.loader import load_config
-from ml.plotting import AMBER, BLUE, RED, apply_report_style
+from ml.plotting import AMBER, BLUE, GRID, NEUTRAL, RED, TEXT_PRIMARY, apply_report_style
 from ml.reporting import holm, mcnemar_p, wilson_ci
 from scripts.phase11.analyze_geometry import (LAYOUTS, REGIME_LABEL, TABLES, band_for, early_handle, early_ring, int8_bar,
                                               noise_bands, pair_band, precision_handles, reference_lines, savefig)
-from scripts.phase11.design_figures import cell_label, frame
+from scripts.phase11.design_figures import K4, KCOLOR, KLABEL, cell_label, frame
 
 COMP = "Compensação (profundidade e blocos)"
 PRE = "Pré-treino ImageNet (não → sim)"
@@ -315,6 +318,96 @@ def fig_matched_pairs(pairs, summary, n_cells, bands):
     savefig(fig, "11_factorial_matched_pairs.png")
 
 
+def critical_difference(cells, metric):
+    """Demšar (2006): the 4 kernels' mean rank (1 = most accurate) over the AlexNet configurations that trained all four
+    (each configuration a block, the other factors fixed), Friedman's p and Nemenyi's critical difference at alpha 0.05.
+    None while fewer than 2 configurations are complete."""
+    from scipy.stats import friedmanchisquare, rankdata, studentized_range
+
+    if cells.empty:
+        return None
+    c = cells[(cells.family == "alexnet") & cells.kernels.isin(K4)]
+    t = c.pivot_table(index=[f for f in FACTORS if f not in ("family", "kernels")], columns="kernels", values=metric)
+    t = t.reindex(columns=K4).dropna()
+    if len(t) < 2:
+        return None
+    k, n = len(K4), len(t)
+    ranks = np.array([rankdata(-row) for row in t.to_numpy()]).mean(0)
+    cd = studentized_range.ppf(0.95, k, np.inf) / np.sqrt(2) * np.sqrt(k * (k + 1) / (6 * n))
+    return dict(zip(K4, ranks)), friedmanchisquare(*t.to_numpy().T).pvalue, cd, t
+
+
+def rank_table(ax, t, rank):
+    """What one diagram averages: each kernel's position (top-1 %) per configuration, the 1st place filled with its
+    kernel's colour, and the mean position (= the diagram's dot) as the last row."""
+    pos = t.rank(axis=1, ascending=False)
+    rows = []
+    for i in t.index:
+        f = dict(zip(t.index.names, i))
+        rows.append(cell_label({**f, "family": "alexnet", "pool_count": f["pooling"][0], "pool_kernel": f["pooling"][-1]},
+                               skip=("kernels",)))
+    text = [[f"{pos.at[i, k]:g}º ({t.at[i, k]:.1f})" for k in K4] for i in t.index] + [[f"{rank[k]:.2f}" for k in K4]]
+    fill = [[to_rgba(KCOLOR[k], 0.35 if pos.at[i, k] == 1 else 0) for k in K4] for i in t.index] + [["white"] * len(K4)]
+    tb = ax.table(cellText=text, cellColours=fill, rowLabels=rows + ["posição média (= a bolinha)"],
+                  colLabels=[KLABEL[k] for k in K4], colWidths=[0.13] * len(K4), rowLoc="left", cellLoc="center",
+                  bbox=[0, 0, 1, 1])
+    tb.auto_set_font_size(False)
+    tb.set_fontsize(9)
+    for (r, c), cell in tb.get_celld().items():
+        cell.set_edgecolor(GRID)
+        if r == 0 and c >= 0:
+            cell.get_text().set(color=KCOLOR[K4[c]], weight="bold")
+        if r == len(t) + 1:
+            cell.get_text().set_weight("bold")
+    ax.set_title("de onde vem a média: posição de cada kernel (top-1 %) em cada configuração\n"
+                 "célula colorida = 1º lugar naquela configuração", fontsize=10)
+
+
+def fig_critical_difference(cells):
+    """Critical-difference diagrams (Demšar 2006), FP32 and INT8: kernels on a mean-rank axis, a black bar joining the
+    ones Nemenyi cannot tell apart; beside each, the table of positions it averages (rank_table)."""
+    fig, axes = plt.subplots(2, 2, figsize=(19, 6.4), gridspec_kw={"width_ratios": [1.15, 1]})
+    for (ax, tab), m in zip(axes, ["fp32", "int8"]):
+        ax.axis("off")
+        tab.axis("off")
+        ax.set(xlim=(0.6, len(K4) + 0.4), ylim=(-1.45, 0.95))
+        res = critical_difference(cells, m)
+        if res is None:
+            ax.text(0.5, 0.5, f"{m.upper()}: pendente", transform=ax.transAxes, ha="center", color=NEUTRAL, fontsize=12)
+            continue
+        rank, p, cd, t = res
+        ax.hlines(0, 1, len(K4), color=TEXT_PRIMARY, lw=1.2)
+        for i in range(1, len(K4) + 1):
+            ax.vlines(i, 0, 0.08, color=TEXT_PRIMARY, lw=1.2)
+            ax.text(i, 0.13, str(i), ha="center", va="bottom", fontsize=9)
+        ax.text(0.95, 0.13, "melhor", ha="right", va="bottom", fontsize=9, color=NEUTRAL)
+        ax.hlines(0.6, 1, 1 + cd, color=TEXT_PRIMARY, lw=2)  # the CD as a length on the rank axis
+        ax.text(1 + cd / 2, 0.66, f"diferença crítica = {cd:.2f}", ha="center", va="bottom", fontsize=9)
+        order = sorted(K4, key=rank.get)
+        cliques = []  # maximal runs of rank-ordered kernels spanning less than the CD
+        for i in range(len(order)):
+            j = max(jj for jj in range(i, len(order)) if rank[order[jj]] - rank[order[i]] < cd)
+            if j > i and not any(a <= i and j <= b for a, b in cliques):
+                cliques.append((i, j))
+        for h, (i, j) in enumerate(cliques):
+            ax.hlines(-0.18 - 0.14 * h, rank[order[i]] - 0.03, rank[order[j]] + 0.03, color=TEXT_PRIMARY, lw=4)
+        for n, kk in enumerate(order):
+            x, y = rank[kk], -0.85 - 0.35 * (n % 2)  # alternate rows: close ranks don't print over each other
+            ax.scatter(x, 0, s=90, color=KCOLOR[kk], zorder=3)
+            ax.plot([x, x], [0, y + 0.12], color=KCOLOR[kk], lw=1)
+            ax.text(x, y, f"{KLABEL[kk]} ({x:.2f})", ha="center", va="top", fontsize=10, color=KCOLOR[kk], weight="bold", zorder=4,
+                    bbox=dict(facecolor="white", edgecolor="none", pad=1))  # over the other kernels' leader lines
+        ax.set_title(f"{m.upper()}: posição média em {len(t)} configurações · Friedman p = {p:.3f}", fontsize=10)
+        rank_table(tab, t, rank)
+        print(f"21 {m}: mean ranks {({KLABEL[k]: round(v, 2) for k, v in rank.items()})}, CD {cd:.2f}, Friedman p {p:.4f}, "
+              f"configurations:\n{t.round(2).to_string()}")
+    fig.suptitle("Qual kernel é melhor no geral? Posição média de cada kernel (1 = mais acurado) nas configurações do AlexNet\n"
+                 "em que os quatro foram treinados; kernels ligados por uma barra preta não se distinguem (Friedman + Nemenyi,\n"
+                 "α = 0,05; Demšar 2006) · seed 42 · top-1 no test set", fontsize=11)
+    fig.tight_layout()
+    savefig(fig, "21_kernel_rank_critical_difference.png")
+
+
 def main():
     apply_report_style()
     df = frame()
@@ -333,6 +426,7 @@ def main():
         print(t[["factor", "contrast", "n_seeds", "d_fp32", "d_int8", "macs_change_pct", "params_change_pct"]].round(2).to_string(index=False))
 
     cells = factorial_cells(df)
+    fig_critical_difference(cells)
     pairs = matched_pairs(cells) if len(cells) else pd.DataFrame()
     if pairs.empty:
         print("14: no finished matched pair yet")

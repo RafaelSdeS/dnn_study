@@ -1643,3 +1643,21 @@ validation curve in black (18); 14 states its numbers in the title. 11 and 19 st
 on beagle or tupi1/2 wait for the one-machine re-measurement, latency compares within a machine only) and draws the
 baseline's ms per MAC as a slope-1 line: above it = slower per MAC than the AlexNet original. Figure 15 drops GAP
 (trained at the two layouts only; figures 01/02 have it) and names the design's cells still queued.
+
+## Three figures from the literature (2026-10-14)
+
+What the figures did not show yet, each with its reference:
+- **20, INT8 prediction flips** (Hooker et al. 2019, "What Do Compressed Deep Neural Networks Forget?"): the % of test
+  images right in FP32 and wrong in INT8, and back, from the tracked test logits. First read: a net with INT8 - FP32
+  near 0 still flips 1.5-4% of the test images each way; the early-best FC no-BN cells flip 10-12%.
+- **21, critical-difference diagram** (Demšar, JMLR 2006): the 4 kernels' mean rank over the 8 AlexNet configurations
+  that trained all four, Friedman + Nemenyi at alpha 0.05 (`studentized_range`, CD 1.66 at N = 8). First read: FP32
+  ranks 11-5-3-3-3 1.50, 3x3 2.25, alternating 2.50, 2x2 3.75 (Friedman p = 0.006); only 11-5-3-3-3 vs 2x2 clears
+  the CD. INT8 the same order but alternating before 3x3. Beside each diagram, the table it averages (each kernel's
+  position and top-1 per configuration): 11-5-3-3-3 is 1st in every FC configuration and 3rd at 64px GAP, where the
+  alternating kernel is 1st -- a kernel x head interaction the mean rank hides.
+- **22, effective receptive field** (Luo et al., NeurIPS 2016; RepLKNet's Fig. 1): |d centre unit of the last conv /
+  d pixel| over 200 test images, from the FP32 checkpoints (fetched from PCAD, gitignored). Half the influence sits in
+  25.1% of the image for 11-5-3-3-3, 23.5% for 3x3, 22.3% for alternating, 17.8% for 2x2 (64px, GAP + BN); 34.2% for
+  the AlexNet original, the same kernels at its stride-4 + three-pool layout: its last conv units step 16 px, the
+  64px layout's 8 px. The theoretical field covers the whole 64x64 image for every net. Stacked cells: pending.

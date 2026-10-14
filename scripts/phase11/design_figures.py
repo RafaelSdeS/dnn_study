@@ -1,4 +1,4 @@
-"""Phase 11 figures 13-19 -- the design read through its factors (ml/model_registrations.py:CELL_FACTORS), not run names.
+"""Phase 11 figures 13-20 -- the design read through its factors (ml/model_registrations.py:CELL_FACTORS), not run names.
 Selecting by factor is what lets one file draw the live runs and, with --archive, the superseded AdamW-recipe runs
 (LEGACY maps their names onto the same factors) -- a preview of each figure's form, not its numbers: validation split,
 pre-fix INT8, latencies that still timed the DataLoader, and some only-approximate twins (marked †).
@@ -10,6 +10,7 @@ pre-fix INT8, latencies that still timed the DataLoader, and some only-approxima
     17_latency_vs_macs.png          batch-1 latency vs MACs on one machine, against the AlexNet original's ms per MAC
     18_training_curves.png          val/train top-1 per epoch at the 64px layout, {GAP, FC} x {no BN, BN}
     19_qat_curves.png               the 50 QAT epochs of the same nets: val top-1 with fake-quant, from the FP32 best to INT8
+    20_int8_prediction_flips.png    % of test images right -> wrong and wrong -> right under INT8 (from the test logits)
 
 18 and 19 read the per-epoch logs, which only PCAD keeps -- fetch them first (analyze_geometry.convergence's rsync; add
 archive_adamw_recipe/ to both paths for --archive).
@@ -334,29 +335,52 @@ def worst_input_ratio(r):
     return max((a["max"] / a["p999"] for a in acts if a.get("p999")), default=np.nan)
 
 
+def kernel_groups(d):
+    """[((family, kernel), runs)] of figures 16/20: AlexNet kernels in KCOLOR order, VGG16, ResNet-18, the families last;
+    only the groups that have a run."""
+    order = [("alexnet", k) for k in KCOLOR] + [("vgg16", k) for k in K4] + [("resnet18", k) for k in RESNET_K] + [("família", None)]
+    groups = [(g, d[(d.family == g[0]) & ((d.kernels == g[1]) if g[1] else True)]) for g in order]
+    return [(g, runs) for g, runs in groups if len(runs)]
+
+
+def group_ticks(ax, groups):
+    ax.set_xticks(range(len(groups)))
+    ax.set_xticklabels([(FAMILY_TAG[fam] + "\n" if fam in FAMILY_TAG else "") + (KLABEL[k] if k else "famílias") for (fam, k), _ in groups],
+                       fontsize=9)
+
+
+def run_point(ax, x, y, r):
+    """One run as figures 16/20 draw it: kernel colour, head marker, filled = BN, rings for early best and baseline."""
+    c = color(r)
+    ax.scatter(x, y, marker=HMARK[r.hk], s=60, zorder=3, **(dict(color=c, edgecolors="white") if r.bn or r.family == "família"
+                                                         else dict(facecolors="none", edgecolors=c, lw=1.3)))
+    if r.early_best:
+        early_ring(ax, x, y)
+    if r.key == BASE_KEY:
+        base_ring(ax, x, y)
+
+
+def run_handles(d):
+    """The legend of run_point's encoding, for the runs in d."""
+    return (legend_kernels(d.kernels)
+            + [Line2D([], [], marker=m, color=TEXT_SECONDARY, ls="", ms=8, label=HLABEL[h]) for h, m in HMARK.items() if h in set(d.hk)]
+            + [Line2D([], [], marker="o", color=TEXT_SECONDARY, ls="", ms=8, label="cheio = com BN"),
+               Line2D([], [], marker="o", mfc="none", mec=TEXT_SECONDARY, ls="", ms=8, label="vazado = sem BN")]
+            + ([BASE_HANDLE] if (d.key == BASE_KEY).any() else []) + ([early_handle("ring")] if d.early_best.any() else []))
+
+
 def fig_quant(df, figs, note):
     d = seed42(df).dropna(subset=["fp32", "int8"]).copy()
     d["dq"] = d.int8 - d.fp32
     d["ratio"] = [worst_input_ratio(r) for r in d.itertuples()]
-    order = [("alexnet", k) for k in KCOLOR] + [("vgg16", k) for k in K4] + [("resnet18", k) for k in RESNET_K] + [("família", None)]
-    groups = [g for g in order if len(d[(d.family == g[0]) & ((d.kernels == g[1]) if g[1] else True)])]
+    groups = kernel_groups(d)
     fig, axes = plt.subplots(1, 2, figsize=(16, 6.2), gridspec_kw={"width_ratios": [1.5, 1]})
     rng = np.random.default_rng(0)
-    for i, (fam, k) in enumerate(groups):
-        g = d[(d.family == fam) & ((d.kernels == k) if k else True)]
+    for i, (_, g) in enumerate(groups):
         for r in g.itertuples():
-            filled = bool(r.bn) if fam != "família" else True
-            c = color(r)
             for ax, x in [(axes[0], i + rng.uniform(-0.2, 0.2)), (axes[1], r.ratio)]:
-                ax.scatter(x, r.dq, marker=HMARK[r.hk], s=60, zorder=3, **(dict(color=c, edgecolors="white") if filled
-                                                                            else dict(facecolors="none", edgecolors=c, lw=1.3)))
-                if r.early_best:
-                    early_ring(ax, x, r.dq)
-                if r.key == BASE_KEY:
-                    base_ring(ax, x, r.dq)
-    axes[0].set_xticks(range(len(groups)))
-    axes[0].set_xticklabels([(FAMILY_TAG[fam] + "\n" if fam in FAMILY_TAG else "") + (KLABEL[k] if k else "famílias") for fam, k in groups],
-                            fontsize=9)
+                run_point(ax, x, r.dq, r)
+    group_ticks(axes[0], groups)
     rho = d[["ratio", "dq"]].corr(method="spearman").iloc[0, 1]
     plain_log(axes[1], "x")
     axes[1].set_xlabel("pior razão max / p99,9 entre as entradas das camadas (escala log)")
@@ -365,15 +389,51 @@ def fig_quant(df, figs, note):
     for ax in axes:
         ax.axhline(0, color="k", lw=0.8)
     axes[0].set_ylabel("INT8 − FP32 (pp; negativo = perde no INT8)")
-    handles = (legend_kernels(d.kernels)
-               + [Line2D([], [], marker=m, color=TEXT_SECONDARY, ls="", ms=8, label=HLABEL[h]) for h, m in HMARK.items() if h in set(d.hk)]
-               + [Line2D([], [], marker="o", color=TEXT_SECONDARY, ls="", ms=8, label="cheio = com BN"),
-                  Line2D([], [], marker="o", mfc="none", mec=TEXT_SECONDARY, ls="", ms=8, label="vazado = sem BN")]
-               + ([BASE_HANDLE] if (d.key == BASE_KEY).any() else []) + ([early_handle("ring")] if d.early_best.any() else []))
-    fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=5, fontsize=9)
+    fig.legend(handles=run_handles(d), loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=5, fontsize=9)
     fig.suptitle("Robustez à quantização: quanto cada rede perde do FP32 ao INT8 real, e um porquê possível\n" + note, fontsize=11)
     fig.tight_layout()
     savefig(fig, "16_quantization_robustness.png", figs)
+
+
+def flips(r):
+    """(% of the test images right in FP32 and wrong in INT8, % wrong -> right) of one run, from its test logits."""
+    from scripts.phase11.factor_effects import _test_hits  # imported here: factor_effects imports this module
+    a, b = (_test_hits(r.results, r.key, s) for s in ("fp32", "int8"))
+    return (100 * np.mean(a & ~b), 100 * np.mean(~a & b)) if a is not None and b is not None else (np.nan, np.nan)
+
+
+def fig_flips(df, figs, note):
+    """Hooker et al. (2019): a compressed net can match its FP32 accuracy while changing its answer on many images. Left:
+    the % of test images whose top-1 changed sides (right <-> wrong) under INT8, per kernel; right: the two directions,
+    the diagonal = no net change (INT8 - FP32 = 0)."""
+    d = seed42(df).copy()
+    d[["r2w", "w2r"]] = [flips(r) for r in d.itertuples()] if len(d) else np.empty((0, 2))
+    d = d.dropna(subset=["r2w"])
+    groups = kernel_groups(d)
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6.2), gridspec_kw={"width_ratios": [1.5, 1]})
+    rng = np.random.default_rng(0)
+    for i, (_, g) in enumerate(groups):
+        for r in g.itertuples():
+            run_point(axes[0], i + rng.uniform(-0.2, 0.2), r.r2w + r.w2r, r)
+            run_point(axes[1], r.r2w, r.w2r, r)
+    group_ticks(axes[0], groups)
+    axes[0].set_ylabel("% das imagens de teste que mudam de lado no INT8")
+    axes[0].set_title("Quantas imagens o INT8 troca (certo ↔ errado), por kernel", fontsize=10)
+    if len(d):
+        lim = 1.05 * max(d.r2w.max(), d.w2r.max())
+        axes[1].plot([0, lim], [0, lim], ls="--", color=TEXT_PRIMARY, lw=1, zorder=1)
+        axes[1].set(xlim=(0, lim), ylim=(0, lim), aspect="equal")
+    else:
+        for ax in axes:
+            ax.text(0.5, 0.5, "pendente", transform=ax.transAxes, ha="center", color=NEUTRAL, fontsize=12)
+    axes[1].set_xlabel("% certo no FP32 → errado no INT8")
+    axes[1].set_ylabel("% errado no FP32 → certo no INT8")
+    axes[1].set_title("As duas direções; na diagonal tracejada o saldo é zero\n(acima = o INT8 ganha no saldo)", fontsize=10)
+    fig.legend(handles=run_handles(d), loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=5, fontsize=9)
+    fig.suptitle("A mesma acurácia não quer dizer as mesmas respostas: quantas imagens de teste mudam de certo para errado (e vice-versa)\n"
+                 "do FP32 para o INT8 real (Hooker et al. 2019)\n" + note, fontsize=11)
+    fig.tight_layout()
+    savefig(fig, "20_int8_prediction_flips.png", figs)
 
 
 def fig_latency(df, figs, note):
@@ -522,6 +582,7 @@ def main(argv=None):
     fig_grid(df, figs, note, bands)
     fig_geometry(df, figs, note, pending=not archive)
     fig_quant(df, figs, note)
+    fig_flips(df, figs, note)
     fig_latency(df, figs, note if archive else "seed 42 · latência por imagem, batch 1")
     curves_note = note if archive else "seed 42 · curvas no split de validação (10% do train), não no test set"
     fig_curves(df, figs, curves_note)

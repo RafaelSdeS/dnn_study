@@ -232,7 +232,7 @@ scripts/                  # CLI entry points (used instead of notebooks for PCAD
     prune_channels.py      # Task 2: structured (channel) pruning CLI;
                            #   --finetune-epochs fine-tunes the pruned model then runs it through QAT->INT8
   phase11/                 # `python -m scripts.phase11.<name>`
-    # The 19 PNGs in results/figures_generated/phase_11_kernel_size_comparison/ (01-19, renumbered without gaps 2026-10-14;
+    # The 22 PNGs in results/figures_generated/phase_11_kernel_size_comparison/ (01-22, renumbered without gaps 2026-10-14;
     # rewritten 2026-10-04 for the 76-run design): runs are picked by their factors (CELL_FACTORS, via design_figures.frame),
     # never by name, each figure with the original AlexNet trained from scratch as a baseline. Names say "layout original"
     # (torchvision's stride-4/three 3x3 pools, 1x1 map at 64px) vs "layout 64px" (stride 2, two 2x2 pools, 8x8 map). Every
@@ -244,12 +244,16 @@ scripts/                  # CLI entry points (used instead of notebooks for PCAD
     # (PHASE11_LOG "Early best FP32 epoch", 2026-10-13); kept in every figure, never dropped.
     plot_kernel_comparison.py  # 01-03 kernel per layout/head/BN (AlexNet original, 64px; VGG16)
     factor_effects.py          # 04-10 one figure per factor over every matched pair of the design (+ FAMILY_CONTRASTS),
-                               #   11 every matched pair per contrast with the seed noise band
+                               #   11 every matched pair per contrast with the seed noise band, 21 critical-difference
+                               #   diagram of the 4 kernels' mean ranks (Friedman + Nemenyi, Demšar 2006) + the per-configuration ranks it averages
     analyze_geometry.py        # 12 QAT-vs-conversion INT8 change + the shared loader/plot helpers + main_grid/kernel_geometry tables
     design_figures.py          # 13 Pareto accuracy x cost, 14 kernel x head x BN grid, 15 kernel x geometry, 16 INT8
-                               #   robustness, 17 latency vs MACs, 18 FP32 training curves, 19 QAT curves (18/19 need
+                               #   robustness, 17 latency vs MACs, 18 FP32 training curves, 19 QAT curves, 20 INT8
+                               #   right <-> wrong flips from the test logits (Hooker et al. 2019) (18/19 need
                                #   the gitignored logs, analyze_geometry.convergence's rsync); --archive previews them on the
                                #   superseded runs (results/archive_adamw_recipe/figures_generated/phase_11_preview/)
+    receptive_field.py         # 22 effective receptive field per kernel (Luo et al. 2016); needs the gitignored FP32
+                               #   checkpoints (prints the rsync for each missing one) and the KaggleHub test images
   oneoff/                  # Retired one-shot fixups, kept for provenance (`python -m scripts.oneoff.<name>`)
     backfill_model_size.py / backfill_best_epoch_eval.py / dilated_gap_local.py
   pcad/                    # PCAD submission wrappers

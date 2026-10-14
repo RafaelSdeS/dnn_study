@@ -20,7 +20,8 @@ FIGURES = {f"{n}.png" for n in ["01_kernel_original_layout", "02_kernel_64px_lay
                                 "05_conv1_stride", "06_pooling", "07_dropout", "08_pretraining", "09_batchnorm",
                                 "10_compensation_block", "11_factorial_matched_pairs", "12_quantization_drop_where",
                                 "13_pareto_accuracy_cost", "14_main_factorial_grid", "15_kernel_by_geometry",
-                                "16_quantization_robustness", "17_latency_vs_macs", "18_training_curves", "19_qat_curves"]}
+                                "16_quantization_robustness", "17_latency_vs_macs", "18_training_curves", "19_qat_curves", "20_int8_prediction_flips",
+                                "21_kernel_rank_critical_difference", "22_effective_receptive_field"]}
 
 
 def _early(m):  # the fake runs whose best FP32 epoch comes early, so every figure draws its early-best mark
@@ -49,6 +50,9 @@ def _fake_runs(root, keep):
             stats = {"features.0": {"activation_in": {"max": 2.6, "p999": 2.6}},
                      "features.3": {"activation_in": {"max": 2 + 10 * rng.random(), "p999": 2.0}}}
             (run / "results" / f"{m}_layer_stats.json").write_text(json.dumps(stats))
+            labels = rng.integers(0, 200, 50)  # test logits: figure 20's flips and the McNemar tests read them
+            for stage in ("fp32", "int8"):
+                np.savez(run / "results" / f"{m}_{stage}_test_logits.npz", logits=rng.random((50, 200)).astype(np.float16), labels=labels)
             (run / "logs" / f"{m}.log").write_text("".join(
                 f"Epoch {e:3d}/500 | train_loss=1.0 train_acc={2 * e:.2f}% | val_loss=2.0 val_acc={e:.2f}% val_top5=50.00%\n"
                 for e in range(1, 4)))
@@ -56,7 +60,7 @@ def _fake_runs(root, keep):
 
 @pytest.mark.parametrize("subset", ["design", "pilot"])
 def test_every_phase_11_figure_renders(tmp_path, monkeypatch, subset):
-    from scripts.phase11 import analyze_geometry, design_figures, factor_effects, plot_kernel_comparison
+    from scripts.phase11 import analyze_geometry, design_figures, factor_effects, plot_kernel_comparison, receptive_field
 
     runs, figs, tables = tmp_path / "runs", tmp_path / "figs", tmp_path / "tables"
     _fake_runs(runs, (lambda e, m: True) if subset == "design" else (lambda e, m: m in PILOT and "_seed" not in e))
@@ -67,6 +71,7 @@ def test_every_phase_11_figure_renders(tmp_path, monkeypatch, subset):
     plot_kernel_comparison.main()
     factor_effects.main()
     design_figures.main([])
+    receptive_field.main()  # no checkpoints in the fake tree: every panel says so, nothing is loaded
     written = {p.name for p in figs.glob("*.png")}
     df = design_figures.frame()
     assert set(df[df.early_best].key) == {k for k in df.key if _early(k)}  # epoch 51 of 500 is flagged, 401 is not
