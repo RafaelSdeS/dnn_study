@@ -127,12 +127,12 @@ def _layout(m):
 
 
 def test_factorial_grid_is_complete_and_every_gap_cell_runs():
-    """208 cells = 4 kernels x 2 strides x 2 pool kernels x 2 pool counts x (FC x BN x Dropout + GAP x BN)
+    """304 cells = 6 kernels (k11-3 / k11-2 since 2026-10-14) x 2 strides x 2 pool kernels x 2 pool counts x (FC x BN x Dropout + GAP x BN)
     + 16 pretrained; each GAP cell (cheap to build) runs and has one Conv-(BN-)ReLU fuse group per conv."""
     from ml.model_registrations import CELL_FACTORS, FX_KERNELS
 
     fx = [n for n, f in CELL_FACTORS.items() if f["family"] == "alexnet" and f["kernels"] in FX_KERNELS]
-    assert len(fx) == 208 and sum(CELL_FACTORS[n]["pretrained"] for n in fx) == 16
+    assert len(fx) == 304 and sum(CELL_FACTORS[n]["pretrained"] for n in fx) == 16
     x = torch.randn(1, 3, 64, 64)
     for name in (n for n in fx if CELL_FACTORS[n]["head"] == "gap"):
         spec, model = MODEL_REGISTRY[name], MODEL_REGISTRY[name]["ctor"]().eval()

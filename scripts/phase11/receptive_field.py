@@ -26,7 +26,7 @@ from ml.plotting import NEUTRAL, TEXT_PRIMARY, apply_report_style
 from scripts.phase11.analyze_geometry import BASE_KEY, BASE_LABEL, ROOT, savefig
 from scripts.phase11.design_figures import KCOLOR, KLABEL, frame, seed42
 
-KERNELS = ["k11-5-3", "k3x3", "k3x3stacked", "k2x2", "k2x2stacked", "kalt3-2"]
+KERNELS = ["k11-5-3", "k11-3", "k11-2", "kalt3-2", "k3x3", "k3x3stacked", "k2x2", "k2x2stacked"]  # row 1: 11x11 conv1
 N_IMAGES = 200
 TEST_IMAGES = Path.home() / ".cache/kagglehub/datasets/akash2sharma/tiny-imagenet/versions/1/tiny-imagenet-200/val/images"
 PCAD = "rsdsouza@gppd-hpc.inf.ufrgs.br:dnn_study/./"
@@ -86,7 +86,11 @@ def main():
     for p in missing:
         print(f"22: no checkpoint -- rsync -aR {PCAD}{p.relative_to(ROOT) if p.is_relative_to(ROOT) else p} .")
     x = images() if len(missing) < len(ckpt) else None
-    fig, axes = plt.subplots(1, len(ps), figsize=(2.6 * len(ps), 4.2), layout="constrained")
+    cols = (len(ps) + 1) // 2
+    fig, axes = plt.subplots(2, cols, figsize=(2.6 * cols, 8.4), layout="constrained")
+    axes = axes.ravel()
+    for ax in axes[len(ps):]:
+        ax.axis("off")
     norm = Normalize(0, 1)
     for ax, (label, key, c, r) in zip(axes, ps):
         ax.axis("off")

@@ -1661,3 +1661,20 @@ What the figures did not show yet, each with its reference:
   25.1% of the image for 11-5-3-3-3, 23.5% for 3x3, 22.3% for alternating, 17.8% for 2x2 (64px, GAP + BN); 34.2% for
   the AlexNet original, the same kernels at its stride-4 + three-pool layout: its last conv units step 16 px, the
   64px layout's 8 px. The theoretical field covers the whole 64x64 image for every net. Stacked cells: pending.
+
+## Large stem, small-kernel body (2026-10-14)
+
+Figures 14 and 21: the 11-5-3-3-3 kernels lead in every FC configuration, but nothing says whether the lead is the
+11x11 conv1's or the 5x5 conv2's. It matters for the accelerator: conv1 has stride 2 in every 64px cell and standard
+Winograd F(m,r) is for stride-1 convs, so restricting conv1's kernel buys no Winograd eligibility. If the lead is
+conv1's, "AlexNet's conv1, a 3x3 / 2x2 body" is the Winograd-friendly design. The ResNet block asks it of ResNet-18
+(k7-3 -> k7-2 -> k2x2); AlexNet had no such cell. New block `phase_11_large_stem`, 4 runs, the mirror of
+`phase_11_stacked` (which compensates with depth): kernels `k11-3` = (11, 3, 3, 3, 3) and `k11-2` = (11, 2, 2, 2, 2)
+(`FX_KERNELS`; the grid registers them at every geometry, only these 4 run) x head {GAP, FC + Dropout}, BN, 64px
+geometry (stride 2, two 2x2 pools, 8x8 map). BN because that regime has its seed floor (GAP + BN, 3 seeds) and the
+cleanest 11-5-3-3-3 vs 3x3 gap (FC + Dropout + BN, +1.5 pp). Four new contrasts, B - A, 2 pairs each (GAP, FC +
+Dropout), in figure 11: conv1 3x3 -> 11x11 (body 3x3), conv1 2x2 -> 11x11 (body 2x2), conv2 3x3 -> 5x5 (conv1 11x11),
+body 3x3 -> 2x2 (conv1 11x11 kept); the head contrast gains 2 pairs (17 -> 19). Colour: purple = a large conv1 / stem
+before a small-kernel body, as ResNet's k7-2; darker = 2x2 body. Figure 22 gets their panels (GAP + BN). Queued on
+PCAD after the 8 AlexNet no-BN noise-floor seeds (moved to the head of the queue the same day: without them every
+no-BN contrast has no band), ahead of the families.

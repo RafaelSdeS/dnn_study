@@ -1,0 +1,17 @@
+# Phase 11 (docs/logs/PHASE11_LOG.md "Large stem, small-kernel body", 2026-10-14). Where does the 11-5-3-3-3 kernels'
+# lead with an FC head (figures 14, 21) come from: the 11x11 conv1 or the 5x5 conv2? conv1 has stride 2 in every 64px
+# cell and standard Winograd F(m,r) is for stride 1, so a large conv1 costs no Winograd eligibility: if the lead is
+# conv1's, "large conv1, 3x3 / 2x2 body" is the Winograd-friendly design. AlexNet's own 11x11 conv1, then every conv
+# 3x3 / 2x2, x head {GAP, FC + Dropout}, with BN, at the 64px geometry (stride 2, two 2x2 pools, 8x8 map) -- each
+# paired with its k3x3 / k2x2 / k11-5-3 twins in phase_11_kernel_head_bn (figure 11), as phase_11_stacked compensates
+# with depth. The ResNet block's k7-3 -> k7-2 -> k2x2 asks the same of ResNet-18.
+# Same protocol as every Phase 11 run (_protocols/no_patience.yaml), enforced by tests/test_config.py. Model names:
+# ml/model_registrations.py (CELL_FACTORS). Queued one job per model on PCAD (scripts/pcad/feed_queue.sh):
+#   python -m scripts.cluster submit --experiment phase_11_large_stem --runtime pcad --slurm tupi_beagle --model <m>
+extends: _protocols/no_patience
+name: phase_11_large_stem
+models:
+  - alexnet_k11-3_stride2_2pool2x2_map8_gap_bn
+  - alexnet_k11-3_stride2_2pool2x2_map8_fcdrop_bn
+  - alexnet_k11-2_stride2_2pool2x2_map8_gap_bn
+  - alexnet_k11-2_stride2_2pool2x2_map8_fcdrop_bn

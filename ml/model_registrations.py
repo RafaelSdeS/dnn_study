@@ -191,14 +191,15 @@ register_model("alexnet_adapted_orig_fc_pt", partial(AlexNetAdapted, pretrained=
 #   alexnet_<kernels>_stride<s>_<n>pool<k>x<k>_map<m>_<gap|fc|fcdrop>_<bn|nobn>[_pretrained]
 #   vgg16_<kernels>_stride<s>_<n>pool<k>x<k>_map<m>_<gap|fc|fcdrop>_bn[_pretrained]
 # kernels: k11-5-3 = AlexNet's own 11-5-3-3-3; k3x3 / k2x2 = every conv; kalt3-2 / kalt2-3 = alternating, starting with
-# the first; k3x3then2x2 / k2x2then3x3 (VGG) = first 7 convs one size, last 6 the other; k3x3stacked = two 3x3 per
+# the first; k11-3 / k11-2 = AlexNet's 11x11 conv1, then every conv 3x3 / 2x2 (phase_11_large_stem); k3x3then2x2 / k2x2then3x3 (VGG) = first 7 convs one size, last 6 the other; k3x3stacked = two 3x3 per
 # AlexNet stage; k3x3narrow = AlexNetSmallKernel (5 convs, 64-128-256 channels). stride = conv1's; <n>pool<k>x<k> = n
 # max-pools of k x k; map = side of the last conv map at a 64x64 input (computed, not assumed) -- a GAP head averages
 # it, an FC head resamples it to 6x6 (VGG: 7x7) with AdaptiveAvgPool as torchvision's AlexNet/VGG do (map 1 = 36 copies);
 # fcdrop = FC head + Dropout 0.5; pretrained = ImageNet weights (AlexNet: only the 11-5-3 FC no-BN shape fits; VGG:
 # vgg16_bn on the 3x3 cells). Every cell of both grids is registered with its factors in CELL_FACTORS (analysis groups by
 # them); the phase_11_*.yaml files list the cells that run. Same channels and He init within a family.
-FX_KERNELS = {"k11-5-3": (11, 5, 3, 3, 3), "k3x3": (3,) * 5, "k2x2": (2,) * 5, "kalt3-2": (3, 2, 3, 2, 3)}
+FX_KERNELS = {"k11-5-3": (11, 5, 3, 3, 3), "k3x3": (3,) * 5, "k2x2": (2,) * 5, "kalt3-2": (3, 2, 3, 2, 3),
+              "k11-3": (11, 3, 3, 3, 3), "k11-2": (11, 2, 2, 2, 2)}
 CELL_FACTORS: dict[str, dict] = {}
 
 
@@ -232,7 +233,7 @@ def _conv_groups(seq: nn.Sequential) -> list:
 
 
 # features' indices depend only on kernels and BN (stride/pool kernel are module args; a 3rd pool sits after
-# the last ReLU), so 8 small GAP instances cover all 208 cells
+# the last ReLU), so 12 small GAP instances cover all 304 cells
 _FX_FUSE = {(kn, bn): _conv_groups(AlexNetAdapted(kernels=ks, head="gap", batch_norm=bn).features)
             for kn, ks in FX_KERNELS.items() for bn in (False, True)}
 for (kn, ks), s, pk, pn in product(FX_KERNELS.items(), (2, 4), (2, 3), (2, 3)):

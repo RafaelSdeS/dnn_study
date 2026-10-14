@@ -41,10 +41,11 @@ LIVE_NOTE = "seed 42 · top-1 no test set (val oficial do Tiny ImageNet)"
 
 K4 = ["k11-5-3", "k3x3", "k2x2", "kalt3-2"]
 KLABEL = {"k11-5-3": "11-5-3-3-3", "k3x3": "3×3", "k2x2": "2×2", "kalt3-2": "alternado 3-2", "k3x3stacked": "3×3 empilhado",
-          "k2x2stacked": "2×2 empilhado", "k7-3": "7×7 + 3×3 (original)", "k7-2": "stem 7×7 + 2×2",
+          "k2x2stacked": "2×2 empilhado", "k11-3": "conv1 11×11 + 3×3", "k11-2": "conv1 11×11 + 2×2", "k7-3": "7×7 + 3×3 (original)", "k7-2": "stem 7×7 + 2×2",
           "k3x3deepstem": "3×3, stem profundo", "k2x2deepstem": "2×2, stem profundo"}
 # every Phase 11 colour comes from ml/plotting.py's report palette; a deeper variant of a kernel = a darker shade of its hue
 KCOLOR = {"k11-5-3": AMBER, "k3x3": GREEN, "k2x2": BLUE, "kalt3-2": RED, "k3x3stacked": shade(GREEN, 0.45), "k2x2stacked": shade(BLUE, 0.45),
+          "k11-3": PURPLE, "k11-2": shade(PURPLE, 0.45),  # purple = a large conv1 / stem before a small-kernel body (as k7-2); darker = 2x2 body
           "k7-3": AMBER, "k7-2": PURPLE, "k3x3deepstem": shade(GREEN, 0.45), "k2x2deepstem": shade(BLUE, 0.45)}  # deep stem = depth, as stacked
 RESNET_K = ["k7-3", "k3x3", "k2x2", "kalt3-2", "k7-2", "k3x3deepstem", "k2x2deepstem"]
 FAMILY_TAG = {"vgg16": "VGG16", "resnet18": "ResNet-18"}  # nets kept at their own geometry, always with BN

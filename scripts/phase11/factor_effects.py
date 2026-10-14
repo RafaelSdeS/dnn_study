@@ -54,6 +54,10 @@ PAIRS = [("kernels", "k11-5-3", "k3x3", "Kernel 11-5-3-3-3 → 3×3"), ("kernels
          ("kernels", "k11-5-3", "k2x2", "Kernel 11-5-3-3-3 → 2×2"), ("kernels", "k3x3", "kalt3-2", "Kernel 3×3 → alternado 3-2"),
          ("kernels", "k3x3", "k3x3stacked", "3×3 → dois 3×3 empilhados por estágio"),
          ("kernels", "k2x2", "k2x2stacked", "2×2 → dois 2×2 empilhados por estágio"),
+         # the large-stem block (phase_11_large_stem.yaml): AlexNet's 11x11 conv1 kept, a 3x3 / 2x2 body
+         ("kernels", "k3x3", "k11-3", "Conv1 3×3 → 11×11, corpo 3×3"), ("kernels", "k2x2", "k11-2", "Conv1 2×2 → 11×11, corpo 2×2"),
+         ("kernels", "k11-3", "k11-5-3", "Conv2 3×3 → 5×5, conv1 11×11"),
+         ("kernels", "k11-3", "k11-2", "Corpo 3×3 → 2×2, conv1 11×11 mantida"),
          ("head", FC_HEAD, GAP_HEAD, "Cabeça FC (+ Dropout) → GAP"), ("bn", False, True, "BatchNorm não → sim"),
          ("stride", 4, 2, "Stride da conv1 4 → 2"), ("pooling", "3pool3x3", "2pool2x2", "3 max-pools 3×3 → 2 max-pools 2×2"),
          ("dropout", False, True, "Dropout 0 → 0,5 (só cabeça FC)"), ("pretrained", False, True, "Pré-treino ImageNet"),
