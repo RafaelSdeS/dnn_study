@@ -1,11 +1,11 @@
-"""Phase 11 figures 02-04 -- the kernel pattern, one network/layout per figure. Cells are picked by their factors
+"""Phase 11 figures 01-03 -- the kernel pattern, one network/layout per figure. Cells are picked by their factors
 (ml/model_registrations.py:CELL_FACTORS, via design_figures.frame); within one panel only the kernel changes.
 
-    02_kernel_original_layout.png  AlexNet, torchvision's layout: FC + Dropout (= AlexNet) | GAP
-    03_kernel_64px_layout.png      AlexNet, 64px layout: {GAP, FC + Dropout} x {no BN, BN} (dots = seeds, where replicated)
-    04_kernel_vgg16.png            VGG16 + BN at its own geometry: GAP | FC | FC + Dropout (= VGG16)
+    01_kernel_original_layout.png  AlexNet, torchvision's layout: FC + Dropout (= AlexNet) | GAP
+    02_kernel_64px_layout.png      AlexNet, 64px layout: {GAP, FC + Dropout} x {no BN, BN} (dots = seeds, where replicated)
+    03_kernel_vgg16.png            VGG16 + BN at its own geometry: GAP | FC | FC + Dropout (= VGG16)
 
-Figure 01 (accuracy x size) is retired: figure 16 (scripts/phase11/design_figures.py) plots every run against MACs and
+The old figure 01 (accuracy x size) is retired: figure 13 (scripts/phase11/design_figures.py) plots every run against MACs and
 INT8 size, with the Pareto front. "layout original" / "layout 64px": scripts/phase11/analyze_geometry.py's docstring.
 
     python -m scripts.phase11.plot_kernel_comparison
@@ -24,19 +24,19 @@ ORIGINAL = dict(family="alexnet", stride=4, pooling="3pool3x3", bn=False)
 PX64 = dict(family="alexnet", stride=2, pooling="2pool2x2")
 VGG = dict(family="vgg16")
 FIGURES = {  # file: (title, [(panel title, factor filter)], baseline key, baseline label)
-    "02_kernel_original_layout.png": (
+    "01_kernel_original_layout.png": (
         "Kernel no AlexNet de layout original (o do torchvision: conv1 stride 4 + 3 max-pools 3×3/2 → mapa final 1×1 em 64×64)\n"
         "em cada painel só o kernel muda; treino do zero, sem BN, seed 42",
         [("FC + Dropout 0,5 (a cabeça do AlexNet original)", {**ORIGINAL, "head": "fc", "dropout": True}),
          ("GAP (média global + 1 linear)", {**ORIGINAL, "head": "gap"})],
         BASE_KEY, BASE_LABEL),
-    "03_kernel_64px_layout.png": (
+    "02_kernel_64px_layout.png": (
         "Kernel no AlexNet de layout 64px (adaptado a 64×64: conv1 stride 2 + 2 max-pools 2×2 → mapa final 8×8)\n"
         "em cada painel só o kernel muda; treino do zero, seed 42 (pontos = seeds, onde replicada)",
         [(f"{'GAP' if h == 'gap' else 'FC + Dropout'} · {'com' if bn else 'sem'} BatchNorm",
           {**PX64, "head": h, "bn": bn, "dropout": h == "fc"}) for h in ("gap", "fc") for bn in (False, True)],
         BASE_KEY, BASE_LABEL),
-    "04_kernel_vgg16.png": (
+    "03_kernel_vgg16.png": (
         "Kernel na VGG16 (13 convs + BatchNorm, stride 1, 5 max-pools 2×2 → mapa 2×2), treino do zero, seed 42\n"
         "em cada painel só o kernel das 13 convs muda",
         [("GAP (média global + 1 linear)", {**VGG, "head": "gap"}), ("FC sem Dropout", {**VGG, "head": "fc", "dropout": False}),

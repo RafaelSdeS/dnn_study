@@ -232,21 +232,23 @@ scripts/                  # CLI entry points (used instead of notebooks for PCAD
     prune_channels.py      # Task 2: structured (channel) pruning CLI;
                            #   --finetune-epochs fine-tunes the pruned model then runs it through QAT->INT8
   phase11/                 # `python -m scripts.phase11.<name>`
-    # The 18 PNGs in results/figures_generated/phase_11_kernel_size_comparison/ (02-11, 14-21; rewritten 2026-10-04 for the
-    # 76-run design): runs are picked by their factors (CELL_FACTORS, via design_figures.frame), never by name, each
-    # figure with the original AlexNet trained from scratch as a baseline. Names say "layout original" (torchvision's
-    # stride-4/three 3x3 pools, 1x1 map at 64px) vs "layout 64px" (stride 2, two 2x2 pools, 8x8 map). 01/12/13 retired
-    # (16, 14 and 17/18 cover them). tests/test_phase11_figures.py renders all of them on a fake run tree (whole design
-    # and the 5 pilot cells) -- run the scripts again whenever runs land; a pair or panel without data is skipped.
+    # The 19 PNGs in results/figures_generated/phase_11_kernel_size_comparison/ (01-19, renumbered without gaps 2026-10-14;
+    # rewritten 2026-10-04 for the 76-run design): runs are picked by their factors (CELL_FACTORS, via design_figures.frame),
+    # never by name, each figure with the original AlexNet trained from scratch as a baseline. Names say "layout original"
+    # (torchvision's stride-4/three 3x3 pools, 1x1 map at 64px) vs "layout 64px" (stride 2, two 2x2 pools, 8x8 map). Every
+    # figure states its arithmetic and which side is better: B - A for an A -> B contrast, INT8 - FP32 for quantization,
+    # negative = loses. tests/test_phase11_figures.py renders all of them on a fake run tree (whole design and the 5 pilot
+    # cells) -- run the scripts again whenever runs land; a pair or panel without data is skipped.
     # A run whose best FP32 epoch falls before 80% of its budget (analyze_geometry.EARLY_FRAC, `early_best`) gets its INT8
     # marked (ring / hatch / *): QAT started from an un-annealed checkpoint, so its FP32 -> INT8 is not quantization
     # (PHASE11_LOG "Early best FP32 epoch", 2026-10-13); kept in every figure, never dropped.
-    plot_kernel_comparison.py  # 02-04 kernel per layout/head/BN (AlexNet original, 64px; VGG16)
-    factor_effects.py          # 05-11 one figure per factor over every matched pair of the design (+ FAMILY_CONTRASTS),
-                               #   14 every matched pair per contrast with the seed noise band
-    analyze_geometry.py        # 15 QAT-vs-conversion INT8 loss + the shared loader/plot helpers + main_grid/kernel_geometry tables
-    design_figures.py          # 16 Pareto accuracy x cost, 17 kernel x head x BN grid, 18 kernel x geometry, 19 INT8
-                               #   robustness, 20 latency vs MACs, 21 training curves; --archive previews them on the
+    plot_kernel_comparison.py  # 01-03 kernel per layout/head/BN (AlexNet original, 64px; VGG16)
+    factor_effects.py          # 04-10 one figure per factor over every matched pair of the design (+ FAMILY_CONTRASTS),
+                               #   11 every matched pair per contrast with the seed noise band
+    analyze_geometry.py        # 12 QAT-vs-conversion INT8 change + the shared loader/plot helpers + main_grid/kernel_geometry tables
+    design_figures.py          # 13 Pareto accuracy x cost, 14 kernel x head x BN grid, 15 kernel x geometry, 16 INT8
+                               #   robustness, 17 latency vs MACs, 18 FP32 training curves, 19 QAT curves (18/19 need
+                               #   the gitignored logs, analyze_geometry.convergence's rsync); --archive previews them on the
                                #   superseded runs (results/archive_adamw_recipe/figures_generated/phase_11_preview/)
   oneoff/                  # Retired one-shot fixups, kept for provenance (`python -m scripts.oneoff.<name>`)
     backfill_model_size.py / backfill_best_epoch_eval.py / dilated_gap_local.py

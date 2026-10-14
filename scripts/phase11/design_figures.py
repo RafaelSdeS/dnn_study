@@ -1,16 +1,17 @@
-"""Phase 11 figures 16-21 -- the design read through its factors (ml/model_registrations.py:CELL_FACTORS), not run names.
+"""Phase 11 figures 13-19 -- the design read through its factors (ml/model_registrations.py:CELL_FACTORS), not run names.
 Selecting by factor is what lets one file draw the live runs and, with --archive, the superseded AdamW-recipe runs
 (LEGACY maps their names onto the same factors) -- a preview of each figure's form, not its numbers: validation split,
 pre-fix INT8, latencies that still timed the DataLoader, and some only-approximate twins (marked †).
 
-    16_pareto_accuracy_cost.png     top-1 INT8 vs MACs and vs INT8 size; Pareto front labelled
-    17_main_factorial_grid.png      kernel x {GAP, FC} x {no BN, BN} at the 64px layout, and the delta vs 11-5-3-3-3
-    18_kernel_by_geometry.png       one line per kernel across the 4 geometries (FC; GAP at the two layouts)
-    19_quantization_robustness.png  INT8 - FP32 per kernel / family, and vs each net's worst layer-input max/p99.9
-    20_latency_vs_macs.png          batch-1 latency vs MACs: FP32 GPU, FP32 CPU, INT8 CPU
-    21_training_curves.png          val/train top-1 per epoch at the 64px layout, {GAP, FC} x {no BN, BN}
+    13_pareto_accuracy_cost.png     top-1 INT8 vs MACs and vs INT8 size; Pareto front labelled
+    14_main_factorial_grid.png      kernel x {GAP, FC} x {no BN, BN} at the 64px layout, and the delta vs 11-5-3-3-3
+    15_kernel_by_geometry.png       one line per kernel across the 4 geometries (FC; GAP at the two layouts)
+    16_quantization_robustness.png  INT8 - FP32 per kernel / family, and vs each net's worst layer-input max/p99.9
+    17_latency_vs_macs.png          batch-1 latency vs MACs: FP32 GPU, FP32 CPU, INT8 CPU
+    18_training_curves.png          val/train top-1 per epoch at the 64px layout, {GAP, FC} x {no BN, BN}
+    19_qat_curves.png               the 50 QAT epochs of the same nets: val top-1 with fake-quant, from the FP32 best to INT8
 
-21 reads the per-epoch logs, which only PCAD keeps -- fetch them first (analyze_geometry.convergence's rsync; add
+18 and 19 read the per-epoch logs, which only PCAD keeps -- fetch them first (analyze_geometry.convergence's rsync; add
 archive_adamw_recipe/ to both paths for --archive).
 
     python -m scripts.phase11.design_figures [--archive]
@@ -174,8 +175,12 @@ def legend_kernels(kernels):
 
 def fig_pareto(df, figs, note):
     d = seed42(df).dropna(subset=["int8"])
+    costs = [("macs_eff_m", "MACs por imagem (milhões, escala log)"), ("int8_eff_mb", "Tamanho do modelo INT8 (MB, escala log)")]
+    # the front's nets get a number (both panels share it) and a key beside the plot: names on the points overlapped
+    on_front = np.logical_or.reduce([pareto_front(d[x], d.int8) for x, _ in costs])
+    num = {i: n + 1 for n, i in enumerate(d[on_front].sort_values("int8").index)}
     fig, axes = plt.subplots(1, 2, figsize=(16, 7), sharey=True)
-    for ax, x, xlabel in [(axes[0], "macs_eff_m", "MACs por imagem (milhões, escala log)"), (axes[1], "int8_eff_mb", "Tamanho do modelo INT8 (MB, escala log)")]:
+    for ax, (x, xlabel) in zip(axes, costs):
         for r in d.itertuples():
             ax.scatter(getattr(r, x), r.fp32, marker=HMARK[r.hk], s=28, color=color(r), alpha=0.22, edgecolors="none", zorder=2)
             ax.scatter(getattr(r, x), r.int8, marker=HMARK[r.hk], s=75, color=color(r), zorder=3,
@@ -184,26 +189,29 @@ def fig_pareto(df, figs, note):
                 early_ring(ax, getattr(r, x), r.int8)
         front = d[pareto_front(d[x], d.int8)].sort_values(x)
         ax.step(front[x], front.int8, where="post", color="#333333", lw=1, ls="--", zorder=1)
-        for k, r in enumerate(front.itertuples()):
-            ax.annotate(short(r), (getattr(r, x), r.int8), xytext=(-6, 8) if k % 2 else (6, 6), ha="right" if k % 2 else "left",
-                        textcoords="offset points", fontsize=7.5,
-                        bbox=dict(facecolor="white", edgecolor="none", alpha=0.75, pad=0.5), zorder=5)
+        for r in front.itertuples():
+            n = num[r.Index]  # odd left, even right: neighbours on the front don't print over each other
+            ax.annotate(str(n), (getattr(r, x), r.int8), xytext=(-5, 4) if n % 2 else (5, 4), ha="right" if n % 2 else "left",
+                        textcoords="offset points", fontsize=8, weight="bold", zorder=5)
         b = baseline(df)
         if b is not None:
             ax.scatter(b[x], b.int8, s=320, facecolors="none", edgecolors="k", lw=1.5, zorder=4)
         plain_log(ax, "x")
         ax.set_xlabel(xlabel)
-    axes[0].set_ylabel("Top-1 INT8 (%)   ·   transparente = o FP32 da mesma rede")
+    axes[0].set_ylabel("Top-1 INT8 (%)")
     handles = (legend_kernels(d.kernels)
                + [Line2D([], [], marker=m, color=TEXT_SECONDARY, ls="", ms=8, label=HLABEL[h]) for h, m in HMARK.items() if h in set(d.hk)]
-               + [Line2D([], [], marker="o", mfc="white", mec="k", mew=1.2, ls="", ms=8, label="contorno preto = VGG16"),
+               + [Line2D([], [], marker="o", color=TEXT_SECONDARY, alpha=0.22, ls="", ms=6, label="marcador claro = FP32 da mesma rede"),
+                  Line2D([], [], marker="o", mfc="white", mec="k", mew=1.2, ls="", ms=8, label="contorno preto = VGG16"),
                   Line2D([], [], color="#333333", ls="--", label="fronteira de Pareto (nenhuma rede é mais barata e melhor)"),
                   Line2D([], [], marker="o", mfc="none", mec="k", mew=1.5, ls="", ms=15, label="AlexNet original do zero")]
                + ([early_handle("ring")] if d.early_best.any() else []))
     fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=4, fontsize=9)
+    fig.legend(handles=[Line2D([], [], ls="", label=f"{n}  {short(d.loc[i])}") for i, n in num.items()], loc="center left",
+               bbox_to_anchor=(1.0, 0.5), fontsize=8.5, handlelength=0, title="redes na fronteira (número no gráfico)", title_fontsize=9)
     fig.suptitle("Acurácia × custo de todas as redes da Fase 11: as redes da fronteira são as que valem a pena\n" + note, fontsize=11)
     fig.tight_layout()
-    savefig(fig, "16_pareto_accuracy_cost.png", figs)
+    savefig(fig, "13_pareto_accuracy_cost.png", figs)
 
 
 def fig_grid(df, figs, note, bands):
@@ -240,8 +248,8 @@ def fig_grid(df, figs, note, bands):
                     txt, c = "sem referência", NEUTRAL
                 else:
                     small = abs(dfp[i, j]) < bcol[j]
-                    txt = (f"{dfp[i, j]:+.1f} pp" + (" ≈ ruído" if small else "")
-                           + (f"\nINT8 {d8[i, j]:+.1f}" + ("*" if star[i, j] else "") if np.isfinite(d8[i, j]) else ""))
+                    txt = (f"FP32 {dfp[i, j]:+.1f} pp" + (" ≈ ruído" if small else "")
+                           + (f"\nINT8 {d8[i, j]:+.1f} pp" + ("*" if star[i, j] else "") if np.isfinite(d8[i, j]) else ""))
                     c = NEUTRAL if small else "k"
                 ax.text(j, i, txt, ha="center", va="center", fontsize=9, color="white" if c == "k" and on_dark[i, j] else c)
         ax.set_xticks(range(len(cols)))
@@ -251,11 +259,12 @@ def fig_grid(df, figs, note, bands):
         ax.set_yticklabels([KLABEL[k] + "†" * (k in approx) for k in K4])
         ax.grid(False)
     axes[0].set_title("Top-1 (%) de cada célula", fontsize=10)
-    axes[1].set_title(f"Δ FP32 vs 11-5-3-3-3 na mesma coluna (pp); cinza = dentro do ruído entre seeds ({btxt(braw[1])} com BN, {btxt(braw[0])} sem BN)", fontsize=10)
+    axes[1].set_title(f"Diferença para o 11-5-3-3-3 da mesma coluna: azul = melhor, vermelho = pior\n"
+                      f"cinza = FP32 dentro do ruído entre seeds ({btxt(braw[1])} com BN, {btxt(braw[0])} sem BN)", fontsize=10)
     fig.suptitle("Fatorial principal: kernel × cabeça × BatchNorm no layout 64px (conv1 stride 2, 2 max-pools 2×2, mapa 8×8)\n" + note
-                 + ("\n* INT8 de " + EARLY_LABEL.replace("\n", " ") if early.any() else ""), fontsize=11)
+                 + ("\n* = " + EARLY_LABEL if early.any() else ""), fontsize=11)
     fig.tight_layout()
-    savefig(fig, "17_main_factorial_grid.png", figs)
+    savefig(fig, "14_main_factorial_grid.png", figs)
 
 
 def fig_geometry(df, figs, note):
@@ -265,13 +274,13 @@ def fig_geometry(df, figs, note):
     ringed = False
     for ax, m in zip(axes, ["fp32", "int8"]):
         for k in K4:
-            for head, ls, lw in [("fc", "-", 2.2), ("gap", "--", 1.4)]:
+            for head, ls, lw in [("fc", "-", 2.2), ("gap", "none", 1.4)]:  # GAP: no line across the 2 geometries it lacks
                 runs = [grid_cells(df, geom=g).query("kernels == @k and head == @head and ~bn") for g in xs]
                 y = [r[m].mean() for r in runs]
                 if np.isfinite(y).sum() == 0:
                     continue
                 pts = [(i, v) for i, v in enumerate(y) if np.isfinite(v)]
-                # ponytail: no value labels -- the left column clusters them; the numbers are in figure 17 and the tables
+                # ponytail: no value labels -- the left column clusters them; the numbers are in figure 14 and the tables
                 ax.plot(*zip(*pts), ls=ls, marker="o" if head == "gap" else "s", color=KCOLOR[k], lw=lw, ms=7, alpha=1 if head == "fc" else 0.7)
                 for i, v in pts:
                     if m == "int8" and runs[i].early_best.any():
@@ -284,7 +293,7 @@ def fig_geometry(df, figs, note):
         ax.set_title({"fp32": "FP32", "int8": "INT8"}[m], fontsize=10)
     axes[0].set_ylabel("Top-1 (%)")
     handles = legend_kernels(K4) + [Line2D([], [], color=TEXT_SECONDARY, marker="s", lw=2.2, label="cabeça FC (linha cheia)"),
-                                    Line2D([], [], color=TEXT_SECONDARY, marker="o", ls="--", lw=1.4, label="cabeça GAP (tracejada, só nos 2 layouts)"),
+                                    Line2D([], [], color=TEXT_SECONDARY, marker="o", ls="", label="cabeça GAP (só pontos: treinada só nos 2 layouts)"),
                                     Line2D([], [], color="#333333", ls=":", lw=1.3, label="AlexNet original do zero (com Dropout)")]
     handles += [early_handle("ring")] if ringed else []
     fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=4, fontsize=9)
@@ -292,7 +301,7 @@ def fig_geometry(df, figs, note):
                  "da esquerda (layout 64px) para a direita (layout do AlexNet original); linhas não paralelas = interação kernel × geometria\n"
                  + note, fontsize=11)
     fig.tight_layout()
-    savefig(fig, "18_kernel_by_geometry.png", figs)
+    savefig(fig, "15_kernel_by_geometry.png", figs)
 
 
 def worst_input_ratio(r):
@@ -330,7 +339,7 @@ def fig_quant(df, figs, note):
     plain_log(axes[1], "x")
     axes[1].set_xlabel("pior razão max / p99,9 entre as entradas das camadas (escala log)")
     axes[1].set_title(f"Ativações com picos raros perdem mais? (Spearman ρ = {rho:+.2f}, n = {d.ratio.notna().sum()})", fontsize=10)
-    axes[0].set_title("ΔINT8 por kernel / família", fontsize=10)
+    axes[0].set_title("INT8 − FP32 por kernel / família (negativo = perde no INT8)", fontsize=10)
     for ax in axes:
         ax.axhline(0, color="k", lw=0.8)
     axes[0].set_ylabel("INT8 − FP32 (pp; negativo = perde no INT8)")
@@ -342,7 +351,7 @@ def fig_quant(df, figs, note):
     fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=5, fontsize=9)
     fig.suptitle("Robustez à quantização: quanto cada rede perde do FP32 ao INT8 real, e um porquê possível\n" + note, fontsize=11)
     fig.tight_layout()
-    savefig(fig, "19_quantization_robustness.png", figs)
+    savefig(fig, "16_quantization_robustness.png", figs)
 
 
 def fig_latency(df, figs, note):
@@ -364,28 +373,33 @@ def fig_latency(df, figs, note):
     others = sorted(set(d.machine) - {ref})
     handles = (legend_kernels(d.kernels)
                + [Line2D([], [], marker=m, color=TEXT_SECONDARY, ls="", ms=8, label=HLABEL[h]) for h, m in HMARK.items() if h in set(d.hk)]
-               + ([Line2D([], [], marker="o", mfc="none", mec=TEXT_SECONDARY, ls="", ms=8, label=f"vazado = medida em outra máquina ({'; '.join(others)})")]
+               + ([Line2D([], [], marker="o", mfc="none", mec=TEXT_SECONDARY, ls="", ms=8, label="vazado = medida em outra máquina: não comparar com os cheios")]
                   if others else []))
+    if others:
+        print(f"20: filled = {ref}; hollow = {'; '.join(others)}")
     fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=5, fontsize=9)
     fig.suptitle("O MAC prevê o tempo real? Mesma conta, kernels diferentes: pontos acima da nuvem = kernel lento por MAC\n" + note,
                  fontsize=11)
     fig.tight_layout()
-    savefig(fig, "20_latency_vs_macs.png", figs)
+    savefig(fig, "17_latency_vs_macs.png", figs)
 
 
-def curve(r):
-    """(epoch, train top-1, val top-1) of the FP32 stage, from the log Trainer writes next to the run's results/."""
-    p = r.results.parent / "logs" / f"{r.key}.log"
+def curve(r, stage="fp32"):
+    """(epoch, train top-1, val top-1) of one stage (fp32 or qat), from the log Trainer writes next to the run's results/."""
+    p = r.results.parent / "logs" / f"{'qat_' * (stage == 'qat')}{r.key}.log"
     if not p.exists():
         return None
     ep = {int(m[1]): (float(m[3]), float(m[5])) for m in LOG_EPOCH.finditer(p.read_text(errors="ignore"))}  # resumed: last wins
     return (sorted(ep), [ep[e][0] for e in sorted(ep)], [ep[e][1] for e in sorted(ep)]) if ep else None
 
 
+CURVE_PANELS = [("gap", False), ("gap", True), ("fc", False), ("fc", True)]
+
+
 def fig_curves(df, figs, note):
     d = grid_cells(df)
     fig, axes = plt.subplots(2, 2, figsize=(15, 9), sharex=True, sharey=True)
-    for ax, (head, bn) in zip(axes.flat, [("gap", False), ("gap", True), ("fc", False), ("fc", True)]):
+    for ax, (head, bn) in zip(axes.flat, CURVE_PANELS):
         drawn = False
         for k in K4:
             for r in d[(d.kernels == k) & (d["head"] == head) & (d.bn.astype(bool) == bn)].itertuples():
@@ -410,7 +424,47 @@ def fig_curves(df, figs, note):
     fig.suptitle("Curvas de treino do fatorial principal (layout 64px): convergiu? quanto o treino se afasta da validação?\n" + note,
                  fontsize=11)
     fig.tight_layout()
-    savefig(fig, "21_training_curves.png", figs)
+    savefig(fig, "18_training_curves.png", figs)
+
+
+def fig_qat_curves(df, figs, note):
+    """The QAT stage of figure 18's nets: val top-1 with fake-quant per epoch, the FP32 best it starts from (dotted) and
+    the real INT8 (diamond) at the QAT epoch it is converted from -- QAT keeps its best val epoch, not its last -- all
+    three on the validation split. No train curve: at ~20 pp above
+    val it would flatten the 0.1-3 pp the QAT moves; each panel zooms on its own nets (no sharey)."""
+    d = grid_cells(df)
+    fig, axes = plt.subplots(2, 2, figsize=(15, 9), sharex=True)
+    ringed = False
+    for ax, (head, bn) in zip(axes.flat, CURVE_PANELS):
+        drawn = False
+        for k in K4:
+            for r in d[(d.kernels == k) & (d["head"] == head) & (d.bn.astype(bool) == bn)].itertuples():
+                c = curve(r, "qat")
+                if c is None:
+                    continue
+                drawn, x8 = True, r.qat_best_ep + 1 if pd.notna(r.qat_best_ep) else c[0][-1]  # log epochs are 1-based
+                ax.plot(c[0], c[2], color=KCOLOR[k], lw=1.6, label=KLABEL[k] + "†" * r.approx)
+                ax.axhline(r.fp32_val, color=KCOLOR[k], ls=":", lw=1.2)
+                ax.scatter(x8, r.int8_raw, marker="D", s=45, color=KCOLOR[k], edgecolors="k", lw=0.8, zorder=5)
+                if r.early_best:
+                    early_ring(ax, x8, r.int8_raw)
+                    ringed = True
+        if not drawn:
+            ax.text(0.5, 0.5, "pendente", transform=ax.transAxes, ha="center", color=NEUTRAL, fontsize=12)
+        ax.set_title(f"{'GAP' if head == 'gap' else 'FC + Dropout'} · {'com BN' if bn else 'sem BN'}", fontsize=10)
+    for ax in axes[1]:
+        ax.set_xlabel("Época do QAT")
+    for ax in axes[:, 0]:
+        ax.set_ylabel("Top-1 na validação (%)")
+    fig.legend(handles=legend_kernels(K4) + [Line2D([], [], color=TEXT_SECONDARY, lw=1.6, label="validação durante o QAT (com fake-quant)"),
+                        Line2D([], [], color=TEXT_SECONDARY, ls=":", lw=1.2, label="melhor FP32: o checkpoint de onde o QAT parte"),
+                        Line2D([], [], marker="D", color=TEXT_SECONDARY, ls="", ms=7, label="INT8 real, convertido da melhor época do QAT (desenhado nela)")]
+               + ([early_handle("ring")] if ringed else []), loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=3, fontsize=9)
+    fig.suptitle("O que o QAT faz com cada rede do fatorial principal (layout 64px): parte do melhor FP32, treina 50 épocas\n"
+                 "simulando o INT8; a melhor época vira o INT8 real (losango); acima do pontilhado = o QAT ganhou acurácia\n" + note,
+                 fontsize=11)
+    fig.tight_layout()
+    savefig(fig, "19_qat_curves.png", figs)
 
 
 def main(argv=None):
@@ -429,8 +483,10 @@ def main(argv=None):
     fig_grid(df, figs, note, bands)
     fig_geometry(df, figs, note)
     fig_quant(df, figs, note)
-    fig_latency(df, figs, note)
-    fig_curves(df, figs, note)
+    fig_latency(df, figs, note if archive else "seed 42 · latência por imagem, batch 1")
+    curves_note = note if archive else "seed 42 · curvas no split de validação (10% do train), não no test set"
+    fig_curves(df, figs, curves_note)
+    fig_qat_curves(df, figs, curves_note)
 
 
 if __name__ == "__main__":

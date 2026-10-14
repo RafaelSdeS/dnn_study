@@ -1,10 +1,10 @@
-"""Phase 11 tables + figure 15, from the raw per-run summaries; also the shared loader and plot helpers of
+"""Phase 11 tables + figure 12, from the raw per-run summaries; also the shared loader and plot helpers of
 scripts/phase11/{plot_kernel_comparison,factor_effects,design_figures}.py.
 
 Reads every outputs/pcad/phase_11_*/<model>/results/*_summary.json -- the live experiments of
 configs/experiments/phase_11_*.yaml (seeds 43/44 in the *_seed43/_seed44 ones), never outputs/pcad/archive_* -- and writes
   results/phase_11_geometry_analysis/{all_runs,main_grid,kernel_geometry,convergence}.csv
-  results/figures_generated/phase_11_kernel_size_comparison/15_quantization_drop_where.png
+  results/figures_generated/phase_11_kernel_size_comparison/12_quantization_drop_where.png
 Runs are picked by their factors (ml/model_registrations.py:CELL_FACTORS, via design_figures.frame), never by name.
 
 Figure vocabulary (every Phase 11 figure): "layout original" = torchvision's AlexNet geometry (conv1 stride 4, three
@@ -44,8 +44,7 @@ LAYOUTS = ("layout original = o do AlexNet torchvision: conv1 stride 4 + 3 max-p
 # effect (docs/logs/PHASE11_LOG.md "Early best FP32 epoch", 2026-10-13). The figures mark these runs; none is dropped.
 EARLY_FRAC = 0.8
 EARLY_GRAY = "#6b6b6b"
-EARLY_LABEL = ("melhor época FP32 cedo (< 80% do treino, LR ainda alto): o QAT parte de um checkpoint sem LR\n"
-               "reduzido, então FP32 → INT8 inclui treino extra, não só quantização (PHASE11_LOG 13/10)")
+EARLY_LABEL = "melhor época FP32 antes de 80% do treino: o ganho no INT8 é treino extra do QAT, não quantização"
 
 
 def load(*roots: Path) -> pd.DataFrame:
@@ -72,6 +71,7 @@ def load(*roots: Path) -> pd.DataFrame:
             int8=d["test_int8_top1"] if post_fix else nan, fp32_val=d["fp32_top1"], results=p.parent,
             qat_raw=d["qat_top1"], int8_raw=d["int8_top1"],
             params_m=d["params_m"], macs_m=d["macs"] / 1e6, fp32_mb=d["fp32_size_mb"], int8_mb=d["int8_size_mb"], best_ep=d["epochs"],
+            qat_best_ep=d.get("qat_best_epoch"),  # 0-based like best_ep: the QAT epoch the INT8 model is converted from
             early_best=bool(d.get("epochs_budget")) and d["epochs"] + 1 < EARLY_FRAC * d["epochs_budget"],  # epochs is 0-based
             ece=d.get("test_fp32_ece") if post_fix else nan, post_fix=post_fix, git_hash=prov.get("git_hash", "")[:7],
             git_dirty=prov.get("git_dirty"), gpu=prov.get("gpu_name"),
@@ -181,7 +181,8 @@ def kernel_geometry_table(df):
 
 
 def fig_convert(df):
-    """Where INT8 loses its accuracy, per main-factorial cell (+ the baseline): in QAT training or in the conversion."""
+    """Where INT8 - FP32 comes from, per main-factorial cell (+ the baseline): QAT training (QAT - FP32), then the
+    conversion (INT8 - QAT) stacked on it -- the bars end at INT8 - FP32, negative = loses (figures 11 and 16's sign)."""
     from scripts.phase11.design_figures import K4, baseline, cell_label, grid_cells
 
     cells = grid_cells(df)
@@ -193,8 +194,8 @@ def fig_convert(df):
         return
     fig, ax = plt.subplots(figsize=(13, 6))
     for i, r in enumerate(d.itertuples()):
-        ax.bar(i, r.drop_qat, 0.7, color=BLUE, **early_hatch(r.early_best))
-        ax.bar(i, r.drop_convert, 0.7, bottom=max(r.drop_qat, 0), color=RED)
+        ax.bar(i, -r.drop_qat, 0.7, color=BLUE, **early_hatch(r.early_best))
+        ax.bar(i, -r.drop_convert, 0.7, bottom=-r.drop_qat, color=RED)
     if cells.bn.any():
         first_bn = list(d.key).index(cells[cells.bn].key.iloc[0])
         ax.axvline(first_bn - 0.5, color=TEXT_SECONDARY, lw=1, ls="--")
@@ -205,14 +206,14 @@ def fig_convert(df):
     ax.set_xticks(range(len(d)))
     ax.set_xticklabels(["AlexNet original\n(baseline)" if r.key == BASE_KEY else cell_label(r, skip=("bn",)) for r in d.itertuples()],
                        rotation=40, ha="right", fontsize=9)
-    ax.set_ylabel("Perda de top-1 (pp)")
-    ax.set_title("Onde o INT8 perde acurácia: no treino QAT ou na conversão para INT8 real? (seed 42)\n"
-                 "fatorial principal, layout 64px (conv1 stride 2, 2 max-pools 2×2)", fontsize=10)
-    ax.legend(handles=[Patch(color=BLUE, label="FP32 → QAT (perda no treino com fake-quant)"),
-                       Patch(color=RED, label="QAT → INT8 real (perda na conversão)")]
+    ax.set_ylabel("INT8 − FP32 (pp; negativo = perde no INT8)")
+    ax.set_title("De onde vem a diferença INT8 − FP32: do treino QAT ou da conversão para INT8 real? (seed 42)\n"
+                 "fatorial principal, layout 64px (conv1 stride 2, 2 max-pools 2×2); a barra termina em INT8 − FP32", fontsize=10)
+    ax.legend(handles=[Patch(color=BLUE, label="QAT − FP32 (treino com fake-quant)"),
+                       Patch(color=RED, label="INT8 − QAT (conversão para INT8 real)")]
               + ([early_handle("hatch")] if d.early_best.any() else []),
               loc="upper left", bbox_to_anchor=(1.01, 1), fontsize=9)
-    savefig(fig, "15_quantization_drop_where.png")
+    savefig(fig, "12_quantization_drop_where.png")
 
 
 # the cells replicated at seeds 43/44: read off every *_seed43 yaml, so the noise floors are whatever the design reruns

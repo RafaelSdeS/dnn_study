@@ -16,11 +16,11 @@ EXPERIMENTS = sorted(p.stem for p in (Path(__file__).resolve().parents[1] / "con
 PILOT = {"alexnet_k11-5-3_stride2_2pool2x2_map8_fc_nobn", "alexnet_k2x2_stride2_2pool2x2_map8_fc_nobn",
          "alexnet_k3x3_stride2_2pool2x2_map8_gap_bn", "vgg16_k3x3_stride1_5pool2x2_map2_fcdrop_bn",
          "alexnet_k11-5-3_stride4_3pool3x3_map1_fcdrop_nobn"}
-FIGURES = {f"{n}.png" for n in ["02_kernel_original_layout", "03_kernel_64px_layout", "04_kernel_vgg16", "05_head_fc_vs_gap",
-                                "06_conv1_stride", "07_pooling", "08_dropout", "09_pretraining", "10_batchnorm",
-                                "11_compensation_block", "14_factorial_matched_pairs", "15_quantization_drop_where",
-                                "16_pareto_accuracy_cost", "17_main_factorial_grid", "18_kernel_by_geometry",
-                                "19_quantization_robustness", "20_latency_vs_macs", "21_training_curves"]}
+FIGURES = {f"{n}.png" for n in ["01_kernel_original_layout", "02_kernel_64px_layout", "03_kernel_vgg16", "04_head_fc_vs_gap",
+                                "05_conv1_stride", "06_pooling", "07_dropout", "08_pretraining", "09_batchnorm",
+                                "10_compensation_block", "11_factorial_matched_pairs", "12_quantization_drop_where",
+                                "13_pareto_accuracy_cost", "14_main_factorial_grid", "15_kernel_by_geometry",
+                                "16_quantization_robustness", "17_latency_vs_macs", "18_training_curves", "19_qat_curves"]}
 
 
 def _early(m):  # the fake runs whose best FP32 epoch comes early, so every figure draws its early-best mark
@@ -74,7 +74,7 @@ def test_every_phase_11_figure_renders(tmp_path, monkeypatch, subset):
         assert written == FIGURES, (FIGURES - written, written - FIGURES)
         assert {p.name for p in tables.glob("*.csv")} >= {"all_runs.csv", "main_grid.csv", "kernel_geometry.csv", "factor_effects.csv"}
     else:  # a half-finished queue: whatever has data renders, the rest is skipped, nothing crashes
-        assert {"02_kernel_original_layout.png", "16_pareto_accuracy_cost.png", "17_main_factorial_grid.png"} <= written
+        assert {"01_kernel_original_layout.png", "13_pareto_accuracy_cost.png", "14_main_factorial_grid.png"} <= written
 
 
 # The design, contrast by contrast (docs/logs/PHASE11_LOG.md "Minimal design" + "Protocol audit", 2026-10-07): how many

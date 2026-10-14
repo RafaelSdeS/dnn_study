@@ -1604,3 +1604,31 @@ contrast. `convergence()` keeps the reference (strictest) band.
 
 Open, not done here: the pre-registered kernel-effect CI (mean difference, pooled replicate SD, 8 df; "Protocol audit")
 has no code yet -- the numbers above were computed by hand from the summaries.
+
+## Figures readable without the code (2026-10-14)
+
+Figure 14 did not say what a point is. Every Phase 11 figure now states its arithmetic and which side is better, with
+one sign convention: **a difference is B - A for an A -> B contrast, and INT8 - FP32 for quantization; negative =
+loses**. Figure 15 is flipped to it (it plotted FP32 - QAT and QAT - INT8 as "loss": the early-best gains were bars
+going down); it now stacks QAT - FP32 and INT8 - QAT, the bar ending at INT8 - FP32, as in 14 and 19. Figures 05-10
+name A and B in the legend, print B - A under each group and draw B in one colour (`B_COLOR`) instead of a per-factor
+one that reused the kernel colours. 16 numbers the Pareto front with a key beside it (the names overlapped); 18 draws
+GAP as points only (its line crossed the two geometries it was never trained at); 20 and 21 no longer say "top-1 on
+the test set" (latency; validation-split curves). No number changed; `factor_effects.csv`'s `factor` label for the
+head and pooling rows now names their levels, like the figures.
+
+## Figures renumbered 01-19, and a QAT-curves figure (2026-10-14)
+
+The numbering had the gaps of retired figures (01, 12, 13). Now 01-19 without gaps; every entry above this one uses
+the old numbers. Old -> new: 02-11 -> 01-10 (kernel 01-03, factors 04-09, compensation 10, still waiting on its runs),
+14 -> 11 (matched pairs), 15 -> 12 (QAT vs conversion), 16 -> 13 (Pareto), 17 -> 14 (main grid), 18 -> 15 (kernel x
+geometry), 19 -> 16 (INT8 robustness), 20 -> 17 (latency), 21 -> 18 (FP32 curves). The PNGs were moved, not redrawn
+under new names; `results/archive_adamw_recipe/figures_generated/phase_11_preview/` keeps the old 16-21 names (a
+`--archive` rerun would write 13-19 next to them).
+
+New figure 19 (`design_figures.fig_qat_curves`): the 50 QAT epochs of figure 18's nets, validation top-1 with
+fake-quant, the FP32 best it starts from (dotted) and the real INT8 as a diamond at the epoch it comes from. That epoch
+is QAT's best on the validation split (`qat_best_epoch`, now `qat_best_ep` in `all_runs.csv`), not its last: checked
+on two runs, `qat_top1` = the log's maximum and the INT8 sits 0.05 and 0.11 pp under it. No train curve: ~20 pp above
+validation, it would flatten the 0.1-3 pp the QAT moves. The early-best FC no-BN cells show their +2-3 pp as QAT
+curves climbing from the FP32 line for ~20 epochs.

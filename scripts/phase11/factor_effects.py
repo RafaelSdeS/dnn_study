@@ -7,14 +7,16 @@ seed-42 pair. The grey band is the noise floor: 2*sqrt(2)*pooled seed-to-seed SD
 delta inside it is not distinguishable from re-drawing the seed). "layout original" / "layout 64px" are defined in
 scripts/phase11/analyze_geometry.py's docstring.
 
-    05..11_*.png                    one figure per factor (absolute top-1 of A and B, baseline line)
-    14_factorial_matched_pairs.png  every matched pair, per contrast: the deltas, their median and its bootstrap CI
+    04..10_*.png                    one figure per factor (absolute top-1 of A and B, baseline line)
+    11_factorial_matched_pairs.png  every matched pair, per contrast: the deltas, their median and its bootstrap CI
 
-Figures 12 (one row per pair: ~100 rows with every matched pair) and 13 (interactions) are retired: 14 summarizes every
-pair with the noise band, 17/18 (scripts/phase11/design_figures.py) show kernel x head x BN and kernel x geometry.
+The old figures 12 (one row per pair: ~100 rows with every matched pair) and 13 (interactions) are retired: 11 summarizes
+every pair with the noise band, 14/15 (scripts/phase11/design_figures.py) show kernel x head x BN and kernel x geometry.
+Numbered 01-19 without gaps since 2026-10-14 (docs/logs/PHASE11_LOG.md "Figures renumbered").
 
     python -m scripts.phase11.factor_effects
 """
+import re
 import textwrap
 
 import numpy as np
@@ -24,20 +26,19 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
 from configs.loader import load_config
-from ml.plotting import AMBER, BLUE, GREEN, NEUTRAL, RED, apply_report_style
+from ml.plotting import BLUE, NEUTRAL, RED, apply_report_style
 from ml.reporting import holm, mcnemar_p, wilson_ci
 from scripts.phase11.analyze_geometry import (LAYOUTS, REGIME_LABEL, TABLES, band_for, early_handle, early_ring, int8_bar,
                                               noise_bands, pair_band, precision_handles, reference_lines, savefig)
 from scripts.phase11.design_figures import cell_label, frame
 
-PURPLE = "#7b3fa0"
 COMP = "Compensação (profundidade e blocos)"
 PRE = "Pré-treino ImageNet (não → sim)"
-FACTOR_COLOR = {"Kernel": GREEN, "Cabeça (FC → GAP)": RED, "Stride da conv1 (4 → 2)": BLUE, "Pooling": AMBER,
-                "Dropout (0 → 0,5)": "#8d6e63", PRE: PURPLE, "BatchNorm (sem → com)": "#0d8b8b", COMP: "#c2185b"}
-FACTOR_FIG = {"Cabeça (FC → GAP)": "05_head_fc_vs_gap.png", "Stride da conv1 (4 → 2)": "06_conv1_stride.png",
-              "Pooling": "07_pooling.png", "Dropout (0 → 0,5)": "08_dropout.png", PRE: "09_pretraining.png",
-              "BatchNorm (sem → com)": "10_batchnorm.png", COMP: "11_compensation_block.png"}  # Kernel: figures 02-04
+POOL = "Pooling (3 max-pools 3×3 → 2 max-pools 2×2)"
+B_COLOR = "#0d8b8b"  # one colour for B in every factor figure, none of the kernel colours (KCOLOR), which mean a kernel
+FACTOR_FIG = {"Cabeça (FC + Dropout → GAP)": "04_head_fc_vs_gap.png", "Stride da conv1 (4 → 2)": "05_conv1_stride.png",
+              POOL: "06_pooling.png", "Dropout (0 → 0,5)": "07_dropout.png", PRE: "08_pretraining.png",
+              "BatchNorm (sem → com)": "09_batchnorm.png", COMP: "10_compensation_block.png"}  # Kernel: figures 01-03
 
 # The factors a matched pair holds fixed. pooling = '<n>pool<k>x<k>' (count and window always change together here);
 # map_side follows from kernels + geometry, so it is not a pairing key.
@@ -61,7 +62,7 @@ PAIRS = [("kernels", "k11-5-3", "k3x3", "Kernel 11-5-3-3-3 → 3×3"), ("kernels
          ("kernels", "k3x3deepstem", "k2x2deepstem", "Kernel 3×3 → 2×2, stem profundo"),
          ("kernels", "k3x3", "k3x3deepstem", "Stem 3×3 → três 3×3 (ResNet-C)"),
          ("kernels", "k2x2", "k2x2deepstem", "Stem 2×2 → três 2×2")]
-FIGURE_OF = {"head": "Cabeça (FC → GAP)", "stride": "Stride da conv1 (4 → 2)", "pooling": "Pooling", "dropout": "Dropout (0 → 0,5)",
+FIGURE_OF = {"head": "Cabeça (FC + Dropout → GAP)", "stride": "Stride da conv1 (4 → 2)", "pooling": POOL, "dropout": "Dropout (0 → 0,5)",
              "pretrained": PRE, "bn": "BatchNorm (sem → com)"}
 K3_GAP_BN = "alexnet_k3x3_stride2_2pool2x2_map8_gap_bn"
 FAMILY_CONTRASTS = [  # (factor, label, A, B, note): what the cell grid can't express. † = a second variable changes too
@@ -170,8 +171,9 @@ def contrasts(df, bands=None):
 
 
 def fig_factor(t, df, factor, per_row=6):
-    """Absolute top-1 of A and B for every contrast of one factor: A grey, B in the factor's colour, + baseline."""
-    g, color = t[t.factor == factor], FACTOR_COLOR[factor]
+    """Absolute top-1 of A and B for every contrast of one factor (A grey, B in B_COLOR) + baseline; each group's label
+    states B - A. The legend names A and B from the factor's '(a → b)'."""
+    g, color = t[t.factor == factor], B_COLOR
     if g.empty:
         print(f"{FACTOR_FIG[factor]}: no finished pair yet")
         return
@@ -190,7 +192,9 @@ def fig_factor(t, df, factor, per_row=6):
                 ax.text(i + (2 * j - 1.5) * w, fp32 + 0.4, f"{fp32:.1f}", ha="center", va="bottom", fontsize=7.5, zorder=6,
                         bbox=dict(facecolor="white", edgecolor="none", pad=0.3))
         ax.set_xticks(range(len(chunk)))
-        ax.set_xticklabels([textwrap.fill(r.contrast, 22) + f"\nparâm. {r.params_change_pct:+.0f}% · MACs {r.macs_change_pct:+.0f}%"
+        ax.set_xticklabels([textwrap.fill(r.contrast, 22)
+                            + f"\nB − A: FP32 {r.d_fp32:+.1f}" + (f" · INT8 {r.d_int8:+.1f}" if pd.notna(r.d_int8) else "") + " pp"
+                            + f"\nparâm. {r.params_change_pct:+.0f}% · MACs {r.macs_change_pct:+.0f}%"
                             + (f"\nmédia de {r.n_seeds} seeds" if r.n_seeds > 1 else "") for r in chunk.itertuples()], fontsize=8.5)
         ax.set_xlim(-0.6, width - 0.4)  # same bar width in every row
         ax.set_ylabel("Top-1 (%)")
@@ -202,7 +206,9 @@ def fig_factor(t, df, factor, per_row=6):
             notes.setdefault(r.note, []).append(r.contrast)
     fig.suptitle(f"{factor}: cada grupo compara duas redes idênticas exceto por este fator (seed 42)\n{LAYOUTS}"
                  + "".join(f"\nnota — {'; '.join(cs)}: {note}" for note, cs in notes.items()), fontsize=10)
-    fig.legend(handles=[Patch(color=NEUTRAL, label="A = antes (1º nível do fator)"), Patch(color=color, label="B = depois (2º nível)")]
+    m = re.fullmatch(r"(.+) \((.+) → (.+)\)", factor)
+    a, b = (f"{m[1]}: {m[2]}", f"{m[1]}: {m[3]}") if m else ("antes", "depois")
+    fig.legend(handles=[Patch(color=NEUTRAL, label=f"A = {a}"), Patch(color=color, label=f"B = {b}")]
                + precision_handles() + ref + ([early_handle("hatch")] if (g.early_A | g.early_B).any() else []),
                loc="outside lower center", ncol=2, fontsize=8.5)
     savefig(fig, FACTOR_FIG[factor])
@@ -260,7 +266,9 @@ def summarize_pairs(pairs):
 
 
 def fig_matched_pairs(pairs, summary, n_cells, bands):
-    titles = {"fp32": "Δ top-1 FP32 (pp)", "int8": "Δ top-1 INT8 (pp)", "dqat": "Δ ΔQAT (pp; >0 = mais robusto)"}
+    titles = {"fp32": "Top-1 FP32: B − A (pp)", "int8": "Top-1 INT8: B − A (pp)", "dqat": "Perda no INT8 (INT8 − FP32): B − A (pp)"}
+    xlabels = {"fp32": "← A melhor   ·   B melhor →", "int8": "← A melhor   ·   B melhor →",
+               "dqat": "← B perde mais no INT8   ·   B perde menos →"}
     fig, axes = plt.subplots(1, 3, figsize=(15, 0.55 * len(summary) + 3), sharey=True)
     y = {c: i for i, c in enumerate(summary.contrast[::-1])}
     # one grey span per regime floor, widest (lightest) first; each pair is judged by its own cells' band (band_<m>)
@@ -285,24 +293,27 @@ def fig_matched_pairs(pairs, summary, n_cells, bands):
             ax.hlines(y[s.contrast], *bootstrap_median_ci(v), color=RED, lw=2, zorder=2)
             ax.text(1.01, y[s.contrast], f"{int((v > 0).sum())}/{len(v)}", transform=ax.get_yaxis_transform(), va="center", fontsize=8)
         ax.set_title(titles[m], fontsize=10)
+        ax.set_xlabel(xlabels[m], fontsize=9)
+    axes[0].text(0, 1.0, "fator trocado: A → B", transform=axes[0].transAxes, ha="right", va="bottom", fontsize=9, weight="bold")
     axes[0].set_yticks(list(y.values()))
     axes[0].set_yticklabels(list(y.keys()), fontsize=9)
-    handles = [Line2D([], [], marker="o", color=BLUE, ls="", ms=4, alpha=0.5, label="um par de células iguais em todo o resto"),
+    handles = [Line2D([], [], marker="o", color=BLUE, ls="", ms=4, alpha=0.5, label="um par de redes iguais em tudo menos no fator (valor = B − A)"),
                Line2D([], [], marker="D", color=RED, ls="-", ms=7, label="mediana dos pares (barra: IC 95% bootstrap)"),
-               Line2D([], [], ls="", label="k/n à direita = pares em que o 2º nível ganha")]
+               Line2D([], [], color="k", lw=0.8, label="linha 0 = A e B iguais (sem efeito)"),
+               Line2D([], [], ls="", label="k/n à direita = em quantos pares B ficou acima de A")]
     for r, b in floors:
         handles.append(Patch(color="#d0d0d0", label=f"ruído entre seeds, {REGIME_LABEL.get(r, r)}: ±{b['fp32']:.1f} pp FP32"
                              + (f", ±{b['int8']:.1f} pp INT8" if np.isfinite(b["int8"]) else "")))
     if floors:
         handles.append(Line2D([], [], marker="o", ls="", ms=4, mfc="none", color=BLUE,
-                              label="par dentro do ruído das suas duas células (vazado)"))
+                              label="par dentro do ruído das suas duas redes (vazado)"))
     if pairs.early.any():
         handles.append(early_handle("ring"))
     fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0), ncol=2, fontsize=9)
-    fig.suptitle(f"Células do desenho da Fase 11 (seed 42; {n_cells} treinadas até agora): cada ponto compara "
-                 "duas células que só diferem no fator da linha", fontsize=11)
+    fig.suptitle("Efeito de trocar um fator de cada vez (A → B, todo o resto igual): cada ponto azul é um par de redes e "
+                 f"o valor é B − A; 0 = sem efeito\nseed 42 · {n_cells} redes do desenho treinadas até agora", fontsize=11)
     fig.tight_layout(rect=(0, 0, 1, 0.95))
-    savefig(fig, "14_factorial_matched_pairs.png")
+    savefig(fig, "11_factorial_matched_pairs.png")
 
 
 def main():
