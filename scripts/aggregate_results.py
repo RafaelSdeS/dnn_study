@@ -2,8 +2,8 @@
 
 Each sweep job runs a single model and writes its own results/{model}_summary.json under
 {runtime.root}/{experiment}/{model}/results/ (see ml/runtime.py's make_model_runs). Reading those
-back — rather than relying on scripts/train.py's own {experiment}_comparison.csv, which each concurrent
-job overwrites — avoids the write race between sibling jobs sharing one experiment name.
+back — rather than relying on scripts/train.py's own {experiment}_comparison.csv, which each job
+merges its row into but two jobs finishing at once can still race on — is the source of truth.
 """
 from __future__ import annotations
 

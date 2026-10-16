@@ -4,6 +4,7 @@ import argparse
 import copy
 import json
 import logging
+import os
 import signal
 import tempfile
 from dataclasses import asdict, replace
@@ -92,8 +93,15 @@ def _append_csv(rows: list[dict[str, Any]], output_path: Path) -> None:
         output_path.write_text(json.dumps(rows, indent=2, default=str))
         return
     df = pd.DataFrame(rows)
+    if output_path.exists():  # one sweep job per model: keep the others' rows, replace only this run's (a resubmit)
+        old = pd.read_csv(output_path)
+        df = pd.concat([old[~old.model_name.isin(df.model_name)], df], ignore_index=True)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(output_path, index=False)
+    # ponytail: the rename keeps a half-written file from ever being read; two jobs finishing in the same instant can
+    # still drop one's row (read-modify-write) -- scripts/aggregate_results.py rebuilds it from the summary JSONs
+    tmp = output_path.with_suffix(f".{os.getpid()}.tmp")
+    df.to_csv(tmp, index=False)
+    os.replace(tmp, output_path)
 
 
 def _maybe_init_wandb(enabled: bool, run_name: str, config: dict[str, Any], mode: str = "offline", group: str | None = None, resume_id: str | None = None):

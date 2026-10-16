@@ -5,11 +5,25 @@ import ml.model_registrations  # noqa: F401 — populates MODEL_REGISTRY
 from scripts.train import (
     _FP32_FIT_FIELDS,
     _QAT_FIT_FIELDS,
+    _append_csv,
     _apply_smoke_override,
     _recover_fit_from_prior_summary,
     _resolve_model_names,
     build_parser,
 )
+
+
+def test_append_csv_keeps_other_jobs_rows_and_replaces_a_resubmit(tmp_path):
+    """One sweep job per model writes the experiment's comparison CSV: it used to overwrite it, leaving one row."""
+    import pandas as pd
+
+    out = tmp_path / "exp_comparison.csv"
+    _append_csv([{"model_name": "a", "top1": 1.0}], out)
+    _append_csv([{"model_name": "b", "top1": 2.0}], out)
+    _append_csv([{"model_name": "a", "top1": 3.0}], out)
+    df = pd.read_csv(out)
+    assert sorted(zip(df.model_name, df.top1)) == [("a", 3.0), ("b", 2.0)]
+    assert list(tmp_path.iterdir()) == [out]  # no temp file left behind
 
 
 def test_model_flag_is_parsed():
