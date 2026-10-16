@@ -1,5 +1,7 @@
 cell,family,kernels,stride,pool_kernel,pool_count,map_side,head,dropout,bn,pretrained,fp32,int8,early_best,params_m,macs_m,pooling,dqat
+alexnet_k11-5-3_stride2_2pool2x2_map8_fcdrop_nobn_pretrained,alexnet,k11-5-3,2,2,2,8,fc,True,False,True,51.889997720718384,56.870001554489136,True,57.82324,294.633472,2pool2x2,4.980003833770752
 alexnet_k11-5-3_stride4_3pool3x3_map1_fcdrop_nobn,alexnet,k11-5-3,4,3,3,1,fc,True,False,False,35.46999990940094,35.679998993873596,False,21.12308,58.168256,3pool3x3,0.20999908447265625
+alexnet_k11-5-3_stride4_3pool3x3_map1_fcdrop_nobn_pretrained,alexnet,k11-5-3,4,3,3,1,fc,True,False,True,36.820000410079956,37.16999888420105,False,21.12308,58.168256,3pool3x3,0.34999847412109375
 alexnet_k2x2_stride4_3pool3x3_map1_fcdrop_nobn,alexnet,k2x2,4,3,3,1,fc,True,False,False,27.820000052452087,30.410000681877136,True,19.654728000000006,29.802751999999998,3pool3x3,2.590000629425049
 alexnet_k3x3_stride4_3pool3x3_map1_fcdrop_nobn,alexnet,k3x3,4,3,3,1,fc,True,False,False,31.520000100135803,35.08000075817108,True,20.904968000000004,43.749632000000005,3pool3x3,3.5600006580352783
 alexnet_kalt3-2_stride4_3pool3x3_map1_fcdrop_nobn,alexnet,kalt3-2,4,3,3,1,fc,True,False,False,31.610000133514404,33.73999893665314,True,20.352008000000005,36.315392,3pool3x3,2.129998803138733
