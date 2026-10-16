@@ -24,7 +24,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
-from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.colors import LinearSegmentedColormap, Normalize
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
@@ -184,6 +184,12 @@ def base_ring(ax, x, y):
 
 
 BASE_HANDLE = Line2D([], [], marker="o", mfc="none", mec="k", mew=1.5, ls="", ms=15, label=BASE_LABEL)
+VGG_HANDLE = Line2D([], [], marker="o", mfc="white", mec="k", mew=1.2, ls="", ms=8, label="contorno preto = VGG16")
+
+
+def vgg_edge(r):
+    """scatter() kwargs of figures 13/17: a VGG16 point gets a black outline, the AlexNet ones a thin white one."""
+    return dict(edgecolors="k", lw=1.2) if r.family == "vgg16" else dict(edgecolors="white", lw=0.5)
 
 
 def fig_pareto(df, figs, note):
@@ -196,8 +202,7 @@ def fig_pareto(df, figs, note):
     for ax, (x, xlabel) in zip(axes, costs):
         for r in d.itertuples():
             ax.scatter(getattr(r, x), r.fp32, marker=HMARK[r.hk], s=28, color=color(r), alpha=0.22, edgecolors="none", zorder=2)
-            ax.scatter(getattr(r, x), r.int8, marker=HMARK[r.hk], s=75, color=color(r), zorder=3,
-                       edgecolors="k" if r.family == "vgg16" else "white", lw=1.2 if r.family == "vgg16" else 0.5)
+            ax.scatter(getattr(r, x), r.int8, marker=HMARK[r.hk], s=75, color=color(r), zorder=3, **vgg_edge(r))
             if r.early_best:
                 early_ring(ax, getattr(r, x), r.int8)
         front = d[pareto_front(d[x], d.int8)].sort_values(x)
@@ -215,7 +220,7 @@ def fig_pareto(df, figs, note):
     handles = (legend_kernels(d.kernels)
                + [Line2D([], [], marker=m, color=TEXT_SECONDARY, ls="", ms=8, label=HLABEL[h]) for h, m in HMARK.items() if h in set(d.hk)]
                + [Line2D([], [], marker="o", color=TEXT_SECONDARY, alpha=0.22, ls="", ms=6, label="marcador claro = FP32 da mesma rede"),
-                  Line2D([], [], marker="o", mfc="white", mec="k", mew=1.2, ls="", ms=8, label="contorno preto = VGG16"),
+                  VGG_HANDLE,
                   Line2D([], [], color=TEXT_PRIMARY, ls="--", label="fronteira de Pareto (nenhuma rede é mais barata e melhor)"),
                   BASE_HANDLE]
                + ([early_handle("ring")] if d.early_best.any() else []))
@@ -243,13 +248,14 @@ def fig_grid(df, figs, note, bands):
     fig, axes = plt.subplots(1, 2, figsize=(15, 5.8))
     lim = np.nanmax(np.abs(dfp[1:])) if np.isfinite(dfp[1:]).any() else 1
     shown = np.where(np.abs(dfp) < bcol, np.nan, dfp)  # inside the seed band: no colour, it is not a difference
-    lo, hi = np.nanmin(fp32), np.nanmax(fp32)
-    dark = [(fp32 - lo) / (hi - lo + 1e-9) > 0.6, np.abs(shown) / lim > 0.6]  # white text on the darkest cells
+    shown[0] = np.nan  # the reference row: no colour in every column (it was white where a floor was still pending)
     seq, div = (LinearSegmentedColormap.from_list(n, c) for n, c in [("acc", ["white", GREEN]), ("delta", [RED, "white", BLUE])])
-    for ax, m, cmap, kw in [(axes[0], fp32, seq, {}), (axes[1], shown, div, dict(vmin=-lim, vmax=lim))]:
-        ax.imshow(np.ma.masked_invalid(m), cmap=cmap, aspect="auto", **kw)
+    norms = [Normalize(np.nanmin(fp32), np.nanmax(fp32)) if np.isfinite(fp32).any() else Normalize(), Normalize(-lim, lim)]
+    for ax, m, cmap, norm in [(axes[0], fp32, seq, norms[0]), (axes[1], shown, div, norms[1])]:
+        ax.imshow(np.ma.masked_invalid(m), cmap=cmap, norm=norm, aspect="auto")
         ax.set_facecolor("#f0f0f0")
-        on_dark = dark[ax is axes[1]]
+        # white text where the cell itself is dark (its luminance), not past a fixed share of the scale
+        on_dark = np.vectorize(lambda v: np.isfinite(v) and np.dot(cmap(norm(v))[:3], [0.2126, 0.7152, 0.0722]) < 0.5)(m)
         for i in range(len(K4)):
             for j in range(len(cols)):
                 if np.isnan(fp32[i, j]):
@@ -382,10 +388,14 @@ def fig_quant(df, figs, note):
             for ax, x in [(axes[0], i + rng.uniform(-0.2, 0.2)), (axes[1], r.ratio)]:
                 run_point(ax, x, r.dq, r)
     group_ticks(axes[0], groups)
-    rho = d[["ratio", "dq"]].corr(method="spearman").iloc[0, 1]
+    # without the early-best runs: their INT8 - FP32 is QAT's extra training (analyze_geometry.EARLY_FRAC), not the
+    # quantization this panel asks about -- they are still drawn, ringed
+    q = d[~d.early_best & d.ratio.notna()]
+    rho = q[["ratio", "dq"]].corr(method="spearman").iloc[0, 1]
     plain_log(axes[1], "x")
     axes[1].set_xlabel("pior razão max / p99,9 entre as entradas das camadas (escala log)")
-    axes[1].set_title(f"Ativações com picos raros perdem mais? (Spearman ρ = {rho:+.2f}, n = {d.ratio.notna().sum()})", fontsize=10)
+    axes[1].set_title(f"Ativações com picos raros perdem mais? Spearman ρ = {rho:+.2f}, n = {len(q)}\n"
+                      "(sem as redes de anel cinza: o ganho delas no INT8 não é quantização)", fontsize=10)
     axes[0].set_title("INT8 − FP32 por kernel / família (negativo = perde no INT8)", fontsize=10)
     for ax in axes:
         ax.axhline(0, color="k", lw=0.8)
@@ -455,7 +465,7 @@ def fig_latency(df, figs, note):
     for ax, m, title in [(axes[0], "lat_gpu", f"FP32 na GPU ({gpu}), batch 1"), (axes[1], "lat_cpu", "FP32 na CPU, batch 1"),
                          (axes[2], "lat_int8", "INT8 na CPU, batch 1")]:
         for r in d.dropna(subset=[m]).itertuples():
-            ax.scatter(r.macs_eff_m, getattr(r, m), marker=HMARK[r.hk], s=55, zorder=3, color=color(r), edgecolors="white")
+            ax.scatter(r.macs_eff_m, getattr(r, m), marker=HMARK[r.hk], s=55, zorder=3, color=color(r), **vgg_edge(r))
         plain_log(ax, "x", "y")
         if b is not None and pd.notna(b[m]):
             base_ring(ax, b.macs_eff_m, b[m])
@@ -469,6 +479,7 @@ def fig_latency(df, figs, note):
     axes[0].set_ylabel("Latência por imagem (ms, log)")
     handles = (legend_kernels(d.kernels)
                + [Line2D([], [], marker=m, color=TEXT_SECONDARY, ls="", ms=8, label=HLABEL[h]) for h, m in HMARK.items() if h in set(d.hk)]
+               + ([VGG_HANDLE] if (d.family == "vgg16").any() else [])
                + ([BASE_HANDLE, Line2D([], [], ls="--", color=TEXT_PRIMARY, lw=1.2,
                                        label="tempo se crescesse junto com os MACs, a partir do AlexNet original")] if b is not None else []))
     fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=4, fontsize=9)
@@ -497,6 +508,7 @@ def fig_curves(df, figs, note):
     b = baseline(df)
     cb = curve(b) if b is not None else None  # the baseline's validation curve, in black in every panel
     fig, axes = plt.subplots(2, 2, figsize=(15, 9), sharex=True, sharey=True)
+    shown = set()
     for ax, (head, bn) in zip(axes.flat, CURVE_PANELS):
         drawn = False
         for k in K4:
@@ -505,22 +517,25 @@ def fig_curves(df, figs, note):
                 if c is None:
                     continue
                 drawn = True
-                ax.plot(c[0], c[2], color=KCOLOR[k], lw=1.6, label=KLABEL[k] + "†" * r.approx)
+                shown.add(k)
+                ax.plot(c[0], c[2], color=KCOLOR[k], lw=1.6)
                 ax.plot(c[0], c[1], color=KCOLOR[k], lw=0.8, ls="--", alpha=0.6)
         if cb is not None:
-            ax.plot(cb[0], cb[2], color="k", lw=1.2, label=f"{BASE_LABEL}, layout original")
+            ax.plot(cb[0], cb[2], color="k", lw=1.2)
         if not drawn:
             ax.text(0.5, 0.5, "pendente", transform=ax.transAxes, ha="center", color=NEUTRAL, fontsize=12)
-        ax.set_title(f"{'GAP' if head == 'gap' else 'FC'} · {'com BN' if bn else 'sem BN'}", fontsize=10)
-        if drawn:
-            ax.legend(fontsize=8.5, loc="lower right")
+        # grid_cells' FC level is the reference nets' head, FC + Dropout (as figure 19 says)
+        ax.set_title(f"{'GAP' if head == 'gap' else 'FC + Dropout'} · {'com BN' if bn else 'sem BN'}", fontsize=10)
     for ax in axes[1]:
         ax.set_xlabel("Época (FP32)")
     for ax in axes[:, 0]:
         ax.set_ylabel("Top-1 (%)")
-    fig.legend(handles=[Line2D([], [], color=TEXT_SECONDARY, lw=1.6, label="validação (split 90/10)"),
-                        Line2D([], [], color=TEXT_SECONDARY, lw=0.8, ls="--", label="treino (com augmentation)")],
-               loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=2, fontsize=9)
+    # one legend for the four panels (it was repeated in each)
+    fig.legend(handles=legend_kernels(shown)
+               + ([Line2D([], [], color="k", lw=1.2, label=f"{BASE_LABEL}, layout original (validação)")] if cb is not None else [])
+               + [Line2D([], [], color=TEXT_SECONDARY, lw=1.6, label="validação (split 90/10)"),
+                  Line2D([], [], color=TEXT_SECONDARY, lw=0.8, ls="--", label="treino (com augmentation)")],
+               loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=4, fontsize=9)
     fig.suptitle("Curvas de treino do fatorial principal (layout 64px): convergiu? quanto o treino se afasta da validação?\n" + note,
                  fontsize=11)
     fig.tight_layout()

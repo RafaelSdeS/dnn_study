@@ -82,6 +82,22 @@ def test_every_phase_11_figure_renders(tmp_path, monkeypatch, subset):
         assert {"01_kernel_original_layout.png", "13_pareto_accuracy_cost.png", "14_main_factorial_grid.png"} <= written
 
 
+def test_figure_numbers_get_a_decimal_comma(tmp_path):
+    """savefig writes numbers as report/ic_report.tex does (pt-BR): texts, table cells and ticks; only digit.digit."""
+    import matplotlib.pyplot as plt
+    from scripts.phase11.analyze_geometry import savefig
+
+    fig, ax = plt.subplots()
+    ax.plot([0, 0.5], [0, 2.5])
+    ax.set_title("35.5% FP32 · p99.9 · Hooker et al. 2019")
+    tab = ax.table([["1.44"]])
+    savefig(fig, "x.png", tmp_path)
+    assert ax.get_title() == "35,5% FP32 · p99,9 · Hooker et al. 2019"
+    assert tab[0, 0].get_text().get_text() == "1,44"
+    ticks = ax.xaxis.get_major_formatter().format_ticks(ax.get_xticks())
+    assert "0,5" in ticks and not any("." in t for t in ticks), ticks
+
+
 # The design, contrast by contrast (docs/logs/PHASE11_LOG.md "Minimal design" + "Protocol audit", 2026-10-07): how many
 # matched pairs the yamls give each one. A yaml edit that drops or breaks a contrast fails here instead of in a figure
 # months later -- as the 2026-10-07 FC -> FC + Dropout swap did (the head contrast fell from 17 pairs to 6 until

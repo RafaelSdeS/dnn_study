@@ -97,7 +97,9 @@ def main():
         why = "pendente" if r is None else "checkpoint só no PCAD" if not ckpt[key].exists() else "sem imagens de teste" if x is None else ""
         if why:
             ax.text(0.5, 0.5, why, transform=ax.transAxes, ha="center", va="center", color=NEUTRAL, fontsize=10)
-            ax.set_title(label, fontsize=10, color=c)
+            # the same 64x64 box and title lines as a drawn panel (imshow shrinks its axes to the image): titles line up
+            ax.set(xlim=(0, 64), ylim=(64, 0), aspect="equal")
+            ax.set_title(f"{label}\n\n", fontsize=10, color=c)
             continue
         model = load_best_model(key, MODEL_REGISTRY[key]["ctor"], ckpt[key].parent, torch.device("cpu"))
         g = effective_rf(model, x)
@@ -109,7 +111,7 @@ def main():
         ax.set_title(f"{label}\nmetade da influência em\n{100 * half / g.size:.1f}% da imagem", fontsize=10, color=c)
         print(f"22 {key}: half the influence in {half} px ({100 * half / g.size:.1f}%)")
     fig.colorbar(ScalarMappable(norm, LinearSegmentedColormap.from_list("rf", ["white", TEXT_PRIMARY])), ax=axes, shrink=0.7,
-                 label="influência do pixel (1 = o mais influente)")
+                 label="influência do pixel (1 = o mais influente; cada painel na cor do seu kernel)")
     fig.suptitle("Que região da imagem cada rede usa? Campo receptivo efetivo do neurônio central da última conv (Luo et al. 2016):\n"
                  f"quanto cada pixel move esse neurônio, média de {N_IMAGES} imagens de teste 64×64; contorno = a menor região com "
                  "metade da influência\n(o campo receptivo teórico cobre a imagem inteira em todas) · cabeça GAP + BN, menos o AlexNet original "

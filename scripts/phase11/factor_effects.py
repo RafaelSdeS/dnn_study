@@ -18,8 +18,8 @@ Numbered 01-19 without gaps since 2026-10-14 (docs/logs/PHASE11_LOG.md "Figures 
 
     python -m scripts.phase11.factor_effects
 """
+import math
 import re
-import textwrap
 
 import numpy as np
 import pandas as pd
@@ -31,14 +31,18 @@ from matplotlib.patches import Patch
 from configs.loader import load_config
 from ml.plotting import AMBER, BLUE, GRID, NEUTRAL, RED, TEXT_PRIMARY, apply_report_style
 from ml.reporting import holm, mcnemar_p, wilson_ci
-from scripts.phase11.analyze_geometry import (LAYOUTS, REGIME_LABEL, TABLES, band_for, early_handle, early_ring, int8_bar,
-                                              noise_bands, pair_band, precision_handles, reference_lines, savefig)
+from scripts.phase11.analyze_geometry import (BASE_KEY, BASE_LABEL, LAYOUTS, REGIME_LABEL, RESNET_BASE, TABLES, VGG_BASE, band_for,
+                                              early_handle, early_ring, int8_bar, noise_bands, pair_band, precision_handles,
+                                              reference_lines, savefig)
 from scripts.phase11.design_figures import K4, KCOLOR, KLABEL, cell_label, frame
 
 COMP = "Compensação (profundidade e blocos)"
 PRE = "Pré-treino ImageNet (não → sim)"
 POOL = "Pooling (3 max-pools 3×3 → 2 max-pools 2×2)"
 A_COLOR, B_COLOR = BLUE, AMBER  # A and B in every factor figure (report palette); the legend names each, never a kernel
+# the factor figures' rows: one family per row, each with its own reference net's line (the families compare to AlexNet)
+FAMILY_ROWS = [("alexnet", (BASE_KEY, BASE_LABEL)), ("família", (BASE_KEY, BASE_LABEL)), ("vgg16", VGG_BASE),
+               ("resnet18", RESNET_BASE)]
 FACTOR_FIG = {"Cabeça (FC + Dropout → GAP)": "04_head_fc_vs_gap.png", "Stride da conv1 (4 → 2)": "05_conv1_stride.png",
               POOL: "06_pooling.png", "Dropout (0 → 0,5)": "07_dropout.png", PRE: "08_pretraining.png",
               "BatchNorm (sem → com)": "09_batchnorm.png", COMP: "10_compensation_block.png"}  # Kernel: figures 01-03
@@ -161,7 +165,7 @@ def contrasts(df, bands=None):
         va, vb = ({c: np.array([idx.loc[(k, s), c] for s in seeds]) for c in ["fp32", "int8", "macs_eff_m", "params_eff_m"]} for k in (a, b))
         d = {c: vb[c] - va[c] for c in va}
         rows.append(dict(
-            factor=factor, contrast=label, A=a, B=b, n_seeds=len(seeds), **_pair_stats(idx, a, b),
+            factor=factor, contrast=label, A=a, B=b, family=idx.loc[(a, 42), "family"], n_seeds=len(seeds), **_pair_stats(idx, a, b),
             **{f"early_{side}": any(idx.loc[(k, s), "early_best"] for s in seeds) for side, k in (("A", a), ("B", b))},
             d_fp32=d["fp32"].mean(), d_fp32_seeds=" / ".join(f"{x:+.2f}" for x in d["fp32"]),
             d_int8=d["int8"].mean(), d_int8_seeds=" / ".join(f"{x:+.2f}" for x in d["int8"]),
@@ -177,35 +181,61 @@ def contrasts(df, bands=None):
     return t
 
 
-def fig_factor(t, df, factor, per_row=6):
-    """Absolute top-1 of A and B for every contrast of one factor (A_COLOR, B_COLOR) + baseline; each group's label
-    states B - A. The legend names A and B from the factor's '(a → b)'."""
+def wrap_dots(s, width=24):
+    """Break a ' · '-joined label only between its terms (textwrap cut 'alternado 3-2 · 2 | pools 2×2'), each line
+    ending in ' ·' when another follows."""
+    lines = []
+    for term in s.split(" · "):
+        if lines and len(lines[-1]) + 3 + len(term) <= width:
+            lines[-1] += " · " + term
+        else:
+            lines.append(term)
+    return " ·\n".join(lines)
+
+
+def family_rows(g, per_row=6):
+    """(rows of contrasts, reference net) per family in FAMILY_ROWS order; a family's contrasts split into balanced rows
+    (8 -> 4 + 4, not 6 + 2)."""
+    out = []
+    for fam, base in FAMILY_ROWS:
+        f = g[g.family == fam]
+        if len(f):
+            k = math.ceil(len(f) / math.ceil(len(f) / per_row))
+            out += [(f.iloc[i:i + k], base) for i in range(0, len(f), k)]
+    return out
+
+
+def fig_factor(t, df, factor):
+    """Absolute top-1 of A and B for every contrast of one factor (A_COLOR, B_COLOR), one family per row with its own
+    reference net's line; each group's label states B - A. The legend names A and B from the factor's '(a → b)'."""
     g, color = t[t.factor == factor], B_COLOR
     if g.empty:
         print(f"{FACTOR_FIG[factor]}: no finished pair yet")
         return
-    chunks = [g.iloc[k:k + per_row] for k in range(0, len(g), per_row)]
-    width = min(len(g), per_row)
-    fig, axes = plt.subplots(len(chunks), 1, figsize=(max(11.0, 2.5 * width + 1.5), 5.2 * len(chunks) + 1.2), squeeze=False,
+    rows = family_rows(g)
+    width = max(len(chunk) for chunk, _ in rows)
+    fig, axes = plt.subplots(len(rows), 1, figsize=(max(11.0, 2.5 * width + 1.5), 5.2 * len(rows) + 1.2), squeeze=False,
                              sharey=True, layout="constrained")
     w = 0.19
-    for ax, chunk in zip(axes[:, 0], chunks):
+    value = dict(ha="center", va="bottom", fontsize=7.5, zorder=6, bbox=dict(facecolor="white", edgecolor="none", pad=0.3))
+    for ax, (chunk, base) in zip(axes[:, 0], rows):
         for i, r in enumerate(chunk.itertuples()):
             for j, (side, c) in enumerate([("A", A_COLOR), ("B", color)]):
-                fp32 = getattr(r, f"fp32_{side}")
+                fp32, int8 = getattr(r, f"fp32_{side}"), getattr(r, f"int8_{side}")
                 ax.bar(i + (2 * j - 1.5) * w, fp32, w, color=c, edgecolor="white")
-                int8_bar(ax, i + (2 * j - 0.5) * w, getattr(r, f"int8_{side}"), w, c, early=getattr(r, f"early_{side}"))
-                ax.text(i + (2 * j - 1.5) * w, fp32 + 0.4, f"{fp32:.1f}", ha="center", va="bottom", fontsize=7.5, zorder=6,
-                        bbox=dict(facecolor="white", edgecolor="none", pad=0.3))
+                int8_bar(ax, i + (2 * j - 0.5) * w, int8, w, c, early=getattr(r, f"early_{side}"))
+                ax.text(i + (2 * j - 1.5) * w, fp32 + 0.4, f"{fp32:.1f}", **value)
+                if pd.notna(int8):  # INT8 labelled too, as in figures 01-03
+                    ax.text(i + (2 * j - 0.5) * w, int8 + 0.4, f"{int8:.1f}", **value)
         ax.set_xticks(range(len(chunk)))
-        ax.set_xticklabels([textwrap.fill(r.contrast, 22)
+        ax.set_xticklabels([wrap_dots(r.contrast)
                             + f"\nB − A: FP32 {r.d_fp32:+.1f}" + (f" · INT8 {r.d_int8:+.1f}" if pd.notna(r.d_int8) else "") + " pp"
                             + f"\nparâm. {r.params_change_pct:+.0f}% · MACs {r.macs_change_pct:+.0f}%"
                             + (f"\nmédia de {r.n_seeds} seeds" if r.n_seeds > 1 else "") for r in chunk.itertuples()], fontsize=8.5)
         ax.set_xlim(-0.6, width - 0.4)  # same bar width in every row
         ax.set_ylabel("Top-1 (%)")
         ax.margins(y=0.08)
-        reference_lines(ax, df)
+        reference_lines(ax, df, *base)
     notes = {}
     for r in g.itertuples():
         if r.note:
@@ -401,7 +431,8 @@ def fig_critical_difference(cells):
             ax.plot([x, x], [0, y + 0.12], color=KCOLOR[kk], lw=1)
             ax.text(x, y, f"{KLABEL[kk]} ({x:.2f})", ha="center", va="top", fontsize=10, color=KCOLOR[kk], weight="bold", zorder=4,
                     bbox=dict(facecolor="white", edgecolor="none", pad=1))  # over the other kernels' leader lines
-        ax.set_title(f"{m.upper()}: posição média em {len(t)} configurações · Friedman p = {p:.3f}", fontsize=10)
+        ax.set_title(f"{m.upper()}: posição média em {len(t)} configurações · Friedman "
+                     + ("p < 0.001" if p < 0.001 else f"p = {p:.3f}"), fontsize=10)
         rank_table(tab, t, rank)
         print(f"21 {m}: mean ranks {({KLABEL[k]: round(v, 2) for k, v in rank.items()})}, CD {cd:.2f}, Friedman p {p:.4f}, "
               f"configurations:\n{t.round(2).to_string()}")

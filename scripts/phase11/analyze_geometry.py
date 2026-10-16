@@ -19,12 +19,15 @@ from functools import lru_cache
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
 import yaml
 
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
+from matplotlib.table import Table
+from matplotlib.text import Text
 
 from ml.plotting import BLUE, RED, TEXT_PRIMARY, TEXT_SECONDARY, apply_report_style
 
@@ -36,6 +39,9 @@ ARCHIVE = RUNS[0] / "archive_adamw_recipe"  # the superseded AdamW-recipe runs, 
 
 BASE_KEY = "alexnet_k11-5-3_stride4_3pool3x3_map1_fcdrop_nobn"  # the original AlexNet (torchvision layout), from scratch
 BASE_LABEL = "AlexNet original (do zero)"
+# the other families' own reference nets, for their rows of the factor figures (figure 03 draws VGG_BASE too)
+VGG_BASE = ("vgg16_k3x3_stride1_5pool2x2_map2_fcdrop_bn", "VGG16 original (3×3)")
+RESNET_BASE = ("resnet18_k7-3_stride2_1pool3x3_map2_gap_bn", "ResNet-18 original (do zero)")
 LAYOUTS = ("layout original = o do AlexNet torchvision: conv1 stride 4 + 3 max-pools 3×3/2 → mapa final 1×1 em 64×64\n"
            "layout 64px = adaptado a 64×64: conv1 stride 2 + 2 max-pools 2×2 → mapa final 8×8")
 
@@ -110,9 +116,46 @@ def replicated_weights(key: str) -> int:
         return replicated_fc_weights(MODEL_REGISTRY[arch]["ctor"]())
 
 
+DECIMAL = re.compile(r"(?<=\d)\.(?=\d)")  # only digit.digit: 'et al.' and the like stay
+
+
+class _Comma(mticker.Formatter):
+    """Any tick formatter, with a decimal comma: delegates to the one it wraps, then swaps the point."""
+
+    def __init__(self, inner):
+        self.inner = inner
+
+    def set_locs(self, locs):
+        self.inner.set_locs(locs)
+
+    def __call__(self, x, pos=None):
+        return DECIMAL.sub(",", self.inner(x, pos))
+
+    def format_ticks(self, values):
+        return [DECIMAL.sub(",", s) for s in self.inner.format_ticks(values)]
+
+    def get_offset(self):
+        return DECIMAL.sub(",", self.inner.get_offset())
+
+
+def comma_decimals(fig):
+    """Every number of a figure with a decimal comma, as report/ic_report.tex writes them (pt-BR): its texts (titles,
+    labels, legends, table cells) now, its ticks when they are drawn -- one pass here instead of a format per f-string."""
+    texts = fig.findobj(Text) + [c.get_text() for t in fig.findobj(Table) for c in t.get_celld().values()]
+    for t in texts:
+        t.set_text(DECIMAL.sub(",", t.get_text()))
+    for ax in fig.axes:
+        for axis in (ax.xaxis, ax.yaxis):  # shared axes share one formatter: wrapped once
+            if not isinstance(axis.get_major_formatter(), _Comma):
+                axis.set_major_formatter(_Comma(axis.get_major_formatter()))
+            if not isinstance(axis.get_minor_formatter(), _Comma):
+                axis.set_minor_formatter(_Comma(axis.get_minor_formatter()))
+
+
 def savefig(fig, name, figs=None):
     figs = figs or FIGS
     figs.mkdir(parents=True, exist_ok=True)
+    comma_decimals(fig)
     fig.savefig(figs / name, dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(f"wrote {figs / name}")
