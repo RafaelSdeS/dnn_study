@@ -20,7 +20,14 @@ while [[ -s "$QUEUE" ]]; do
   if nvidia-smi --query-compute-apps=pid --format=csv,noheader | grep -q .; then sleep "$WAIT"; continue; fi
   cmd=$(head -n1 "$QUEUE"); sed -i 1d "$QUEUE"
   echo "$(date -Is) START $cmd"
-  if bash -c "$cmd"; then
+  # up to TRIES attempts: a run resumes from its per-epoch checkpoint, so a transient crash (an intermittent CUDA error
+  # in the DataLoader's pin-memory thread was seen once on nyx, 2026-10-17) costs one epoch; a real bug fails each time
+  ok=0
+  for try in $(seq "${TRIES:-3}"); do
+    if bash -c "$cmd"; then ok=1; break; fi
+    echo "$(date -Is) RETRY $try $cmd"; sleep 60
+  done
+  if (( ok )); then
     echo "$cmd" >> "$QUEUE.done"; echo "$(date -Is) OK $cmd"
   else
     echo "$cmd" >> "$QUEUE.failed"; echo "$(date -Is) FAILED $cmd"
