@@ -84,6 +84,7 @@ def load(*roots: Path) -> pd.DataFrame:
             # where the latencies were measured: same GPU name, different CPUs on tupi1/2 vs tupi3-6 (no cpu_model
             # before 2026-10-06 -> hostname)
             machine=f"{prov.get('gpu_name')} / {prov.get('cpu_model') or prov.get('hostname')}",
+            host=prov.get("hostname"),  # nyx and hefesto share one GPU / CPU model
             lat_gpu=d.get("fp32_bs1_latency_ms_per_image"),
             lat_cpu=d.get("fp32_cpu_bs1_latency_ms_per_image"), lat_int8=d.get("int8_bs1_latency_ms_per_image")))
     df = pd.DataFrame(rows)
@@ -105,15 +106,16 @@ def replicated_weights(key: str) -> int:
     """ml.reporting.replicated_fc_weights of a run's architecture, built on the meta device: shapes only, and a
     pretrained net is measured on its from-scratch twin's identical architecture, so no weights are downloaded."""
     import torch
-    import ml.model_registrations  # noqa: F401
+    from ml.model_registrations import CELL_FACTORS
     from ml.registry import MODEL_REGISTRY
     from ml.reporting import replicated_fc_weights
 
     arch = next((k for k in (key.removesuffix("_pretrained"), f"{key}_scratch", key) if k in MODEL_REGISTRY), None)
     if arch is None:  # ponytail: an archived run whose name left the registry -- as built, only the --archive preview
         return 0
+    side = CELL_FACTORS.get(arch, {}).get("input_size", 64)  # at 224 the FC head sees torchvision's 6x6: nothing copied
     with torch.device("meta"):
-        return replicated_fc_weights(MODEL_REGISTRY[arch]["ctor"]())
+        return replicated_fc_weights(MODEL_REGISTRY[arch]["ctor"](), input_size=(1, 3, side, side))
 
 
 DECIMAL = re.compile(r"(?<=\d)\.(?=\d)")  # only digit.digit: 'et al.' and the like stay
@@ -341,16 +343,34 @@ def convergence(df, band_pp: float) -> pd.DataFrame:
     return c
 
 
+def design_status(df) -> pd.DataFrame:
+    """One row per planned run -- each experiment x model x seed of the phase_11_*.yaml files -- with the machine it
+    ran on and its test top-1, blank while it has not: what ran where (PCAD, nyx) and what is left, in one table."""
+    from configs.loader import load_config
+
+    plan = pd.DataFrame([dict(exp=p.stem.removeprefix("phase_11_"), key=m, seed=cfg["seed"])
+                         for p in sorted((ROOT / "configs/experiments").glob("phase_11_*.yaml"))
+                         for cfg in [load_config(f"experiments/{p.name}")] for m in cfg["models"]])
+    status = plan.merge(df[["exp", "key", "seed", "host", "fp32", "qat", "int8"]], on=["exp", "key", "seed"], how="left",
+                        indicator=True)
+    return status.assign(done=status.pop("_merge").eq("both"))
+
+
 def main():
-    from scripts.phase11.design_figures import frame
+    from scripts.phase11.design_figures import core, frame
 
     apply_report_style()
-    df = frame(archive=False)
-    if df.empty:
+    everything = frame(archive=False, everything=True)
+    if everything.empty:
         print("no Phase 11 run has a summary yet")
         return
     TABLES.mkdir(parents=True, exist_ok=True)
-    df.drop(columns="results").sort_values(["exp", "key", "seed"]).to_csv(TABLES / "all_runs.csv", index=False)
+    everything.drop(columns="results").sort_values(["exp", "key", "seed"]).to_csv(TABLES / "all_runs.csv", index=False)
+    status = design_status(everything)
+    status.to_csv(TABLES / "design_status.csv", index=False)
+    print(f"== design status: {status.done.sum()}/{len(status)} planned runs done "
+          f"({status.host.value_counts().to_dict()}); {TABLES / 'design_status.csv'}")
+    df = core(everything)
     band = band_for(noise_bands(df), *REFERENCE_REGIME)["fp32"]  # the strictest floor
     band = band if np.isfinite(band) else CONVERGED_PP
     conv = convergence(df, band)

@@ -1,7 +1,9 @@
 # Phase 11 VGG noise floor (2026-10-13, docs/logs/PHASE11_LOG.md "Noise floors per regime and a ResNet block"): VGG16 + BN
 # with its own head (FC + Dropout), 3x3 and 2x2, again at seed 43. With seeds 42/43/44 the 3x3 vs 2x2 contrast at VGG16's
 # own head -- at seed 42 an equivalence claim (+0.23 pp) -- gets a CI, and VGG gets a band of its own (4 df) for its
-# single-seed contrasts (GAP: -2.5 pp). The seed also moves the 90/10 split.
+# single-seed contrasts. The GAP + BN pair (2026-10-17) is the floor of the kernel-block patterns
+# (phase_11_vgg_kernel_blocks.yaml), all GAP, where 3x3 -> 2x2 costs 2.5 pp at seed 42. The seed also moves the 90/10
+# split. The GAP pair runs on nyx (scripts/lab/run_queue.sh), the FC + Dropout pair on PCAD.
 # Same protocol as every Phase 11 run (_protocols/no_patience.yaml), enforced by tests/test_config.py. Queued on PCAD:
 #   python -m scripts.cluster submit --experiment phase_11_vgg_kernel_head_seed43 --runtime pcad --slurm tupi_4090 --model <m>
 extends: _protocols/no_patience
@@ -10,3 +12,5 @@ name: phase_11_vgg_kernel_head_seed43
 models:
   - vgg16_k3x3_stride1_5pool2x2_map2_fcdrop_bn
   - vgg16_k2x2_stride1_5pool2x2_map2_fcdrop_bn
+  - vgg16_k3x3_stride1_5pool2x2_map2_gap_bn
+  - vgg16_k2x2_stride1_5pool2x2_map2_gap_bn

@@ -223,8 +223,11 @@ MACHINE_KEYS = {"dataset_path"}  # the same dataset sits at a different path on 
 
 def _protocol(cfg: dict[str, Any]) -> dict[str, Any]:
     cfg = json.loads(json.dumps(cfg, default=str))  # the on-disk form (tuples -> lists), so the two compare as equals
+    # a None field reads as absent: a config field added later (DataConfig.upscale_to, 2026-10-17) at its None default
+    # leaves every run saved before it the same protocol; any real value still differs
     return {"seed": cfg.get("experiment", {}).get("seed"),
-            **{k: {f: v for f, v in cfg.get(k, {}).items() if f not in MACHINE_KEYS} for k in PROTOCOL_KEYS}}
+            **{k: {f: v for f, v in cfg.get(k, {}).items() if f not in MACHINE_KEYS and v is not None}
+               for k in PROTOCOL_KEYS}}
 
 
 def refuse_foreign_run_dir(run_root: Path, resolved_config: dict[str, Any]) -> None:
@@ -582,7 +585,8 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
                 int8_bs1_benchmark = int8_trainer.benchmark(loader=bs1_loader)
 
         fp32_model = load_best_model(model_name, spec["ctor"], checkpoints_dir, device) if best_model_path.exists() else spec["ctor"]().to(device)
-        flops_results = compute_flops(fp32_model)
+        side = data_cfg.upscale_to or data_cfg.img_size
+        flops_results = compute_flops(fp32_model, input_size=(1, 3, side, side))
         fp32_size_mb = disk_mb(best_model_path)
         int8_size_mb = disk_mb(int8_path) if int8_path.exists() else None
         compress_checkpoint(best_model_path)

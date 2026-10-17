@@ -131,7 +131,7 @@ def test_factorial_grid_is_complete_and_every_gap_cell_runs():
     + 16 pretrained; each GAP cell (cheap to build) runs and has one Conv-(BN-)ReLU fuse group per conv."""
     from ml.model_registrations import CELL_FACTORS, FX_KERNELS
 
-    fx = [n for n, f in CELL_FACTORS.items() if f["family"] == "alexnet" and f["kernels"] in FX_KERNELS]
+    fx = [n for n, f in CELL_FACTORS.items() if f["family"] == "alexnet" and f["kernels"] in FX_KERNELS and f["input_size"] == 64]
     assert len(fx) == 304 and sum(CELL_FACTORS[n]["pretrained"] for n in fx) == 16
     x = torch.randn(1, 3, 64, 64)
     for name in (n for n in fx if CELL_FACTORS[n]["head"] == "gap"):
@@ -155,7 +155,7 @@ def test_every_cell_name_says_what_the_net_is():
         with torch.device("meta"):
             m = MODEL_REGISTRY[name]["ctor"]()
             feats = [x for x in m.features if not isinstance(x, torch.nn.AdaptiveAvgPool2d)]
-            side = torch.nn.Sequential(*feats)(torch.zeros(1, 3, 64, 64)).shape[-1]
+            side = torch.nn.Sequential(*feats)(torch.zeros(1, 3, f["input_size"], f["input_size"])).shape[-1]
         convs = [x for x in m.features if isinstance(x, torch.nn.Conv2d)]
         pools = [x for x in m.features if isinstance(x, torch.nn.MaxPool2d)]
         if f["family"] == "resnet18":  # every conv but the 1x1 shortcuts: the stem's, then (conv1, conv2) of 8 blocks
@@ -256,13 +256,13 @@ VGG_FX_MAPS = {(1, 5): 2, (1, 4): 4, (2, 5): 1, (2, 4): 2}  # (stem stride, pool
 
 
 def test_vgg_factorial_grid_is_complete_and_only_stride_and_pool_count_set_the_map():
-    """168 cells = 6 kernel patterns x 2 strides x 2 pool kernels x 2 pool counts x 3 heads + 24 pretrained (3x3).
+    """336 cells = 13 kernel patterns x 2 strides x 2 pool kernels x 2 pool counts x 3 heads + 24 pretrained (3x3).
     The kernel and pool-kernel factors are only clean if they never change the map size -- checked on every cell
     (meta device: shapes only, no weights), plus each fuse group being Conv-BN-ReLU in the padded layout."""
     from ml.model_registrations import CELL_FACTORS, VGG_FX_KERNELS
 
     fx = [n for n, f in CELL_FACTORS.items() if f["family"] == "vgg16"]
-    assert len(fx) == 168 and sum(CELL_FACTORS[n]["pretrained"] for n in fx) == 24
+    assert len(fx) == 336 and sum(CELL_FACTORS[n]["pretrained"] for n in fx) == 24
     for name in (n for n in fx if not CELL_FACTORS[n]["pretrained"]):
         spec = MODEL_REGISTRY[name]
         with torch.device("meta"):
@@ -273,7 +273,7 @@ def test_vgg_factorial_grid_is_complete_and_only_stride_and_pool_count_set_the_m
         assert tuple(m.kernel_size[0] for m in model.features if isinstance(m, torch.nn.Conv2d)) == kw["kernels"], name
         assert [type(model.features.get_submodule(i)) for g in spec["fuse_map"] for i in g] == \
             [torch.nn.Conv2d, torch.nn.BatchNorm2d, torch.nn.ReLU] * 13, name
-    assert sum(k == 3 for k in VGG_FX_KERNELS["kalt3-2"]) == 7 and sum(k == 3 for k in VGG_FX_KERNELS["k2x2then3x3"]) == 6
+    assert sum(k == 3 for k in VGG_FX_KERNELS["kalt3-2"]) == 7 and sum(k == 3 for k in VGG_FX_KERNELS["kblocks2-2-2-3-3"]) == 6
 
 
 def test_vgg_no_dropout_fc_cell_keeps_vgg16s_state_dict_layout():

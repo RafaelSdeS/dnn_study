@@ -54,7 +54,7 @@ def create_test_loader(cfg: DataConfig, train_ds: Subset) -> DataLoader:
     the reported numbers come from images no selection ever saw (Cawley & Talbot, JMLR 2010) -- and from the same
     10k images for every seed, while the 90/10 split moves with cfg.seed. train_ds: create_imagenet_loaders' train
     Subset, whose ImageFolder's class_to_idx labels the test images."""
-    ds = _TinyImageNetVal(Path(cfg.dataset_path).parent / "val", train_ds.dataset.class_to_idx, _val_transform(cfg.img_size))
+    ds = _TinyImageNetVal(Path(cfg.dataset_path).parent / "val", train_ds.dataset.class_to_idx, _val_transform(cfg.upscale_to or cfg.img_size))
     assert len(ds) == TINY_IMAGENET_TEST_SIZE, len(ds)
     return DataLoader(ds, batch_size=cfg.batch_size, shuffle=False, num_workers=cfg.num_workers, pin_memory=cfg.pin_memory)
 
@@ -79,13 +79,16 @@ def create_imagenet_loaders(cfg: DataConfig, persistent_workers: bool = False):
             transforms.RandomHorizontalFlip(p=0.5),
             transforms.RandomRotation(degrees=15, interpolation=transforms.InterpolationMode.BICUBIC),
         ]
+    # upscale_to: the same augmented img_size image, enlarged last -- Resize draws no random number, so every sample is
+    # the img_size run's sample at the larger size (tests/test_phase11_runs.py)
     transform_train = transforms.Compose(geometric + [
         transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.IMAGENET),
+        *([transforms.Resize(cfg.upscale_to)] if cfg.upscale_to else []),
         transforms.ToTensor(),
         transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),
     ])
 
-    transform_val = _val_transform(cfg.img_size)
+    transform_val = _val_transform(cfg.upscale_to or cfg.img_size)
 
     train_full = datasets.ImageFolder(cfg.dataset_path, transform=transform_train)
     val_full = datasets.ImageFolder(cfg.dataset_path, transform=transform_val)

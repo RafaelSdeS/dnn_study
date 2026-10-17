@@ -21,6 +21,9 @@ class DataConfig:
     # "legacy": RRC(0.7-1) + rotation 15 + AutoAugment (Phases 1-10). "crop_flip_autoaug": 4-px pad + random crop + flip
     # (He et al. 2016) then AutoAugment's ImageNet policy (Cubuk et al. 2019) -- Phase 11 since 2026-10-03
     train_aug: str = "legacy"
+    # enlarge every image to this side after augmenting at img_size (Phase 11 input-size block: torchvision's AlexNet
+    # layout at its native 224 px input, docs/logs/PHASE11_LOG.md "Input 224 and VGG kernel blocks"); None = no resize
+    upscale_to: Optional[int] = None
 
 
 @dataclass

@@ -6,6 +6,7 @@ from pathlib import Path
 
 import matplotlib
 import numpy as np
+import pandas as pd
 import pytest
 
 from configs.loader import load_config
@@ -77,8 +78,13 @@ def test_every_phase_11_figure_renders(tmp_path, monkeypatch, subset):
     assert set(df[df.early_best].key) == {k for k in df.key if _early(k)}  # epoch 51 of 500 is flagged, 401 is not
     if subset == "design":
         assert written == FIGURES, (FIGURES - written, written - FIGURES)
-        assert {p.name for p in tables.glob("*.csv")} >= {"all_runs.csv", "main_grid.csv", "kernel_geometry.csv", "factor_effects.csv"}
-    else:  # a half-finished queue: whatever has data renders, the rest is skipped, nothing crashes
+        assert {p.name for p in tables.glob("*.csv")} >= {"all_runs.csv", "main_grid.csv", "kernel_geometry.csv", "factor_effects.csv",
+                                                          "design_status.csv"}
+    # one row per planned run of the yamls, each fake run found as done (whichever experiment holds it)
+    status = pd.read_csv(tables / "design_status.csv")
+    assert len(status) == sum(len(load_config(f"experiments/{e}.yaml")["models"]) for e in EXPERIMENTS)
+    assert status.done.sum() == len(list(runs.glob("*/*")))
+    if subset != "design":  # a half-finished queue: whatever has data renders, the rest is skipped, nothing crashes
         assert {"01_kernel_original_layout.png", "13_pareto_accuracy_cost.png", "14_main_factorial_grid.png"} <= written
 
 
@@ -102,18 +108,24 @@ def test_figure_numbers_get_a_decimal_comma(tmp_path):
 # matched pairs the yamls give each one. A yaml edit that drops or breaks a contrast fails here instead of in a figure
 # months later -- as the 2026-10-07 FC -> FC + Dropout swap did (the head contrast fell from 17 pairs to 6 until
 # factor_effects paired GAP with the real FC head). Change these numbers only with the design.
-DESIGN_PAIRS = {"Kernel 11-5-3-3-3 → 3×3": 9, "Kernel 3×3 → 2×2": 13, "Kernel 11-5-3-3-3 → 2×2": 9,
-                "Kernel 3×3 → alternado 3-2": 12, "3×3 → dois 3×3 empilhados por estágio": 2,
+DESIGN_PAIRS = {"Kernel 11-5-3-3-3 → 3×3": 10, "Kernel 3×3 → 2×2": 14, "Kernel 11-5-3-3-3 → 2×2": 10,
+                "Kernel 3×3 → alternado 3-2": 13, "3×3 → dois 3×3 empilhados por estágio": 2,
                 "2×2 → dois 2×2 empilhados por estágio": 2, "Cabeça FC (+ Dropout) → GAP": 19, "BatchNorm não → sim": 8,
                 "Stride da conv1 4 → 2": 8, "3 max-pools 3×3 → 2 max-pools 2×2": 8, "Dropout 0 → 0,5 (só cabeça FC)": 6,
-                "Pré-treino ImageNet": 4,
+                "Pré-treino ImageNet": 5,
                 # the ResNet-18 block (2026-10-13): +1 each to 3x3 -> 2x2 / alternating / pretraining above, and its own
                 "Kernel 7-3 (ResNet) → 3×3": 1, "Kernel 7-3 (ResNet) → 2×2": 1, "Kernel blocos 3×3 → 2×2, stem 7×7 mantido": 1,
                 "Kernel stem 7×7 → 2×2, blocos 2×2": 1, "Kernel 3×3 → 2×2, stem profundo": 1,
                 "Stem 3×3 → três 3×3 (ResNet-C)": 1, "Stem 2×2 → três 2×2": 1,
                 # the large-stem block (2026-10-14): +2 to the head contrast above, and its own, at GAP and FC + Dropout
                 "Conv1 3×3 → 11×11, corpo 3×3": 2, "Conv1 2×2 → 11×11, corpo 2×2": 2, "Conv2 3×3 → 5×5, conv1 11×11": 2,
-                "Corpo 3×3 → 2×2, conv1 11×11 mantida": 2}
+                "Corpo 3×3 → 2×2, conv1 11×11 mantida": 2,
+                # the input-size block (2026-10-17): its 5 cells against their 64px twins, + 1 each to the 4 AlexNet kernel
+                # contrasts and to pretraining above (the same contrasts within 224 px)
+                "Entrada 64 → 224 px (ampliada)": 5,
+                # the VGG kernel blocks (2026-10-17): VGG16's 3x3 GAP + BN cell -> each one-kernel-per-block pattern
+                **{f"Kernel 3×3 → blocos {p}": 1 for p in ("3-2-3-2-3", "2-3-2-3-2", "3-3-3-2-2", "2-2-2-3-3", "2-3-3-3-3",
+                                                           "3-2-3-3-3", "3-3-2-3-3", "3-3-3-2-3", "3-3-3-3-2")}}
 
 
 def test_the_design_has_every_contrast_and_no_orphan_cell():
@@ -128,6 +140,7 @@ def test_the_design_has_every_contrast_and_no_orphan_cell():
     k64 = cells[(cells.family == "alexnet") & (cells.stride == 2) & (cells.pooling == "2pool2x2")
                 & cells.kernels.isin(["k11-5-3", "k3x3", "k2x2", "kalt3-2"]) & ~cells.pretrained]
     assert seeds[0] == seeds[1] == set(k64[(k64["head"] == "gap") & k64.bn].cell) | set(k64[k64.dropout & ~k64.bn].cell)
+    # VGG16: 3x3 and 2x2 x 3 seeds at its own head (FC + Dropout) and at GAP, the kernel blocks' regime (2026-10-17)
     vgg = [set(load_config(f"experiments/phase_11_vgg_kernel_head_seed{s}.yaml")["models"]) for s in (43, 44)]
-    assert vgg[0] == vgg[1] == set(cells[(cells.family == "vgg16") & cells.dropout & ~cells.pretrained
+    assert vgg[0] == vgg[1] == set(cells[(cells.family == "vgg16") & (cells.dropout | (cells["head"] == "gap")) & ~cells.pretrained
                                          & cells.kernels.isin(["k3x3", "k2x2"])].cell)

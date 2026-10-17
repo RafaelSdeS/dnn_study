@@ -1,0 +1,21 @@
+# Phase 11 VGG kernel blocks (2026-10-17, docs/logs/PHASE11_LOG.md "Input 224 and VGG kernel blocks"). Where in VGG16 does
+# the kernel size matter? One kernel per block (VGG16's 5 blocks hold 2, 2, 3, 3, 3 convs; kalt3-2 in
+# phase_11_vgg_kernel_head alternates conv by conv instead): alternating blocks (3-2-3-2-3, 2-3-2-3-2), early vs late
+# (3-3-3-2-2, 2-2-2-3-3), and one 2x2 block in a 3x3 net (5 positions). All at VGG16 + BN's own geometry with the GAP
+# head, where 3x3 -> 2x2 costs 2.5 pp at seed 42 (at the FC + Dropout head the three patterns sit within 0.2 pp); the
+# floor is phase_11_vgg_kernel_head_seed43/44's GAP pair.
+# Same protocol as every Phase 11 run (_protocols/no_patience.yaml), enforced by tests/test_config.py.
+# Runs on nyx, one at a time (scripts/lab/run_queue.sh):
+#   .venv/bin/python -m scripts.train --experiment phase_11_vgg_kernel_blocks --runtime pcad --model <m>
+extends: _protocols/no_patience
+name: phase_11_vgg_kernel_blocks
+models:
+  - vgg16_kblocks3-2-3-2-3_stride1_5pool2x2_map2_gap_bn
+  - vgg16_kblocks2-3-2-3-2_stride1_5pool2x2_map2_gap_bn
+  - vgg16_kblocks3-3-3-2-2_stride1_5pool2x2_map2_gap_bn
+  - vgg16_kblocks2-2-2-3-3_stride1_5pool2x2_map2_gap_bn
+  - vgg16_kblocks2-3-3-3-3_stride1_5pool2x2_map2_gap_bn
+  - vgg16_kblocks3-2-3-3-3_stride1_5pool2x2_map2_gap_bn
+  - vgg16_kblocks3-3-2-3-3_stride1_5pool2x2_map2_gap_bn
+  - vgg16_kblocks3-3-3-2-3_stride1_5pool2x2_map2_gap_bn
+  - vgg16_kblocks3-3-3-3-2_stride1_5pool2x2_map2_gap_bn

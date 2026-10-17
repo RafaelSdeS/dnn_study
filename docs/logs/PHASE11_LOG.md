@@ -1678,3 +1678,44 @@ body 3x3 -> 2x2 (conv1 11x11 kept); the head contrast gains 2 pairs (17 -> 19). 
 before a small-kernel body, as ResNet's k7-2; darker = 2x2 body. Figure 22 gets their panels (GAP + BN). Queued on
 PCAD after the 8 AlexNet no-BN noise-floor seeds (moved to the head of the queue the same day: without them every
 no-BN contrast has no band), ahead of the families.
+
+## Input 224 and VGG kernel blocks, on nyx (2026-10-17)
+
+Two new blocks, 18 runs, trained on nyx (the lab's RTX 4060 Ti 16 GB / Ryzen 7 9700X box), since PCAD's queue held 37
+lines and tupi was full.
+
+**Input size** (`phase_11_input224`, 5 runs). torchvision's AlexNet layout collapses to a 1x1 map at 64 px: scratch
+35.47 / pretrained 36.82 % test, against 44.00 / 51.89 at the 64px layout's 8x8 map; pretraining buys +1.3 pp there
+against +7.9. The block feeds the 5 torchvision-layout cells of `phase_11_dropout_pretraining` (4 kernels with AlexNet's
+FC + Dropout head, + the pretrained 11-5-3) Tiny ImageNet enlarged to 224x224, the input the layout was designed for
+(Krizhevsky et al. 2012): the map is 6x6 again (cells `..._map6_..._in224[_pretrained]`, map computed at 224).
+`DataConfig.upscale_to`: training augments at 64 px as every run does (pad-4 crop, flip, AutoAugment) and resizes last
+(bilinear); Resize draws no random number, so from the same seed each sample is its 64px twin's sample enlarged
+(`tests/test_phase11_runs.py` checks it bit for bit); val/test are resized to 224 too. Enlarging adds no information,
+so the contrast isolates the geometry. Cost: 0.095 -> ~0.71 GMACs. New contrast "Entrada 64 -> 224 px", 5 pairs;
+`input_size` joins the pairing factors, so no other contrast mixes the two sizes (the 4 AlexNet kernel contrasts and
+pretraining gain one 224 pair each).
+
+**VGG kernel blocks** (`phase_11_vgg_kernel_blocks`, 9 runs). One kernel per VGG16 block (2, 2, 3, 3, 3 convs),
+`kblocks<5 kernels>` -- kalt3-2 alternates conv by conv instead: alternating blocks 3-2-3-2-3 / 2-3-2-3-2, early vs
+late 3-3-3-2-2 / 2-2-2-3-3 (the unrun `k3x3then2x2` / `k2x2then3x3`, renamed), and one 2x2 block in a 3x3 net at each of
+the 5 positions (at 64 px blocks 3 and 4 hold 60% of the conv MACs, block 5 9%). GAP + BN only: at seed 42, 3x3 -> 2x2
+costs 2.5 pp with GAP (59.35 -> 56.84) and nothing with FC + Dropout (59.22 / 59.45; kalt3-2 59.30), so only GAP can
+rank the patterns. Its floor: `phase_11_vgg_kernel_head_seed43/44` gain the 3x3 / 2x2 GAP + BN cells (4 runs). Each
+pattern is one contrast, 3x3 -> blocks, 1 pair.
+
+**Machines, one tree.** The nyx runs use `--runtime pcad` with `PCAD_DATASET_ROOT` at the dataset rsynced from PCAD
+(each run's provenance records its sha256; `test_every_run_saw_the_same_dataset` checks they all match), so they land at
+`outputs/pcad/<experiment>/<model>/`, the path they have on PCAD, which keeps their checkpoints and logs (rsynced after
+each run). The tree is organised by experiment whatever the machine; the machine is data: each run's provenance
+(hostname, GPU, CPU), `all_runs.csv` (`host`, new: nyx and hefesto share one GPU / CPU model) and the new
+`design_status.csv` (one row per planned run of the phase_11 yamls: where it ran, its test top-1, blank while pending).
+Accuracy is machine-independent by the 2026-10-06 measures (TF32 off, exact INT8 kernels, both checked per run);
+latency still compares only within one machine (the final re-evaluation on tupi3-6). `scripts/lab/run_queue.sh` runs
+the nyx queue one job at a time and, between runs, waits while anyone else computes on the GPU.
+
+**Compatibility.** With the new config field, `scripts/train.py:_protocol` reads a None field as absent: every run saved
+before it has no `upscale_to`, and would otherwise be refused on a re-evaluation (`refuse_foreign_run_dir`) and fail
+`test_every_finished_run_is_the_protocol`. Existing cell names, protocols and figures 01-22 are unchanged: the figures
+read `design_figures.core()` (64 px, no kernel blocks); the two new questions get figures of their own when their runs
+land.

@@ -199,7 +199,10 @@ def test_a_run_dir_of_another_protocol_is_refused_not_resumed(tmp_path):
     train.save_resolved_config(tmp_path, cfg)
     train.refuse_foreign_run_dir(tmp_path, {**cfg, "data": {**cfg["data"], "dataset_path": "/pcad/train"},
                                             "provenance": {"git_hash": "b"}})
-    for other in ({**cfg, "training": {"lr": 3e-4, "optimizer": "adamw"}}, {**cfg, "experiment": {"seed": 43}}):
+    # a field added to the config later (DataConfig.upscale_to) at its None default: still the saved run's protocol
+    train.refuse_foreign_run_dir(tmp_path, {**cfg, "data": {**cfg["data"], "upscale_to": None}})
+    for other in ({**cfg, "training": {"lr": 3e-4, "optimizer": "adamw"}}, {**cfg, "experiment": {"seed": 43}},
+                  {**cfg, "data": {**cfg["data"], "upscale_to": 224}}):
         with pytest.raises(SystemExit, match="another protocol"):
             train.refuse_foreign_run_dir(tmp_path, other)
     # a new QAT protocol on the same FP32: refused while the old QAT checkpoints sit there, passes once archived

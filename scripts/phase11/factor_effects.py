@@ -48,8 +48,9 @@ FACTOR_FIG = {"Cabeça (FC + Dropout → GAP)": "04_head_fc_vs_gap.png", "Stride
               "BatchNorm (sem → com)": "09_batchnorm.png", COMP: "10_compensation_block.png"}  # Kernel: figures 01-03
 
 # The factors a matched pair holds fixed. pooling = '<n>pool<k>x<k>' (count and window always change together here);
-# map_side follows from kernels + geometry, so it is not a pairing key.
-FACTORS = ["family", "kernels", "stride", "pooling", "head", "bn", "dropout", "pretrained"]
+# map_side follows from kernels + geometry + input_size, so it is not a pairing key; input_size (64, or 224 for the
+# phase_11_input224 cells) keeps every other contrast within one input size.
+FACTORS = ["family", "kernels", "stride", "pooling", "head", "bn", "dropout", "pretrained", "input_size"]
 # (factor, level a, level b, label): delta = b - a over every pair of cells equal in all other factors. A level may be a
 # {column: value} dict when the factor moves two columns: the head contrast is GAP vs the reference nets' FC head, which
 # has Dropout (2026-10-07) -- a GAP head has none, so head and dropout change together
@@ -65,6 +66,8 @@ PAIRS = [("kernels", "k11-5-3", "k3x3", "Kernel 11-5-3-3-3 → 3×3"), ("kernels
          ("head", FC_HEAD, GAP_HEAD, "Cabeça FC (+ Dropout) → GAP"), ("bn", False, True, "BatchNorm não → sim"),
          ("stride", 4, 2, "Stride da conv1 4 → 2"), ("pooling", "3pool3x3", "2pool2x2", "3 max-pools 3×3 → 2 max-pools 2×2"),
          ("dropout", False, True, "Dropout 0 → 0,5 (só cabeça FC)"), ("pretrained", False, True, "Pré-treino ImageNet"),
+         # the input-size block (phase_11_input224.yaml): the same net fed Tiny ImageNet enlarged to 224x224
+         ("input_size", 64, 224, "Entrada 64 → 224 px (ampliada)"),
          # ResNet-18 (phase_11_resnet_kernel_stem.yaml): its own kernels are k7-3 (7x7 stem, 3x3 blocks); stem and blocks
          # apart through k7-2; the deep stems (ResNet-C) are a depth compensation, like stacked
          ("kernels", "k7-3", "k3x3", "Kernel 7-3 (ResNet) → 3×3"), ("kernels", "k7-3", "k2x2", "Kernel 7-3 (ResNet) → 2×2"),
@@ -74,7 +77,8 @@ PAIRS = [("kernels", "k11-5-3", "k3x3", "Kernel 11-5-3-3-3 → 3×3"), ("kernels
          ("kernels", "k3x3", "k3x3deepstem", "Stem 3×3 → três 3×3 (ResNet-C)"),
          ("kernels", "k2x2", "k2x2deepstem", "Stem 2×2 → três 2×2")]
 FIGURE_OF = {"head": "Cabeça (FC + Dropout → GAP)", "stride": "Stride da conv1 (4 → 2)", "pooling": POOL, "dropout": "Dropout (0 → 0,5)",
-             "pretrained": PRE, "bn": "BatchNorm (sem → com)"}
+             "pretrained": PRE, "bn": "BatchNorm (sem → com)",
+             "input_size": "Entrada (64 → 224 px)"}  # ponytail: no figure file yet -- the 224 runs are outside core()
 K3_GAP_BN = "alexnet_k3x3_stride2_2pool2x2_map8_gap_bn"
 FAMILY_CONTRASTS = [  # (factor, label, A, B, note): what the cell grid can't express. † = a second variable changes too
     (COMP, "64px · 3×3 + BN + GAP → Bottleneck", K3_GAP_BN, "alexnet_bottleneck", ""),
@@ -101,8 +105,11 @@ def design_cells():
 def pairs_of(cells):
     """Every (a, b) of cells equal in all FACTORS but the one(s) a PAIRS entry varies; the other columns of a and b come
     along with _a / _b suffixes, the shared factors as plain columns."""
+    # the VGG kernel blocks (phase_11_vgg_kernel_blocks.yaml): VGG16's 3x3 -> each one-kernel-per-block pattern
+    blocks = [("kernels", "k3x3", k, f"Kernel 3×3 → blocos {k.removeprefix('kblocks')}")
+              for k in sorted(set(cells.kernels.dropna())) if k.startswith("kblocks")]
     out = []
-    for f, a, b, label in PAIRS:
+    for f, a, b, label in PAIRS + blocks:
         a, b = (lv if isinstance(lv, dict) else {f: lv} for lv in (a, b))
         others = [x for x in FACTORS if x not in a]
         side = lambda lv: cells[np.logical_and.reduce([cells[c] == v for c, v in lv.items()])].set_index(others)  # noqa: E731

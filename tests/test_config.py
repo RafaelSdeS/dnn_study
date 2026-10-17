@@ -113,6 +113,8 @@ def test_every_phase_11_experiment_shares_the_protocol_exactly():
         seed = cfg.pop("seed")
         assert seed == (int(name.rsplit("_seed", 1)[1]) if "_seed" in name else 42), name  # replicates: <exp>_seed<N>
         cfg.pop("name"), cfg.pop("models")
+        if name == "phase_11_input224":  # the input-size block's one deliberate difference: the images enlarged to 224
+            assert cfg["data"].pop("upscale_to") == 224
         assert cfg == reference, f"{name} differs from the Phase 11 protocol: {cfg} vs {reference}"
 
 

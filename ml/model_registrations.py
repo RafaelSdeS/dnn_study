@@ -191,9 +191,11 @@ register_model("alexnet_adapted_orig_fc_pt", partial(AlexNetAdapted, pretrained=
 #   alexnet_<kernels>_stride<s>_<n>pool<k>x<k>_map<m>_<gap|fc|fcdrop>_<bn|nobn>[_pretrained]
 #   vgg16_<kernels>_stride<s>_<n>pool<k>x<k>_map<m>_<gap|fc|fcdrop>_bn[_pretrained]
 # kernels: k11-5-3 = AlexNet's own 11-5-3-3-3; k3x3 / k2x2 = every conv; kalt3-2 / kalt2-3 = alternating, starting with
-# the first; k11-3 / k11-2 = AlexNet's 11x11 conv1, then every conv 3x3 / 2x2 (phase_11_large_stem); k3x3then2x2 / k2x2then3x3 (VGG) = first 7 convs one size, last 6 the other; k3x3stacked = two 3x3 per
+# the first; k11-3 / k11-2 = AlexNet's 11x11 conv1, then every conv 3x3 / 2x2 (phase_11_large_stem); kblocks3-2-3-2-3
+# (VGG) = one kernel per VGG16 block (2, 2, 3, 3, 3 convs; phase_11_vgg_kernel_blocks); k3x3stacked = two 3x3 per
 # AlexNet stage; k3x3narrow = AlexNetSmallKernel (5 convs, 64-128-256 channels). stride = conv1's; <n>pool<k>x<k> = n
-# max-pools of k x k; map = side of the last conv map at a 64x64 input (computed, not assumed) -- a GAP head averages
+# max-pools of k x k; a trailing _in224 = fed Tiny ImageNet enlarged to 224x224 (phase_11_input224; every other cell
+# sees 64x64); map = side of the last conv map at the cell's input (computed, not assumed) -- a GAP head averages
 # it, an FC head resamples it to 6x6 (VGG: 7x7) with AdaptiveAvgPool as torchvision's AlexNet/VGG do (map 1 = 36 copies);
 # fcdrop = FC head + Dropout 0.5; pretrained = ImageNet weights (AlexNet: only the 11-5-3 FC no-BN shape fits; VGG:
 # vgg16_bn on the 3x3 cells). Every cell of both grids is registered with its factors in CELL_FACTORS (analysis groups by
@@ -203,24 +205,26 @@ FX_KERNELS = {"k11-5-3": (11, 5, 3, 3, 3), "k3x3": (3,) * 5, "k2x2": (2,) * 5, "
 CELL_FACTORS: dict[str, dict] = {}
 
 
-def _map_side(features: nn.Sequential) -> int:
-    """Side of the last conv map at a 64x64 input: features minus the head's adaptive pool, on whatever device the
-    module lives (meta here: shapes only)."""
+def _map_side(features: nn.Sequential, side: int = 64) -> int:
+    """Side of the last conv map at a side x side input: features minus the head's adaptive pool, on whatever device
+    the module lives (meta here: shapes only)."""
     mods = list(features)
     while isinstance(mods[-1], nn.AdaptiveAvgPool2d):
         mods.pop()
-    return nn.Sequential(*mods)(torch.zeros(1, 3, 64, 64, device=next(features.parameters()).device)).shape[-1]
+    return nn.Sequential(*mods)(torch.zeros(1, 3, side, side, device=next(features.parameters()).device)).shape[-1]
 
 
-def _cell_name(family, kernels, stride, pool_kernel, pool_count, map_side, head, dropout, bn, pretrained) -> str:
+def _cell_name(family, kernels, stride, pool_kernel, pool_count, map_side, head, dropout, bn, pretrained,
+               input_size=64) -> str:
     return (f"{family}_{kernels}_stride{stride}_{pool_count}pool{pool_kernel}x{pool_kernel}_map{map_side}_"
-            f"{'fcdrop' if dropout else head}_{'bn' if bn else 'nobn'}" + "_pretrained" * pretrained)
+            f"{'fcdrop' if dropout else head}_{'bn' if bn else 'nobn'}" + (f"_in{input_size}" if input_size != 64 else "")
+            + "_pretrained" * pretrained)
 
 
-def _register_cell(ctor, fuse_map, lr, **factors) -> str:
-    name = _cell_name(**factors)
+def _register_cell(ctor, fuse_map, lr, input_size=64, **factors) -> str:
+    name = _cell_name(input_size=input_size, **factors)
     register_model(name, ctor, fuse_map=fuse_map, fuse_root_attr="features", lr=lr)
-    CELL_FACTORS[name] = factors
+    CELL_FACTORS[name] = {**factors, "input_size": input_size}
     return name
 
 
@@ -251,6 +255,18 @@ for (kn, ks), s, pk, pn in product(FX_KERNELS.items(), (2, 4), (2, 3), (2, 3)):
             _register_cell(partial(AlexNetAdapted, head=head, batch_norm=bn, dropout=0.5 * d, pretrained=pt, **geo),
                            _FX_FUSE[kn, bn], 3e-4, family="alexnet", kernels=kn, stride=s, pool_kernel=pk,
                            pool_count=pn, map_side=side, head=head, dropout=d, bn=bn, pretrained=pt)
+# Phase 11 input-size block (phase_11_input224.yaml): torchvision's layout with AlexNet's own head (FC + Dropout, no
+# BN) fed Tiny ImageNet enlarged to 224x224, its native input -- the same nets as the 64x64 cells above, so the map
+# goes from 1x1 back to torchvision's 6x6
+for kn in ("k11-5-3", "k3x3", "k2x2", "kalt3-2"):
+    geo = dict(kernels=FX_KERNELS[kn], stem_stride=4, pool_kernel=3, pool_count=3,
+               **({"stem_padding": 2} if kn == "k11-5-3" else {}))
+    with torch.device("meta"):
+        side = _map_side(AlexNetAdapted(head="gap", **geo).features, 224)
+    for pt in (False, True) if kn == "k11-5-3" else (False,):
+        _register_cell(partial(AlexNetAdapted, head="fc", batch_norm=False, dropout=0.5, pretrained=pt, **geo),
+                       _FX_FUSE[kn, False], 3e-4, input_size=224, family="alexnet", kernels=kn, stride=4, pool_kernel=3,
+                       pool_count=3, map_side=side, head="fc", dropout=True, bn=False, pretrained=pt)
 register_model("alexnet_stacked_gap", partial(AlexNetStacked, head="gap"),
                fuse_map=FUSE_MAP_STACKED, fuse_root_attr="features", lr=1e-3)
 # No BN -> features compresses to plain Conv-ReLU pairs (BN entries drop out, shifting every
@@ -275,12 +291,15 @@ register_model("vgg16_2x2", partial(VGG16, kernel_size=2), fuse_map=FUSE_MAP_VGG
 
 # Phase 11 VGG grid (names: see CELL_FACTORS above): every VGGAdapted (VGG16 + BN) cell of kernel pattern x stem stride x
 # pool kernel x pool count x head (GAP / FC / FC + Dropout 0.5), + ImageNet pretraining (vgg16_bn) on the all-3x3 cells
-# = 168. The 4 mixed patterns all put 6-7 of the 13 convs at 3x3, so they compare order/position at ~equal proportion;
-# the *then* patterns split after stage 3 (7 convs). vgg16_k3x3_stride1_5pool2x2_map2_fcdrop_bn IS torchvision's VGG16
-# (+ BN), layer for layer (tests/test_registry.py).
+# = 336. kalt3-2 / kalt2-3 alternate conv by conv (6-7 of the 13 at 3x3); the kblocks patterns set one kernel per block
+# (phase_11_vgg_kernel_blocks.yaml): alternating blocks, early vs late blocks, and one 2x2 block in a 3x3 net.
+# vgg16_k3x3_stride1_5pool2x2_map2_fcdrop_bn IS torchvision's VGG16 (+ BN), layer for layer (tests/test_registry.py).
 _alt = lambda first: tuple(first if i % 2 == 0 else 5 - first for i in range(13))  # noqa: E731
+_blocks = lambda p: tuple(int(k) for k, n in zip(p.split("-"), (2, 2, 3, 3, 3)) for _ in range(n))  # noqa: E731
+VGG_BLOCK_PATTERNS = ("3-2-3-2-3", "2-3-2-3-2", "3-3-3-2-2", "2-2-2-3-3",
+                      "2-3-3-3-3", "3-2-3-3-3", "3-3-2-3-3", "3-3-3-2-3", "3-3-3-3-2")
 VGG_FX_KERNELS = {"k3x3": (3,) * 13, "k2x2": (2,) * 13, "kalt3-2": _alt(3), "kalt2-3": _alt(2),
-                  "k3x3then2x2": (3,) * 7 + (2,) * 6, "k2x2then3x3": (2,) * 7 + (3,) * 6}
+                  **{f"kblocks{p}": _blocks(p) for p in VGG_BLOCK_PATTERNS}}
 with torch.device("meta"):  # the fuse map depends only on where the ZeroPad2d's sit: kernel pattern x stem stride
     _VGG_FX_FUSE = {(kn, s): _conv_groups(_vgg_adapted_features(ks, s, 2, 5))
                     for kn, ks in VGG_FX_KERNELS.items() for s in (1, 2)}

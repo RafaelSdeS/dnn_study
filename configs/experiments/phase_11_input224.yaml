@@ -1,0 +1,20 @@
+# Phase 11 input-size block (2026-10-17, docs/logs/PHASE11_LOG.md "Input 224 and VGG kernel blocks"). Does torchvision's
+# AlexNet layout lose at 64 px because its map collapses to 1x1 (scratch 35.5 / pretrained 36.8 % test, vs 44.0 / 51.9 at
+# the 64px layout's 8x8 map)? The same 5 nets as phase_11_dropout_pretraining's torchvision-layout cells (4 kernels with
+# AlexNet's own head, + the ImageNet-pretrained 11-5-3), fed Tiny ImageNet enlarged to 224x224, the input they were
+# designed for (Krizhevsky et al. 2012): the map is 6x6 again. Each training image is its 64px twin's augmented image
+# (same seed, crop/flip/AutoAugment at 64 px, 4 workers) resized last (DataConfig.upscale_to; val/test resized too), so
+# the input size is the only difference from those cells (figure contrast "Entrada 64 -> 224 px").
+# Same protocol as every Phase 11 run (_protocols/no_patience.yaml) but data.upscale_to, enforced by tests/test_config.py.
+# Runs on nyx, one at a time (scripts/lab/run_queue.sh):
+#   .venv/bin/python -m scripts.train --experiment phase_11_input224 --runtime pcad --model <m>
+extends: _protocols/no_patience
+name: phase_11_input224
+data:
+  upscale_to: 224
+models:
+  - alexnet_k11-5-3_stride4_3pool3x3_map6_fcdrop_nobn_in224
+  - alexnet_k11-5-3_stride4_3pool3x3_map6_fcdrop_nobn_in224_pretrained
+  - alexnet_k3x3_stride4_3pool3x3_map6_fcdrop_nobn_in224
+  - alexnet_k2x2_stride4_3pool3x3_map6_fcdrop_nobn_in224
+  - alexnet_kalt3-2_stride4_3pool3x3_map6_fcdrop_nobn_in224

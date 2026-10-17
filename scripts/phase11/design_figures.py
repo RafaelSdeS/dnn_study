@@ -81,9 +81,16 @@ LEGACY = {  # superseded run -> the factors of the cell it previews; approx = no
 LEGACY_NOISE = ["alexnet_3x3_fc", "alexnet_adapted_orig_fc", "alexnet_3x3_gap", "alexnet_adapted_orig_gap"]  # seeds 42-44
 
 
-def frame(archive: bool = False) -> pd.DataFrame:
+def core(df: pd.DataFrame) -> pd.DataFrame:
+    """Figures 01-22's 64 px design: without the input-size block (phase_11_input224, Tiny ImageNet enlarged to 224) and
+    the VGG kernel blocks (phase_11_vgg_kernel_blocks), whose questions get figures of their own."""
+    return df[(df.input_size.fillna(64) == 64) & ~df.kernels.fillna("").str.startswith("kblocks")]
+
+
+def frame(archive: bool = False, everything: bool = False) -> pd.DataFrame:
     """load() + each run's factors; the families (phase_11_families.yaml) get family 'família' and no grid factors.
-    pooling = '<n>pool<k>x<k>', the one pooling factor of the design (pool count and window always change together)."""
+    pooling = '<n>pool<k>x<k>', the one pooling factor of the design (pool count and window always change together).
+    Only the core() runs unless everything (the all-runs tables)."""
     if archive:
         df = load(ARCHIVE)
         # the old runs only have the validation split; no early-best mark: it is about the current recipe's cosine-to-0
@@ -105,7 +112,7 @@ def frame(archive: bool = False) -> pd.DataFrame:
         df[c] = df[c].fillna(False).astype(bool) if c in df else False
     df["hk"] = np.where(df.family == "família", "família", np.where(df.dropout, "fcdrop", df["head"]))
     df["pooling"] = [f"{n:.0f}pool{k:.0f}x{k:.0f}" if pd.notna(k) else None for n, k in zip(df.pool_count, df.pool_kernel)]
-    return df
+    return df if archive or everything else core(df)
 
 
 def pareto_front(cost, acc):

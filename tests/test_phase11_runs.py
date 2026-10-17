@@ -81,3 +81,28 @@ def test_the_test_set_and_the_split_are_what_the_protocol_says():
     assert Counter(y for _, y in create_test_loader(cfg, tr).dataset.samples) == {c: 50 for c in range(200)}
     assert (len(tr), len(va)) == (90_000, 10_000) and not set(tr.indices) & set(va.indices)
     assert create_imagenet_loaders(cfg)[1].indices == va.indices
+
+
+@pytest.mark.skipif(not DATASET, reason="Tiny ImageNet not on this machine")
+def test_the_224_input_is_the_64px_sample_enlarged():
+    """phase_11_input224 (DataConfig.upscale_to): from the same random state, each training sample is its 64px twin's
+    augmented image resized to 224 -- the input size is the only difference -- and val/test come out 224x224."""
+    import torch
+    from torchvision import transforms
+
+    from ml.config import DataConfig
+    from ml.data import create_imagenet_loaders, create_test_loader
+
+    cfg64 = DataConfig(dataset_path=str(DATASET[-1] / "train"), num_workers=0, train_aug="crop_flip_autoaug")
+    cfg224 = DataConfig(**{**cfg64.__dict__, "upscale_to": 224})
+    tr64, tr224 = create_imagenet_loaders(cfg64)[0], create_imagenet_loaders(cfg224)
+    t64, t224 = tr64.dataset.transform.transforms, tr224[0].dataset.transform.transforms
+    img = tr64.dataset.loader(tr64.dataset.samples[tr64.indices[0]][0])
+    for seed in range(5):
+        torch.manual_seed(seed)
+        a = tr224[0].dataset.transform(img)
+        torch.manual_seed(seed)
+        b = transforms.Compose(t224[-3:])(transforms.Compose(t64[:-2])(img))  # 64px augment, then Resize/ToTensor/Normalize
+        assert a.shape == (3, 224, 224) and torch.equal(a, b), seed
+    assert tr224[1].dataset.transform(img).shape == (3, 224, 224)
+    assert create_test_loader(cfg224, tr224[0]).dataset.transform(img).shape == (3, 224, 224)
