@@ -1695,6 +1695,14 @@ FC + Dropout head, + the pretrained 11-5-3) Tiny ImageNet enlarged to 224x224, t
 so the contrast isolates the geometry. Cost: 0.095 -> ~0.71 GMACs. New contrast "Entrada 64 -> 224 px", 5 pairs;
 `input_size` joins the pairing factors, so no other contrast mixes the two sizes (the 4 AlexNet kernel contrasts and
 pretraining gain one 224 pair each).
+Precedent for enlarging small images to feed an ImageNet net: BiT's fine-tuning rule (Kolesnikov et al., ECCV 2020
+Sec. 3.3, "We resize input images with area smaller than 96x96 pixels to 160x160 pixels, and then take a random crop of
+128x128 pixels"). BiT resizes first and crops at the large size; augmenting at 64 px and resizing last is this study's
+choice, so each 224 sample is its 64px twin's and the input size is the only variable. Limitation: the pretrained cell
+is fine-tuned with the from-scratch recipe (SGD lr 0.01, 500 epochs), not a fine-tuning one (BiT: lr 0.003, 500-20k
+steps), as its 64px twin was -- the 64 -> 224 contrast is fair, the absolute pretrained number is not the best a
+fine-tuning recipe would give (the one-recipe limitation of `_protocols/no_patience.yaml`: Bello et al. 2021, Wightman
+et al. 2021).
 
 **VGG kernel blocks** (`phase_11_vgg_kernel_blocks`, 9 runs). One kernel per VGG16 block (2, 2, 3, 3, 3 convs),
 `kblocks<5 kernels>` -- kalt3-2 alternates conv by conv instead: alternating blocks 3-2-3-2-3 / 2-3-2-3-2, early vs
