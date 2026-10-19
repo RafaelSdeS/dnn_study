@@ -545,7 +545,9 @@ column is `budget_unico`'s original F(4,3) **without** packing, same models, for
 - `vgg13_fpga` is usable now: the 2026-09-14 memory note had its FP32 at chance (0.50%, plain VGG13 without BN); `budget_unico` now holds
   50.60% FP32 / 50.32% F43 no-pack, i.e. it was retrained.
 
-**Provenance / reproducibility gap (open).** These runs did not come from the `~/dnn_study` checkout: PCAD has a second one,
+**Provenance / reproducibility gap (closed 2026-10-19: the fix is `f87b6a7` on `main`, the 14-model lists of PCAD's `d5084d9` are applied
+to `wino_f{23,43,63}_pack.yaml` here; the follow-ups `wino_f*_hw`, `wino_f63_hw_lr`, `budget_unico_orig` / `_s43` stay only in
+`~/dnn_study_m7`; what follows is the situation of 2026-09-25).** These runs did not come from the `~/dnn_study` checkout: PCAD has a second one,
 `~/dnn_study_m7` (main @ `c9750c0`, bridge `~/winograd_bridge_m7`, Winograd-FPGA `fde71c7`, clean). That checkout holds **one commit that is not
 on `origin`** — `c9750c0`, "qat_wino-only runs crashed in the run summary and would clobber fp32_top1" (`ml/reporting.py` None-safe gap guards +
 `scripts/train.py` recovering `fp32_eval` from the prior summary) — plus **uncommitted** edits to `wino_f{23,43,63}_pack.yaml` (the 14-model
@@ -1660,7 +1662,8 @@ What the figures did not show yet, each with its reference:
   d pixel| over 200 test images, from the FP32 checkpoints (fetched from PCAD, gitignored). Half the influence sits in
   25.1% of the image for 11-5-3-3-3, 23.5% for 3x3, 22.3% for alternating, 17.8% for 2x2 (64px, GAP + BN); 34.2% for
   the AlexNet original, the same kernels at its stride-4 + three-pool layout: its last conv units step 16 px, the
-  64px layout's 8 px. The theoretical field covers the whole 64x64 image for every net. Stacked cells: pending.
+  64px layout's 8 px. The theoretical field covers the whole 64x64 image for every net. Stacked cells (2026-10-19): 33.1% for
+3x3 stacked and 29.8% for 2x2 stacked, against 23.5% / 17.8% for the single-kernel nets.
 
 ## Large stem, small-kernel body (2026-10-14)
 
@@ -1786,6 +1789,22 @@ labelled "AlexNet torchvision com entrada ampliada a 224 px (mapa 6x6)". It is d
 (VGG and ResNet rows keep their own single reference), named in figure 14's title, and read straight from the run's summary
 since the 224 block is outside `core()`. Kernel contrasts are unaffected: their reference was already the 11-5-3-3-3 of the
 same cell. Caveat: the 224 line is the 64px images enlarged, no new information, so it is "AlexNet at its design geometry",
-not "AlexNet on 224 px images". Figure 22 (receptive fields) was not redrawn -- it needs the FP32 checkpoints, which only PCAD
-holds -- and keeps the old label until it is. Figure 15 gains 2 pp of headroom at the top for the new label. The factor figures (04-10) are at least 13 in wide now (11 before):
+not "AlexNet on 224 px images". Figure 22 (receptive fields) was redrawn the same day (see "Figures 22-24" below). Figure 15 gains 2 pp of headroom at the top for the new label. The factor figures (04-10) are at least 13 in wide now (11 before):
 the longer label outside the axes squeezed figure 10's three groups until their tick labels ran into each other.
+
+**Figures 22-24 (2026-10-19).** Three changes, all on the 70 finished runs.
+- *23_input_224.png* (new): `factor_effects` now builds its contrast table from `frame(everything=True)`, so the "Entrada (64 -> 224 px)"
+  pairs and the 9 `kblocks` contrasts exist (the latter only in `factor_effects.csv`; figures 11 and 21 stay on `core()`). Two pairs so far:
+  scratch 35.5 -> 49.5 FP32 (+14.1 pp, INT8 +14.0) and pretrained 36.8 -> 53.4 (+16.6; INT8 +22.9 is QAT's extra training, hatched).
+  `cell_label` now says "224 px" on a 224 cell, so figure 08's pretraining pairs at 64 and 224 px no longer carry the same label.
+- *24_vgg_kernel_blocks.png* (new, `design_figures.fig_kblocks`): a dot plot (FP32 filled, INT8 hollow) of VGG16 + BN + GAP, seed 42: all
+  3x3, the finished `kblocks` patterns ordered by how many of the 13 convs are 2x2, the conv-by-conv alternation, all 2x2, with the 3x3
+  floor band (AlexNet + BN's +-0.6 pp stands in, named in the legend, until the VGG16 seeds finish). 3 of 9 patterns so far: 5/13, 6/13
+  and 8/13 convs at 2x2 sit 0.56-0.68 pp under 3x3 in FP32, at the lower edge of that band, a quarter of the 2.5 pp the all-2x2 net loses.
+  Unfinished patterns are named in the title.
+- *22_effective_receptive_field.png* redrawn with the new baseline name (shortened to "AlexNet sem adaptar" in the panel title) and the
+  two stacked nets, whose field is wider: half the influence in 33.1% (3x3 stacked) and 29.8% (2x2 stacked) of the image vs 23.5% / 17.8%.
+  Running `receptive_field` without the FP32 checkpoints still overwrites the PNG with empty "checkpoint so no PCAD" panels (it did, once,
+  and `git checkout` restored it); the 7 checkpoints were fetched from PCAD, used and deleted.
+- Backup: Hestia's `~/dnn_study_backup` now has the 105 files (15.5 GB) of runs finished after 2026-10-16 (size-checked against PCAD: 0
+  missing, 0 different); the one running seed-44 cell was left out on purpose (its checkpoint changes under `--size-only`).

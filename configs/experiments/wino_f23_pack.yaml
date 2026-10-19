@@ -28,5 +28,17 @@ qat_wino:
   v_w: 8
   k_dsp: 2
 models:
-  - alexnet_fire_bypass_fpga
-  - vgg_style_fpga
+  - alexnet_3x3_fc_fpga
+  - alexnet_bottleneck_fpga
+  - alexnet_final_bottleneck_residual_fpga
+  - alexnet_final_fire_residual_fpga
+  - alexnet_fire_fpga
+  - alexnet_stacked_fpga
+  - googlenet_fpga
+  - repvgg_a0_fpga
+  - resnet18_fpga
+  - vgg13_fpga
+  - wrn_16_4_fpga
+  - wrn_28_2_fpga
+  - alexnet_tv_3x3
+  - vgg16

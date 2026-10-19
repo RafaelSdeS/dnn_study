@@ -63,11 +63,13 @@ regime carry a ±3.7 pp band (see finding 4), so read them with the rings of fig
    but the stricter 1.8×-margin criterion holds in only 31% of layer groups (bar: 60%), so H1 is PARTIAL. FP32 latency ranks nets like
    INT8 latency (ρ = 0.9999). conv1 has stride 2 in every 64px cell, so restricting its kernel buys no eligibility.
 6. **Winograd-FPGA study (M7): the transform size, not the kernel, sets the accuracy cost of the accelerator.** Median over 14
-   networks, packed at the iso-DSP point: F(2,3) ≈ FP32 (+0.05 pp), F(4,3) −5.1 pp, F(6,3) −18.9 pp. These runs come from a separate
-   PCAD checkout and are not reproducible from `main` yet (`docs/logs/PHASE11_LOG.md` "M7 extension").
+   networks, packed at the iso-DSP point: F(2,3) ≈ FP32 (+0.05 pp), F(4,3) −5.1 pp, F(6,3) −18.9 pp. Reproducible from `main`
+   since 2026-10-19 (`wino_f*_pack.yaml` list the 14 networks; `docs/logs/PHASE11_LOG.md` "M7 extension"). The `_hw` / `_orig` / `_s43`
+   follow-ups of the PCAD checkout `~/dnn_study_m7` are not summarized here.
 7. **Detection (Phase 7): compensation transfers only partly.** Bottleneck is the best detector (20.98 mAP FP32, 20.85 INT8) and
    quantization-stable; Fire is the worst (8.94 mAP) and loses 2.6 pp in QAT; the 223 MB AlexNetTV backbone does not turn its size
-   into a proportional lead. Segmentation has finished on PCAD but has not been analysed.
+   into a proportional lead. Segmentation (VOC2012 mIoU 17.8 / 17.0 / 16.3 for bottleneck / fire / tv) separates the backbones far
+   less than detection does and its FP32 → INT8 drift is ≤ 0.13 pp, so Fire's loss looks specific to the detection task or head (Phase 7 section; cause not isolated).
 8. **Local attention (Phase 8): window size behaves like kernel size, but attention does not beat compensation CNNs at equal size.**
    Accuracy rises with the window (32.95 → 33.53 → 36.75% for w = 2, 4, 8); `hybrid_bottleneck_swin` reaches 40.2% at ~0.55 MB where
    `AlexNetFireBypass` reaches 49.9%. DeiT distillation adds +6 pp. 5 of 7 models gain under INT8 (H3 came out inverted; the
@@ -275,9 +277,9 @@ further down instead.
    notebook (Section 11) to test whether BN fixes it — not yet trained.
 3. ~~**Benchmark Winograd compatibility** — Verify that Bottleneck & Fire leverage small-kernel acceleration on actual hardware.~~ **Done — see Phase 6.**
 4. **Architecture search** — AutoML over compensation mechanisms for Pareto-optimal size/accuracy/quantization trade-offs. Not started (see "Phase 10" in `TODO.md`, contingent on Phase 8).
-5. ~~**Task transfer** — Test best models on object detection and semantic segmentation.~~ **Detection done (valid A4 retrain, all 3 backbones) — see Phase 7. Segmentation PCAD runs also done, all 3 backbones.**
+5. ~~**Task transfer** — Test best models on object detection and semantic segmentation.~~ **Detection done (valid A4 retrain, all 3 backbones) — see Phase 7. Segmentation PCAD runs also done and analysed, all 3 backbones.**
 6. **Fine-tune Tier 1 models** for deployment scenarios (mobile, edge, server). Not started.
-7. **Extend the H1–H4 analysis notebook to segmentation** now that results are on disk.
+7. ~~**Extend the H1–H4 analysis notebook to segmentation** now that results are on disk.~~ **Done — notebook Part B and report Eixo 6.**
 
 ---
 
@@ -393,7 +395,7 @@ further work. Full per-model breakdown: `.../pareto_frontier.csv`.
 
 ---
 
-## Phase 7 — Detection: A4 retrain complete (valid numbers); Segmentation: PCAD runs complete, not yet analyzed
+## Phase 7 — Detection: A4 retrain complete (valid numbers); Segmentation: PCAD runs complete and analysed (notebook Part B, report Eixo 6)
 
 **Root cause found and fixed** (`docs/logs/PHASE7_LOG.md` Stage 9): anchor recall was originally
 0.76–0.80 for all 3 backbones (well under the 95% acceptance bar), caused by a tap-index bug
@@ -423,8 +425,20 @@ bottleneck. This is a first read of the raw numbers, not yet the H1–H4 hypothe
 
 Segmentation (Part B) has a fully implemented model/trainer/CLI (`build_deeplabv3_segmenter`,
 `SegmentationTrainer`, `run_segmentation` — no longer placeholders) and PCAD runs are now complete
-for all 3 backbones × FP32/QAT/INT8 (`outputs/pcad/phase_7_detection_segmentation/seg_*`); results are
-on disk but not yet folded into the H1–H4 analysis notebook.
+for all 3 backbones × FP32/QAT/INT8 (`outputs/pcad/phase_7_detection_segmentation/seg_*`), and they are
+analysed in the notebook's Part B (stage bars, size, efficiency; outputs stored) and in `report/ic_report.tex` Eixo 6
+(`tab:phase_7_segmentation`), VOC2012 val:
+
+| Backbone | FP32 mIoU | QAT mIoU | INT8 mIoU | Size FP32 / INT8 (MB) |
+|---|---|---|---|---|
+| alexnet_bottleneck | 17.84% | 17.90% | **17.91%** | 12.13 / 11.19 |
+| alexnet_fire | 17.03% | 17.12% | 17.05% | 12.63 / 11.31 |
+| alexnet_tv | 16.34% | 16.33% | 16.21% | 10.26 / 9.32 |
+
+**Reading it:** quantization transfers to segmentation (FP32 → INT8 drift ≤ 0.13 pp for all three, the Phase 5 "INT8 barely
+costs accuracy" finding), and the spread between backbones is small (1.5 pp of mIoU against 12 pp of mAP in detection): Fire's
+detection collapse (8.94 mAP) does not appear in segmentation, so it is specific to the detection task or head rather than a
+general weakness of the backbone (an inference: the cause was not isolated).
 
 ---
 
