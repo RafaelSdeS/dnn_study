@@ -1727,3 +1727,47 @@ before it has no `upscale_to`, and would otherwise be refused on a re-evaluation
 `test_every_finished_run_is_the_protocol`. Existing cell names, protocols and figures 01-22 are unchanged: the figures
 read `design_figures.core()` (64 px, no kernel blocks); the two new questions get figures of their own when their runs
 land.
+
+## Progress 2026-10-19: 70 of 120 runs, the FC + Dropout noise floor, two figure fixes
+
+**Status.** 70 of the 120 planned runs (14 yamls) are finished and all 70 sit in PCAD's tree and on the laptop (the 3
+`phase_11_vgg_kernel_blocks` runs were rsynced nyx -> PCAD whole, checkpoints and logs included, then compared with an
+rsync dry run: identical). The 50 left, at 08:30: PCAD has 1 running (seed 44 `kalt3-2` FC + Dropout, no BN, on
+beagle), 7 submitted (`large_stem` x 4, `k2x2stacked` FC + Dropout + BN, `alexnet_bottleneck`, `alexnet_fire`) and 29 in
+the feeder's file (17 `families`, 8 `resnet_kernel_stem`, the 4 FC + Dropout VGG seeds); nyx has `kblocks2-2-2-3-3`
+running and 12 queued (the 4 GAP VGG seeds, 5 `kblocks`, 3 `input224`). Every pending run has a place; none is
+unassigned.
+
+**New numbers** (test top-1, seed 42, FP32 / INT8):
+- *Stacked, GAP + BN.* 3x3 -> two 3x3 per stage: 53.5 -> 55.9 / 53.6 -> 56.2 (+2.4 FP32), 167 -> 451M MACs. 2x2 -> two
+  2x2: 52.4 -> 57.3 / 52.4 -> 57.6 (+4.9), 74 -> 201M MACs. The stacked 2x2 net is ahead of the stacked 3x3 net
+  (57.25 vs 55.87) at less than half its MACs, on one seed (GAP + BN floor: 0.6 pp).
+- *VGG kernel blocks, GAP + BN* (nyx), against 3x3 at 59.35 / 59.47 and 2x2 at 56.84 / 56.90: 3-2-3-2-3 58.73 / 58.85,
+  2-3-2-3-2 58.67 / 58.30, 3-3-3-2-2 58.79 / 58.83. FP32 sits 0.56-0.68 pp under 3x3 for every pattern -- a quarter of
+  the 2.5 pp the full 2x2 costs, 2-3-2-3-2 included (8 of 13 convs are 2x2). Whether that is above the floor waits for
+  the GAP seeds 43/44 (queued on nyx); 3 of the 9 patterns are in.
+- *Input 224* (nyx): the scratch 11-5-3 net trains to 49.54 / 49.72 at 224 against 35.47 / 35.68 at 64 px (same layout,
+  6x6 map instead of 1x1). The pretrained twin's 53.42 / 60.11 is not comparable on INT8: its best FP32 epoch is the
+  10th of 500 (`early_best`), so QAT trains an un-annealed checkpoint and the 6.7 pp is QAT's extra training, not
+  quantization (the one-recipe limitation noted on 2026-10-17; ringed in the figures).
+
+**Noise floor, FC + Dropout, no BN.** Seeds 42/43/44 now exist for 3 of the 4 kernels (2 for `kalt3-2`, seed 44
+running): the band is +-0.8 pp FP32 and +-3.7 pp INT8 (GAP + BN: +-0.6 / +-0.7). The INT8 band is not quantization noise.
+9 of the 11 runs peak at FP32 epoch 55-80 of 500 and gain +2.7 to +3.8 pp from QAT's extra training; the 2 that peaked
+late (seed 42 3x3 at 462, seed 44 11-5-3 at 474) gain -0.1 / +0.1. Which side of that line a seed falls on decides its
+INT8, so single-seed INT8 contrasts in this regime need the ring (figures 02, 11, 14, 16) before they are read.
+
+**Figures.** 01-21 regenerated on the 70 runs (`analyze_geometry`, `plot_kernel_comparison`, `factor_effects`,
+`design_figures`; the 141 gitignored logs for 18/19 fetched by `analyze_geometry.convergence`'s rsync); 22 not, since
+it reads the FP32 checkpoints of the 4 kernels and none of those runs changed. `10_compensation_block.png` is drawn for
+the first time (3 stacked pairs). Two defects the new runs exposed, both fixed in `design_figures.py`:
+(1) figure 15's subtitle said "ainda na fila: 11-5-3-3-3 e 3x3 e 2x2 e alternado 3-2 em layout original", cells that
+had finished: `fig_geometry`'s pending filter matched the `phase_11_input224` cells too (same stride and pools as the
+layout original, added 2026-10-17), now `input_size == 64`; (2) the x labels "3x3 empilhado" / "2x2 empilhado" of 16/20 ran
+into each other once the 2x2 stacked cell landed, `group_ticks` now wraps labels at 10 characters.
+`tests/test_phase11_figures.py` passes (4 tests).
+
+**Still without figures.** `phase_11_vgg_kernel_blocks` and `phase_11_input224`: no figure code exists for them (the
+2026-10-17 note said "when their runs land"), and `design_figures.core()` keeps them out of every existing figure and of
+`factor_effects`' contrasts, though the contrasts themselves are defined (`PAIRS`' "Entrada 64 -> 224 px", one `kblocks`
+pair each). They get figures once more of the 18 runs are in.

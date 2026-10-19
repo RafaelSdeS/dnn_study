@@ -253,7 +253,9 @@ scripts/                  # CLI entry points (used instead of notebooks for PCAD
     analyze_geometry.py        # 12 QAT-vs-conversion INT8 change + the shared loader/plot helpers + main_grid/kernel_geometry tables
                                #   + all_runs.csv (every run, with host) and design_status.csv (every planned run of the yamls:
                                #   done where / pending). Figures 01-22 read design_figures.core() = the 64 px design without
-                               #   phase_11_input224 and phase_11_vgg_kernel_blocks (their figures: when the runs land)
+                               #   phase_11_input224 and phase_11_vgg_kernel_blocks (their figures: not written yet -- core()
+                               #   leaves both out of every figure and of factor_effects' contrasts, though 3 of 9 kblocks and
+                               #   2 of 5 input224 runs had finished by 2026-10-19; PHASE11_LOG "Progress 2026-10-19")
     design_figures.py          # 13 Pareto accuracy x cost, 14 kernel x head x BN grid, 15 kernel x geometry, 16 INT8
                                #   robustness, 17 latency vs MACs, 18 FP32 training curves, 19 QAT curves, 20 INT8
                                #   right <-> wrong flips from the test logits (Hooker et al. 2019) (18/19 need
