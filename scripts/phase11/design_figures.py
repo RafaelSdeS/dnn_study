@@ -19,6 +19,7 @@ archive_adamw_recipe/ to both paths for --archive).
 """
 import argparse
 import json
+import textwrap
 
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
@@ -327,7 +328,7 @@ def fig_geometry(df, figs, note, pending=True):
     if pending:
         from scripts.phase11.factor_effects import design_cells  # imported here: factor_effects imports this module
         c = design_cells()
-        c = c[(c.family == "alexnet") & (c["head"] == "fc") & c.dropout & ~c.bn & ~c.pretrained & c.kernels.isin(K4)]
+        c = c[(c.family == "alexnet") & (c["head"] == "fc") & c.dropout & ~c.bn & ~c.pretrained & c.kernels.isin(K4) & (c.input_size == 64)]
         for r in c[~c.cell.isin(seed42(df).key)].itertuples():
             missing.setdefault(GEOMS[(r.stride, r.pool_kernel, r.pool_count)].replace("\n", " "), []).append(KLABEL[r.kernels])
     handles = legend_kernels(K4) + ([BASE_HANDLE] if b is not None else []) + ([early_handle("ring")] if ringed else [])
@@ -359,8 +360,8 @@ def kernel_groups(d):
 
 def group_ticks(ax, groups):
     ax.set_xticks(range(len(groups)))
-    ax.set_xticklabels([(FAMILY_TAG[fam] + "\n" if fam in FAMILY_TAG else "") + (KLABEL[k] if k else "famílias") for (fam, k), _ in groups],
-                       fontsize=9)
+    ax.set_xticklabels([(FAMILY_TAG[fam] + "\n" if fam in FAMILY_TAG else "") + textwrap.fill(KLABEL[k] if k else "famílias", 10)
+                        for (fam, k), _ in groups], fontsize=9)
 
 
 def run_point(ax, x, y, r):
