@@ -528,8 +528,12 @@ def fig_curves(df, figs, note):
                 shown.add(k)
                 ax.plot(c[0], c[2], color=KCOLOR[k], lw=1.6)
                 ax.plot(c[0], c[1], color=KCOLOR[k], lw=0.8, ls="--", alpha=0.6)
+                if pd.notna(r.best_ep):  # the epoch whose checkpoint is the FP32 net (log epochs are 1-based)
+                    ax.scatter(r.best_ep + 1, r.fp32_val, marker="D", s=45, color=KCOLOR[k], edgecolors="k", lw=0.8, zorder=5)
         if cb is not None:
             ax.plot(cb[0], cb[2], color="k", lw=1.2)
+            if pd.notna(b.best_ep):
+                ax.scatter(b.best_ep + 1, b.fp32_val, marker="D", s=45, color="k", edgecolors="white", lw=0.8, zorder=5)
         if not drawn:
             ax.text(0.5, 0.5, "pendente", transform=ax.transAxes, ha="center", color=NEUTRAL, fontsize=12)
         # grid_cells' FC level is the reference nets' head, FC + Dropout (as figure 19 says)
@@ -542,7 +546,8 @@ def fig_curves(df, figs, note):
     fig.legend(handles=legend_kernels(shown)
                + ([Line2D([], [], color="k", lw=1.2, label=f"{BASE_LABEL}, layout original (validação)")] if cb is not None else [])
                + [Line2D([], [], color=TEXT_SECONDARY, lw=1.6, label="validação (split 90/10)"),
-                  Line2D([], [], color=TEXT_SECONDARY, lw=0.8, ls="--", label="treino (com augmentation)")],
+                  Line2D([], [], color=TEXT_SECONDARY, lw=0.8, ls="--", label="treino (com augmentation)"),
+                  Line2D([], [], marker="D", color=TEXT_SECONDARY, ls="", ms=7, label="época escolhida: a melhor na validação, de onde o QAT parte")],
                loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=4, fontsize=9)
     fig.suptitle("Curvas de treino do fatorial principal (layout 64px): convergiu? quanto o treino se afasta da validação?\n" + note,
                  fontsize=11)
