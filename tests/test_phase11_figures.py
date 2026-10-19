@@ -22,7 +22,7 @@ FIGURES = {f"{n}.png" for n in ["01_kernel_original_layout", "02_kernel_64px_lay
                                 "10_compensation_block", "11_factorial_matched_pairs", "12_quantization_drop_where",
                                 "13_pareto_accuracy_cost", "14_main_factorial_grid", "15_kernel_by_geometry",
                                 "16_quantization_robustness", "17_latency_vs_macs", "18_training_curves", "19_qat_curves", "20_int8_prediction_flips",
-                                "21_kernel_rank_critical_difference", "22_effective_receptive_field"]}
+                                "21_kernel_rank_critical_difference", "22_effective_receptive_field", "23_input_224", "24_vgg_kernel_blocks"]}
 
 
 def _early(m):  # the fake runs whose best FP32 epoch comes early, so every figure draws its early-best mark

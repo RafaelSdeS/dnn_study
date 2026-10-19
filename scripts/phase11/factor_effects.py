@@ -45,7 +45,8 @@ FAMILY_ROWS = [("alexnet", (BASE_KEY, BASE_LABEL)), ("família", (BASE_KEY, BASE
                ("resnet18", RESNET_BASE)]
 FACTOR_FIG = {"Cabeça (FC + Dropout → GAP)": "04_head_fc_vs_gap.png", "Stride da conv1 (4 → 2)": "05_conv1_stride.png",
               POOL: "06_pooling.png", "Dropout (0 → 0,5)": "07_dropout.png", PRE: "08_pretraining.png",
-              "BatchNorm (sem → com)": "09_batchnorm.png", COMP: "10_compensation_block.png"}  # Kernel: figures 01-03
+              "BatchNorm (sem → com)": "09_batchnorm.png", COMP: "10_compensation_block.png",
+              "Entrada (64 → 224 px)": "23_input_224.png"}  # Kernel: figures 01-03 (VGG kernel blocks: design_figures 24)
 
 # The factors a matched pair holds fixed. pooling = '<n>pool<k>x<k>' (count and window always change together here);
 # map_side follows from kernels + geometry + input_size, so it is not a pairing key; input_size (64, or 224 for the
@@ -78,7 +79,7 @@ PAIRS = [("kernels", "k11-5-3", "k3x3", "Kernel 11-5-3-3-3 → 3×3"), ("kernels
          ("kernels", "k2x2", "k2x2deepstem", "Stem 2×2 → três 2×2")]
 FIGURE_OF = {"head": "Cabeça (FC + Dropout → GAP)", "stride": "Stride da conv1 (4 → 2)", "pooling": POOL, "dropout": "Dropout (0 → 0,5)",
              "pretrained": PRE, "bn": "BatchNorm (sem → com)",
-             "input_size": "Entrada (64 → 224 px)"}  # ponytail: no figure file yet -- the 224 runs are outside core()
+             "input_size": "Entrada (64 → 224 px)"}
 K3_GAP_BN = "alexnet_k3x3_stride2_2pool2x2_map8_gap_bn"
 FAMILY_CONTRASTS = [  # (factor, label, A, B, note): what the cell grid can't express. † = a second variable changes too
     (COMP, "64px · 3×3 + BN + GAP → Bottleneck", K3_GAP_BN, "alexnet_bottleneck", ""),
@@ -457,7 +458,7 @@ def main():
         print("no Phase 11 run has a summary yet")
         return
     bands = noise_bands(df)  # one floor per regime; no seed band of its own for the INT8 - FP32 difference (dqat)
-    t = contrasts(df, bands)
+    t = contrasts(frame(everything=True), bands)  # everything: the 224 and kblocks runs are outside core()
     TABLES.mkdir(parents=True, exist_ok=True)
     t.to_csv(TABLES / "factor_effects.csv", index=False)
     print("noise bands (pp):", {REGIME_LABEL.get(r, r): {k: round(v, 2) for k, v in b.items()} for r, b in bands.items()})

@@ -23,7 +23,7 @@ from scipy.ndimage import gaussian_filter
 from torch import nn
 
 from ml.plotting import NEUTRAL, TEXT_PRIMARY, apply_report_style
-from scripts.phase11.analyze_geometry import BASE_KEY, BASE_LABEL, ROOT, savefig
+from scripts.phase11.analyze_geometry import BASE_KEY, ROOT, savefig
 from scripts.phase11.design_figures import KCOLOR, KLABEL, frame, seed42
 
 KERNELS = ["k11-5-3", "k11-3", "k11-2", "kalt3-2", "k3x3", "k3x3stacked", "k2x2", "k2x2stacked"]  # row 1: 11x11 conv1
@@ -69,7 +69,7 @@ def panels(df):
     """(label, key, colour, run or None) per panel: the baseline, then KERNELS' cells (None = not trained yet)."""
     runs = seed42(df).set_index("key")
     # the layout on every label: the baseline has 11-5-3-3-3 too, its wider field is its stride-4 + 3-pool geometry
-    rows = ([(f"{BASE_LABEL}: 11-5-3-3-3\nlayout original (conv1 s4, 3 pools)", BASE_KEY, TEXT_PRIMARY)]
+    rows = ([("AlexNet sem adaptar: 11-5-3-3-3\nlayout original (conv1 s4, 3 pools)", BASE_KEY, TEXT_PRIMARY)]
             + [(f"{KLABEL[k]}\nlayout 64px (conv1 s2, 2 pools)", cell(k), KCOLOR[k]) for k in KERNELS])
     return [(label, key, c, runs.loc[key] if key in runs.index else None) for label, key, c in rows]
 

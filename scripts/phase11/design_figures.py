@@ -30,9 +30,9 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
 from configs.loader import load_config
-from ml.plotting import AMBER, BLUE, GREEN, NEUTRAL, PURPLE, RED, TEXT_PRIMARY, TEXT_SECONDARY, apply_report_style, shade
+from ml.plotting import AMBER, BLUE, GREEN, GRID, NEUTRAL, PURPLE, RED, TEXT_PRIMARY, TEXT_SECONDARY, apply_report_style, shade
 from scripts.phase11.analyze_geometry import (ARCHIVE, BASE_KEY, BASE_LABEL, EARLY_LABEL, FIGS, LOG_EPOCH, REFERENCE_REGIME, ROOT,
-                                              RUNS, band_for, early_handle, early_ring, healthy_run, load, noise_band, noise_bands,
+                                              REGIME_LABEL, RUNS, band_for, early_handle, early_ring, healthy_run, load, noise_band, noise_bands,
                                               reference_lines, savefig)
 
 PREVIEW = ROOT / "results/archive_adamw_recipe/figures_generated/phase_11_preview"
@@ -155,7 +155,8 @@ def cell_label(f, skip=()):
            else GEO_LABEL.get((s, pk, pn), f"conv1 s{s} · {pn} pools {pk}×{pk}"))
     tags = [tag + ("" if "kernels" in skip else " " * bool(tag) + KLABEL[g("kernels")] + "†" * bool(g("approx", False))), geo,
             "" if "head" in skip else {"gap": "GAP", "fc": "FC"}[g("head")], "Dropout" * (bool(g("dropout")) and "dropout" not in skip),
-            "" if "bn" in skip or tag else ("BN" if g("bn") else "sem BN"), "pré-treino" * (bool(g("pretrained")) and "pretrained" not in skip)]
+            "" if "bn" in skip or tag else ("BN" if g("bn") else "sem BN"), "pré-treino" * (bool(g("pretrained")) and "pretrained" not in skip),
+            "224 px" * bool(g("input_size") == 224 and "input_size" not in skip)]
     return " · ".join(t for t in tags if t)
 
 
@@ -597,6 +598,62 @@ def fig_qat_curves(df, figs, note):
     savefig(fig, "19_qat_curves.png", figs)
 
 
+VGG_CONVS = (2, 2, 3, 3, 3)  # convs per VGG16 block
+
+
+def fig_kblocks(df, figs, note, bands):
+    """VGG16 + BN + GAP with one kernel per block (phase_11_vgg_kernel_blocks), seed 42, between the all-3x3 and all-2x2 nets
+    and the conv-by-conv alternation. df = frame(everything=True): the blocks are outside core(). A dot plot, not bars: the
+    patterns sit within ~0.7 pp of 3x3, which a 0-based bar axis would hide."""
+    g = seed42(df)
+    g = g[(g.family == "vgg16") & (g["head"] == "gap") & g.bn.astype(bool) & ~g.pretrained.astype(bool)]
+    twos = lambda k: sum(n for n, c in zip(VGG_CONVS, k.removeprefix("kblocks").split("-")) if c == "2")  # noqa: E731
+    blocks = sorted((k for k in g.kernels.unique() if k.startswith("kblocks")), key=lambda k: (twos(k), k))
+    rows = [g[g.kernels == k].iloc[0] for k in ["k3x3", *blocks, "kalt3-2", "k2x2"] if (g.kernels == k).any()]
+    if not rows:
+        print("24: no VGG16 GAP + BN run yet")
+        return
+    ref = {r.kernels: r for r in rows}
+    tick = {"k3x3": "3×3 em todos\n0/13 convs 2×2", "k2x2": "2×2 em todos\n13/13 convs 2×2", "kalt3-2": "alternado\nconv a conv"}
+    fig, ax = plt.subplots(figsize=(max(9.0, 1.4 * len(rows) + 2), 5.8))
+    band, src = band_for(bands, "vgg16", True), REGIME_LABEL[("vgg16", True)]
+    if pd.isna(band["fp32"]):  # the VGG16 seeds are still running: AlexNet + BN's floor stands in, named as such
+        band, src = bands.get(REFERENCE_REGIME, band), f"{REGIME_LABEL[REFERENCE_REGIME]}, até as seeds da VGG16"
+    if "k3x3" in ref and pd.notna(band["fp32"]):
+        ax.axhspan(ref["k3x3"].fp32 - band["fp32"], ref["k3x3"].fp32 + band["fp32"], color=GRID, alpha=0.6, zorder=0)
+    for k in ("k3x3", "k2x2"):
+        if k in ref:
+            ax.axhline(ref[k].fp32, color=KCOLOR[k], ls="--", lw=1.2, zorder=1)
+    ringed = False
+    for i, r in enumerate(rows):
+        c = KCOLOR.get(r.kernels, NEUTRAL)
+        ax.scatter(i, r.fp32, s=75, color=c, zorder=3)
+        ax.scatter(i, r.int8, s=75, marker="D", facecolors="white", edgecolors=c, lw=1.7, zorder=3)
+        if r.early_best:
+            early_ring(ax, i, r.int8)
+            ringed = True
+        ax.text(i, max(r.fp32, r.int8) + 0.12, f"{r.fp32:.1f} · {r.int8:.1f}", ha="center", fontsize=8.5)
+    ax.set_xticks(range(len(rows)))
+    ax.set_xticklabels([tick.get(r.kernels, f"{r.kernels.removeprefix('kblocks')}\n{twos(r.kernels)}/13 convs 2×2") for r in rows], fontsize=9)
+    ax.set_ylabel("Top-1 (%)")
+    ax.margins(x=0.08, y=0.12)
+    from scripts.phase11.factor_effects import design_cells  # imported here: factor_effects imports this module
+    c = design_cells()
+    pending = [k.removeprefix("kblocks") for k in sorted(set(c[c.family == "vgg16"].kernels.dropna()))
+               if k.startswith("kblocks") and k not in blocks]
+    handles = [Line2D([], [], marker="o", color=TEXT_SECONDARY, ls="", ms=8, label="FP32"),
+               Line2D([], [], marker="D", mfc="white", mec=TEXT_SECONDARY, ls="", ms=8, label="INT8"),
+               Line2D([], [], color=KCOLOR["k3x3"], ls="--", label="3×3 em todos os blocos"),
+               Line2D([], [], color=KCOLOR["k2x2"], ls="--", label="2×2 em todos os blocos")]
+    if pd.notna(band["fp32"]):
+        handles.append(Patch(color=GRID, alpha=0.6, label=f"ruído entre seeds em torno do 3×3 (±{band['fp32']:.1f} pp FP32, {src})"))
+    fig.legend(handles=handles + ([early_handle("ring")] if ringed else []), loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=3, fontsize=9)
+    fig.suptitle("Em que bloco da VGG16 o kernel 2×2 custa? Um kernel por bloco (VGG16 + BN + GAP, blocos de 2, 2, 3, 3, 3 convs)\n"
+                 + note + (f"\nainda na fila: {', '.join(pending)}" if pending else ""), fontsize=11)
+    fig.tight_layout()
+    savefig(fig, "24_vgg_kernel_blocks.png", figs)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--archive", action="store_true", help="draw the superseded AdamW-recipe runs into the preview dir")
@@ -618,6 +675,8 @@ def main(argv=None):
     curves_note = note if archive else "seed 42 · curvas no split de validação (10% do train), não no test set"
     fig_curves(df, figs, curves_note)
     fig_qat_curves(df, figs, curves_note)
+    if not archive:
+        fig_kblocks(frame(everything=True), figs, note, bands)
 
 
 if __name__ == "__main__":
