@@ -32,7 +32,7 @@ from matplotlib.patches import Patch
 from configs.loader import load_config
 from ml.plotting import AMBER, BLUE, GREEN, NEUTRAL, PURPLE, RED, TEXT_PRIMARY, TEXT_SECONDARY, apply_report_style, shade
 from scripts.phase11.analyze_geometry import (ARCHIVE, BASE_KEY, BASE_LABEL, EARLY_LABEL, FIGS, LOG_EPOCH, REFERENCE_REGIME, ROOT,
-                                              RUNS, band_for, early_handle, early_ring, load, noise_band, noise_bands,
+                                              RUNS, band_for, early_handle, early_ring, healthy_run, load, noise_band, noise_bands,
                                               reference_lines, savefig)
 
 PREVIEW = ROOT / "results/archive_adamw_recipe/figures_generated/phase_11_preview"
@@ -291,7 +291,8 @@ def fig_grid(df, figs, note, bands):
                       f"cinza = FP32 dentro do ruído entre seeds ({btxt(braw[1])} com BN, {btxt(braw[0])} sem BN)", fontsize=10)
     b = baseline(df)
     fig.suptitle("Fatorial principal: kernel × cabeça × BatchNorm no layout 64px (conv1 stride 2, 2 max-pools 2×2, mapa 8×8)\n" + note
-                 + (f"\npara comparar, o AlexNet original do zero (layout original, FC + Dropout, sem BN): FP32 {b.fp32:.1f} · INT8 {b.int8:.1f}"
+                 + (f"\npara comparar, o AlexNet sem adaptar (mapa 1×1, FC + Dropout, sem BN): FP32 {b.fp32:.1f} · INT8 {b.int8:.1f}"
+                    + (f"; o mesmo com entrada ampliada a 224 px (mapa 6×6): FP32 {h['fp32']:.1f} · INT8 {h['int8']:.1f}" if (h := healthy_run()) else "")
                     if b is not None else "")
                  + ("\n* = " + EARLY_LABEL if early.any() else ""), fontsize=11)
     fig.tight_layout()
@@ -324,6 +325,7 @@ def fig_geometry(df, figs, note, pending=True):
         ax.set_xticklabels([GEOMS[g] for g in xs], fontsize=9)
         ax.set_title({"fp32": "FP32", "int8": "INT8"}[m], fontsize=10)
     axes[0].set_ylabel("Top-1 (%)")
+    axes[0].set_ylim(top=axes[0].get_ylim()[1] + 2)  # room for the healthy-map reference's label above its line (sharey)
     missing = {}
     if pending:
         from scripts.phase11.factor_effects import design_cells  # imported here: factor_effects imports this module
@@ -489,7 +491,7 @@ def fig_latency(df, figs, note):
                + [Line2D([], [], marker=m, color=TEXT_SECONDARY, ls="", ms=8, label=HLABEL[h]) for h, m in HMARK.items() if h in set(d.hk)]
                + ([VGG_HANDLE] if (d.family == "vgg16").any() else [])
                + ([BASE_HANDLE, Line2D([], [], ls="--", color=TEXT_PRIMARY, lw=1.2,
-                                       label="tempo se crescesse junto com os MACs, a partir do AlexNet original")] if b is not None else []))
+                                       label="tempo se crescesse junto com os MACs, a partir do AlexNet sem adaptar")] if b is not None else []))
     fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=4, fontsize=9)
     fig.suptitle("A latência acompanha os MACs? Cada ponto é uma rede; acima da linha tracejada = mais lenta por MAC que o AlexNet "
                  "original, abaixo = mais rápida\n" + note + f" · {len(d)} redes medidas em {ref}"
@@ -544,7 +546,7 @@ def fig_curves(df, figs, note):
         ax.set_ylabel("Top-1 (%)")
     # one legend for the four panels (it was repeated in each)
     fig.legend(handles=legend_kernels(shown)
-               + ([Line2D([], [], color="k", lw=1.2, label=f"{BASE_LABEL}, layout original (validação)")] if cb is not None else [])
+               + ([Line2D([], [], color="k", lw=1.2, label=f"{BASE_LABEL} (validação)")] if cb is not None else [])
                + [Line2D([], [], color=TEXT_SECONDARY, lw=1.6, label="validação (split 90/10)"),
                   Line2D([], [], color=TEXT_SECONDARY, lw=0.8, ls="--", label="treino (com augmentation)"),
                   Line2D([], [], marker="D", color=TEXT_SECONDARY, ls="", ms=7, label="época escolhida: a melhor na validação, de onde o QAT parte")],

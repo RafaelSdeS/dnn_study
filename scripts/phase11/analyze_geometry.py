@@ -9,7 +9,8 @@ Runs are picked by their factors (ml/model_registrations.py:CELL_FACTORS, via de
 
 Figure vocabulary (every Phase 11 figure): "layout original" = torchvision's AlexNet geometry (conv1 stride 4, three
 3x3/2 max-pools -> 1x1 map before the classifier at 64x64); "layout 64px" = the adapted one (conv1 stride 2, two 2x2
-max-pools -> 8x8 map). Baseline = BASE_KEY, the original AlexNet trained from scratch.
+max-pools -> 8x8 map). Baseline = BASE_KEY, torchvision's AlexNet unadapted (1x1 map) trained from scratch; beside it
+HEALTHY_KEY, the same net at a 6x6 map (reference_lines).
 
     python -m scripts.phase11.analyze_geometry
 """
@@ -37,8 +38,13 @@ FIGS = ROOT / "results/figures_generated/phase_11_kernel_size_comparison"
 RUNS = (ROOT / "outputs/pcad", ROOT / "outputs/local")  # every runtime a run can come from (CLAUDE.md "Layout")
 ARCHIVE = RUNS[0] / "archive_adamw_recipe"  # the superseded AdamW-recipe runs, same phase_11_*/<model>/results layout
 
-BASE_KEY = "alexnet_k11-5-3_stride4_3pool3x3_map1_fcdrop_nobn"  # the original AlexNet (torchvision layout), from scratch
-BASE_LABEL = "AlexNet original (do zero)"
+BASE_KEY = "alexnet_k11-5-3_stride4_3pool3x3_map1_fcdrop_nobn"  # torchvision's AlexNet, unadapted (1x1 map at 64 px), from scratch
+BASE_LABEL = "AlexNet torchvision sem adaptar (mapa 1×1)"
+# The same net at the 6x6 map it was designed for (Tiny ImageNet enlarged to 224, phase_11_input224): the AlexNet reference
+# at a healthy map, drawn beside BASE_KEY wherever that one is a line -- BASE_KEY's 35.5% is the 1x1 map's, not AlexNet's
+# (docs/logs/PHASE11_LOG.md "Progress 2026-10-19").
+HEALTHY_KEY = "alexnet_k11-5-3_stride4_3pool3x3_map6_fcdrop_nobn_in224"
+HEALTHY_LABEL = "AlexNet torchvision com entrada\nampliada a 224 px (mapa 6×6)"
 # the other families' own reference nets, for their rows of the factor figures (figure 03 draws VGG_BASE too)
 VGG_BASE = ("vgg16_k3x3_stride1_5pool2x2_map2_fcdrop_bn", "VGG16 original (3×3)")
 RESNET_BASE = ("resnet18_k7-3_stride2_1pool3x3_map2_gap_bn", "ResNet-18 original (do zero)")
@@ -191,20 +197,38 @@ def precision_handles(color=TEXT_SECONDARY):
     return [Patch(facecolor=color, label="barra cheia = FP32"), Patch(facecolor=color, alpha=0.45, label="barra clara ao lado = INT8")]
 
 
+def healthy_run():
+    """HEALTHY_KEY's FP32 / INT8 test top-1 (seed 42, current quant protocol), None until that run has finished. It is
+    outside core() (input_size 224), so its summary is read directly."""
+    from ml.quantization import QUANT_PROTOCOL
+
+    for root in RUNS:
+        p = root / "phase_11_input224" / HEALTHY_KEY / "results" / f"{HEALTHY_KEY}_summary.json"
+        if p.exists():
+            d = json.loads(p.read_text())
+            if d.get("quant_protocol") == QUANT_PROTOCOL:
+                return {"fp32": d["test_fp32_top1"], "int8": d["test_int8_top1"]}
+
+
 def reference_lines(ax, df, key=BASE_KEY, label=BASE_LABEL, stage="fp32", text="right"):
     """One dashed line at the baseline run's top-1 (stage), named on the plot with both its numbers -- its FP32 and
-    INT8 sit ~0.2 pp apart, two lines overlapped. text: "right" = outside the axes (bar figures: bars cover the
-    inside), "left" = inside, above the line, None = line only (a middle panel). Nothing until the baseline has run."""
+    INT8 sit ~0.2 pp apart, two lines overlapped. For BASE_KEY a dotted line beside it at HEALTHY_KEY's (the same net at
+    a healthy map), once that run has finished. text: "right" = outside the axes (bar figures: bars cover the inside),
+    "left" = inside, above the line, None = line only (a middle panel). Nothing until the baseline has run."""
     r = df[(df.key == key) & (df.seed == 42)]
     if r.empty or pd.isna(r.iloc[0][stage]):
         return
-    r = r.iloc[0]
-    ax.axhline(r[stage], color=TEXT_PRIMARY, ls="--", lw=1.3, zorder=4)
-    if text:
-        out = text == "right"
-        ax.text(1.01 if out else 0.01, r[stage], f"{label}\n{r.fp32:.1f}% FP32 · {r.int8:.1f}% INT8",
-                transform=ax.get_yaxis_transform(), ha="left", va="center" if out else "bottom", fontsize=8.5, clip_on=False,
-                zorder=6, bbox=dict(facecolor="white", edgecolor="none", alpha=0.85, pad=0.5))
+    lines = [(r.iloc[0], label, "--")]
+    healthy = healthy_run() if key == BASE_KEY else None
+    if healthy:
+        lines.append((healthy, HEALTHY_LABEL, ":"))
+    for r, name, ls in lines:
+        ax.axhline(r[stage], color=TEXT_PRIMARY, ls=ls, lw=1.3, zorder=4)
+        if text:
+            out = text == "right"
+            ax.text(1.01 if out else 0.01, r[stage], f"{name}\n{r['fp32']:.1f}% FP32 · {r['int8']:.1f}% INT8",
+                    transform=ax.get_yaxis_transform(), ha="left", va="center" if out else "bottom", fontsize=8.5, clip_on=False,
+                    zorder=6, bbox=dict(facecolor="white", edgecolor="none", alpha=0.85, pad=0.5))
 
 
 def main_grid_table(df):
@@ -254,7 +278,7 @@ def fig_convert(df):
         ax.axvspan(-0.5, 0.5, color="#e6e6e6", zorder=0)  # the baseline's bar, to compare the others against
     ax.margins(y=0.1)  # headroom for the BN labels above the tallest bar
     ax.set_xticks(range(len(d)))
-    ax.set_xticklabels(["AlexNet original\n(baseline)" if r.key == BASE_KEY else cell_label(r, skip=("bn",)) for r in d.itertuples()],
+    ax.set_xticklabels(["AlexNet sem adaptar\n(baseline)" if r.key == BASE_KEY else cell_label(r, skip=("bn",)) for r in d.itertuples()],
                        rotation=40, ha="right", fontsize=9)
     ax.set_ylabel("INT8 − FP32 (pp; negativo = perde no INT8)")
     ax.set_title("De onde vem a diferença INT8 − FP32: do treino QAT ou da conversão para INT8 real? (seed 42)\n"

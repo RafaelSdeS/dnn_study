@@ -221,7 +221,7 @@ def fig_factor(t, df, factor):
         return
     rows = family_rows(g)
     width = max(len(chunk) for chunk, _ in rows)
-    fig, axes = plt.subplots(len(rows), 1, figsize=(max(11.0, 2.5 * width + 1.5), 5.2 * len(rows) + 1.2), squeeze=False,
+    fig, axes = plt.subplots(len(rows), 1, figsize=(max(13.0, 2.5 * width + 1.5), 5.2 * len(rows) + 1.2), squeeze=False,
                              sharey=True, layout="constrained")
     w = 0.19
     value = dict(ha="center", va="bottom", fontsize=7.5, zorder=6, bbox=dict(facecolor="white", edgecolor="none", pad=0.3))
