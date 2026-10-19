@@ -1771,3 +1771,21 @@ into each other once the 2x2 stacked cell landed, `group_ticks` now wraps labels
 2026-10-17 note said "when their runs land"), and `design_figures.core()` keeps them out of every existing figure and of
 `factor_effects`' contrasts, though the contrasts themselves are defined (`PAIRS`' "Entrada 64 -> 224 px", one `kblocks`
 pair each). They get figures once more of the 18 runs are in.
+
+**Baseline reference lines (2026-10-19).** The dashed line every AlexNet figure drew, "AlexNet original (do zero)" at 35.5
+/ 35.7 %, is torchvision's AlexNet with nothing adapted to 64 px, and 35.5 is the 1x1 map's number, not AlexNet's. The run
+is converged and not a training fault: validation sits at 34-36 % from epoch ~100 while train accuracy climbs 40.8 ->
+70.4 -> 94.7 % (epochs 100 / 250 / 500), i.e. it memorises (57.8M parameters, 90k images, no BN). The same net, kernels,
+head and recipe reach 44.0 at the 64px layout (8x8 map, train 98.2 %) and 49.5 / 49.7 with the input enlarged to 224 (6x6
+map, train 98.5 %): the 1x1 map costs 8.5-14 pp on its own, the "geometry is worth ~17 pp" of 2026-09-24. Read against 35.5,
+nearly every adapted net "beats AlexNet" by 8-23 pp, which is the geometry and says nothing about kernels. Changes:
+`BASE_LABEL` is now "AlexNet torchvision sem adaptar (mapa 1x1)" (the run itself is unchanged), and
+`analyze_geometry.reference_lines` draws a second, dotted line beside it at `HEALTHY_KEY` (the 224 run: FP32 and INT8 agree
+within 0.2 pp, `best_ep` 455 -- the 64px-layout twin's INT8 47.7 is QAT's extra training, so it makes a worse reference),
+labelled "AlexNet torchvision com entrada ampliada a 224 px (mapa 6x6)". It is drawn in the AlexNet rows of figures 01, 02, 04-10 and 15
+(VGG and ResNet rows keep their own single reference), named in figure 14's title, and read straight from the run's summary
+since the 224 block is outside `core()`. Kernel contrasts are unaffected: their reference was already the 11-5-3-3-3 of the
+same cell. Caveat: the 224 line is the 64px images enlarged, no new information, so it is "AlexNet at its design geometry",
+not "AlexNet on 224 px images". Figure 22 (receptive fields) was not redrawn -- it needs the FP32 checkpoints, which only PCAD
+holds -- and keeps the old label until it is. Figure 15 gains 2 pp of headroom at the top for the new label. The factor figures (04-10) are at least 13 in wide now (11 before):
+the longer label outside the axes squeezed figure 10's three groups until their tick labels ran into each other.

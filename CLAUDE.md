@@ -238,7 +238,10 @@ scripts/                  # CLI entry points (used instead of notebooks for PCAD
   phase11/                 # `python -m scripts.phase11.<name>`
     # The 22 PNGs in results/figures_generated/phase_11_kernel_size_comparison/ (01-22, renumbered without gaps 2026-10-14;
     # rewritten 2026-10-04 for the 76-run design): runs are picked by their factors (CELL_FACTORS, via design_figures.frame),
-    # never by name, each figure with the original AlexNet trained from scratch as a baseline. Names say "layout original"
+    # never by name, each AlexNet figure with two reference lines (analyze_geometry.reference_lines): torchvision's AlexNet
+    # unadapted trained from scratch (BASE_KEY, 1x1 map, 35.5%: dashed) and the same net at the 6x6 map it was designed for
+    # (HEALTHY_KEY = phase_11_input224's k11-5-3, 49.5%: dotted) -- 35.5 is the 1x1 map's, not AlexNet's (PHASE11_LOG "Progress
+    # 2026-10-19"); a kernel contrast's own reference is always the 11-5-3-3-3 of the same cell. Names say "layout original"
     # (torchvision's stride-4/three 3x3 pools, 1x1 map at 64px) vs "layout 64px" (stride 2, two 2x2 pools, 8x8 map). Every
     # figure states its arithmetic and which side is better: B - A for an A -> B contrast, INT8 - FP32 for quantization,
     # negative = loses. tests/test_phase11_figures.py renders all of them on a fake run tree (whole design and the 5 pilot
