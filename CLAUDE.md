@@ -237,7 +237,8 @@ scripts/                  # CLI entry points (used instead of notebooks for PCAD
     prune_channels.py      # Task 2: structured (channel) pruning CLI;
                            #   --finetune-epochs fine-tunes the pruned model then runs it through QAT->INT8
   phase11/                 # `python -m scripts.phase11.<name>`
-    # The 24 PNGs in results/figures_generated/phase_11_kernel_size_comparison/ (01-22 renumbered without gaps 2026-10-14, 23-24 added 2026-10-19;
+    # The 25 PNGs in results/figures_generated/phase_11_kernel_size_comparison/ (01-22 renumbered without gaps 2026-10-14, 23-24 added 2026-10-19,
+    # 25 on 2026-10-20 with a readability pass: PHASE11_LOG "Figures made lighter";
     # rewritten 2026-10-04 for the 76-run design): runs are picked by their factors (CELL_FACTORS, via design_figures.frame),
     # never by name, each AlexNet figure with two reference lines (analyze_geometry.reference_lines): torchvision's AlexNet
     # unadapted trained from scratch (BASE_KEY, 1x1 map, 35.5%: dashed) and the same net at the 6x6 map it was designed for
@@ -252,14 +253,15 @@ scripts/                  # CLI entry points (used instead of notebooks for PCAD
     # (PHASE11_LOG "Early best FP32 epoch", 2026-10-13); kept in every figure, never dropped.
     plot_kernel_comparison.py  # 01-03 kernel per layout/head/BN (AlexNet original, 64px; VGG16)
     factor_effects.py          # 04-10 and 23 (input 64 -> 224 px) one figure per factor over every matched pair (+ FAMILY_CONTRASTS),
-                               #   11 every matched pair per contrast with the seed noise band, 21 critical-difference
+                               #   11 every matched pair per contrast, FP32 and INT8 (hollow = inside its seed band), 21 critical-difference
                                #   diagram of the 4 kernels' mean ranks (Friedman + Nemenyi, Demšar 2006) + the per-configuration ranks it averages
     analyze_geometry.py        # 12 QAT-vs-conversion INT8 change + the shared loader/plot helpers + main_grid/kernel_geometry tables
                                #   + all_runs.csv (every run, with host) and design_status.csv (every planned run of the yamls:
                                #   done where / pending). Figures 01-22 read design_figures.core() = the 64 px design without
                                #   phase_11_input224 and phase_11_vgg_kernel_blocks; only 23 (factor_effects' input-size contrasts,
-                               #   read through frame(everything=True)) and 24 (design_figures.fig_kblocks) read them
-    design_figures.py          # 13 Pareto accuracy x cost, 14 kernel x head x BN grid, 15 kernel x geometry, 16 INT8
+                               #   read through frame(everything=True)), 24 (design_figures.fig_kblocks) and 25 (every net: size
+                               #   does not depend on the input) read them
+    design_figures.py          # 13 accuracy x MACs and 25 accuracy x model size, FP32 and INT8 panels (Pareto fronts), 14 kernel x head x BN grid, 15 kernel x geometry, 16 INT8
                                #   robustness, 17 latency vs MACs, 18 FP32 training curves, 19 QAT curves, 20 INT8
                                #   right <-> wrong flips from the test logits (Hooker et al. 2019), 24 VGG16 kernel blocks against its all-3x3 / all-2x2
                                #   nets (dot plot; patterns still queued are named in its title) (18/19 need

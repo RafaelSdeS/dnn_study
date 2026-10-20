@@ -8,7 +8,7 @@ delta inside it is not distinguishable from re-drawing the seed). "layout origin
 scripts/phase11/analyze_geometry.py's docstring.
 
     04..10_*.png                    one figure per factor (absolute top-1 of A and B, baseline line)
-    11_factorial_matched_pairs.png  every matched pair, per contrast: the deltas, their median and its bootstrap CI
+    11_factorial_matched_pairs.png  every matched pair, per contrast: the FP32 / INT8 deltas, their median and its bootstrap CI
     21_kernel_rank_critical_difference.png  the 4 kernels' mean rank over the AlexNet configurations that have all four,
                                             beside the table of positions per configuration it averages
 
@@ -31,8 +31,8 @@ from matplotlib.patches import Patch
 from configs.loader import load_config
 from ml.plotting import AMBER, BLUE, GRID, NEUTRAL, RED, TEXT_PRIMARY, apply_report_style
 from ml.reporting import holm, mcnemar_p, wilson_ci
-from scripts.phase11.analyze_geometry import (BASE_KEY, BASE_LABEL, LAYOUTS, REGIME_LABEL, RESNET_BASE, TABLES, VGG_BASE, band_for,
-                                              early_handle, early_ring, int8_bar, noise_bands, pair_band, precision_handles,
+from scripts.phase11.analyze_geometry import (BASE_KEY, BASE_LABEL, EARLY_GRAY, EARLY_LABEL, LAYOUTS, REGIME_LABEL, RESNET_BASE, TABLES,
+                                              VGG_BASE, band_for, early_handle, int8_bar, noise_bands, pair_band, precision_handles,
                                               reference_lines, savefig)
 from scripts.phase11.design_figures import K4, KCOLOR, KLABEL, cell_label, frame
 
@@ -238,7 +238,6 @@ def fig_factor(t, df, factor):
         ax.set_xticks(range(len(chunk)))
         ax.set_xticklabels([wrap_dots(r.contrast)
                             + f"\nB − A: FP32 {r.d_fp32:+.1f}" + (f" · INT8 {r.d_int8:+.1f}" if pd.notna(r.d_int8) else "") + " pp"
-                            + f"\nparâm. {r.params_change_pct:+.0f}% · MACs {r.macs_change_pct:+.0f}%"
                             + (f"\nmédia de {r.n_seeds} seeds" if r.n_seeds > 1 else "") for r in chunk.itertuples()], fontsize=8.5)
         ax.set_xlim(-0.6, width - 0.4)  # same bar width in every row
         ax.set_ylabel("Top-1 (%)")
@@ -309,18 +308,13 @@ def summarize_pairs(pairs):
     return pd.DataFrame(rows)
 
 
-def fig_matched_pairs(pairs, summary, n_cells, bands):
-    titles = {"fp32": "Top-1 FP32: B − A (pp)", "int8": "Top-1 INT8: B − A (pp)", "dqat": "Perda no INT8 (INT8 − FP32): B − A (pp)"}
-    xlabels = {"fp32": "← A melhor   ·   B melhor →", "int8": "← A melhor   ·   B melhor →",
-               "dqat": "← B perde mais no INT8   ·   B perde menos →"}
-    fig, axes = plt.subplots(1, 3, figsize=(15, 0.55 * len(summary) + 3), sharey=True)
+def fig_matched_pairs(pairs, summary, n_cells):
+    """FP32 and INT8 only: the INT8 - FP32 change of each net is figures 12/16's. Each pair is judged by its own two cells'
+    seed band (band_<m>: hollow = inside it), so no grey spans -- three regimes' spans overlapped into an unreadable
+    background. An INT8 pair with an early-best cell is grey (QAT's extra training, not quantization)."""
+    fig, axes = plt.subplots(1, 2, figsize=(12.5, 0.55 * len(summary) + 2.5), sharey=True)
     y = {c: i for i, c in enumerate(summary.contrast[::-1])}
-    # one grey span per regime floor, widest (lightest) first; each pair is judged by its own cells' band (band_<m>)
-    floors = sorted(((r, b) for r, b in bands.items() if np.isfinite(b["fp32"])), key=lambda rb: -rb[1]["fp32"])
-    for ax, m in zip(axes, METRICS):
-        for n, (_, b) in enumerate(floors):
-            if m in b and np.isfinite(b[m]):
-                ax.axvspan(-b[m], b[m], color="#d0d0d0", alpha=0.35 + 0.25 * n / max(len(floors) - 1, 1), zorder=0)
+    for ax, m in zip(axes, ["fp32", "int8"]):
         ax.axvline(0, color="k", lw=0.8)
         for s in summary.itertuples():
             v = pairs[pairs.contrast == s.contrast][m].dropna()
@@ -328,34 +322,27 @@ def fig_matched_pairs(pairs, summary, n_cells, bands):
                 continue
             yy = y[s.contrast] + np.random.default_rng(0).uniform(-0.18, 0.18, len(v))
             inside = (v.abs() < pairs.loc[v.index, f"band_{m}"]).to_numpy() if f"band_{m}" in pairs else np.zeros(len(v), bool)
-            ax.scatter(v[~inside], yy[~inside], s=14, alpha=0.8, color=BLUE)
-            ax.scatter(v[inside], yy[inside], s=10, alpha=0.7, facecolors="none", edgecolors=BLUE, lw=0.8)
-            e = pairs.loc[v.index, "early"].to_numpy()
-            if m != "fp32" and e.any():  # INT8 and ΔQAT of a pair with an early-best cell
-                early_ring(ax, v[e], yy[e], s=45)
+            c = np.where(pairs.loc[v.index, "early"].to_numpy() & (m == "int8"), EARLY_GRAY, BLUE)
+            ax.scatter(v[~inside], yy[~inside], s=16, color=list(c[~inside]))
+            ax.scatter(v[inside], yy[inside], s=12, facecolors="none", edgecolors=list(c[inside]), lw=0.9)
             ax.scatter(v.median(), y[s.contrast], marker="D", s=50, zorder=3, color=RED)
             ax.hlines(y[s.contrast], *bootstrap_median_ci(v), color=RED, lw=2, zorder=2)
-            ax.text(1.01, y[s.contrast], f"{int((v > 0).sum())}/{len(v)}", transform=ax.get_yaxis_transform(), va="center", fontsize=8)
-        ax.set_title(titles[m], fontsize=10)
-        ax.set_xlabel(xlabels[m], fontsize=9)
+        ax.set_title(f"Top-1 {m.upper()}: B − A (pp)", fontsize=10)
+        ax.set_xlabel("← A melhor   ·   B melhor →", fontsize=9)
     axes[0].text(0, 1.0, "fator trocado: A → B", transform=axes[0].transAxes, ha="right", va="bottom", fontsize=9, weight="bold")
+    n = dict(zip(summary.contrast, summary.n_pairs))
     axes[0].set_yticks(list(y.values()))
-    axes[0].set_yticklabels(list(y.keys()), fontsize=9)
-    handles = [Line2D([], [], marker="o", color=BLUE, ls="", ms=4, alpha=0.8, label="um par de redes iguais em tudo menos no fator (valor = B − A)"),
-               Line2D([], [], marker="D", color=RED, ls="-", ms=7, label="mediana dos pares (barra: IC 95% bootstrap)"),
-               Line2D([], [], color="k", lw=0.8, label="linha 0 = A e B iguais (sem efeito)"),
-               Line2D([], [], ls="", label="k/n à direita = em quantos pares B ficou acima de A")]
-    for r, b in floors:
-        handles.append(Patch(color="#d0d0d0", label=f"ruído entre seeds, {REGIME_LABEL.get(r, r)}: ±{b['fp32']:.1f} pp FP32"
-                             + (f", ±{b['int8']:.1f} pp INT8" if np.isfinite(b["int8"]) else "")))
-    if floors:
-        handles.append(Line2D([], [], marker="o", ls="", ms=4, mfc="none", color=BLUE,
-                              label="par dentro do ruído das suas duas redes (vazado)"))
+    axes[0].set_yticklabels([f"{c} ({n[c]} {'par' if n[c] == 1 else 'pares'})" for c in y], fontsize=9)
+    handles = [Line2D([], [], marker="o", color=BLUE, ls="", ms=5, label="um par de redes iguais em tudo menos no fator (B − A)"),
+               Line2D([], [], marker="D", color=RED, ls="-", ms=7, label="mediana dos pares (barra = IC 95%)")]
+    if pairs.filter(like="band_").notna().any().any():
+        handles.append(Line2D([], [], marker="o", ls="", ms=5, mfc="none", mec=BLUE,
+                              label="vazado = diferença menor que o ruído entre seeds das duas redes"))
     if pairs.early.any():
-        handles.append(early_handle("ring"))
+        handles.append(Line2D([], [], marker="o", color=EARLY_GRAY, ls="", ms=5, label="cinza = " + EARLY_LABEL))
     fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0), ncol=2, fontsize=9)
-    fig.suptitle("Efeito de trocar um fator de cada vez (A → B, todo o resto igual): cada ponto azul é um par de redes e "
-                 f"o valor é B − A; 0 = sem efeito\nseed 42 · {n_cells} redes do desenho treinadas até agora", fontsize=11)
+    fig.suptitle("Efeito de trocar um fator de cada vez (A → B, todo o resto igual)\n"
+                 f"cada ponto = um par de redes, valor = B − A · seed 42 · {n_cells} redes treinadas até agora", fontsize=11)
     fig.tight_layout(rect=(0, 0, 1, 0.95))
     savefig(fig, "11_factorial_matched_pairs.png")
 
@@ -481,7 +468,7 @@ def main():
     cells.to_csv(TABLES / "factorial_cells.csv", index=False)
     pairs.to_csv(TABLES / "factorial_pairs.csv", index=False)
     summary.to_csv(TABLES / "factorial_pair_summary.csv", index=False)
-    fig_matched_pairs(pairs, summary, len(cells), bands)
+    fig_matched_pairs(pairs, summary, len(cells))
     print(f"\n{len(cells)} factorial cells trained (seed 42)")
     print(summary[["contrast", "n_pairs", "fp32_median", "fp32_n_positive", "int8_n", "int8_median", "dqat_median", "dqat_n_positive",
                    "macs_pct"]].round(2).to_string(index=False))

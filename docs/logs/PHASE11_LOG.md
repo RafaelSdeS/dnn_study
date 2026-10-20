@@ -1808,3 +1808,88 @@ the longer label outside the axes squeezed figure 10's three groups until their 
   and `git checkout` restored it); the 7 checkpoints were fetched from PCAD, used and deleted.
 - Backup: Hestia's `~/dnn_study_backup` now has the 105 files (15.5 GB) of runs finished after 2026-10-16 (size-checked against PCAD: 0
   missing, 0 different); the one running seed-44 cell was left out on purpose (its checkpoint changes under `--size-only`).
+
+## Progress 2026-10-20: 75 of 120 runs, the no-BN floor closed, early best epochs outside the floor cells
+
+**Status.** 75 of 120 done (`design_status.csv`). The 4 nyx runs finished since 10-19 (`vgg16_kblocks2-2-2-3-3`, the seed 43
+3x3 / 2x2 GAP pair, seed 44 3x3 GAP) were rsynced nyx -> PCAD whole (84 files, 2.2 GB; an `rsync -c` dry run afterwards: 0
+differences) and to the laptop without `*.pth` / `*_best.pth.gz`, like every other run here; PCAD's seed 44 `kalt3-2` FC +
+Dropout no-BN run came down too. The 45 left: PCAD 1 running (`large_stem` k11-3 GAP + BN, beagle), 7 submitted, 28 in the
+feeder's file (16 `families`, 8 `resnet_kernel_stem`, the 4 FC + Dropout VGG seeds); nyx 1 running (seed 44 2x2 GAP), 8 queued (5 `kblocks`, 3
+`input224`). PCAD moves ~3 runs a day: tupi5 is down and tupi1-4/6 are held by other users' jobs.
+
+**Audit of the 75 (nothing found).** One training config, one QAT config, one data config (the 2 `input224` runs add
+`upscale_to: 224`; the 3 runs saved before that field carry it as null); the seed is the experiment's in every run;
+`git_dirty` false and `quant_protocol` 2026-10-07 everywhere; 500 / 50 epochs used; `int8_kernel_max_err_steps` <= 1;
+`agreement_qat_int8` >= 0.98; |INT8 - QAT| <= 0.4 pp; best val - test FP32 between -1.0 and +1.3 pp; no NaN in any log.
+The 7 commits the runs trained on differ, from 49a66f5 to a216556, in `ml/` and `scripts/train.py` only by `upscale_to` and
+bookkeeping (CSV rows, epoch counts): no change to the training of an existing cell. The 4 runs with two earlier jobs in
+`provenance_history` are the pilots (FP32 on beagle, QAT redone on d5c76e1, 2026-10-09/10); the 2x2 one trained on 8d7aca0,
+which already has C2sp. The seed 42 / 43 VGG GAP 3x3 runs land 0.02 pp apart (59.35 / 59.37), as do the 2x2 ones (56.84 /
+56.86): different runs (top-1 agreement 0.64, best epochs 472 / 482), a coincidence.
+
+**No-BN floor closed (FC + Dropout, 4 kernels x 3 seeds).** Seed 44 `kalt3-2` peaked late (best epoch 495): band +-0.80 pp
+FP32, **+-4.40 pp INT8** (+-3.7 with 11 runs on 10-19). Each kernel against 11-5-3-3-3 of the same seed (42 / 43 / 44):
+
+| | FP32 | INT8 |
+|---|---|---|
+| 3x3 | -0.83 / -1.25 / -1.62 | **-4.40 / -1.23 / +1.88** |
+| 2x2 | -4.71 / -3.88 / -4.91 | -5.05 / -4.48 / -0.97 |
+| alt 3-2 | -1.29 / -1.45 / -1.69 | -1.63 / -1.96 / -1.51 |
+
+The INT8 3x3 contrast changes sign with the seed: it follows which of the two nearly equal val peaks (epoch ~60 / ~460) each
+run picked. Alt 3-2 looks stable in INT8 only because both of its runs fell on the same side in every seed (early, early,
+late). In this regime the kernel effect is read in FP32 (stable within 0.8 pp, same sign in all 3 seeds) and the quantization
+cost as QAT -> INT8; a single-seed INT8 contrast of a no-BN cell under ~4.4 pp is not evidence either way.
+
+**Early best epochs outside the floor cells.** The 2026-10-13 entry expected the queued no-BN cells "may add cases"; they
+did, 20 runs marked now (`analyze_geometry` prints them):
+- *Torchvision layout (map 1x1), FC + Dropout, no BN* (`phase_11_dropout_pretraining`): 3x3, 2x2 and alt 3-2 peaked at epoch
+  110 / 165 / 135, the 11-5-3-3-3 baseline late. Here the early peak beat the late one by 0.7-1 pp (not the 0.05-0.5 pp of the
+  map-8 cells). Against the baseline, FP32 -3.95 / -7.65 / -3.86 pp, INT8 -0.60 / -5.27 / -1.94: in figure 01's INT8 bars
+  3x3 looks even with the original kernels, while FP32 puts it 4 pp behind.
+- *Pretrained cells, another shape.* Not two equal peaks: one early peak, and the run never gets back to it. Val peaks at epoch
+  11 (s2 map 8, 0-based) / 10 (`_in224`); the best val after epoch 200 is 4.4 / 1.3 pp lower. At lr 0.01 the pretrained
+  features are lost in the first epochs and the run continues like a scratch one; QAT (lr 1e-4) is what fine-tunes the
+  epoch-10/11 checkpoint, +5.0 / +6.7 pp. The pretraining gain therefore depends on the stage read: s2 map 8 +7.9 FP32 /
+  +9.2 INT8 (its scratch twin is early too), 224 px **+3.9 FP32 / +10.4 INT8**, map 1 +1.4 / +1.5 (both late). The 64 px map-1
+  pretrained twin peaked late (best epoch 469), so figure 23's pretrained 64 -> 224 pair is fair in FP32 (+16.6) and not in
+  INT8 (+22.9, hatched since 10-19). This is the measured size of the one-recipe limitation noted on 2026-10-17 (a fine-tuning
+  lr is outside the protocol); no change to the runs.
+
+**VGG16 floor (GAP + BN), 5 of 6 runs.** 3x3 59.35 / 59.37 / 59.09 (seeds 42 / 43 / 44), 2x2 56.84 / 56.86 (seed 44
+running): band +-0.31 pp FP32 / +-0.56 INT8 (`factor_effects`' `noise bands`), now figure 24's own band instead of AlexNet +
+BN's +-0.6 standing in. New pattern `kblocks2-2-2-3-3` (7/13 convs 2x2): 58.46 / 58.49. The 4 finished patterns sit 0.56-0.89
+pp under 3x3 in FP32, beyond VGG's band, at 22-35% of the 2.51 pp the all-2x2 net loses.
+
+**Figures.** `analyze_geometry`, `plot_kernel_comparison`, `factor_effects` and `design_figures` rerun on the 75 runs: 02, 03,
+11 and 24 changed (new runs and bands), plus `all_runs`, `convergence`, `design_status`, `factor_effects`, `factorial_pairs`
+and `main_grid` CSVs; 23 has no new pair; 22 not rerun (it needs the FP32 checkpoints, none of its runs changed).
+`tests/test_phase11_figures.py` passes (4 tests).
+
+## Figures made lighter, figure 18's train line, accuracy x size (2026-10-20)
+
+User request: every figure clear and self-explanatory; 11 was too heavy; is 18's "treino (com augmentation)" right; an
+accuracy x size plot. What changed, one place each:
+- *Early-best label* (`analyze_geometry.EARLY_LABEL`, every legend that has the mark): "INT8 inflado pelo QAT (melhor época FP32
+  antes de 80% do treino)" -- it was the longest line of nearly every legend.
+- *11* (`factor_effects.fig_matched_pairs`): FP32 and INT8 only -- the INT8 - FP32 panel is per net in 12 / 16; the 3 grey seed
+  spans (one per regime, overlaid) are gone, each pair is still judged by its own two cells' band (hollow = inside); the k/n
+  column moved into the CSV (`factorial_pair_summary.csv`, `*_n_positive`) and the row label says how many pairs; an INT8 pair
+  with an early-best cell is grey instead of ringed. Legend: 9 entries -> 4.
+- *13 / 25* (`design_figures.fig_pareto`, one figure per cost): 13 = top-1 INT8 x MACs, new 25 = top-1 x model size in two panels,
+  FP32 x FP32 MB and INT8 x INT8 MB (`analyze_geometry.load`'s new `fp32_eff_mb`; INT8 x size was 13's right panel, not found). No faint FP32 markers; the marker is the family (AlexNet / VGG16 / ResNet-18 / other), replacing
+  head-as-marker + a black VGG outline; the head stays in the front's key. Both state that the costs are the effective ones
+  (`int8_eff_mb`/`macs_eff_m`: without the FC weights that only multiply AdaptiveAvgPool copies). 17 uses the same markers.
+  25 draws every net, `frame(everything=True)`: the 224 px pretrained AlexNet (53.4 FP32 / 60.1 INT8, early best) was missing
+  from it under `core()`, though a net's size does not depend on its input; the VGG kernel-block patterns come in too (grey,
+  2 of them on the front: blocos 3-3-3-2-2 and 3-2-3-2-3). A pretrained net gets a black outline in 13 and 25.
+- *18*: the dashed line is `Trainer`'s `train_acc` -- the running mean over the epoch, in train mode, on the augmented batches,
+  so with Dropout on in the FC heads (`ml/trainer.py:_train_one_epoch`). "com augmentation" was right but incomplete: in the FC
+  + Dropout panels the train - val gap includes Dropout. Label now "treino: média da época, com augmentation (e Dropout ligado na
+  cabeça FC)".
+- *15*: the reference lines' labels sat on the kernels' lines inside the axes; now line only on FP32, labels outside on INT8.
+- *16*: single panel; the max / p99.9 scatter (a null result, Spearman ρ = -0.05, n = 36) is one sentence in its title.
+- *04-10, 23*: the "parâm. / MACs %" line left the tick labels (cost has 13 / 25).
+Unchanged: 01-03, 12, 14, 19-21, 24 (shorter early label only); 22 (needs the FP32 checkpoints). `tests/test_phase11_figures.py`
+expects 25 figures; passes.

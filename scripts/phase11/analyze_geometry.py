@@ -56,7 +56,7 @@ LAYOUTS = ("layout original = o do AlexNet torchvision: conv1 stride 4 + 3 max-p
 # effect (docs/logs/PHASE11_LOG.md "Early best FP32 epoch", 2026-10-13). The figures mark these runs; none is dropped.
 EARLY_FRAC = 0.8
 EARLY_GRAY = "#6b6b6b"
-EARLY_LABEL = "melhor época FP32 antes de 80% do treino: o ganho no INT8 é treino extra do QAT, não quantização"
+EARLY_LABEL = "INT8 inflado pelo QAT (melhor época FP32 antes de 80% do treino)"
 
 
 def load(*roots: Path) -> pd.DataFrame:
@@ -67,7 +67,7 @@ def load(*roots: Path) -> pd.DataFrame:
     *_test_logits.npz live (factor_effects' McNemar tests). roots default to RUNS (every runtime: a cell may have run on
     PCAD or the laptop, never on both); ARCHIVE reads the superseded runs.
     lat_* = forward latency per image at batch 1 (ms): FP32 on the training GPU and on CPU, INT8 on CPU.
-    params_eff_m/macs_eff_m/int8_eff_mb = the same costs without the FC-head weights that only multiply AdaptiveAvgPool
+    params_eff_m/macs_eff_m/int8_eff_mb/fp32_eff_mb = the same costs without the FC-head weights that only multiply AdaptiveAvgPool
     copies (replicated_weights): the cost axes of the figures; the as-built ones stay for the tables."""
     from ml.quantization import QUANT_PROTOCOL
 
@@ -101,6 +101,7 @@ def load(*roots: Path) -> pd.DataFrame:
     assert twice.empty, twice[["exp", "key", "results"]]
     rep = df.key.map(replicated_weights) / 1e6  # one int8 byte per weight; int8_mb is MiB (ml.reporting.disk_mb)
     df["params_eff_m"], df["macs_eff_m"], df["int8_eff_mb"] = df.params_m - rep, df.macs_m - rep, df.int8_mb - rep * 1e6 / 2**20
+    df["fp32_eff_mb"] = df.fp32_mb - 4 * rep * 1e6 / 2**20  # four bytes per FP32 weight
     df["drop_qat"] = df.fp32 - df.qat      # FP32 -> fake-quant (what QAT costs)
     df["drop_convert"] = df.qat - df.int8  # fake-quant -> real INT8 (what convert_to_int8 costs)
     df["drop_total"] = df.fp32 - df.int8

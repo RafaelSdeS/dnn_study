@@ -1,12 +1,13 @@
-"""Phase 11 figures 13-20 -- the design read through its factors (ml/model_registrations.py:CELL_FACTORS), not run names.
+"""Phase 11 figures 13-20, 24, 25 -- the design read through its factors (ml/model_registrations.py:CELL_FACTORS), not run names.
 Selecting by factor is what lets one file draw the live runs and, with --archive, the superseded AdamW-recipe runs
 (LEGACY maps their names onto the same factors) -- a preview of each figure's form, not its numbers: validation split,
 pre-fix INT8, latencies that still timed the DataLoader, and some only-approximate twins (marked †).
 
-    13_pareto_accuracy_cost.png     top-1 INT8 vs MACs and vs INT8 size; Pareto front labelled
+    13_pareto_accuracy_cost.png     top-1 INT8 vs MACs; Pareto front numbered, named beside the plot
+    25_accuracy_vs_size.png         the same against model size: FP32 top-1 x FP32 MB, INT8 top-1 x INT8 MB
     14_main_factorial_grid.png      kernel x {GAP, FC} x {no BN, BN} at the 64px layout, and the delta vs 11-5-3-3-3
     15_kernel_by_geometry.png       one line per kernel across the 4 geometries (FC + Dropout, no BN)
-    16_quantization_robustness.png  INT8 - FP32 per kernel / family, and vs each net's worst layer-input max/p99.9
+    16_quantization_robustness.png  INT8 - FP32 per kernel / family; its Spearman with the worst layer-input max/p99.9 in the title
     17_latency_vs_macs.png          batch-1 latency vs MACs on one machine, against the AlexNet original's ms per MAC
     18_training_curves.png          val/train top-1 per epoch at the 64px layout, {GAP, FC} x {no BN, BN}
     19_qat_curves.png               the 50 QAT epochs of the same nets: val top-1 with fake-quant, from the FP32 best to INT8
@@ -153,7 +154,8 @@ def cell_label(f, skip=()):
     tag = FAMILY_TAG.get(g("family"), "")
     geo = ("" if tag else f"{pn} pools {pk}×{pk}" if "stride" in skip else f"conv1 stride {s}" if "pooling" in skip
            else GEO_LABEL.get((s, pk, pn), f"conv1 s{s} · {pn} pools {pk}×{pk}"))
-    tags = [tag + ("" if "kernels" in skip else " " * bool(tag) + KLABEL[g("kernels")] + "†" * bool(g("approx", False))), geo,
+    k = g("kernels")  # a VGG kernel-block pattern (kblocks3-3-3-2-2) has no KLABEL entry: "blocos 3-3-3-2-2"
+    tags = [tag + ("" if "kernels" in skip else " " * bool(tag) + KLABEL.get(k, k.replace("kblocks", "blocos ")) + "†" * bool(g("approx", False))), geo,
             "" if "head" in skip else {"gap": "GAP", "fc": "FC"}[g("head")], "Dropout" * (bool(g("dropout")) and "dropout" not in skip),
             "" if "bn" in skip or tag else ("BN" if g("bn") else "sem BN"), "pré-treino" * (bool(g("pretrained")) and "pretrained" not in skip),
             "224 px" * bool(g("input_size") == 224 and "input_size" not in skip)]
@@ -193,52 +195,57 @@ def base_ring(ax, x, y):
 
 
 BASE_HANDLE = Line2D([], [], marker="o", mfc="none", mec="k", mew=1.5, ls="", ms=15, label=BASE_LABEL)
-VGG_HANDLE = Line2D([], [], marker="o", mfc="white", mec="k", mew=1.2, ls="", ms=8, label="contorno preto = VGG16")
 
 
-def vgg_edge(r):
-    """scatter() kwargs of figures 13/17: a VGG16 point gets a black outline, the AlexNet ones a thin white one."""
-    return dict(edgecolors="k", lw=1.2) if r.family == "vgg16" else dict(edgecolors="white", lw=0.5)
+FMARK = {"alexnet": "o", "vgg16": "s", "resnet18": "D", "família": "X"}  # figures 13/17/25: the marker is the family
+FLABEL = {"alexnet": "AlexNet", "vgg16": "VGG16", "resnet18": "ResNet-18", "família": "rede de compensação / outra família"}
+EFF_NOTE = "custo efetivo: sem os pesos da cabeça FC que só multiplicam as cópias repetidas pelo AdaptiveAvgPool"
 
 
-def fig_pareto(df, figs, note):
+def family_handles(d):
+    return [Line2D([], [], marker=m, color=TEXT_SECONDARY, ls="", ms=8, label=FLABEL[f]) for f, m in FMARK.items() if f in set(d.family)]
+
+
+def fig_pareto(df, figs, note, panels, name, question):
+    """Top-1 against one cost per panel, panels = [(accuracy column, cost column, x label)] (figure 13: INT8 x MACs, 25:
+    FP32 x FP32 size and INT8 x INT8 size): colour = kernel, marker = family. The fronts' nets are numbered (one numbering
+    for all panels) and named in a key beside the plot (names on the points overlapped)."""
     d = seed42(df).dropna(subset=["int8"])
-    costs = [("macs_eff_m", "MACs por imagem (milhões, escala log)"), ("int8_eff_mb", "Tamanho do modelo INT8 (MB, escala log)")]
-    # the front's nets get a number (both panels share it) and a key beside the plot: names on the points overlapped
-    on_front = np.logical_or.reduce([pareto_front(d[x], d.int8) for x, _ in costs])
-    num = {i: n + 1 for n, i in enumerate(d[on_front].sort_values("int8").index)}
-    fig, axes = plt.subplots(1, 2, figsize=(16, 7), sharey=True)
-    for ax, (x, xlabel) in zip(axes, costs):
+    fronts = [d[pareto_front(d[x], d[acc])].sort_values(x) for acc, x, _ in panels]
+    num = {i: n + 1 for n, i in enumerate(d.loc[pd.concat(fronts).index.unique()].sort_values("int8").index)}
+    fig, axes = plt.subplots(1, len(panels), figsize=(10 if len(panels) == 1 else 16, 7), sharey=True, squeeze=False)
+    for ax, (acc, x, xlabel), front in zip(axes[0], panels, fronts):
         for r in d.itertuples():
-            ax.scatter(getattr(r, x), r.fp32, marker=HMARK[r.hk], s=28, color=color(r), alpha=0.22, edgecolors="none", zorder=2)
-            ax.scatter(getattr(r, x), r.int8, marker=HMARK[r.hk], s=75, color=color(r), zorder=3, **vgg_edge(r))
-            if r.early_best:
+            ax.scatter(getattr(r, x), getattr(r, acc), marker=FMARK[r.family], s=75, color=color(r), zorder=3,
+                       **(dict(edgecolors="k", lw=1.3) if r.pretrained else dict(edgecolors="white", lw=0.5)))
+            if r.early_best and acc == "int8":  # the mark is about the INT8 number
                 early_ring(ax, getattr(r, x), r.int8)
-        front = d[pareto_front(d[x], d.int8)].sort_values(x)
-        ax.step(front[x], front.int8, where="post", color=TEXT_PRIMARY, lw=1, ls="--", zorder=1)
+        ax.step(front[x], front[acc], where="post", color=TEXT_PRIMARY, lw=1, ls="--", zorder=1)
         for r in front.itertuples():
             n = num[r.Index]  # odd left, even right: neighbours on the front don't print over each other
-            ax.annotate(str(n), (getattr(r, x), r.int8), xytext=(-5, 4) if n % 2 else (5, 4), ha="right" if n % 2 else "left",
-                        textcoords="offset points", fontsize=8, weight="bold", zorder=5)
+            ax.annotate(str(n), (getattr(r, x), getattr(r, acc)), xytext=(-5, 4) if n % 2 else (5, 4),
+                        ha="right" if n % 2 else "left", textcoords="offset points", fontsize=8, weight="bold", zorder=5)
         b = baseline(df)
         if b is not None:
-            base_ring(ax, b[x], b.int8)
+            base_ring(ax, b[x], b[acc])
         plain_log(ax, "x")
         ax.set_xlabel(xlabel)
-    axes[0].set_ylabel("Top-1 INT8 (%)")
+        if len(panels) > 1:
+            ax.set_title(acc.upper(), fontsize=10)
+    axes[0, 0].set_ylabel("Top-1 (%)" if len(panels) > 1 else f"Top-1 {panels[0][0].upper()} (%)")
     handles = (legend_kernels(d.kernels)
-               + [Line2D([], [], marker=m, color=TEXT_SECONDARY, ls="", ms=8, label=HLABEL[h]) for h, m in HMARK.items() if h in set(d.hk)]
-               + [Line2D([], [], marker="o", color=TEXT_SECONDARY, alpha=0.22, ls="", ms=6, label="marcador claro = FP32 da mesma rede"),
-                  VGG_HANDLE,
-                  Line2D([], [], color=TEXT_PRIMARY, ls="--", label="fronteira de Pareto (nenhuma rede é mais barata e melhor)"),
-                  BASE_HANDLE]
+               + ([Patch(color=NEUTRAL, label="um kernel por bloco (VGG16)")] if d.kernels.fillna("").str.startswith("kblocks").any() else [])
+               + family_handles(d)
+               + ([Line2D([], [], marker="o", color=TEXT_SECONDARY, mec="k", mew=1.3, ls="", ms=8, label="contorno preto = pré-treino ImageNet")]
+                  if d.pretrained.any() else [])
+               + [Line2D([], [], color=TEXT_PRIMARY, ls="--", label="fronteira: nenhuma rede é mais barata e melhor"), BASE_HANDLE]
                + ([early_handle("ring")] if d.early_best.any() else []))
-    fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=4, fontsize=9)
+    fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=3, fontsize=9)
     fig.legend(handles=[Line2D([], [], ls="", label=f"{n}  {short(d.loc[i])}") for i, n in num.items()], loc="center left",
                bbox_to_anchor=(1.0, 0.5), fontsize=8.5, handlelength=0, title="redes na fronteira (número no gráfico)", title_fontsize=9)
-    fig.suptitle("Acurácia × custo de todas as redes da Fase 11: as redes da fronteira são as que valem a pena\n" + note, fontsize=11)
+    fig.suptitle(f"{question}\n{note} · {EFF_NOTE}", fontsize=11)
     fig.tight_layout()
-    savefig(fig, "13_pareto_accuracy_cost.png", figs)
+    savefig(fig, name, figs)
 
 
 def fig_grid(df, figs, note, bands):
@@ -319,14 +326,13 @@ def fig_geometry(df, figs, note, pending=True):
                 if m == "int8" and runs[i].early_best.any():
                     early_ring(ax, i, v)
                     ringed = True
-        reference_lines(ax, df, stage=m, text="left")
+        reference_lines(ax, df, stage=m, text="right" if m == "int8" else None)  # inside, the labels sat on the kernels' lines
         if b is not None and np.isfinite(b[m]):
             base_ring(ax, xs.index((4, 3, 3)), b[m])  # the baseline is this figure's 11-5-3-3-3 at the original layout
         ax.set_xticks(range(len(xs)))
         ax.set_xticklabels([GEOMS[g] for g in xs], fontsize=9)
         ax.set_title({"fp32": "FP32", "int8": "INT8"}[m], fontsize=10)
     axes[0].set_ylabel("Top-1 (%)")
-    axes[0].set_ylim(top=axes[0].get_ylim()[1] + 2)  # room for the healthy-map reference's label above its line (sharey)
     missing = {}
     if pending:
         from scripts.phase11.factor_effects import design_cells  # imported here: factor_effects imports this module
@@ -392,27 +398,22 @@ def fig_quant(df, figs, note):
     d["dq"] = d.int8 - d.fp32
     d["ratio"] = [worst_input_ratio(r) for r in d.itertuples()]
     groups = kernel_groups(d)
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6.2), gridspec_kw={"width_ratios": [1.5, 1]})
+    fig, ax = plt.subplots(figsize=(12, 6.2))
     rng = np.random.default_rng(0)
     for i, (_, g) in enumerate(groups):
         for r in g.itertuples():
-            for ax, x in [(axes[0], i + rng.uniform(-0.2, 0.2)), (axes[1], r.ratio)]:
-                run_point(ax, x, r.dq, r)
-    group_ticks(axes[0], groups)
-    # without the early-best runs: their INT8 - FP32 is QAT's extra training (analyze_geometry.EARLY_FRAC), not the
-    # quantization this panel asks about -- they are still drawn, ringed
+            run_point(ax, i + rng.uniform(-0.2, 0.2), r.dq, r)
+    group_ticks(ax, groups)
+    # one sentence instead of a scatter panel against the ratio (a null result, ρ ~ 0, 2026-10-20). Without the early-best
+    # runs: their INT8 - FP32 is QAT's extra training (analyze_geometry.EARLY_FRAC), not quantization
     q = d[~d.early_best & d.ratio.notna()]
     rho = q[["ratio", "dq"]].corr(method="spearman").iloc[0, 1]
-    plain_log(axes[1], "x")
-    axes[1].set_xlabel("pior razão max / p99,9 entre as entradas das camadas (escala log)")
-    axes[1].set_title(f"Ativações com picos raros perdem mais? Spearman ρ = {rho:+.2f}, n = {len(q)}\n"
-                      "(sem as redes de anel cinza: o ganho delas no INT8 não é quantização)", fontsize=10)
-    axes[0].set_title("INT8 − FP32 por kernel / família (negativo = perde no INT8)", fontsize=10)
-    for ax in axes:
-        ax.axhline(0, color="k", lw=0.8)
-    axes[0].set_ylabel("INT8 − FP32 (pp; negativo = perde no INT8)")
-    fig.legend(handles=run_handles(d), loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=5, fontsize=9)
-    fig.suptitle("Robustez à quantização: quanto cada rede perde do FP32 ao INT8 real, e um porquê possível\n" + note, fontsize=11)
+    ax.set_title(f"Picos raros nas ativações explicam a perda? Spearman ρ(pior max / p99,9 das entradas das camadas, INT8 − FP32) "
+                 f"= {rho:+.2f}, n = {len(q)} (sem as redes de anel cinza)", fontsize=10)
+    ax.axhline(0, color="k", lw=0.8)
+    ax.set_ylabel("INT8 − FP32 (pp; negativo = perde no INT8)")
+    fig.legend(handles=run_handles(d), loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=4, fontsize=9)
+    fig.suptitle("Robustez à quantização: quanto cada rede perde do FP32 ao INT8 real, por kernel / família\n" + note, fontsize=11)
     fig.tight_layout()
     savefig(fig, "16_quantization_robustness.png", figs)
 
@@ -476,7 +477,7 @@ def fig_latency(df, figs, note):
     for ax, m, title in [(axes[0], "lat_gpu", f"FP32 na GPU ({gpu}), batch 1"), (axes[1], "lat_cpu", "FP32 na CPU, batch 1"),
                          (axes[2], "lat_int8", "INT8 na CPU, batch 1")]:
         for r in d.dropna(subset=[m]).itertuples():
-            ax.scatter(r.macs_eff_m, getattr(r, m), marker=HMARK[r.hk], s=55, zorder=3, color=color(r), **vgg_edge(r))
+            ax.scatter(r.macs_eff_m, getattr(r, m), marker=FMARK[r.family], s=55, zorder=3, color=color(r), edgecolors="white", lw=0.5)
         plain_log(ax, "x", "y")
         if b is not None and pd.notna(b[m]):
             base_ring(ax, b.macs_eff_m, b[m])
@@ -488,9 +489,7 @@ def fig_latency(df, figs, note):
             x = np.array(ax.get_xlim())
             ax.plot(x, b[m] * x / b.macs_eff_m, ls="--", color=TEXT_PRIMARY, lw=1.2, zorder=2)
     axes[0].set_ylabel("Latência por imagem (ms, log)")
-    handles = (legend_kernels(d.kernels)
-               + [Line2D([], [], marker=m, color=TEXT_SECONDARY, ls="", ms=8, label=HLABEL[h]) for h, m in HMARK.items() if h in set(d.hk)]
-               + ([VGG_HANDLE] if (d.family == "vgg16").any() else [])
+    handles = (legend_kernels(d.kernels) + family_handles(d)
                + ([BASE_HANDLE, Line2D([], [], ls="--", color=TEXT_PRIMARY, lw=1.2,
                                        label="tempo se crescesse junto com os MACs, a partir do AlexNet sem adaptar")] if b is not None else []))
     fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=4, fontsize=9)
@@ -549,7 +548,8 @@ def fig_curves(df, figs, note):
     fig.legend(handles=legend_kernels(shown)
                + ([Line2D([], [], color="k", lw=1.2, label=f"{BASE_LABEL} (validação)")] if cb is not None else [])
                + [Line2D([], [], color=TEXT_SECONDARY, lw=1.6, label="validação (split 90/10)"),
-                  Line2D([], [], color=TEXT_SECONDARY, lw=0.8, ls="--", label="treino (com augmentation)"),
+                  # Trainer's train_acc: the running mean over the epoch, in train mode, on the augmented batches
+                  Line2D([], [], color=TEXT_SECONDARY, lw=0.8, ls="--", label="treino: média da época, com augmentation (e Dropout ligado na cabeça FC)"),
                   Line2D([], [], marker="D", color=TEXT_SECONDARY, ls="", ms=7, label="época escolhida: a melhor na validação, de onde o QAT parte")],
                loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=4, fontsize=9)
     fig.suptitle("Curvas de treino do fatorial principal (layout 64px): convergiu? quanto o treino se afasta da validação?\n" + note,
@@ -666,7 +666,14 @@ def main(argv=None):
     figs, note = (PREVIEW, PREVIEW_NOTE) if archive else (FIGS, LIVE_NOTE)
     bands = {REFERENCE_REGIME: noise_band(df, LEGACY_NOISE)} if archive else noise_bands(df)
     print(f"{len(df)} runs, noise bands (pp): {bands}")
-    fig_pareto(df, figs, note)
+    fig_pareto(df, figs, note, [("int8", "macs_eff_m", "MACs por imagem (milhões, escala log)")], "13_pareto_accuracy_cost.png",
+               "Acurácia × custo de cálculo: as redes na fronteira tracejada são as que valem a pena")
+    # every net, the 224 px and VGG kernel-block runs too: core() keeps them out of the 64 px contrasts, but a net's size
+    # does not depend on its input
+    fig_pareto(df if archive else frame(everything=True), figs, note,
+               [("fp32", "fp32_eff_mb", "Tamanho do modelo FP32 (MB, escala log; 4 bytes por parâmetro)"),
+                                ("int8", "int8_eff_mb", "Tamanho do modelo INT8 (MB, escala log; 1 byte por parâmetro)")],
+               "25_accuracy_vs_size.png", "Acurácia × tamanho do modelo, FP32 e INT8: as redes na fronteira tracejada são as que valem a pena")
     fig_grid(df, figs, note, bands)
     fig_geometry(df, figs, note, pending=not archive)
     fig_quant(df, figs, note)
