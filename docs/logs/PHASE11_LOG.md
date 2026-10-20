@@ -1893,3 +1893,13 @@ accuracy x size plot. What changed, one place each:
 - *04-10, 23*: the "parâm. / MACs %" line left the tick labels (cost has 13 / 25).
 Unchanged: 01-03, 12, 14, 19-21, 24 (shorter early label only); 22 (needs the FP32 checkpoints). `tests/test_phase11_figures.py`
 expects 25 figures; passes.
+
+**Machines after the push (2026-10-20, 57e926c).** PCAD's `~/dnn_study` pulled 8dd735c -> 57e926c: the 247 tracked files of
+the runs committed since 10-16 sat there untracked and blocked the pull; they were moved to
+`~/dnn_study_prepull_untracked_20261020/` (961 MB), and after the pull all 247 `cmp` equal to the checked-out copies (the
+moved copies are redundant). nyx's sparse clone pulled a216556 -> 57e926c. The code PCAD's pending jobs will import changes
+the training path only by `DataConfig.upscale_to` (None by default) and bookkeeping -- what nyx has run since 10-17, same
+protocol. Both checkouts clean in ml/models/scripts/configs. `large_stem` k11-3 GAP + BN (job 832113) finished at 09:40:
+54.55 FP32 / 54.24 INT8 test, best epoch 481, agreement_qat_int8 0.991 -- on PCAD only, not brought to the laptop or
+figures yet (user: not yet). Queues: PCAD 8 jobs (k11-3 FC + Dropout running on beagle) + 27 lines, nyx 1 running + 8,
+0 failed on either.

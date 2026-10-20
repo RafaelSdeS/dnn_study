@@ -382,6 +382,13 @@ by pattern, every `phase_11_vgg_kernel_head*/vgg16_*_fc*` cell's `qat_*.pth.gz`.
 After a `git pull` on a machine that still has artifacts under old folder names, run
 `scripts/pcad/migrate_pcad_gitignored.sh` — it is idempotent and covers every rename to date.
 
+A `git pull --ff-only` on PCAD stops on the tracked files of runs committed from the laptop, which already sit there
+untracked (byte-identical: the laptop got them from PCAD or nyx). Move exactly those paths aside to
+`~/dnn_study_prepull_untracked_<date>/`, pull, `cmp` each one against the checked-out copy, then delete the copies
+(2026-09-30: 269 files, 2026-10-20: 247, 0 different). nyx's sparse clone (code dirs only) never hits this. PCAD also
+keeps tracked files modified on purpose: the `outputs/pcad/aggregates/*_comparison.csv` rows its jobs append, and 74
+`archive_adamw_recipe/` files re-evaluated there on 2026-10-01/02 -- leave both as they are.
+
 ---
 
 ## Stack
