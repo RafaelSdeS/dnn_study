@@ -1904,7 +1904,7 @@ protocol. Both checkouts clean in ml/models/scripts/configs. `large_stem` k11-3 
 figures yet (user: not yet). Queues: PCAD 8 jobs (k11-3 FC + Dropout running on beagle) + 27 lines, nyx 1 running + 8,
 0 failed on either.
 
-## Controls and robustness runs (2026-10-21): 71 runs planned, none submitted
+## Controls and robustness runs (2026-10-21): 71 runs, queued the same day
 
 **Why.** At 80 of 120 runs, the open doubts the log itself lists: most contrasts have one seed (3 seeds only for 8 AlexNet cells and VGG16's
 3x3 / 2x2); ResNet-18 and the VGG kernel blocks have no floor of their own; no-BN INT8 is +-4.4 pp; the pretrained cells peak at epoch 10-11
@@ -1962,8 +1962,23 @@ Phase 11 recipe plus one declared override (`PHASE_12_OVERRIDES`); every `phase_
 - `test_phase11_figures.py` expects 26 figures plus Phase 12's three on a fake tree; `test_quantization.py` runs the new cells through QAT -> INT8
   (`_in32`: 100 classes).
 
-**Not yet done (gates).** Nothing is committed, pushed or submitted. Order: (1) a 1-epoch `--smoke` of one cell per new kind (`_w150`, `k5x5`,
-`_in32` AlexNet and VGG16, a fine-tune cell, an lr cell); (2) commit + push, `git pull --ff-only` on PCAD (move aside the committed run files that sit
-there untracked, `cmp`, as on 10-20) and on nyx; export CIFAR-100 and rsync it to both; (3) queue: PCAD `~/queue_phase11_full.txt`, appended
-after the 26 lines already there, in the order 2, 3, 5-6, 7, 4, 8 (`--slurm tupi_beagle` for AlexNet / ResNet cells); nyx `~/queue_nyx.txt`:
-wave 1 of #1, then the VGG16 CIFAR cells; wave 2 of #1 once the three seed-42 patterns land.
+**Done 2026-10-21.** (1) A 1-epoch `--smoke` of one cell per new kind (`_w150`, `k5x5`, `_in32` AlexNet and VGG16, a fine-tune cell, an lr cell):
+6 of 6 passed FP32 -> QAT -> INT8, nothing written to `outputs/`. (2) Committed and pushed (5771212 code/tests/docs, 512b834 the 18 yamls);
+`git pull --ff-only` on nyx and on PCAD, where 26 committed run files (the `large_stem` k11-3 cells) sat untracked: `cmp` found 0 different and the
+copies were deleted. CIFAR-100 was exported once, on nyx (`scripts/phase12/export_cifar100.py`), and its 60 001 files match the laptop's export by
+md5 manifest; nyx -> PCAD by rsync (`_raw` left out), checksum dry run 0 differences (the laptop's ~100 kB/s link is never the path). (3) Queued: PCAD
+`~/queue_phase11_full.txt` (24 lines before, `--slurm tupi_beagle`, VGG16 on `tupi_4090`) and nyx `~/queue_nyx.txt` (5 before). The 71 runs went to the
+machine that has what they need: the fine-tunes of VGG16 / ResNet-18 / MobileNetV2 to PCAD (nyx's torch cache holds only AlexNet's weights), the VGG16
+cells to nyx (a cell on PCAD's 4090s takes 6-13 h, on nyx's 4060 Ti 7.7-8.2 h, measured on the Phase 11 seeds).
+
+*Throughput, measured the same day, and the rebalancing it forced.* PCAD feeds the queue by the jobs that finish: `queue_phase11_full.log` shows 6
+submissions in 61 h (~2.4 a day), with 4 jobs running and 4 pending for a GPU of the shared `tupi`; `sacct` (10-12 .. 10-21): an AlexNet 64 px cell
+takes ~5 h on a 4090 and ~16 h on beagle. 74 lines would have taken ~30 days there, against ~6 days for nyx's 26. 18 AlexNet lines (the 12 CIFAR-100
+cells, the 6 lr cells -- from scratch, no weights needed) therefore moved from PCAD's tail to nyx, after wave 1 of #1, lr first (the first AlexNet
+64 px cell on nyx, which times it). Final state: PCAD 56 lines (32 new), nyx 44 (39 new); each of the 71 cells is in exactly one queue. Wave 2 of #1
+sits behind the seed-42 runs of the same patterns in nyx's sequential queue, so it starts after they land. *Stage 2, open:* when the first lr cell
+ends on nyx, if an AlexNet 64 px cell takes <= 8 h there, `large_stem` seeds (8) and `kernel_controls` (10) move too, while still far from PCAD's head.
+Runs that finish on nyx reach PCAD by one idempotent `rsync -a` of `outputs/pcad/phase_1[12]_*` per day (`ssh -A rafael@nyx`), then their tracked files
+go to the laptop; no key nyx -> PCAD is installed. *Not yet exercised on a cluster:* the 6 smokes ran on the laptop, so the first new job of each machine is
+the real test (the inline `PCAD_DATASET_ROOT` reaching a Slurm job through `--export ALL`, the cached pretrained weights). Both queues keep the old lines
+in front: the first new cell starts in ~2 days on nyx (2 seed-42 VGG16 + 3 AlexNet in224 first) and in ~10 days on PCAD (24 old lines at ~2.4 a day).
