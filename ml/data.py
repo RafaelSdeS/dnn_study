@@ -93,6 +93,8 @@ def create_imagenet_loaders(cfg: DataConfig, persistent_workers: bool = False):
     train_full = datasets.ImageFolder(cfg.dataset_path, transform=transform_train)
     val_full = datasets.ImageFolder(cfg.dataset_path, transform=transform_val)
     assert train_full.classes == val_full.classes
+    # a yaml for one dataset pointed at the other (PCAD_DATASET_ROOT picks the data) must stop, not train on 200 vs 100 classes
+    assert len(train_full.classes) == cfg.num_classes, (len(train_full.classes), cfg.num_classes)
 
     n_total = len(train_full)
     perm = torch.randperm(n_total, generator=torch.Generator().manual_seed(cfg.seed)).tolist()

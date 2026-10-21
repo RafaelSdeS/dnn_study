@@ -100,7 +100,10 @@ def design_cells():
 
     models = {m for p in (Path(__file__).resolve().parents[2] / "configs/experiments").glob("phase_11_*.yaml")
               for m in load_config(f"experiments/{p.name}")["models"]}
-    return with_pooling(pd.DataFrame([{"cell": k, **f} for k, f in CELL_FACTORS.items() if k in models]))
+    cells = pd.DataFrame([{"cell": k, **f} for k, f in CELL_FACTORS.items() if k in models])
+    # the controls (width-scaled nets, k5x5) share every FACTORS value with a design cell: out of the pairing, as in core()
+    width = cells["width"].fillna(1.0) if "width" in cells else 1.0  # no control cell in the yamls yet: no column
+    return with_pooling(cells[(width == 1.0) & (cells.kernels != "k5x5")])
 
 
 def pairs_of(cells):

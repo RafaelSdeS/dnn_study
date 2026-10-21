@@ -1903,3 +1903,67 @@ protocol. Both checkouts clean in ml/models/scripts/configs. `large_stem` k11-3 
 54.55 FP32 / 54.24 INT8 test, best epoch 481, agreement_qat_int8 0.991 -- on PCAD only, not brought to the laptop or
 figures yet (user: not yet). Queues: PCAD 8 jobs (k11-3 FC + Dropout running on beagle) + 27 lines, nyx 1 running + 8,
 0 failed on either.
+
+## Controls and robustness runs (2026-10-21): 71 runs planned, none submitted
+
+**Why.** At 80 of 120 runs, the open doubts the log itself lists: most contrasts have one seed (3 seeds only for 8 AlexNet cells and VGG16's
+3x3 / 2x2); ResNet-18 and the VGG kernel blocks have no floor of their own; no-BN INT8 is +-4.4 pp; the pretrained cells peak at epoch 10-11
+(lr 0.01 erases the pretraining, "Progress 2026-10-20"); the kernel ranking might be the single recipe's; 2x2 loses 4/9 of the MACs together with
+its kernel; and everything is Tiny ImageNet. The user approved all eight proposals; the first plan (65 runs) became 71 when the fine-tuning
+lr turned out to need two values (below).
+
+| # | experiment (yaml) | cells | runs |
+|---|---|---|---|
+| 1 | `phase_11_vgg_kernel_blocks_seed43/44` | the 5 one-2x2-block patterns (`kblocks2-3-3-3-3` ... `3-3-3-3-2`), VGG16 GAP + BN; wave 1 = the 2 finished patterns (4 runs, nyx), wave 2 = the 3 queued ones after their seed 42 | 10 |
+| 2 | `phase_11_large_stem_seed43/44` | k11-3 / k11-2 x {GAP, FC + Dropout}, BN (k11-3 GAP + BN: +1.7 pp over 11-5-3-3-3 at seed 42, band +-0.6) | 8 |
+| 3 | `phase_11_resnet_kernel_stem_seed43/44` | `resnet18_k3x3`, `resnet18_k2x2` | 4 |
+| 4 | `phase_12_finetune_pretrained[_in224]_lr1e3` / `_lr1e4` | the 6 pretrained twins (AlexNet map 1 / map 8, VGG16 3x3 FC + Dropout, ResNet-18 k7-3, MobileNetV2; AlexNet at 224 px) | 12 |
+| 5-6 | `phase_11_kernel_controls` (+ `_seed43/44`) | `k2x2_w150`, `k3x3_w67`, `k5x5` GAP + BN (3 seeds each), `k5x5` FC + Dropout (seed 42) | 10 |
+| 7 | `phase_12_lr_half` / `_lr_double` | AlexNet GAP + BN k11-5-3 / 3x3 / 2x2 at lr 0.005 / 0.02, seed 42 | 6 |
+| 8 | `phase_12_cifar100` (+ `_seed43/44`) | AlexNet k11-5-3 / 3x3 / 2x2 / alt 3-2 + VGG16 3x3 / 2x2 / alt 3-2, GAP + BN, `_in32` | 21 |
+
+Phase 11 gains 32 planned runs (120 -> 152, 23 yamls), Phase 12 has 39 (9 yamls).
+
+**Why two slugs.** `analyze_geometry.load()` reads `phase_11_*`, and `design_figures.frame()` asserts that no (model, seed) appears twice:
+an lr-0.005 run of `alexnet_k3x3_..._gap_bn` seed 42 next to the lr-0.01 one would stop every Phase 11 figure. A run on another recipe or
+dataset is therefore its own experiment, `phase_12_*` (CLAUDE.md: one slug per phase, a different protocol is never filed into another's
+slot); `load(prefix="phase_12_")` reads them, `scripts/phase12/robustness.py` draws them. `tests/test_config.py` pins each phase_12 yaml to the
+Phase 11 recipe plus one declared override (`PHASE_12_OVERRIDES`); every `phase_11_*.yaml` stays the exact protocol.
+
+**Decisions and their references.**
+- *Fine-tuning lr (#4).* Li, Chaudhari, Yang, Lam, Ravichandran, Bhotika, Soatto, "Rethinking the Hyperparameters for Fine-tuning" (ICLR 2020): the
+  best fine-tuning hyperparameters, the effective lr above all, depend on the target dataset and on its similarity to the source, unlike
+  from scratch -- so no single lr is claimed. Their grid (App. D, eta in {0.02, 0.01, 0.005, 0.001, 0.0001}); the two points run are 1e-3 and 1e-4,
+  and each net is read at the lr with the better *validation* top-1 (the 90/10 split, never the test set). Our own evidence for the small end: QAT at
+  lr 1e-4 recovered +5.0 / +6.7 pp from the epoch-10 / 11 checkpoint of the pretrained cells ("Progress 2026-10-20"). 100 epochs, same SGD /
+  momentum / weight decay / cosine / label smoothing / augmentation; QAT by the protocol's own rule (Wu et al. 2020 App. A.2: ~1/10 of the
+  steps, 1/100 of the initial lr): 10 epochs at 1e-5 -> 1e-7 (lr 1e-3) and 1e-6 -> 1e-8 (lr 1e-4). Kornblith et al. (CVPR 2019) was looked up
+  for a default lr and gives none here, so it is not cited as support.
+- *lr octave (#7).* lr 0.005 and 0.02, one octave either side of 0.01; QAT unchanged, so only the FP32 lr moves.
+- *Width control (#5).* Conv MACs at the 64px layout, 3x3: 9 x 18.55M = 166.9M; 2x2: 4 x 18.55M = 74.2M. A 2x2 net at width w has
+  4 x (0.197M w + 18.35M w^2) = 166.3M at w = 1.5 (-0.4%); a 3x3 net at w = 2/3 (channels 43-128-256-171-171) 74.8M (+0.8%). Hand-computed from the
+  layer shapes; `tests/test_registry.py::test_controls_and_cifar_cells_are_what_their_names_say` checks the built nets within 2%.
+  The weights match as well (same k^2 Cin Cout). The 3 input channels never scale.
+- *CIFAR-100 (#8).* The exporter writes the 50 000 training images and the 10 000 official test images in Tiny ImageNet's folder layout, so
+  ml/data.py, runtime.py and scripts/train.py are untouched; `PCAD_DATASET_ROOT` picks the data (as on nyx) and the path lands in
+  `resolved_config.json`. One line in ml/data.py asserts `len(classes) == data.num_classes`. Hold-out 90/10 of train = He et al. (CVPR 2016
+  Sec. 4.2)'s CIFAR 45k/5k, already the protocol's reference. Recipe identical (pad-4 crop + flip + AutoAugment's ImageNet policy: kept so that only
+  the data differs; Cubuk et al. publish a CIFAR-10 policy, which would be a second change). Same nets as at 64 px (stride-2 stem, two 2x2 pools:
+  map 4x4; VGG16: map 1x1), not CIFAR-style nets: the question is whether the contrast moves with the data. Cells are named `_in32` (fed 32x32).
+  The loader, not the GPU, bounds these runs (4 workers, AutoAugment): ~3-4 h each, estimated.
+
+**What changes in the analysis.**
+- `core()` and `factor_effects.design_cells()` leave out `width != 1` and `k5x5`: the pairing of figures 04-11 has no width factor, and a
+  `k2x2_w150` cell would join the plain 2x2 one in every contrast. Figure 26 (`design_figures.fig_controls`) draws them: (a) the width-matched pairs,
+  (b) 2x2 -> 3x3 -> 5x5 with 11-5-3-3-3. Figure 24 now draws every seed of a replicated block pattern.
+- Noise bands are computed from `core()`, so the seeds of the block patterns and of the controls do not enter any pool; the `large_stem` replicates
+  join AlexNet + BN's, and ResNet-18 gets a regime of its own (`REGIME_LABEL.get` already tolerates it). Expect AlexNet + BN's band
+  (+-0.6 pp FP32) to move a little, ResNet-18's to appear.
+- `test_phase11_figures.py` expects 26 figures plus Phase 12's three on a fake tree; `test_quantization.py` runs the new cells through QAT -> INT8
+  (`_in32`: 100 classes).
+
+**Not yet done (gates).** Nothing is committed, pushed or submitted. Order: (1) a 1-epoch `--smoke` of one cell per new kind (`_w150`, `k5x5`,
+`_in32` AlexNet and VGG16, a fine-tune cell, an lr cell); (2) commit + push, `git pull --ff-only` on PCAD (move aside the committed run files that sit
+there untracked, `cmp`, as on 10-20) and on nyx; export CIFAR-100 and rsync it to both; (3) queue: PCAD `~/queue_phase11_full.txt`, appended
+after the 26 lines already there, in the order 2, 3, 5-6, 7, 4, 8 (`--slurm tupi_beagle` for AlexNet / ResNet cells); nyx `~/queue_nyx.txt`:
+wave 1 of #1, then the VGG16 CIFAR cells; wave 2 of #1 once the three seed-42 patterns land.

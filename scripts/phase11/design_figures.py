@@ -1,4 +1,4 @@
-"""Phase 11 figures 13-20, 24, 25 -- the design read through its factors (ml/model_registrations.py:CELL_FACTORS), not run names.
+"""Phase 11 figures 13-20, 24-26 -- the design read through its factors (ml/model_registrations.py:CELL_FACTORS), not run names.
 Selecting by factor is what lets one file draw the live runs and, with --archive, the superseded AdamW-recipe runs
 (LEGACY maps their names onto the same factors) -- a preview of each figure's form, not its numbers: validation split,
 pre-fix INT8, latencies that still timed the DataLoader, and some only-approximate twins (marked †).
@@ -12,6 +12,8 @@ pre-fix INT8, latencies that still timed the DataLoader, and some only-approxima
     18_training_curves.png          val/train top-1 per epoch at the 64px layout, {GAP, FC} x {no BN, BN}
     19_qat_curves.png               the 50 QAT epochs of the same nets: val top-1 with fake-quant, from the FP32 best to INT8
     20_int8_prediction_flips.png    % of test images right -> wrong and wrong -> right under INT8 (from the test logits)
+    24_vgg_kernel_blocks.png        VGG16 one kernel per block between its all-3x3 and all-2x2 nets (every seed a dot)
+    26_kernel_controls.png          phase_11_kernel_controls: (a) width-matched 2x2 / 3x3 pairs, (b) 2x2 -> 3x3 -> 5x5 dose-response
 
 18 and 19 read the per-epoch logs, which only PCAD keeps -- fetch them first (analyze_geometry.convergence's rsync; add
 archive_adamw_recipe/ to both paths for --archive).
@@ -33,8 +35,8 @@ from matplotlib.patches import Patch
 from configs.loader import load_config
 from ml.plotting import AMBER, BLUE, GREEN, GRID, NEUTRAL, PURPLE, RED, TEXT_PRIMARY, TEXT_SECONDARY, apply_report_style, shade
 from scripts.phase11.analyze_geometry import (ARCHIVE, BASE_KEY, BASE_LABEL, EARLY_LABEL, FIGS, LOG_EPOCH, REFERENCE_REGIME, ROOT,
-                                              REGIME_LABEL, RUNS, band_for, early_handle, early_ring, healthy_run, load, noise_band, noise_bands,
-                                              reference_lines, savefig)
+                                              REGIME_LABEL, RUNS, band_for, early_handle, early_ring, healthy_run, int8_bar, load, noise_band,
+                                              noise_bands, precision_handles, reference_lines, savefig)
 
 PREVIEW = ROOT / "results/archive_adamw_recipe/figures_generated/phase_11_preview"
 PREVIEW_NOTE = ("PRÉVIA — runs antigas: receita AdamW, split de validação, INT8 antes das correções de 30/09–03/10; "
@@ -84,9 +86,11 @@ LEGACY_NOISE = ["alexnet_3x3_fc", "alexnet_adapted_orig_fc", "alexnet_3x3_gap", 
 
 
 def core(df: pd.DataFrame) -> pd.DataFrame:
-    """Figures 01-22's 64 px design: without the input-size block (phase_11_input224, Tiny ImageNet enlarged to 224) and
-    the VGG kernel blocks (phase_11_vgg_kernel_blocks), whose questions get figures of their own."""
-    return df[(df.input_size.fillna(64) == 64) & ~df.kernels.fillna("").str.startswith("kblocks")]
+    """Figures 01-22's 64 px design: without the input-size block (phase_11_input224, Tiny ImageNet enlarged to 224), the
+    VGG kernel blocks (phase_11_vgg_kernel_blocks) and the controls (phase_11_kernel_controls: width-scaled nets and the
+    5x5 net -- the pairing of 04-11 has no width factor), whose questions get figures of their own."""
+    return df[(df.input_size.fillna(64) == 64) & ~df.kernels.fillna("").str.startswith("kblocks")
+              & (df.get("width", 1.0) == 1.0) & (df.kernels != "k5x5")]
 
 
 def frame(archive: bool = False, everything: bool = False) -> pd.DataFrame:
@@ -112,6 +116,7 @@ def frame(archive: bool = False, everything: bool = False) -> pd.DataFrame:
     df["family"] = df.family.fillna("família")
     for c in ("bn", "dropout", "pretrained", "approx"):  # bool, so ~ / query("not bn") negate (object dtype would not)
         df[c] = df[c].fillna(False).astype(bool) if c in df else False
+    df["width"] = df["width"].fillna(1.0) if "width" in df else 1.0  # only the controls' cells carry one
     df["hk"] = np.where(df.family == "família", "família", np.where(df.dropout, "fcdrop", df["head"]))
     df["pooling"] = [f"{n:.0f}pool{k:.0f}x{k:.0f}" if pd.notna(k) else None for n, k in zip(df.pool_count, df.pool_kernel)]
     return df if archive or everything else core(df)
@@ -605,8 +610,8 @@ def fig_kblocks(df, figs, note, bands):
     """VGG16 + BN + GAP with one kernel per block (phase_11_vgg_kernel_blocks), seed 42, between the all-3x3 and all-2x2 nets
     and the conv-by-conv alternation. df = frame(everything=True): the blocks are outside core(). A dot plot, not bars: the
     patterns sit within ~0.7 pp of 3x3, which a 0-based bar axis would hide."""
-    g = seed42(df)
-    g = g[(g.family == "vgg16") & (g["head"] == "gap") & g.bn.astype(bool) & ~g.pretrained.astype(bool)]
+    allseeds = df[(df.family == "vgg16") & (df["head"] == "gap") & df.bn.astype(bool) & ~df.pretrained.astype(bool)]
+    g = seed42(allseeds)  # the dots of the replicated patterns (seeds 43 / 44) go beside these
     twos = lambda k: sum(n for n, c in zip(VGG_CONVS, k.removeprefix("kblocks").split("-")) if c == "2")  # noqa: E731
     blocks = sorted((k for k in g.kernels.unique() if k.startswith("kblocks")), key=lambda k: (twos(k), k))
     rows = [g[g.kernels == k].iloc[0] for k in ["k3x3", *blocks, "kalt3-2", "k2x2"] if (g.kernels == k).any()]
@@ -624,7 +629,7 @@ def fig_kblocks(df, figs, note, bands):
     for k in ("k3x3", "k2x2"):
         if k in ref:
             ax.axhline(ref[k].fp32, color=KCOLOR[k], ls="--", lw=1.2, zorder=1)
-    ringed = False
+    ringed = seeded = False
     for i, r in enumerate(rows):
         c = KCOLOR.get(r.kernels, NEUTRAL)
         ax.scatter(i, r.fp32, s=75, color=c, zorder=3)
@@ -632,7 +637,12 @@ def fig_kblocks(df, figs, note, bands):
         if r.early_best:
             early_ring(ax, i, r.int8)
             ringed = True
-        ax.text(i, max(r.fp32, r.int8) + 0.12, f"{r.fp32:.1f} · {r.int8:.1f}", ha="center", fontsize=8.5)
+        runs = allseeds[allseeds.kernels == r.kernels]
+        if len(runs) > 1:  # replicated: every seed is a small dot (FP32 filled, INT8 hollow), as in figures 01-03
+            seeded = True
+            ax.scatter([i + 0.12] * len(runs), runs.fp32, color="k", s=12, zorder=5)
+            ax.scatter([i + 0.12] * len(runs), runs.int8, marker="D", facecolors="white", edgecolors="k", s=12, lw=0.8, zorder=5)
+        ax.text(i, max(r.fp32, r.int8, *runs.fp32, *runs.int8) + 0.12, f"{r.fp32:.1f} · {r.int8:.1f}", ha="center", fontsize=8.5)
     ax.set_xticks(range(len(rows)))
     ax.set_xticklabels([tick.get(r.kernels, f"{r.kernels.removeprefix('kblocks')}\n{twos(r.kernels)}/13 convs 2×2") for r in rows], fontsize=9)
     ax.set_ylabel("Top-1 (%)")
@@ -647,11 +657,81 @@ def fig_kblocks(df, figs, note, bands):
                Line2D([], [], color=KCOLOR["k2x2"], ls="--", label="2×2 em todos os blocos")]
     if pd.notna(band["fp32"]):
         handles.append(Patch(color=GRID, alpha=0.6, label=f"ruído entre seeds em torno do 3×3 (±{band['fp32']:.1f} pp FP32, {src})"))
+    if seeded:
+        handles.append(Line2D([], [], marker="o", color="k", ls="", ms=4, label="uma seed (42/43/44), onde replicado"))
     fig.legend(handles=handles + ([early_handle("ring")] if ringed else []), loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=3, fontsize=9)
     fig.suptitle("Em que bloco da VGG16 o kernel 2×2 custa? Kernel misto por bloco (VGG16 + BN + GAP, blocos de 2, 2, 3, 3, 3 convs)\n"
                  + note + (f"\nainda na fila: {', '.join(pending)}" if pending else ""), fontsize=11)
     fig.tight_layout()
     savefig(fig, "24_vgg_kernel_blocks.png", figs)
+
+
+def fig_controls(df, figs, note):
+    """Figure 26 -- phase_11_kernel_controls, AlexNet GAP + BN at the 64px layout (the main factorial's best-trained column).
+    (a) capacity: is 2x2's loss its kernel or its 4/9 of the MACs? Width-matched pairs side by side (2x2 against the 3x3 net
+    narrowed to its MACs; 3x3 against the 2x2 net widened to its). (b) dose-response: 2x2 -> 3x3 -> 5x5, with 11-5-3-3-3.
+    (a) bars = seed 42, dots = every seed; (b) points = every seed (FP32 filled, INT8 hollow), tick = the seed mean, the
+    line through the FP32 means."""
+    sel = df[(df.family == "alexnet") & (df.stride == 2) & (df.pooling == "2pool2x2") & (df["head"] == "gap") & df.bn
+             & ~df.pretrained & (df.input_size == 64)]
+    runs = lambda k, w=1.0: sel[(sel.kernels == k) & np.isclose(sel.width, w)]  # noqa: E731
+    if runs("k3x3").empty or runs("k2x2").empty:
+        print("26: the 3x3 / 2x2 reference runs are missing")
+        return
+    colors = {**KCOLOR, "k5x5": shade(AMBER, 0.45)}
+    fig, (axa, axb) = plt.subplots(1, 2, figsize=(14, 5.6), gridspec_kw={"width_ratios": [1.15, 1]})
+    # (a) capacity: (kernel, width) in two matched-MACs groups
+    groups = [[("k2x2", 1.0, "2×2"), ("k3x3", 2 / 3, "3×3, canais ×0,67")], [("k3x3", 1.0, "3×3"), ("k2x2", 1.5, "2×2, canais ×1,5")]]
+    x, ticks, seeded, flagged = 0.0, [], False, False
+    for gi, group in enumerate(groups):
+        for k, w, label in group:
+            r = runs(k, w)
+            if r.empty:
+                ticks.append((x, f"{label}\npendente"))
+                x += 1
+                continue
+            r42 = r[r.seed == 42].iloc[0] if (r.seed == 42).any() else r.iloc[0]
+            axa.bar(x - 0.19, r42.fp32, 0.38, color=colors[k], edgecolor="white")
+            flagged |= bool(r42.early_best)
+            int8_bar(axa, x + 0.19, r42.int8, 0.38, colors[k], early=bool(r42.early_best))
+            axa.text(x - 0.19, r.fp32.max() + 0.4, f"{r42.fp32:.1f}", ha="center", fontsize=8.5)
+            if len(r) > 1:
+                seeded = True
+                axa.scatter([x - 0.19] * len(r), r.fp32, color="k", s=12, zorder=5)
+                axa.scatter([x + 0.19] * len(r), r.int8, color="k", s=12, zorder=5)
+            ticks.append((x, f"{label}\n{r42.macs_eff_m:.0f}M MACs"))
+            x += 1
+        x += 0.6
+    axa.set_xticks([t for t, _ in ticks])
+    axa.set_xticklabels([t for _, t in ticks], fontsize=9)
+    axa.set_ylabel("Top-1 (%)")
+    axa.set_title("(a) mesmo custo de cálculo: o kernel ou a capacidade?", fontsize=10)
+    axa.margins(y=0.12)
+    # (b) dose-response
+    axb.set_title("(b) tamanho do kernel (todas as convs): 2×2 → 3×3 → 5×5", fontsize=10)
+    for j, (k, label) in enumerate([("k2x2", "2×2"), ("k3x3", "3×3"), ("k5x5", "5×5"), ("k11-5-3", "11-5-3-3-3")]):
+        r = runs(k)
+        if r.empty:
+            axb.text(j, axb.get_ylim()[0], "pendente", ha="center", color=NEUTRAL, fontsize=9)
+            continue
+        axb.scatter([j] * len(r), r.fp32, color=colors[k], s=55, zorder=3)
+        axb.scatter([j] * len(r), r.int8, marker="D", facecolors="white", edgecolors=colors[k], lw=1.6, s=55, zorder=3)
+        if j < 3:  # the 2 -> 3 -> 5 line through the seed means (11-5-3-3-3 is a different kind of net: no line)
+            axb.plot([j - 0.0], [r.fp32.mean()], color=colors[k], marker="_", ms=22, zorder=2)
+    means = [(j, runs(k).fp32.mean()) for j, k in enumerate(["k2x2", "k3x3", "k5x5"]) if not runs(k).empty]
+    if len(means) > 1:
+        axb.plot(*zip(*means), color=NEUTRAL, lw=1.2, zorder=1)
+    axb.set_xticks(range(4))
+    axb.set_xticklabels([f"{lb}\n{runs(k).macs_eff_m.iloc[0]:.0f}M MACs" if not runs(k).empty else lb
+                         for k, lb in [("k2x2", "2×2"), ("k3x3", "3×3"), ("k5x5", "5×5"), ("k11-5-3", "11-5-3-3-3")]], fontsize=9)
+    axb.margins(x=0.1, y=0.15)
+    handles = precision_handles() + [Line2D([], [], marker="D", mfc="white", mec=TEXT_SECONDARY, ls="", ms=7, label="INT8 (painel b)"),
+                                     Line2D([], [], marker="_", color=TEXT_SECONDARY, ls="", ms=10, label="média das seeds (painel b)")]
+    if seeded:
+        handles.append(Line2D([], [], marker="o", color="k", ls="", ms=4, label="uma seed (42/43/44)"))
+    fig.legend(handles=handles + ([early_handle("hatch")] if flagged else []), loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=4, fontsize=9)
+    fig.suptitle("Controles do kernel: custo de cálculo igual e kernel maior (AlexNet, layout 64px, GAP + BN)\n" + note, fontsize=11, y=1.04)
+    savefig(fig, "26_kernel_controls.png", figs)
 
 
 def main(argv=None):
@@ -684,6 +764,7 @@ def main(argv=None):
     fig_qat_curves(df, figs, curves_note)
     if not archive:
         fig_kblocks(frame(everything=True), figs, note, bands)
+        fig_controls(frame(everything=True), figs, note)
 
 
 if __name__ == "__main__":

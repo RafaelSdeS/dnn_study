@@ -202,3 +202,34 @@ def test_tupi_4090_slurm_config_has_requeue_and_signal():
     assert slurm_cfg["signal"] == "B:USR1@900"
     assert slurm_cfg["open_mode"] == "append"
     assert slurm_cfg["time"] == "24:00:00"
+
+
+# Phase 12 (robustness of the Phase 11 conclusions): the Phase 11 recipe with ONE declared difference per experiment, so a
+# yaml edit cannot drift the protocol silently (lr, fine-tuning, dataset). (training/qat/data keys merge into the reference's.)
+PHASE_12_OVERRIDES = {
+    "phase_12_lr_half": {"training": {"lr": 0.005}},
+    "phase_12_lr_double": {"training": {"lr": 0.02}},
+    "phase_12_finetune_pretrained_lr1e3": {"training": {"epochs": 100, "lr": 1e-3}, "qat": {"epochs": 10, "lr": 1e-5, "eta_min": 1e-7}},
+    "phase_12_finetune_pretrained_lr1e4": {"training": {"epochs": 100, "lr": 1e-4}, "qat": {"epochs": 10, "lr": 1e-6, "eta_min": 1e-8}},
+    "phase_12_finetune_pretrained_in224_lr1e3": {"training": {"epochs": 100, "lr": 1e-3}, "data": {"upscale_to": 224},
+                                                  "qat": {"epochs": 10, "lr": 1e-5, "eta_min": 1e-7}},
+    "phase_12_finetune_pretrained_in224_lr1e4": {"training": {"epochs": 100, "lr": 1e-4}, "data": {"upscale_to": 224},
+                                                  "qat": {"epochs": 10, "lr": 1e-6, "eta_min": 1e-8}},
+    "phase_12_cifar100": {"data": {"img_size": 32, "num_classes": 100}},
+}
+
+
+def test_every_phase_12_experiment_differs_from_phase_11_only_in_its_declared_overrides():
+    reference = load_config("experiments/phase_11_kernel_head_bn.yaml")
+    for key in ("name", "models", "seed"):
+        reference.pop(key, None)
+    names = [n for n in _experiment_names() if n.startswith("phase_12_")]
+    assert {n.split("_seed")[0] for n in names} == set(PHASE_12_OVERRIDES), names
+    for name in names:
+        cfg = load_config(f"experiments/{name}.yaml")
+        assert cfg.pop("seed") == (int(name.rsplit("_seed", 1)[1]) if "_seed" in name else 42), name
+        cfg.pop("name"), cfg.pop("models")
+        declared = PHASE_12_OVERRIDES[name.split("_seed")[0]]
+        expected = {k: ({**v, **declared.get(k, {})} if isinstance(v, dict) else v) for k, v in reference.items()}
+        expected.update({k: v for k, v in declared.items() if k not in expected})
+        assert cfg == expected, f"{name}: {cfg} vs {expected}"

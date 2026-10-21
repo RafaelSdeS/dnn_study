@@ -131,7 +131,8 @@ def test_factorial_grid_is_complete_and_every_gap_cell_runs():
     + 16 pretrained; each GAP cell (cheap to build) runs and has one Conv-(BN-)ReLU fuse group per conv."""
     from ml.model_registrations import CELL_FACTORS, FX_KERNELS
 
-    fx = [n for n, f in CELL_FACTORS.items() if f["family"] == "alexnet" and f["kernels"] in FX_KERNELS and f["input_size"] == 64]
+    fx = [n for n, f in CELL_FACTORS.items() if f["family"] == "alexnet" and f["kernels"] in FX_KERNELS and f["input_size"] == 64
+          and f.get("width", 1.0) == 1.0]  # the width-scaled controls (phase_11_kernel_controls) are not part of the grid
     assert len(fx) == 304 and sum(CELL_FACTORS[n]["pretrained"] for n in fx) == 16
     x = torch.randn(1, 3, 64, 64)
     for name in (n for n in fx if CELL_FACTORS[n]["head"] == "gap"):
@@ -146,11 +147,11 @@ def test_factorial_grid_is_complete_and_every_gap_cell_runs():
 def test_every_cell_name_says_what_the_net_is():
     """The descriptive names are only useful if true: on every registered cell (meta device, shapes only), the kernels,
     conv1 stride, max-pools, last-map side, head, Dropout and BN read off the built net match its name."""
-    from ml.model_registrations import CELL_FACTORS, FX_KERNELS, RESNET_FX_KERNELS, VGG_FX_KERNELS, _cell_name
+    from ml.model_registrations import CELL_FACTORS, CONTROL_KERNELS, FX_KERNELS, RESNET_FX_KERNELS, VGG_FX_KERNELS, _cell_name
     from models.baselines import RESNET_STEMS
 
     for name, f in CELL_FACTORS.items():
-        kernels = {"alexnet": FX_KERNELS, "vgg16": VGG_FX_KERNELS}.get(f["family"], {})
+        kernels = {"alexnet": {**FX_KERNELS, **CONTROL_KERNELS}, "vgg16": VGG_FX_KERNELS}.get(f["family"], {})
         assert _cell_name(**f) == name, name
         with torch.device("meta"):
             m = MODEL_REGISTRY[name]["ctor"]()
@@ -261,7 +262,7 @@ def test_vgg_factorial_grid_is_complete_and_only_stride_and_pool_count_set_the_m
     (meta device: shapes only, no weights), plus each fuse group being Conv-BN-ReLU in the padded layout."""
     from ml.model_registrations import CELL_FACTORS, VGG_FX_KERNELS
 
-    fx = [n for n, f in CELL_FACTORS.items() if f["family"] == "vgg16"]
+    fx = [n for n, f in CELL_FACTORS.items() if f["family"] == "vgg16" and f["input_size"] == 64]  # not the CIFAR-100 _in32 cells
     assert len(fx) == 336 and sum(CELL_FACTORS[n]["pretrained"] for n in fx) == 24
     for name in (n for n in fx if not CELL_FACTORS[n]["pretrained"]):
         spec = MODEL_REGISTRY[name]
@@ -340,3 +341,22 @@ def test_replicated_fc_weights_fold_away_exactly():
         folded = torch.einsum("ocp,ip->oci", fc1.weight.view(fc1.out_features, c, -1), pooling).reshape(fc1.out_features, -1)
         assert torch.allclose(fc1(pool(feats).flatten(1)), feats.flatten(1) @ folded.T + fc1.bias, atol=1e-4)
     assert fc1.weight.numel() - folded.numel() == replicated_fc_weights(m) > 0
+
+
+def test_controls_and_cifar_cells_are_what_their_names_say():
+    """phase_11_kernel_controls: the width-scaled nets carry the other kernel's MACs (the point of the control: 2x2 widened to
+    1.5 against the 3x3 net, 3x3 narrowed to 2/3 against the 2x2 net) and k5x5 is five 5x5 convs. phase_12_cifar100: every
+    _in32 cell takes 32x32 in and gives 100 classes (scripts/train.py builds each model with ctor(), no num_classes)."""
+    from ml.model_registrations import CELL_FACTORS
+    from ml.reporting import compute_flops
+
+    macs = lambda n: compute_flops(MODEL_REGISTRY[n]["ctor"]().eval(), input_size=(1, 3, 64, 64))["macs"]  # noqa: E731
+    base = "alexnet_{}_stride2_2pool2x2_map8_gap_bn"
+    assert abs(macs(base.format("k2x2") + "_w150") / macs(base.format("k3x3")) - 1) < 0.02
+    assert abs(macs(base.format("k3x3") + "_w67") / macs(base.format("k2x2")) - 1) < 0.02
+    m = MODEL_REGISTRY[base.format("k5x5")]["ctor"]()
+    assert [c.kernel_size[0] for c in m.features if isinstance(c, torch.nn.Conv2d)] == [5] * 5
+    cifar = [n for n, f in CELL_FACTORS.items() if f["input_size"] == 32]
+    assert len(cifar) == 7, cifar  # 4 AlexNet kernel sets + VGG16 3x3 / 2x2 / alternating
+    for name in cifar:
+        assert MODEL_REGISTRY[name]["ctor"]().eval()(torch.randn(1, 3, 32, 32)).shape == (1, 100), name

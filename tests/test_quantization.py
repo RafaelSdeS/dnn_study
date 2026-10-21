@@ -65,7 +65,7 @@ def test_residual_models_quantize_to_int8_without_crashing():
         assert out.shape == (2, 200), f"{name} produced the wrong output shape after INT8 convert"
 
 
-PHASE11_MODELS = sorted({m for p in (Path(__file__).parents[1] / "configs/experiments").glob("phase_11_*.yaml")
+PHASE11_MODELS = sorted({m for p in (Path(__file__).parents[1] / "configs/experiments").glob("phase_1[12]_*.yaml")  # + Phase 12's cells
                          for m in yaml.safe_load(p.read_text())["models"]})
 
 
@@ -100,7 +100,7 @@ def test_every_phase_11_model_is_the_literature_int8_through_qat_and_convert(nam
     qat.apply(tq.disable_observer)
     int8 = convert_to_int8(qat)
     with torch.no_grad():
-        assert int8(torch.randn(2, 3, 64, 64)).shape == (2, 200)
+        assert int8(torch.randn(2, 3, 64, 64)).shape == (2, 100 if name.endswith("_in32") else 200)  # CIFAR-100 cells: 100 classes
     logits = next(m.linear for m in int8.modules() if isinstance(m, _FloatLogits))
     assert not [type(m).__name__ for m in int8.modules()
                 if type(m) in (nn.Conv2d, nn.Linear, nn.BatchNorm2d, nn.BatchNorm1d) and m is not logits]

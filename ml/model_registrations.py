@@ -200,8 +200,12 @@ register_model("alexnet_adapted_orig_fc_pt", partial(AlexNetAdapted, pretrained=
 # fcdrop = FC head + Dropout 0.5; pretrained = ImageNet weights (AlexNet: only the 11-5-3 FC no-BN shape fits; VGG:
 # vgg16_bn on the 3x3 cells). Every cell of both grids is registered with its factors in CELL_FACTORS (analysis groups by
 # them); the phase_11_*.yaml files list the cells that run. Same channels and He init within a family.
+# Controls (2026-10-21, docs/logs/PHASE11_LOG.md "Controls and robustness runs"): a trailing _w<percent> = every conv's
+# channels scaled (phase_11_kernel_controls: w150 / w67 give the 2x2 / 3x3 net the MACs of the other); k5x5 = every conv 5x5
+# (kernel dose-response); a trailing _in32 = fed natively 32x32 with 100 classes (CIFAR-100, phase_12_cifar100).
 FX_KERNELS = {"k11-5-3": (11, 5, 3, 3, 3), "k3x3": (3,) * 5, "k2x2": (2,) * 5, "kalt3-2": (3, 2, 3, 2, 3),
               "k11-3": (11, 3, 3, 3, 3), "k11-2": (11, 2, 2, 2, 2)}
+CONTROL_KERNELS = {"k5x5": (5,) * 5}  # not in FX_KERNELS: tests/test_registry.py pins that grid at 304 cells
 CELL_FACTORS: dict[str, dict] = {}
 
 
@@ -215,10 +219,10 @@ def _map_side(features: nn.Sequential, side: int = 64) -> int:
 
 
 def _cell_name(family, kernels, stride, pool_kernel, pool_count, map_side, head, dropout, bn, pretrained,
-               input_size=64) -> str:
+               input_size=64, width=1.0) -> str:
     return (f"{family}_{kernels}_stride{stride}_{pool_count}pool{pool_kernel}x{pool_kernel}_map{map_side}_"
-            f"{'fcdrop' if dropout else head}_{'bn' if bn else 'nobn'}" + (f"_in{input_size}" if input_size != 64 else "")
-            + "_pretrained" * pretrained)
+            f"{'fcdrop' if dropout else head}_{'bn' if bn else 'nobn'}" + (f"_w{round(100 * width)}" if width != 1 else "")
+            + (f"_in{input_size}" if input_size != 64 else "") + "_pretrained" * pretrained)
 
 
 def _register_cell(ctor, fuse_map, lr, input_size=64, **factors) -> str:
@@ -236,10 +240,10 @@ def _conv_groups(seq: nn.Sequential) -> list:
             for i, m in enumerate(mods) if isinstance(m, nn.Conv2d)]
 
 
-# features' indices depend only on kernels and BN (stride/pool kernel are module args; a 3rd pool sits after
-# the last ReLU), so 12 small GAP instances cover all 304 cells
+# features' indices depend only on kernels and BN (stride/pool kernel/width are module args; a 3rd pool sits after
+# the last ReLU), so 14 small GAP instances cover all 304 cells and the controls
 _FX_FUSE = {(kn, bn): _conv_groups(AlexNetAdapted(kernels=ks, head="gap", batch_norm=bn).features)
-            for kn, ks in FX_KERNELS.items() for bn in (False, True)}
+            for kn, ks in {**FX_KERNELS, **CONTROL_KERNELS}.items() for bn in (False, True)}
 for (kn, ks), s, pk, pn in product(FX_KERNELS.items(), (2, 4), (2, 3), (2, 3)):
     # torchvision's own conv1 (11x11, stride 4, pad 2) only in torchvision's own layout (three 3x3 pools), where every
     # kernel ends on a 1x1 map anyway; elsewhere 'same' padding (k // 2) gives every kernel the same maps (pad 2 left
@@ -267,6 +271,17 @@ for kn in ("k11-5-3", "k3x3", "k2x2", "kalt3-2"):
         _register_cell(partial(AlexNetAdapted, head="fc", batch_norm=False, dropout=0.5, pretrained=pt, **geo),
                        _FX_FUSE[kn, False], 3e-4, input_size=224, family="alexnet", kernels=kn, stride=4, pool_kernel=3,
                        pool_count=3, map_side=side, head="fc", dropout=True, bn=False, pretrained=pt)
+# Phase 11 controls (phase_11_kernel_controls.yaml), at the 64px layout (stride 2, two 2x2 pools, 8x8 map), with BN: the
+# 2x2 net at width 1.5 / the 3x3 net at width 2/3 (MACs of the 3x3 / 2x2 net at width 1) and the uniform 5x5 net
+_CTRL_GEO = dict(stem_stride=2, pool_kernel=2, pool_count=2)
+for kn, w, head in (("k2x2", 1.5, "gap"), ("k3x3", 2 / 3, "gap"), ("k5x5", 1.0, "gap"), ("k5x5", 1.0, "fc")):
+    ks = {**FX_KERNELS, **CONTROL_KERNELS}[kn]
+    with torch.device("meta"):
+        side = _map_side(AlexNetAdapted(head="gap", kernels=ks, width=w, **_CTRL_GEO).features)
+    _register_cell(partial(AlexNetAdapted, head=head, batch_norm=True, dropout=0.5 * (head == "fc"), kernels=ks, width=w,
+                           **_CTRL_GEO),
+                   _FX_FUSE[kn, True], 3e-4, family="alexnet", kernels=kn, stride=2, pool_kernel=2, pool_count=2,
+                   map_side=side, head=head, dropout=head == "fc", bn=True, pretrained=False, width=w)
 register_model("alexnet_stacked_gap", partial(AlexNetStacked, head="gap"),
                fuse_map=FUSE_MAP_STACKED, fuse_root_attr="features", lr=1e-3)
 # No BN -> features compresses to plain Conv-ReLU pairs (BN entries drop out, shifting every
@@ -326,6 +341,23 @@ for _kn, (_stem, _blocks) in RESNET_FX_KERNELS.items():
         _register_cell(partial(ResNetAdapted, stem=_stem, blocks=_blocks, pretrained=_pt), find_fuse_groups(_f), 1e-3,
                        family="resnet18", kernels=_kn, stride=2, pool_kernel=3, pool_count=1, map_side=_map_side(_f),
                        head="gap", dropout=False, bn=True, pretrained=_pt)
+
+# Phase 12 CIFAR-100 (phase_12_cifar100.yaml): the same nets (GAP + BN, the 64px layout / VGG16's own) fed 32x32 images with
+# 100 classes -- _in32, the ctor carries num_classes because scripts/train.py builds every model with ctor()
+for kn in ("k11-5-3", "k3x3", "k2x2", "kalt3-2"):
+    geo = dict(kernels=FX_KERNELS[kn], stem_stride=2, pool_kernel=2, pool_count=2)
+    with torch.device("meta"):
+        side = _map_side(AlexNetAdapted(head="gap", **geo).features, 32)
+    _register_cell(partial(AlexNetAdapted, head="gap", batch_norm=True, num_classes=100, **geo), _FX_FUSE[kn, True], 3e-4,
+                   input_size=32, family="alexnet", kernels=kn, stride=2, pool_kernel=2, pool_count=2, map_side=side,
+                   head="gap", dropout=False, bn=True, pretrained=False)
+for kn in ("k3x3", "k2x2", "kalt3-2"):
+    with torch.device("meta"):
+        side = _map_side(_vgg_adapted_features(VGG_FX_KERNELS[kn], 1, 2, 5), 32)
+    _register_cell(partial(VGGAdapted, kernels=VGG_FX_KERNELS[kn], stem_stride=1, pool_kernel=2, pool_count=5, head="gap",
+                           dropout=0.0, num_classes=100, pretrained=False),
+                   _VGG_FX_FUSE[kn, 1], 1e-3, input_size=32, family="vgg16", kernels=kn, stride=1, pool_kernel=2,
+                   pool_count=5, map_side=side, head="gap", dropout=False, bn=True, pretrained=False)
 
 # large-scale sweep (see configs/experiments/large_scale.yaml)
 FUSE_MAP_ALEXNET_SMALLKERNEL = [["0", "1"], ["3", "4"], ["6", "7"], ["8", "9"], ["10", "11"]]

@@ -290,13 +290,17 @@ class AlexNetAdapted(nn.Module):
 
     def __init__(self, num_classes: int = 200, kernels: tuple = (11, 5, 3, 3, 3), head: str = "fc",
                  batch_norm: bool = False, stem_stride: int = 2, stem_padding: int | None = None,
-                 pool_kernel: int = 2, pool_count: int = 2, dropout: float = 0.0, pretrained: bool = False):
+                 pool_kernel: int = 2, pool_count: int = 2, dropout: float = 0.0, pretrained: bool = False,
+                 width: float = 1.0):
         super().__init__()
         self.quant = tq.QuantStub()
         self.dequant = tq.DeQuantStub()
         assert pool_count in (2, 3), pool_count
+        assert width == 1.0 or not pretrained, "pretrained weights only fit width 1"
 
-        channels = (3, 64, 192, 384, 256, 256)
+        # width scales every conv's output channels (phase_11_kernel_controls: a 2x2 net at width 1.5 has the MACs of
+        # the 3x3 net at 1.0, a 3x3 net at 2/3 those of the 2x2 one); the 3 input channels stay
+        channels = (3, *(round(c * width) for c in (64, 192, 384, 256, 256)))
         layers = []
         for i, k in enumerate(kernels):
             if k % 2:
@@ -312,7 +316,7 @@ class AlexNetAdapted(nn.Module):
                                  stride=stem_stride if i == 0 else 1, padding=padding)
             if i < 2 or (i == 4 and pool_count == 3):
                 layers.append(nn.MaxPool2d(pool_kernel, 2))
-        pool, classifier = _pool_and_classifier(head, 256, 6, num_classes, dropout=dropout)
+        pool, classifier = _pool_and_classifier(head, channels[-1], 6, num_classes, dropout=dropout)
         layers.append(pool)
         self.features = nn.Sequential(*layers)
         self.classifier = classifier

@@ -59,26 +59,27 @@ EARLY_GRAY = "#6b6b6b"
 EARLY_LABEL = "INT8 inflado pelo QAT (melhor época FP32 antes de 80% do treino)"
 
 
-def load(*roots: Path) -> pd.DataFrame:
+def load(*roots: Path, prefix: str = "phase_11_") -> pd.DataFrame:
     """One row per run, accuracies on the held-out test set (Tiny ImageNet's official val split; the 90/10 split of
     train/ only picked each run's best epoch). fp32/qat/int8 are NaN for a run without the current quant_protocol
     (ml/quantization.py:QUANT_PROTOCOL); qat_raw/int8_raw/fp32_val are its validation-split numbers, all the superseded
     runs have (design_figures --archive draws those). `results` is the run's results dir, where the per-image
     *_test_logits.npz live (factor_effects' McNemar tests). roots default to RUNS (every runtime: a cell may have run on
-    PCAD or the laptop, never on both); ARCHIVE reads the superseded runs.
+    PCAD or the laptop, never on both); ARCHIVE reads the superseded runs. prefix: the experiment dirs to read (Phase 12's
+    robustness runs are phase_12_*: another recipe or dataset, so never mixed with the design's).
     lat_* = forward latency per image at batch 1 (ms): FP32 on the training GPU and on CPU, INT8 on CPU.
     params_eff_m/macs_eff_m/int8_eff_mb/fp32_eff_mb = the same costs without the FC-head weights that only multiply AdaptiveAvgPool
     copies (replicated_weights): the cost axes of the figures; the as-built ones stay for the tables."""
     from ml.quantization import QUANT_PROTOCOL
 
     rows = []
-    for p in sorted(q for r in (roots or RUNS) for q in r.glob("phase_11_*/*/results/*_summary.json")):
+    for p in sorted(q for r in (roots or RUNS) for q in r.glob(f"{prefix}*/*/results/*_summary.json")):
         d = json.loads(p.read_text())
         prov, key = d["config"]["provenance"], p.parents[1].name
         post_fix = d.get("quant_protocol") == QUANT_PROTOCOL
         nan = float("nan")
         rows.append(dict(
-            exp=p.parents[2].name.removeprefix("phase_11_"), key=key, seed=d["config"]["experiment"]["seed"],
+            exp=p.parents[2].name.removeprefix(prefix), key=key, seed=d["config"]["experiment"]["seed"],
             fp32=d["test_fp32_top1"] if post_fix else nan, qat=d["test_qat_top1"] if post_fix else nan,
             int8=d["test_int8_top1"] if post_fix else nan, fp32_val=d["fp32_top1"], results=p.parent,
             qat_raw=d["qat_top1"], int8_raw=d["int8_top1"],
