@@ -1,0 +1,22 @@
+# Phase 12 -- fine-tuning the pretrained twins (docs/logs/PHASE11_LOG.md "Controls and robustness runs" (2026-10-21)). In phase_11_* every pretrained net trains
+# on the one from-scratch recipe (lr 0.01), which erases the pretraining: the val peak falls at epoch 10-11 and the run goes on
+# like a scratch one (PHASE11_LOG "Progress 2026-10-20"). Here the same nets are fine-tuned: 100 epochs, lr 1.0e-4 (Li et al.,
+# ICLR 2020: the best fine-tuning lr depends on the target dataset and its similarity to the source, so no single value is
+# claimed -- the two lrs run, 1e-3 and 1e-4, both points of their App. D grid {0.02, 0.01, 0.005, 0.001, 0.0001}, and each net's
+# is read at the lr with the better *validation* top-1, never the test's). Same SGD, momentum, weight decay, cosine, label smoothing
+# and augmentation. QAT by the protocol's own rule (Wu et al. 2020 App. A.2: ~1/10 of the training steps at 1/100 of the initial
+# lr): 10 epochs, lr 1.0e-6 -> 1.0e-8. Fed Tiny ImageNet enlarged to 224 (DataConfig.upscale_to), as phase_11_input224.
+# Compared with the from-scratch twin and the lr 0.01 pretrained run of phase_11_*.
+extends: _protocols/no_patience
+name: phase_12_finetune_pretrained_in224_lr1e4
+models:
+  - alexnet_k11-5-3_stride4_3pool3x3_map6_fcdrop_nobn_in224_pretrained
+training:
+  epochs: 100
+  lr: 1.0e-4
+qat:
+  epochs: 10
+  lr: 1.0e-6
+  eta_min: 1.0e-8
+data:
+  upscale_to: 224

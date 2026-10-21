@@ -1,0 +1,12 @@
+# Replicates of the large-stem cells (11x11 conv1, 3x3 / 2x2 body): k11-3 GAP + BN beats 11-5-3-3-3 by 1.7 pp at seed 42
+# (band +-0.6 pp, AlexNet + BN) -- one seed each. These four join AlexNet + BN's noise band (core() keeps them).
+# Same protocol as every Phase 11 run (_protocols/no_patience.yaml), enforced by tests/test_config.py: only the seed
+# differs (it also moves the 90/10 split). docs/logs/PHASE11_LOG.md "Controls and robustness runs" (2026-10-21).
+extends: _protocols/no_patience
+seed: 44
+name: phase_11_large_stem_seed44
+models:
+  - alexnet_k11-3_stride2_2pool2x2_map8_gap_bn
+  - alexnet_k11-3_stride2_2pool2x2_map8_fcdrop_bn
+  - alexnet_k11-2_stride2_2pool2x2_map8_gap_bn
+  - alexnet_k11-2_stride2_2pool2x2_map8_fcdrop_bn

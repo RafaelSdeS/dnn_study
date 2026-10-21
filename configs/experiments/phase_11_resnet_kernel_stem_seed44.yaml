@@ -1,0 +1,10 @@
+# ResNet-18's noise floor: 3x3 and 2x2 everywhere, again at seeds 43 / 44 (ResNet-18 had no band of its own, so its single-
+# seed contrasts were read against AlexNet + BN's). noise_bands() adds the regime (resnet18, BN) by itself.
+# Same protocol as every Phase 11 run (_protocols/no_patience.yaml), enforced by tests/test_config.py: only the seed
+# differs (it also moves the 90/10 split). docs/logs/PHASE11_LOG.md "Controls and robustness runs" (2026-10-21).
+extends: _protocols/no_patience
+seed: 44
+name: phase_11_resnet_kernel_stem_seed44
+models:
+  - resnet18_k3x3_stride2_1pool3x3_map2_gap_bn
+  - resnet18_k2x2_stride2_1pool3x3_map2_gap_bn

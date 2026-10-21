@@ -1,0 +1,19 @@
+# Phase 11 controls (2026-10-21, docs/logs/PHASE11_LOG.md "Controls and robustness runs"). Two confounds the kernel
+# contrasts leave open, at the main factorial's best-trained column (the 64px layout: stride 2, two 2x2 pools, 8x8 map, BN):
+#  - capacity: a 2x2 net has 4/9 of the 3x3 net's MACs and weights. Width scales every conv's channels (AlexNetAdapted(width=)):
+#    the 2x2 net at 1.5 has 166.3M MACs against the 3x3 net's 166.9M, the 3x3 net at 2/3 (channels 43-128-256-171-171) 74.8M
+#    against the 2x2 net's 74.2M (by hand from the layer shapes; tests/test_registry.py checks the built nets within 2%).
+#    If 2x2 only loses because it is smaller, w150 closes the gap; if it is the kernel, it does not.
+#  - dose-response: 11-5-3-3-3 and 11-3 lead the 3x3 net; a uniform 5x5 net (2.8x the 3x3 MACs) says whether larger kernels
+#    help everywhere or only at the stem (2x2 -> 3x3 -> 5x5 completes the curve). The FC + Dropout twin is one seed.
+# These cells carry a `width` factor / the k5x5 kernel that the pairing of figures 04-11 does not know: core() and
+# design_cells() leave them out and figure 26 draws them. Replicates: phase_11_kernel_controls_seed43/44 (GAP cells).
+# Same protocol as every Phase 11 run (_protocols/no_patience.yaml), enforced by tests/test_config.py:
+#   python -m scripts.cluster submit --experiment phase_11_kernel_controls --runtime pcad --slurm tupi_beagle --model <m>
+extends: _protocols/no_patience
+name: phase_11_kernel_controls
+models:
+  - alexnet_k2x2_stride2_2pool2x2_map8_gap_bn_w150
+  - alexnet_k3x3_stride2_2pool2x2_map8_gap_bn_w67
+  - alexnet_k5x5_stride2_2pool2x2_map8_gap_bn
+  - alexnet_k5x5_stride2_2pool2x2_map8_fcdrop_bn

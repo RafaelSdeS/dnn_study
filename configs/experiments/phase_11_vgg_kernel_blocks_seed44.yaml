@@ -1,0 +1,15 @@
+# Replicates of the VGG16 one-2x2-block patterns (the 5 positions of phase_11_vgg_kernel_blocks.yaml), GAP + BN, run on
+# nyx. At seed 42 a 2x2 block in blocks 1-2 sits inside the VGG16 floor and one in blocks 3-5 loses 0.6-0.9 pp: with three
+# seeds each position gets its own mean and spread. Wave 1 = the two finished positions (2-3-3-3-3, 3-2-3-3-3); the three
+# late ones are queued after their seed-42 runs land. Not in the noise band's pool (core() leaves the blocks out).
+# Same protocol as every Phase 11 run (_protocols/no_patience.yaml), enforced by tests/test_config.py: only the seed
+# differs (it also moves the 90/10 split). docs/logs/PHASE11_LOG.md "Controls and robustness runs" (2026-10-21).
+extends: _protocols/no_patience
+seed: 44
+name: phase_11_vgg_kernel_blocks_seed44
+models:
+  - vgg16_kblocks2-3-3-3-3_stride1_5pool2x2_map2_gap_bn
+  - vgg16_kblocks3-2-3-3-3_stride1_5pool2x2_map2_gap_bn
+  - vgg16_kblocks3-3-2-3-3_stride1_5pool2x2_map2_gap_bn
+  - vgg16_kblocks3-3-3-2-3_stride1_5pool2x2_map2_gap_bn
+  - vgg16_kblocks3-3-3-3-2_stride1_5pool2x2_map2_gap_bn

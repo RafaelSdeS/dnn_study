@@ -1,0 +1,13 @@
+# Phase 12 -- robustness of the Phase 11 conclusions (docs/logs/PHASE11_LOG.md "Controls and robustness runs" (2026-10-21)). Is the kernel ranking an artifact of
+# the one recipe? The same three AlexNet GAP + BN cells (11-5-3-3-3, 3x3, 2x2 at the 64px layout; their lr 0.01 runs are
+# phase_11_kernel_head_bn, three seeds) at half the lr: one octave either side of 0.01, the step Li et al. (ICLR 2020, App. D) take
+# around 0.01 in their fine-tuning grid {0.02, 0.01, 0.005, ...}. QAT keeps its protocol (lr 1e-4 -> 1e-6), so only the FP32
+# lr changes. A different recipe from phase_11_*: its own slug, tests/test_config.py pins the one difference.
+extends: _protocols/no_patience
+name: phase_12_lr_half
+models:
+  - alexnet_k11-5-3_stride2_2pool2x2_map8_gap_bn
+  - alexnet_k3x3_stride2_2pool2x2_map8_gap_bn
+  - alexnet_k2x2_stride2_2pool2x2_map8_gap_bn
+training:
+  lr: 0.005

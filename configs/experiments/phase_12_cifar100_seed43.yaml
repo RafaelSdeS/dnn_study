@@ -1,0 +1,20 @@
+# Phase 12 -- is it Tiny ImageNet? (docs/logs/PHASE11_LOG.md "Controls and robustness runs" (2026-10-21).) The kernel contrast on CIFAR-100: AlexNet's 4 kernel sets
+# and VGG16's 3x3 / 2x2 / alternating, GAP + BN, the very same nets (the 64px layout, VGG16's own) fed 32x32 images with 100
+# classes, seed 43. Data: scripts/phase12/export_cifar100.py writes it in Tiny ImageNet's folder layout (PCAD_DATASET_ROOT
+# picks it; ml/data.py asserts the class count). The 90/10 hold-out of the 50k training images is He et al. 2016's CIFAR 45k/5k;
+# the 10k official test images are the test set. Pad-4 random crop is the standard CIFAR augmentation at 32 px; the rest of the
+# recipe is Phase 11's (AutoAugment's ImageNet policy kept so that nothing but the dataset differs).
+extends: _protocols/no_patience
+seed: 43
+name: phase_12_cifar100_seed43
+models:
+  - alexnet_k11-5-3_stride2_2pool2x2_map4_gap_bn_in32
+  - alexnet_k3x3_stride2_2pool2x2_map4_gap_bn_in32
+  - alexnet_k2x2_stride2_2pool2x2_map4_gap_bn_in32
+  - alexnet_kalt3-2_stride2_2pool2x2_map4_gap_bn_in32
+  - vgg16_k3x3_stride1_5pool2x2_map1_gap_bn_in32
+  - vgg16_k2x2_stride1_5pool2x2_map1_gap_bn_in32
+  - vgg16_kalt3-2_stride1_5pool2x2_map1_gap_bn_in32
+data:
+  img_size: 32
+  num_classes: 100

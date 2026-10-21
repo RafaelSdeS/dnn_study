@@ -1,0 +1,10 @@
+# Replicates of phase_11_kernel_controls.yaml's GAP + BN cells (the width-matched pair and the 5x5 net), seed 44: the
+# controls are only as good as the spread they are read against. Same protocol as every Phase 11 run
+# (_protocols/no_patience.yaml), only the seed differs.
+extends: _protocols/no_patience
+seed: 44
+name: phase_11_kernel_controls_seed44
+models:
+  - alexnet_k2x2_stride2_2pool2x2_map8_gap_bn_w150
+  - alexnet_k3x3_stride2_2pool2x2_map8_gap_bn_w67
+  - alexnet_k5x5_stride2_2pool2x2_map8_gap_bn
