@@ -154,8 +154,8 @@ def cell_label(f, skip=()):
     tag = FAMILY_TAG.get(g("family"), "")
     geo = ("" if tag else f"{pn} pools {pk}×{pk}" if "stride" in skip else f"conv1 stride {s}" if "pooling" in skip
            else GEO_LABEL.get((s, pk, pn), f"conv1 s{s} · {pn} pools {pk}×{pk}"))
-    k = g("kernels")  # a VGG kernel-block pattern (kblocks3-3-3-2-2) has no KLABEL entry: "blocos 3-3-3-2-2"
-    tags = [tag + ("" if "kernels" in skip else " " * bool(tag) + KLABEL.get(k, k.replace("kblocks", "blocos ")) + "†" * bool(g("approx", False))), geo,
+    k = g("kernels")  # a VGG kernel-block pattern (kblocks3-3-3-2-2) has no KLABEL entry: "kernel por bloco 3-3-3-2-2"
+    tags = [tag + ("" if "kernels" in skip else " " * bool(tag) + KLABEL.get(k, k.replace("kblocks", "kernel por bloco ")) + "†" * bool(g("approx", False))), geo,
             "" if "head" in skip else {"gap": "GAP", "fc": "FC"}[g("head")], "Dropout" * (bool(g("dropout")) and "dropout" not in skip),
             "" if "bn" in skip or tag else ("BN" if g("bn") else "sem BN"), "pré-treino" * (bool(g("pretrained")) and "pretrained" not in skip),
             "224 px" * bool(g("input_size") == 224 and "input_size" not in skip)]
@@ -234,7 +234,7 @@ def fig_pareto(df, figs, note, panels, name, question):
             ax.set_title(acc.upper(), fontsize=10)
     axes[0, 0].set_ylabel("Top-1 (%)" if len(panels) > 1 else f"Top-1 {panels[0][0].upper()} (%)")
     handles = (legend_kernels(d.kernels)
-               + ([Patch(color=NEUTRAL, label="um kernel por bloco (VGG16)")] if d.kernels.fillna("").str.startswith("kblocks").any() else [])
+               + ([Patch(color=NEUTRAL, label="blocos mistos 3×3 / 2×2 (VGG16)")] if d.kernels.fillna("").str.startswith("kblocks").any() else [])
                + family_handles(d)
                + ([Line2D([], [], marker="o", color=TEXT_SECONDARY, mec="k", mew=1.3, ls="", ms=8, label="contorno preto = pré-treino ImageNet")]
                   if d.pretrained.any() else [])
@@ -265,8 +265,8 @@ def fig_grid(df, figs, note, bands):
     lim = np.nanmax(np.abs(dfp[1:])) if np.isfinite(dfp[1:]).any() else 1
     shown = np.where(np.abs(dfp) < bcol, np.nan, dfp)  # inside the seed band: no colour, it is not a difference
     shown[0] = np.nan  # the reference row: no colour in every column (it was white where a floor was still pending)
-    seq, div = (LinearSegmentedColormap.from_list(n, c) for n, c in [("acc", ["white", GREEN]), ("delta", [RED, "white", BLUE])])
-    norms = [Normalize(np.nanmin(fp32), np.nanmax(fp32)) if np.isfinite(fp32).any() else Normalize(), Normalize(-lim, lim)]
+    seq, div = (LinearSegmentedColormap.from_list(n, c) for n, c in [("acc", ["#c6efd3", GREEN]), ("delta", [RED, "white", BLUE])])
+    norms = [Normalize(np.nanmin(fp32), np.nanmax(fp32)) if np.isfinite(fp32).any() else Normalize(), Normalize(-lim / 2, lim / 2)]  # colour saturates at half the largest gap: the text has the numbers
     for ax, m, cmap, norm in [(axes[0], fp32, seq, norms[0]), (axes[1], shown, div, norms[1])]:
         ax.imshow(np.ma.masked_invalid(m), cmap=cmap, norm=norm, aspect="auto")
         ax.set_facecolor("#f0f0f0")
@@ -648,7 +648,7 @@ def fig_kblocks(df, figs, note, bands):
     if pd.notna(band["fp32"]):
         handles.append(Patch(color=GRID, alpha=0.6, label=f"ruído entre seeds em torno do 3×3 (±{band['fp32']:.1f} pp FP32, {src})"))
     fig.legend(handles=handles + ([early_handle("ring")] if ringed else []), loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=3, fontsize=9)
-    fig.suptitle("Em que bloco da VGG16 o kernel 2×2 custa? Um kernel por bloco (VGG16 + BN + GAP, blocos de 2, 2, 3, 3, 3 convs)\n"
+    fig.suptitle("Em que bloco da VGG16 o kernel 2×2 custa? Kernel misto por bloco (VGG16 + BN + GAP, blocos de 2, 2, 3, 3, 3 convs)\n"
                  + note + (f"\nainda na fila: {', '.join(pending)}" if pending else ""), fontsize=11)
     fig.tight_layout()
     savefig(fig, "24_vgg_kernel_blocks.png", figs)

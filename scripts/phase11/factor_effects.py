@@ -29,7 +29,7 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
 from configs.loader import load_config
-from ml.plotting import AMBER, BLUE, GRID, NEUTRAL, RED, TEXT_PRIMARY, apply_report_style
+from ml.plotting import BLUE, GRID, NEUTRAL, RED, TEXT_PRIMARY, apply_report_style
 from ml.reporting import holm, mcnemar_p, wilson_ci
 from scripts.phase11.analyze_geometry import (BASE_KEY, BASE_LABEL, EARLY_GRAY, EARLY_LABEL, LAYOUTS, REGIME_LABEL, RESNET_BASE, TABLES,
                                               VGG_BASE, band_for, early_handle, int8_bar, noise_bands, pair_band, precision_handles,
@@ -39,7 +39,7 @@ from scripts.phase11.design_figures import K4, KCOLOR, KLABEL, cell_label, frame
 COMP = "Compensação (profundidade e blocos)"
 PRE = "Pré-treino ImageNet (não → sim)"
 POOL = "Pooling (3 max-pools 3×3 → 2 max-pools 2×2)"
-A_COLOR, B_COLOR = BLUE, AMBER  # A and B in every factor figure (report palette); the legend names each, never a kernel
+A_COLOR, B_COLOR = BLUE, RED  # A and B in every factor figure (report palette, vivid like figures 01-03); the legend names each, never a kernel
 # the factor figures' rows: one family per row, each with its own reference net's line (the families compare to AlexNet)
 FAMILY_ROWS = [("alexnet", (BASE_KEY, BASE_LABEL)), ("família", (BASE_KEY, BASE_LABEL)), ("vgg16", VGG_BASE),
                ("resnet18", RESNET_BASE)]
@@ -376,7 +376,7 @@ def rank_table(ax, t, rank):
         rows.append(cell_label({**f, "family": "alexnet", "pool_count": f["pooling"][0], "pool_kernel": f["pooling"][-1]},
                                skip=("kernels",)))
     text = [[f"{pos.at[i, k]:g}º ({t.at[i, k]:.1f})" for k in K4] for i in t.index] + [[f"{rank[k]:.2f}" for k in K4]]
-    fill = [[to_rgba(KCOLOR[k], 0.35 if pos.at[i, k] == 1 else 0) for k in K4] for i in t.index] + [["white"] * len(K4)]
+    fill = [[to_rgba(KCOLOR[k], 0.85 if pos.at[i, k] == 1 else 0) for k in K4] for i in t.index] + [["white"] * len(K4)]
     tb = ax.table(cellText=text, cellColours=fill, rowLabels=rows + ["posição média (= a bolinha)"],
                   colLabels=[KLABEL[k] for k in K4], colWidths=[0.13] * len(K4), rowLoc="left", cellLoc="center",
                   bbox=[0, 0, 1, 1])

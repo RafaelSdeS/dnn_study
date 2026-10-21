@@ -77,8 +77,8 @@ kernel_head_bn_seed44,alexnet_k11-5-3_stride2_2pool2x2_map8_fcdrop_nobn,44,tupi4
 kernel_head_bn_seed44,alexnet_k3x3_stride2_2pool2x2_map8_fcdrop_nobn,44,beagle,42.66999959945679,46.09000086784363,46.05000019073486,True
 kernel_head_bn_seed44,alexnet_k2x2_stride2_2pool2x2_map8_fcdrop_nobn,44,tupi3,39.37999904155731,43.20000112056732,43.20000112056732,True
 kernel_head_bn_seed44,alexnet_kalt3-2_stride2_2pool2x2_map8_fcdrop_nobn,44,beagle,42.59999990463257,42.6800012588501,42.660000920295715,True
-large_stem,alexnet_k11-3_stride2_2pool2x2_map8_gap_bn,42,,,,,False
-large_stem,alexnet_k11-3_stride2_2pool2x2_map8_fcdrop_bn,42,,,,,False
+large_stem,alexnet_k11-3_stride2_2pool2x2_map8_gap_bn,42,beagle,54.54999804496765,54.269999265670776,54.24000024795532,True
+large_stem,alexnet_k11-3_stride2_2pool2x2_map8_fcdrop_bn,42,beagle,52.399998903274536,52.799999713897705,52.82999873161316,True
 large_stem,alexnet_k11-2_stride2_2pool2x2_map8_gap_bn,42,,,,,False
 large_stem,alexnet_k11-2_stride2_2pool2x2_map8_fcdrop_bn,42,,,,,False
 resnet_kernel_stem,resnet18_k7-3_stride2_1pool3x3_map2_gap_bn,42,,,,,False
@@ -97,8 +97,8 @@ vgg_kernel_blocks,vgg16_kblocks3-2-3-2-3_stride1_5pool2x2_map2_gap_bn,42,Nyx,58.
 vgg_kernel_blocks,vgg16_kblocks2-3-2-3-2_stride1_5pool2x2_map2_gap_bn,42,Nyx,58.67000222206116,58.43999981880188,58.30000042915344,True
 vgg_kernel_blocks,vgg16_kblocks3-3-3-2-2_stride1_5pool2x2_map2_gap_bn,42,Nyx,58.789998292922974,58.77000093460083,58.82999897003174,True
 vgg_kernel_blocks,vgg16_kblocks2-2-2-3-3_stride1_5pool2x2_map2_gap_bn,42,Nyx,58.45999717712402,58.57999920845032,58.490002155303955,True
-vgg_kernel_blocks,vgg16_kblocks2-3-3-3-3_stride1_5pool2x2_map2_gap_bn,42,,,,,False
-vgg_kernel_blocks,vgg16_kblocks3-2-3-3-3_stride1_5pool2x2_map2_gap_bn,42,,,,,False
+vgg_kernel_blocks,vgg16_kblocks2-3-3-3-3_stride1_5pool2x2_map2_gap_bn,42,Nyx,59.57000255584717,59.299999475479126,59.18999910354614,True
+vgg_kernel_blocks,vgg16_kblocks3-2-3-3-3_stride1_5pool2x2_map2_gap_bn,42,Nyx,59.42999720573425,59.67000126838684,59.700000286102295,True
 vgg_kernel_blocks,vgg16_kblocks3-3-2-3-3_stride1_5pool2x2_map2_gap_bn,42,,,,,False
 vgg_kernel_blocks,vgg16_kblocks3-3-3-2-3_stride1_5pool2x2_map2_gap_bn,42,,,,,False
 vgg_kernel_blocks,vgg16_kblocks3-3-3-3-2_stride1_5pool2x2_map2_gap_bn,42,,,,,False
@@ -118,4 +118,4 @@ vgg_kernel_head_seed43,vgg16_k2x2_stride1_5pool2x2_map2_gap_bn,43,Nyx,56.8599998
 vgg_kernel_head_seed44,vgg16_k3x3_stride1_5pool2x2_map2_fcdrop_bn,44,,,,,False
 vgg_kernel_head_seed44,vgg16_k2x2_stride1_5pool2x2_map2_fcdrop_bn,44,,,,,False
 vgg_kernel_head_seed44,vgg16_k3x3_stride1_5pool2x2_map2_gap_bn,44,Nyx,59.09000039100647,59.28000211715698,59.28000211715698,True
-vgg_kernel_head_seed44,vgg16_k2x2_stride1_5pool2x2_map2_gap_bn,44,,,,,False
+vgg_kernel_head_seed44,vgg16_k2x2_stride1_5pool2x2_map2_gap_bn,44,Nyx,56.83000087738037,56.97000026702881,56.88999891281128,True
