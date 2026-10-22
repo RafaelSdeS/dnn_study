@@ -64,17 +64,6 @@ PAIRS = [("kernels", "k11-5-3", "k3x3", "Kernel 11-5-3-3-3 → 3×3"), ("kernels
          ("kernels", "k3x3", "k11-3", "Conv1 3×3 → 11×11, corpo 3×3"), ("kernels", "k2x2", "k11-2", "Conv1 2×2 → 11×11, corpo 2×2"),
          ("kernels", "k11-3", "k11-5-3", "Conv2 3×3 → 5×5, conv1 11×11"),
          ("kernels", "k11-3", "k11-2", "Corpo 3×3 → 2×2, conv1 11×11 mantida"),
-         # the hybrids (phase_11_hybrids.yaml): depth, the residual skip and the 11x11 conv1 on each other's bodies, and the
-         # kernel on the deep bodies (each pair at conv1 stride 2 and 1)
-         *[p for k in (3, 2) for p in (
-             ("kernels", f"k{k}x{k}stacked", f"k{k}x{k}residual", f"Empilhado {k}×{k} → residual (skip por estágio)"),
-             ("kernels", f"k11-{k}stacked", f"k11-{k}residual", f"Empilhado {k}×{k} → residual, conv1 11×11"),
-             ("kernels", f"k11-{k}", f"k11-{k}stacked", f"Conv1 11×11: corpo {k}×{k} → dois {k}×{k} empilhados por estágio"),
-             ("kernels", f"k{k}x{k}stacked", f"k11-{k}stacked", f"Conv1 {k}×{k} → 11×11, corpo empilhado"),
-             ("kernels", f"k{k}x{k}residual", f"k11-{k}residual", f"Conv1 {k}×{k} → 11×11, corpo residual"))],
-         ("kernels", "k3x3stacked", "k2x2stacked", "Kernel 3×3 → 2×2, corpo empilhado"),
-         ("kernels", "k3x3residual", "k2x2residual", "Kernel 3×3 → 2×2, corpo residual"),
-         ("stride", 2, 1, "Stride da conv1 2 → 1"),
          ("head", FC_HEAD, GAP_HEAD, "Cabeça FC (+ Dropout) → GAP"), ("bn", False, True, "BatchNorm não → sim"),
          ("stride", 4, 2, "Stride da conv1 4 → 2"), ("pooling", "3pool3x3", "2pool2x2", "3 max-pools 3×3 → 2 max-pools 2×2"),
          ("dropout", False, True, "Dropout 0 → 0,5 (só cabeça FC)"), ("pretrained", False, True, "Pré-treino ImageNet"),
@@ -141,12 +130,9 @@ def contrast_list():
     for r in pairs_of(design_cells()).itertuples():
         context = cell_label(CELL_FACTORS[r.cell_a], skip=(r.factor,) + (("dropout",) if r.factor == "head" else ()))
         if r.factor == "kernels":
-            # a body change (one conv -> several, a skip) is compensation; a kernel change on the same body is a kernel one
-            body = lambda k: next((s for s in ("stacked", "residual", "deepstem") if k.endswith(s)), "")  # noqa: E731
-            factor = COMP if body(r.kernels_a) != body(r.kernels_b) else "Kernel"
+            depth = "stacked" in r.cell_b or ("deepstem" in r.cell_b and "deepstem" not in r.cell_a)  # one conv -> several
+            factor = COMP if depth else "Kernel"
             label = f"{r.contrast.removeprefix('Kernel ')} · {context}"
-        elif r.factor == "stride" and r.stride_b == 1:  # the hybrids' 2 -> 1: figure 27 draws it, figure 05 stays 4 -> 2
-            factor, label = r.contrast, context
         else:
             factor, label = FIGURE_OF[r.factor], context
         rows.append((factor, label, r.cell_a, r.cell_b, ""))

@@ -133,7 +133,7 @@ def test_factorial_grid_is_complete_and_every_gap_cell_runs():
 
     fx = [n for n, f in CELL_FACTORS.items() if f["family"] == "alexnet" and f["kernels"] in FX_KERNELS and f["input_size"] == 64
           and f.get("width", 1.0) == 1.0 and f["stride"] != 1]  # not part of the grid: the width-scaled controls
-    # (phase_11_kernel_controls) and the stride-1 plain hybrids (phase_11_hybrids)
+    # (phase_11_kernel_controls) and the stride-1 plain hybrids (phase_13_hybrids)
     assert len(fx) == 304 and sum(CELL_FACTORS[n]["pretrained"] for n in fx) == 16
     x = torch.randn(1, 3, 64, 64)
     for name in (n for n in fx if CELL_FACTORS[n]["head"] == "gap"):
@@ -168,7 +168,7 @@ def test_every_cell_name_says_what_the_net_is():
         elif f["kernels"] in kernels:
             assert tuple(c.kernel_size[0] for c in convs) == kernels[f["kernels"]], name
         elif f["kernels"].endswith(("stacked", "residual")):  # two convs per stage, conv1 11x11 in the k11-* cells; residual =
-            big = f["kernels"].startswith("k11-")  # a FloatFunctional skip over each pair (phase_11_hybrids)
+            big = f["kernels"].startswith("k11-")  # a FloatFunctional skip over each pair (phase_13_hybrids)
             body = int(f["kernels"][4 if big else 1])
             assert [c.kernel_size[0] for c in convs] == [11 if big else body] + [body] * 9, name
             assert any(isinstance(x, torch.nn.quantized.FloatFunctional) for x in m.modules()) == f["kernels"].endswith("residual"), name
@@ -204,7 +204,7 @@ def test_named_reference_cells_are_the_reference_nets():
     assert _layout(mine) == _layout(ref)
     weights = lambda m: [x.weight for x in m.modules() if isinstance(x, (torch.nn.Conv2d, torch.nn.BatchNorm2d, torch.nn.Linear))]  # noqa: E731
     assert all(torch.equal(a, b) for a, b in zip(weights(mine), weights(ref), strict=True))
-    # the hybrids' 3x3 residual body (phase_11_hybrids) is AlexNetResidual's (phase_11_families), its head aside
+    # the hybrids' 3x3 residual body (phase_13_hybrids) is AlexNetResidual's (phase_11_families), its head aside
     from models import AlexNetResidual
 
     with torch.device("meta"):

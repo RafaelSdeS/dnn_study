@@ -359,7 +359,7 @@ class AlexNetStacked(nn.Module):
     kernel_size=2 (the k2x2stacked cells): every conv 2x2 -- the stride-2 stem unpadded, the rest behind
     SymmetricPad2d, as in AlexNetAdapted -- so the same maps (8x8 at the end) with two 2x2 per stage.
     dropout (FC head only): Dropout before the first two Linears, AlexNet's head (the *_fcdrop_bn cells).
-    phase_11_hybrids (docs/logs/PHASE11_LOG.md "Hybrids"): stem_kernel = conv1's kernel (11: AlexNet's 11x11, 'same'
+    phase_13_hybrids (docs/logs/PHASE13_LOG.md): stem_kernel = conv1's kernel (11: AlexNet's 11x11, 'same'
     padding 5), stem_stride = conv1's stride (1 keeps the 64x64 map: a 16x16 last map), residual = each stage's pair as
     a residual block (models.compensation._ResBlock: He et al. 2016, two convs + identity / 1x1 projection shortcut).
     The defaults build the same flat Sequential as before (same indices: the trained stacked cells load unchanged).

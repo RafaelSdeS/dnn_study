@@ -397,7 +397,7 @@ for _k in (3, 2):
         _f = _ctor().features
     _register_cell(_ctor, _conv_groups(_f), 1e-3, family="alexnet", kernels=f"k{_k}x{_k}stacked", stride=2,
                    pool_kernel=2, pool_count=2, map_side=_map_side(_f), head="fc", dropout=True, bn=True, pretrained=False)
-# Phase 11 hybrids (phase_11_hybrids.yaml, docs/logs/PHASE11_LOG.md "Hybrids"): the 64px layout's GAP + BN net, kernel
+# Phase 13 hybrids (phase_13_hybrids.yaml, docs/logs/PHASE13_LOG.md): the 64px layout's GAP + BN net, kernel
 # (3x3 / 2x2) x conv1 (that kernel / AlexNet's 11x11) x body (5 convs / two per stage / two per stage as a residual block)
 # x conv1 stride (2 / 1). <kernels> names the body: k11-3stacked = 11x11 conv1, then 3x3 two per stage; k3x3residual =
 # k3x3stacked with a skip over each stage's pair (He et al. 2016). The stride-2 plain and stacked cells exist above.

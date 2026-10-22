@@ -1,4 +1,4 @@
-"""Phase 11 figures 13-20, 24-27 -- the design read through its factors (ml/model_registrations.py:CELL_FACTORS), not run names.
+"""Phase 11 figures 13-20, 24-26 -- the design read through its factors (ml/model_registrations.py:CELL_FACTORS), not run names.
 Selecting by factor is what lets one file draw the live runs and, with --archive, the superseded AdamW-recipe runs
 (LEGACY maps their names onto the same factors) -- a preview of each figure's form, not its numbers: validation split,
 pre-fix INT8, latencies that still timed the DataLoader, and some only-approximate twins (marked †).
@@ -14,7 +14,6 @@ pre-fix INT8, latencies that still timed the DataLoader, and some only-approxima
     20_int8_prediction_flips.png    % of test images right -> wrong and wrong -> right under INT8 (from the test logits)
     24_vgg_kernel_blocks.png        VGG16 one kernel per block between its all-3x3 and all-2x2 nets (every seed a dot)
     26_kernel_controls.png          phase_11_kernel_controls: (a) width-matched 2x2 / 3x3 pairs, (b) 2x2 -> 3x3 -> 5x5 dose-response
-    27_hybrids.png                  phase_11_hybrids: 5 convs / stacked / residual body x conv1 (kernel / 11x11) x conv1 stride 2 / 1
 
 18 and 19 read the per-epoch logs, which only PCAD keeps -- fetch them first (analyze_geometry.convergence's rsync; add
 archive_adamw_recipe/ to both paths for --archive).
@@ -735,70 +734,6 @@ def fig_controls(df, figs, note):
     savefig(fig, "26_kernel_controls.png", figs)
 
 
-HYB_BODIES = [("", "5 convs"), ("stacked", "2 por estágio"), ("residual", "2 por estágio\n+ skip residual")]
-
-
-def fig_hybrids(df, figs, note, bands):
-    """Figure 27 -- phase_11_hybrids, AlexNet GAP + BN with two 2x2 pools: do depth, the residual skip, the 11x11 conv1 and a
-    stride-1 conv1 add up? One panel per conv1 stride; per conv1 (the body's kernel / 11x11) the three bodies left to right,
-    3x3 and 2x2 side by side, seed 42 (FP32 filled, INT8 hollow), a line through each kernel's FP32 across the bodies.
-    df = frame(everything=True); drawn once a phase_11_hybrids run exists (before that it would be the 6 old cells)."""
-    g = seed42(df[(df.family == "alexnet") & (df.pooling == "2pool2x2") & (df["head"] == "gap") & df.bn & ~df.pretrained
-                  & (df.input_size == 64) & (df.width == 1.0)])
-    if not (g.exp == "hybrids").any():  # load() strips the phase_11_ prefix
-        print("27: no phase_11_hybrids run yet")
-        return
-    cell = lambda k, s, big, body: g[(g.kernels == (f"k11-{k}" if big else f"k{k}x{k}") + body) & (g.stride == s)]  # noqa: E731
-    kernels = ((3, -0.14), (2, 0.14))
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6), sharey=True)
-    queued, ringed = 0, False
-    for ax, s in zip(axes, (2, 1)):
-        ticks = []
-        for gi, big in enumerate((False, True)):
-            for bi, (body, blabel) in enumerate(HYB_BODIES):
-                x, macs = 3.6 * gi + bi, []
-                for k, dx in kernels:
-                    r = cell(k, s, big, body)
-                    if r.empty:
-                        queued += 1
-                        continue
-                    r, c = r.iloc[0], KCOLOR[f"k{k}x{k}"]
-                    ax.scatter(x + dx, r.fp32, s=60, color=c, zorder=3)
-                    ax.scatter(x + dx, r.int8, s=60, marker="D", facecolors="white", edgecolors=c, lw=1.6, zorder=3)
-                    if r.early_best:
-                        early_ring(ax, x + dx, r.int8)
-                        ringed = True
-                    macs.append(f"{r.macs_eff_m:.0f}")
-                ticks.append((x, f"{blabel}\n" + (f"{' · '.join(macs)}M" if macs else "pendente")))
-            for k, dx in kernels:  # each kernel's FP32 across the three bodies
-                pts = [(3.6 * gi + bi + dx, cell(k, s, big, body).fp32.iloc[0]) for bi, (body, _) in enumerate(HYB_BODIES)
-                       if not cell(k, s, big, body).empty]
-                if len(pts) > 1:
-                    ax.plot(*zip(*pts), color=KCOLOR[f"k{k}x{k}"], lw=1, alpha=0.6, zorder=2)
-            ax.text(3.6 * gi + 1, 1.01, "conv1 11×11" if big else "conv1 = kernel do corpo", transform=ax.get_xaxis_transform(),
-                    ha="center", va="bottom", fontsize=9.5, weight="bold")
-        vgg = seed42(df[(df.family == "vgg16") & (df.kernels == "k3x3") & (df["head"] == "gap") & ~df.pretrained & (df.input_size == 64)])
-        if len(vgg):
-            ax.axhline(vgg.fp32.iloc[0], color=NEUTRAL, ls="--", lw=1, zorder=1)
-        ax.set_xticks([t for t, _ in ticks])
-        ax.set_xticklabels([t for _, t in ticks], fontsize=8.5)
-        ax.set_title(f"conv1 stride {s} (mapa final {8 if s == 2 else 16}×{8 if s == 2 else 16})", fontsize=10, pad=22)
-        ax.margins(x=0.06, y=0.12)
-    axes[0].set_ylabel("Top-1 (%)")
-    handles = legend_kernels(["k3x3", "k2x2"]) + [
-        Line2D([], [], marker="o", color=TEXT_SECONDARY, ls="", ms=8, label="FP32"),
-        Line2D([], [], marker="D", mfc="white", mec=TEXT_SECONDARY, ls="", ms=8, label="INT8"),
-        Line2D([], [], color=NEUTRAL, ls="--", label="VGG16 3×3 (GAP + BN)")]
-    fig.legend(handles=handles + ([early_handle("ring")] if ringed else []), loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=6, fontsize=9)
-    band = band_for(bands, "alexnet", True)["fp32"]
-    fig.suptitle("Híbridos: profundidade, skip residual, conv1 11×11 e stride 1 somam? (AlexNet, 2 max-pools 2×2, GAP + BN)\n"
-                 "sob cada corpo: MACs por imagem do 3×3 · do 2×2\n" + note
-                 + (f" · ruído entre seeds (GAP + BN): ±{band:.1f} pp FP32" if pd.notna(band) else "")
-                 + (f"\nainda na fila: {queued} de 24 células" if queued else ""), fontsize=11)
-    fig.tight_layout()
-    savefig(fig, "27_hybrids.png", figs)
-
-
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--archive", action="store_true", help="draw the superseded AdamW-recipe runs into the preview dir")
@@ -830,7 +765,6 @@ def main(argv=None):
     if not archive:
         fig_kblocks(frame(everything=True), figs, note, bands)
         fig_controls(frame(everything=True), figs, note)
-        fig_hybrids(frame(everything=True), figs, note, bands)
 
 
 if __name__ == "__main__":

@@ -304,7 +304,7 @@ def _conv_bn(in_ch: int, out_ch: int, k: int, stride: int = 1) -> list:
 
 class _ResBlock(nn.Module):
     """Two convolutions (3×3 by default) with BatchNorm and a residual skip connection. kernel_size sets both convs,
-    first_kernel only the first (phase_11_hybrids: AlexNet's 11x11 conv1 opening the first block); the 1x1 projection
+    first_kernel only the first (phase_13_hybrids: AlexNet's 11x11 conv1 opening the first block); the 1x1 projection
     shortcut when the shape changes is He et al. 2016's option B (Sec. 3.3)."""
 
     def __init__(self, in_ch: int, out_ch: int, stride: int = 1, use_se: bool = False, kernel_size: int = 3,

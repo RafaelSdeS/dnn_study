@@ -106,7 +106,8 @@ def test_every_phase_11_experiment_shares_the_protocol_exactly():
     assert reference["uniform_hparams"] is True
     assert reference["stages"] == ["fp32", "qat", "int8"]
 
-    names = [n for n in _experiment_names() if n.startswith("phase_11_")]
+    # Phase 13 (the hybrids, an extra study outside Phase 11) trains on exactly this protocol too
+    names = [n for n in _experiment_names() if n.startswith(("phase_11_", "phase_13_"))]
     assert len(names) >= 8, names  # the 8 files of the minimal design (2026-10-04)
     for name in names:
         cfg = load_config(f"experiments/{name}.yaml")

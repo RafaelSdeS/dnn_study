@@ -65,7 +65,7 @@ def test_residual_models_quantize_to_int8_without_crashing():
         assert out.shape == (2, 200), f"{name} produced the wrong output shape after INT8 convert"
 
 
-PHASE11_MODELS = sorted({m for p in (Path(__file__).parents[1] / "configs/experiments").glob("phase_1[12]_*.yaml")  # + Phase 12's cells
+PHASE11_MODELS = sorted({m for p in (Path(__file__).parents[1] / "configs/experiments").glob("phase_1[1-3]_*.yaml")  # + Phase 12's / 13's cells
                          for m in yaml.safe_load(p.read_text())["models"]})
 
 
