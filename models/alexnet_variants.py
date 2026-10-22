@@ -5,6 +5,7 @@ import torch.ao.quantization as tq
 from torchvision.models import alexnet
 
 from models.baselines import SymmetricPad2d, he_init
+from models.compensation import _ResBlock
 
 
 def _conv_relu(in_c: int, out_c: int, k: int, batch_norm: bool, stride: int = 1, padding: int = 0) -> list:
@@ -306,11 +307,11 @@ class AlexNetAdapted(nn.Module):
             if k % 2:
                 padding = k // 2 if (i or stem_padding is None) else stem_padding
             else:
-                # stem: no padding (64 -> 32 at stride 2, -> 16 at stride 4, like AlexNetTV(kernel_size=2)'s
-                # stride-4 stem); later convs: C2sp keeps the map size with no shift
+                # strided stem: no padding (64 -> 32 at stride 2, -> 16 at stride 4, like AlexNetTV(kernel_size=2)'s
+                # stride-4 stem); every stride-1 conv (a stride-1 stem too, as VGGAdapted's): C2sp keeps the map size
                 assert k == 2, "even kernels: only k=2"
                 padding = 0
-                if i > 0:
+                if i > 0 or stem_stride == 1:
                     layers.append(SymmetricPad2d())
             layers += _conv_relu(channels[i], channels[i + 1], k, batch_norm,
                                  stride=stem_stride if i == 0 else 1, padding=padding)
@@ -358,33 +359,38 @@ class AlexNetStacked(nn.Module):
     kernel_size=2 (the k2x2stacked cells): every conv 2x2 -- the stride-2 stem unpadded, the rest behind
     SymmetricPad2d, as in AlexNetAdapted -- so the same maps (8x8 at the end) with two 2x2 per stage.
     dropout (FC head only): Dropout before the first two Linears, AlexNet's head (the *_fcdrop_bn cells).
+    phase_11_hybrids (docs/logs/PHASE11_LOG.md "Hybrids"): stem_kernel = conv1's kernel (11: AlexNet's 11x11, 'same'
+    padding 5), stem_stride = conv1's stride (1 keeps the 64x64 map: a 16x16 last map), residual = each stage's pair as
+    a residual block (models.compensation._ResBlock: He et al. 2016, two convs + identity / 1x1 projection shortcut).
+    The defaults build the same flat Sequential as before (same indices: the trained stacked cells load unchanged).
     """
 
     def __init__(self, num_classes: int = 200, head: str = "fc", batch_norm: bool = True, kernel_size: int = 3,
-                 dropout: float = 0.0):
+                 dropout: float = 0.0, stem_kernel: int | None = None, stem_stride: int = 2, residual: bool = False):
         super().__init__()
         self.quant = tq.QuantStub()
         self.dequant = tq.DeQuantStub()
         assert kernel_size in (2, 3), kernel_size
+        assert batch_norm or not residual, "the residual blocks always have BN"
+        stem_kernel = stem_kernel or kernel_size
 
-        def conv(in_c, out_c, stride=1):
-            if kernel_size == 3:
-                return _conv_relu(in_c, out_c, 3, batch_norm, stride=stride, padding=1)
+        def conv(in_c, out_c, stride=1, k=kernel_size):
+            if k % 2:
+                return _conv_relu(in_c, out_c, k, batch_norm, stride=stride, padding=k // 2)
             return ([] if stride > 1 else [SymmetricPad2d()]) + _conv_relu(in_c, out_c, 2, batch_norm, stride=stride)
 
+        # (in, out, stride, first kernel) per stage, a max-pool after the first two
+        stages = [(3, 64, stem_stride, stem_kernel), (64, 192, 1, kernel_size), (192, 384, 1, kernel_size),
+                  (384, 256, 1, kernel_size), (256, 256, 1, kernel_size)]
         layers = []
-        layers += conv(3, 64, stride=2)
-        layers += conv(64, 64)
-        layers.append(nn.MaxPool2d(2))
-        layers += conv(64, 192)
-        layers += conv(192, 192)
-        layers.append(nn.MaxPool2d(2))
-        layers += conv(192, 384)
-        layers += conv(384, 384)
-        layers += conv(384, 256)
-        layers += conv(256, 256)
-        layers += conv(256, 256)
-        layers += conv(256, 256)
+        for i, (cin, cout, s, k) in enumerate(stages):
+            if residual:
+                layers.append(_ResBlock(cin, cout, s, kernel_size=kernel_size, first_kernel=k))
+            else:
+                layers += conv(cin, cout, s, k)
+                layers += conv(cout, cout)
+            if i < 2:
+                layers.append(nn.MaxPool2d(2))
         pool, classifier = _pool_and_classifier(head, 256, 6, num_classes, dropout=dropout)
         layers.append(pool)
         self.features = nn.Sequential(*layers)

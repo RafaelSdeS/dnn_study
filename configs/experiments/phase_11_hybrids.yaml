@@ -1,0 +1,39 @@
+# Phase 11 hybrids (2026-10-22, docs/logs/PHASE11_LOG.md "Hybrids"): do the gains of the techniques that worked add up?
+# A factorial on the 64px layout's GAP + BN AlexNet (channels 64-192-384-256-256, two 2x2 max-pools), every contrast a
+# matched pair and every cell reported (no "best net" picked on the test set: Cawley & Talbot, JMLR 2010):
+#   kernel  3x3 / 2x2 (2x2 behind C2sp, Wu et al. NeurIPS 2019; a stride-1 conv1 too, as VGGAdapted's)
+#   conv1   that kernel / AlexNet's 11x11 (Krizhevsky et al. 2012) -- a large stem on a small body, ResNet's pattern
+#           (He et al. CVPR 2016, Table 1); phase_11_large_stem measured it on the 5-conv body
+#   body    5 convs / two per stage (k*stacked: Simonyan & Zisserman, ICLR 2015 Sec. 2.3) / two per stage as a residual
+#           block (k*residual: He et al. 2016, identity shortcut, 1x1 projection where the shape changes = option B,
+#           Sec. 3.3). Residual only on the two-conv body: a one-conv residual unit showed no advantage (He 2016 Sec. 3.2)
+#   stride  conv1 stride 2 (8x8 last map) / 1 (16x16; small-image nets keep the resolution early: He 2016 Sec. 4.2's
+#           CIFAR ResNet; the Fire and SmallKernelWithBN families, which both do well, have it)
+# = 2 x 2 x 3 x 2 = 24 cells; 6 already trained at stride 2 (k3x3, k2x2, k11-3, k11-2, k3x3stacked, k2x2stacked GAP + BN),
+# the 18 below are new. Besides the factor of each contrast, the residual body adds four 1x1 projections (~0.19M
+# parameters) and stride 1 ~4x the MACs. Seed 42 only; replicates decided once these land.
+# Queue order = priority: the stride-2 hybrids, then the stride-1 plain nets, then the stride-1 deep ones (VGG16-like
+# cost: --slurm tupi_4090; the stride-2 cells --slurm tupi_beagle, as every AlexNet cell). Same protocol as every Phase
+# 11 run (_protocols/no_patience.yaml), enforced by tests/test_config.py:
+#   python -m scripts.cluster submit --experiment phase_11_hybrids --runtime pcad --slurm tupi_beagle --model <m>
+extends: _protocols/no_patience
+name: phase_11_hybrids
+models:
+  - alexnet_k11-3stacked_stride2_2pool2x2_map8_gap_bn
+  - alexnet_k11-2stacked_stride2_2pool2x2_map8_gap_bn
+  - alexnet_k3x3residual_stride2_2pool2x2_map8_gap_bn
+  - alexnet_k2x2residual_stride2_2pool2x2_map8_gap_bn
+  - alexnet_k11-3residual_stride2_2pool2x2_map8_gap_bn
+  - alexnet_k11-2residual_stride2_2pool2x2_map8_gap_bn
+  - alexnet_k3x3_stride1_2pool2x2_map16_gap_bn
+  - alexnet_k2x2_stride1_2pool2x2_map16_gap_bn
+  - alexnet_k11-3_stride1_2pool2x2_map16_gap_bn
+  - alexnet_k11-2_stride1_2pool2x2_map16_gap_bn
+  - alexnet_k3x3stacked_stride1_2pool2x2_map16_gap_bn
+  - alexnet_k2x2stacked_stride1_2pool2x2_map16_gap_bn
+  - alexnet_k11-3stacked_stride1_2pool2x2_map16_gap_bn
+  - alexnet_k11-2stacked_stride1_2pool2x2_map16_gap_bn
+  - alexnet_k3x3residual_stride1_2pool2x2_map16_gap_bn
+  - alexnet_k2x2residual_stride1_2pool2x2_map16_gap_bn
+  - alexnet_k11-3residual_stride1_2pool2x2_map16_gap_bn
+  - alexnet_k11-2residual_stride1_2pool2x2_map16_gap_bn

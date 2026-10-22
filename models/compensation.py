@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 import torch.ao.quantization as tq
 
-from models.baselines import he_init
+from models.baselines import SymmetricPad2d, he_init
 
 
 def _float_functional():
@@ -294,16 +294,25 @@ class _SEBlock(nn.Module):
         return x * self.fc(s).view(x.size(0), -1, 1, 1)
 
 
-class _ResBlock(nn.Module):
-    """Two 3×3 convolutions with BatchNorm and a residual skip connection."""
+def _conv_bn(in_ch: int, out_ch: int, k: int, stride: int = 1) -> list:
+    """Conv + BN with 'same' padding: odd k pads k // 2; k=2 gets SymmetricPad2d (C2sp, Wu et al. NeurIPS 2019) before a
+    stride-1 conv and no padding when strided -- the rule VGGAdapted and AlexNetAdapted follow."""
+    assert k % 2 or k == 2, k
+    pad = [SymmetricPad2d()] if k == 2 and stride == 1 else []
+    return pad + [nn.Conv2d(in_ch, out_ch, k, stride=stride, padding=k // 2 if k % 2 else 0, bias=False), nn.BatchNorm2d(out_ch)]
 
-    def __init__(self, in_ch: int, out_ch: int, stride: int = 1, use_se: bool = False):
+
+class _ResBlock(nn.Module):
+    """Two convolutions (3×3 by default) with BatchNorm and a residual skip connection. kernel_size sets both convs,
+    first_kernel only the first (phase_11_hybrids: AlexNet's 11x11 conv1 opening the first block); the 1x1 projection
+    shortcut when the shape changes is He et al. 2016's option B (Sec. 3.3)."""
+
+    def __init__(self, in_ch: int, out_ch: int, stride: int = 1, use_se: bool = False, kernel_size: int = 3,
+                 first_kernel: int | None = None):
         super().__init__()
         self.block = nn.Sequential(
-            nn.Conv2d(in_ch, out_ch, 3, stride=stride, padding=1, bias=False),
-            nn.BatchNorm2d(out_ch), nn.ReLU(inplace=False),
-            nn.Conv2d(out_ch, out_ch, 3, padding=1, bias=False),
-            nn.BatchNorm2d(out_ch),
+            *_conv_bn(in_ch, out_ch, first_kernel or kernel_size, stride), nn.ReLU(inplace=False),
+            *_conv_bn(out_ch, out_ch, kernel_size),
         )
         self.shortcut = nn.Identity()
         if stride != 1 or in_ch != out_ch:

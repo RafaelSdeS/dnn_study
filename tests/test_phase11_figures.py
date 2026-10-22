@@ -23,7 +23,7 @@ FIGURES = {f"{n}.png" for n in ["01_kernel_original_layout", "02_kernel_64px_lay
                                 "13_pareto_accuracy_cost", "14_main_factorial_grid", "15_kernel_by_geometry",
                                 "16_quantization_robustness", "17_latency_vs_macs", "18_training_curves", "19_qat_curves", "20_int8_prediction_flips",
                                 "21_kernel_rank_critical_difference", "22_effective_receptive_field", "23_input_224", "24_vgg_kernel_blocks",
-                                "25_accuracy_vs_size", "26_kernel_controls"]}
+                                "25_accuracy_vs_size", "26_kernel_controls", "27_hybrids"]}
 
 
 def _early(m):  # the fake runs whose best FP32 epoch comes early, so every figure draws its early-best mark
@@ -112,9 +112,9 @@ def test_figure_numbers_get_a_decimal_comma(tmp_path):
 # matched pairs the yamls give each one. A yaml edit that drops or breaks a contrast fails here instead of in a figure
 # months later -- as the 2026-10-07 FC -> FC + Dropout swap did (the head contrast fell from 17 pairs to 6 until
 # factor_effects paired GAP with the real FC head). Change these numbers only with the design.
-DESIGN_PAIRS = {"Kernel 11-5-3-3-3 → 3×3": 10, "Kernel 3×3 → 2×2": 14, "Kernel 11-5-3-3-3 → 2×2": 10,
-                "Kernel 3×3 → alternado 3-2": 13, "3×3 → dois 3×3 empilhados por estágio": 2,
-                "2×2 → dois 2×2 empilhados por estágio": 2, "Cabeça FC (+ Dropout) → GAP": 19, "BatchNorm não → sim": 8,
+DESIGN_PAIRS = {"Kernel 11-5-3-3-3 → 3×3": 10, "Kernel 3×3 → 2×2": 15, "Kernel 11-5-3-3-3 → 2×2": 10,
+                "Kernel 3×3 → alternado 3-2": 13, "3×3 → dois 3×3 empilhados por estágio": 3,
+                "2×2 → dois 2×2 empilhados por estágio": 3, "Cabeça FC (+ Dropout) → GAP": 19, "BatchNorm não → sim": 8,
                 "Stride da conv1 4 → 2": 8, "3 max-pools 3×3 → 2 max-pools 2×2": 8, "Dropout 0 → 0,5 (só cabeça FC)": 6,
                 "Pré-treino ImageNet": 5,
                 # the ResNet-18 block (2026-10-13): +1 each to 3x3 -> 2x2 / alternating / pretraining above, and its own
@@ -122,8 +122,14 @@ DESIGN_PAIRS = {"Kernel 11-5-3-3-3 → 3×3": 10, "Kernel 3×3 → 2×2": 14, "K
                 "Kernel stem 7×7 → 2×2, blocos 2×2": 1, "Kernel 3×3 → 2×2, stem profundo": 1,
                 "Stem 3×3 → três 3×3 (ResNet-C)": 1, "Stem 2×2 → três 2×2": 1,
                 # the large-stem block (2026-10-14): +2 to the head contrast above, and its own, at GAP and FC + Dropout
-                "Conv1 3×3 → 11×11, corpo 3×3": 2, "Conv1 2×2 → 11×11, corpo 2×2": 2, "Conv2 3×3 → 5×5, conv1 11×11": 2,
-                "Corpo 3×3 → 2×2, conv1 11×11 mantida": 2,
+                "Conv1 3×3 → 11×11, corpo 3×3": 3, "Conv1 2×2 → 11×11, corpo 2×2": 3, "Conv2 3×3 → 5×5, conv1 11×11": 2,
+                "Corpo 3×3 → 2×2, conv1 11×11 mantida": 3,
+                # the hybrids (2026-10-22): +1 each to the 3x3 -> 2x2, stacking, 11x11-conv1 and 11x11-body contrasts above (their
+                # stride-1 pair), and their own -- each at conv1 stride 2 and 1 (the stacked kernel one also at FC + Dropout)
+                **{c: 2 for k in (3, 2) for c in (f"Empilhado {k}×{k} → residual (skip por estágio)", f"Empilhado {k}×{k} → residual, conv1 11×11",
+                                                    f"Conv1 11×11: corpo {k}×{k} → dois {k}×{k} empilhados por estágio",
+                                                    f"Conv1 {k}×{k} → 11×11, corpo empilhado", f"Conv1 {k}×{k} → 11×11, corpo residual")},
+                "Kernel 3×3 → 2×2, corpo empilhado": 3, "Kernel 3×3 → 2×2, corpo residual": 2, "Stride da conv1 2 → 1": 12,
                 # the input-size block (2026-10-17): its 5 cells against their 64px twins, + 1 each to the 4 AlexNet kernel
                 # contrasts and to pretraining above (the same contrasts within 224 px)
                 "Entrada 64 → 224 px (ampliada)": 5,

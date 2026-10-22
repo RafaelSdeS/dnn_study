@@ -132,7 +132,8 @@ def test_factorial_grid_is_complete_and_every_gap_cell_runs():
     from ml.model_registrations import CELL_FACTORS, FX_KERNELS
 
     fx = [n for n, f in CELL_FACTORS.items() if f["family"] == "alexnet" and f["kernels"] in FX_KERNELS and f["input_size"] == 64
-          and f.get("width", 1.0) == 1.0]  # the width-scaled controls (phase_11_kernel_controls) are not part of the grid
+          and f.get("width", 1.0) == 1.0 and f["stride"] != 1]  # not part of the grid: the width-scaled controls
+    # (phase_11_kernel_controls) and the stride-1 plain hybrids (phase_11_hybrids)
     assert len(fx) == 304 and sum(CELL_FACTORS[n]["pretrained"] for n in fx) == 16
     x = torch.randn(1, 3, 64, 64)
     for name in (n for n in fx if CELL_FACTORS[n]["head"] == "gap"):
@@ -157,7 +158,8 @@ def test_every_cell_name_says_what_the_net_is():
             m = MODEL_REGISTRY[name]["ctor"]()
             feats = [x for x in m.features if not isinstance(x, torch.nn.AdaptiveAvgPool2d)]
             side = torch.nn.Sequential(*feats)(torch.zeros(1, 3, f["input_size"], f["input_size"])).shape[-1]
-        convs = [x for x in m.features if isinstance(x, torch.nn.Conv2d)]
+        # every conv but the residual blocks' 1x1 shortcuts, nested or not
+        convs = [x for x in m.features.modules() if isinstance(x, torch.nn.Conv2d) and x.kernel_size != (1, 1)]
         pools = [x for x in m.features if isinstance(x, torch.nn.MaxPool2d)]
         if f["family"] == "resnet18":  # every conv but the 1x1 shortcuts: the stem's, then (conv1, conv2) of 8 blocks
             stem, blocks = RESNET_FX_KERNELS[f["kernels"]]
@@ -165,8 +167,11 @@ def test_every_cell_name_says_what_the_net_is():
                 == [k for k, _, _ in RESNET_STEMS[stem]] + list(blocks) * 8, name
         elif f["kernels"] in kernels:
             assert tuple(c.kernel_size[0] for c in convs) == kernels[f["kernels"]], name
-        elif f["kernels"].endswith("stacked"):  # k3x3stacked / k2x2stacked: every conv that size, two per stage
-            assert {c.kernel_size[0] for c in convs} == {int(f["kernels"][1])} and len(convs) == 10, name
+        elif f["kernels"].endswith(("stacked", "residual")):  # two convs per stage, conv1 11x11 in the k11-* cells; residual =
+            big = f["kernels"].startswith("k11-")  # a FloatFunctional skip over each pair (phase_11_hybrids)
+            body = int(f["kernels"][4 if big else 1])
+            assert [c.kernel_size[0] for c in convs] == [11 if big else body] + [body] * 9, name
+            assert any(isinstance(x, torch.nn.quantized.FloatFunctional) for x in m.modules()) == f["kernels"].endswith("residual"), name
         assert convs[0].stride[0] == f["stride"] and side == f["map_side"], name
         assert len(pools) == f["pool_count"] and {p.kernel_size for p in pools} == {f["pool_kernel"]}, name
         assert any(isinstance(x, torch.nn.BatchNorm2d) for x in m.modules()) == f["bn"], name
@@ -199,6 +204,12 @@ def test_named_reference_cells_are_the_reference_nets():
     assert _layout(mine) == _layout(ref)
     weights = lambda m: [x.weight for x in m.modules() if isinstance(x, (torch.nn.Conv2d, torch.nn.BatchNorm2d, torch.nn.Linear))]  # noqa: E731
     assert all(torch.equal(a, b) for a, b in zip(weights(mine), weights(ref), strict=True))
+    # the hybrids' 3x3 residual body (phase_11_hybrids) is AlexNetResidual's (phase_11_families), its head aside
+    from models import AlexNetResidual
+
+    with torch.device("meta"):
+        mine, ref = MODEL_REGISTRY["alexnet_k3x3residual_stride2_2pool2x2_map8_gap_bn"]["ctor"](), AlexNetResidual()
+    assert _layout(mine.features[:-1]) == _layout(ref.features[:-1])
 
 
 def test_factorial_cells_survive_the_qat_to_int8_path():

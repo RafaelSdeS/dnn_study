@@ -397,6 +397,20 @@ for _k in (3, 2):
         _f = _ctor().features
     _register_cell(_ctor, _conv_groups(_f), 1e-3, family="alexnet", kernels=f"k{_k}x{_k}stacked", stride=2,
                    pool_kernel=2, pool_count=2, map_side=_map_side(_f), head="fc", dropout=True, bn=True, pretrained=False)
+# Phase 11 hybrids (phase_11_hybrids.yaml, docs/logs/PHASE11_LOG.md "Hybrids"): the 64px layout's GAP + BN net, kernel
+# (3x3 / 2x2) x conv1 (that kernel / AlexNet's 11x11) x body (5 convs / two per stage / two per stage as a residual block)
+# x conv1 stride (2 / 1). <kernels> names the body: k11-3stacked = 11x11 conv1, then 3x3 two per stage; k3x3residual =
+# k3x3stacked with a skip over each stage's pair (He et al. 2016). The stride-2 plain and stacked cells exist above.
+for _k, _stem, _body, _s in product((3, 2), (None, 11), ("", "stacked", "residual"), (2, 1)):
+    _kn = (f"k11-{_k}" if _stem else f"k{_k}x{_k}") + _body
+    if _s == 2 and (not _body or (_body == "stacked" and not _stem)):
+        continue
+    _ctor = (partial(AlexNetStacked, head="gap", kernel_size=_k, stem_kernel=_stem, stem_stride=_s, residual=_body == "residual")
+             if _body else partial(AlexNetAdapted, head="gap", batch_norm=True, kernels=FX_KERNELS[_kn], stem_stride=_s))
+    with torch.device("meta"):
+        _f = _ctor().features
+    _register_cell(_ctor, find_fuse_groups(_f), 1e-3, family="alexnet", kernels=_kn, stride=_s, pool_kernel=2,
+                   pool_count=2, map_side=_map_side(_f), head="gap", dropout=False, bn=True, pretrained=False)
 # models/compensation.py — exists since the Phase 2 QAT-drop investigation, never
 # trained (Winograd-FPGA plano_avaliacao_redes_winograd.md Fase 1). No `features`
 # Sequential (named conv/bn/relu attrs instead), so find_fuse_groups like the
