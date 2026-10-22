@@ -2040,7 +2040,9 @@ beagle as VGG16 is). At the end of PCAD's queue (~48 lines at ~2.4 a day): first
 **Checked 2026-10-22.** tests/test_registry.py, test_config.py, test_phase11_figures.py, test_train_pipeline.py and test_quantization.py's
 slice for the 18 cells (QAT -> INT8 against the literature's definition) pass; a 1-epoch `--smoke` of the two most complex cells
 (`k11-2residual` and `k3x3stacked`, both stride 1) ran FP32 -> QAT -> INT8 and exited 0 (the INT8 kernel and QAT-agreement guards
-included), nothing written to `outputs/`.
+included), nothing written to `outputs/`. Pushed (a0a7719); PCAD pulled 512b834 -> a0a7719 (135 committed run / aggregate files sat
+there untracked or modified, every one byte-identical to the commit: moved aside, pulled, `cmp` 0 different, copies deleted); the 18
+lines appended to the end of `~/queue_phase11_full.txt` (48 -> 66, backup `.bak_20261022`), in the yaml's order.
 
 **Next, not in this block.** Seeds 43 / 44 once seed 42 lands, on the contrasts inside 2x the noise band (likely stacked -> residual, with
 the stacked partners that have one seed). Stage B -- Bottleneck / Fire blocks on the best body (compression at equal accuracy) -- waits for
