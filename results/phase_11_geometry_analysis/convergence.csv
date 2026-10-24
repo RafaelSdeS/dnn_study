@@ -15,8 +15,13 @@ families,alexnet_bottleneck,42,fp32,500,True,53.5,497,424,427,1.759999999999998,
 families,alexnet_bottleneck,42,qat,50,True,53.48,16,1,1,0.0,40,59.76,True
 families,alexnet_depthwisesep,42,fp32,500,True,47.59,462,407,430,1.0500000000000043,491,48.71,False
 families,alexnet_depthwisesep,42,qat,50,True,47.33,47,1,2,0.05999999999999517,2,48.04,True
+families,alexnet_dilated_fc,42,fp32,500,True,47.9,499,389,424,0.6899999999999977,454,99.78,False
+families,alexnet_dilated_fc,42,qat,50,False,47.83,4,1,1,0.0,6,99.8,False
+families,alexnet_dilated_gap,42,fp32,500,True,52.46,467,409,441,1.240000000000002,499,78.98,False
+families,alexnet_dilated_gap,42,qat,50,False,52.25,12,1,1,0.0,24,78.82,False
 families,alexnet_factorized,42,fp32,500,True,54.72,472,403,425,1.009999999999998,459,99.93,False
 families,alexnet_factorized,42,qat,50,True,54.79,46,1,1,0.01999999999999602,13,99.91,True
+families,alexnet_final_bottleneck_fire,42,fp32,500,False,41.18,59,50,59,2.299999999999997,59,37.79,False
 families,alexnet_fire,42,fp32,500,True,55.32,468,417,438,1.490000000000002,489,59.19,False
 families,alexnet_fire,42,qat,50,True,55.16,45,1,1,0.03999999999999915,23,59.17,True
 families,alexnet_groupconv,42,fp32,500,True,46.76,451,369,415,0.6999999999999957,449,99.4,False
@@ -25,6 +30,8 @@ families,alexnet_residual,42,fp32,500,True,56.7,477,409,439,1.0300000000000011,4
 families,alexnet_residual,42,qat,50,True,56.77,31,1,1,0.0,17,99.95,True
 families,alexnet_small_kernel_with_bn,42,fp32,500,True,57.11,472,423,450,1.8900000000000006,488,65.26,False
 families,alexnet_small_kernel_with_bn,42,qat,50,True,57.02,23,1,2,0.0,46,65.05,True
+families,tinyhybridnet,42,fp32,500,False,45.58,370,347,354,2.469999999999999,368,43.15,False
+families,tinymobilenetv2,42,fp32,500,False,53.9,109,77,77,0.240000000000002,77,62.22,False
 kernel_geometry,alexnet_k11-5-3_stride2_3pool3x3_map3_fcdrop_nobn,42,fp32,500,True,45.68,457,367,413,0.7999999999999972,49,98.22,False
 kernel_geometry,alexnet_k11-5-3_stride2_3pool3x3_map3_fcdrop_nobn,42,qat,50,True,45.65,42,1,1,0.03999999999999915,20,98.11,True
 kernel_geometry,alexnet_k11-5-3_stride4_2pool2x2_map4_fcdrop_nobn,42,fp32,500,True,37.8,71,49,68,0.0,49,97.04,True

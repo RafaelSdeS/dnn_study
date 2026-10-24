@@ -41,6 +41,8 @@ alexnet_k11-2_stride2_2pool2x2_map8_fcdrop_bn,alexnet,k11-2,2,2,2,8,fc,True,True
 alexnet_k11-2_stride2_2pool2x2_map8_gap_bn,alexnet,k11-2,2,2,2,8,gap,False,True,False,64,55.640000104904175,55.83999752998352,False,1.07636,97.601536,2pool2x2,0.1999974250793457
 alexnet_k11-3_stride2_2pool2x2_map8_fcdrop_bn,alexnet,k11-3,2,2,2,8,fc,True,True,False,64,52.399998903274536,52.82999873161316,False,57.627784,244.645888,2pool2x2,0.42999982833862305
 alexnet_k11-3_stride2_2pool2x2_map8_gap_bn,alexnet,k11-3,2,2,2,8,gap,False,True,False,64,54.54999804496765,54.24000024795532,False,2.32564,189.351936,2pool2x2,-0.3099977970123291
+resnet18_k3x3_stride2_1pool3x3_map2_gap_bn,resnet18,k3x3,2,3,1,2,gap,False,True,False,64,42.6800012588501,43.25999915599823,False,11.271432,140.691456,1pool3x3,0.5799978971481323
+resnet18_k7-3_stride2_1pool3x3_map2_gap_bn,resnet18,k7-3,2,3,1,2,gap,False,True,False,64,43.630000948905945,43.68000030517578,False,11.279112,148.555776,1pool3x3,0.049999356269836426
 alexnet_k2x2stacked_stride2_2pool2x2_map8_fcdrop_bn,alexnet,k2x2stacked,2,2,2,8,fc,True,True,False,64,56.88999891281128,56.859999895095825,False,57.636296,256.065536,2pool2x2,-0.0299990177154541
 alexnet_k2x2stacked_stride2_2pool2x2_map8_gap_bn,alexnet,k2x2stacked,2,2,2,8,gap,False,True,False,64,57.249999046325684,57.55000114440918,False,2.334152,200.771584,2pool2x2,0.3000020980834961
 alexnet_k3x3stacked_stride2_2pool2x2_map8_fcdrop_bn,alexnet,k3x3stacked,2,2,2,8,fc,True,True,False,64,58.89999866485596,58.92000198364258,False,60.483976,506.085376,2pool2x2,0.020003318786621094
