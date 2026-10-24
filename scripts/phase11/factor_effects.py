@@ -7,8 +7,9 @@ seed-42 pair. The grey band is the noise floor: 2*sqrt(2)*pooled seed-to-seed SD
 delta inside it is not distinguishable from re-drawing the seed). "layout original" / "layout 64px" are defined in
 scripts/phase11/analyze_geometry.py's docstring.
 
-    04..10_*.png                    one figure per factor (absolute top-1 of A and B, baseline line)
-    11_factorial_matched_pairs.png  every matched pair, per contrast: the FP32 / INT8 deltas, their median and its bootstrap CI
+    04..10_*.png, 23_input_224.png  one figure per factor: FP32 top-1 of A and B, baseline line, B - A in FP32 and INT8 below
+    11_factorial_matched_pairs.png  every matched pair of the contrasts with >= MIN_PAIRS pairs: the FP32 / INT8 deltas, their
+                                    median and its bootstrap CI
     21_kernel_rank_critical_difference.png  the 4 kernels' mean rank over the AlexNet configurations that have all four,
                                             beside the table of positions per configuration it averages
 
@@ -20,6 +21,7 @@ Numbered 01-19 without gaps since 2026-10-14 (docs/logs/PHASE11_LOG.md "Figures 
 """
 import math
 import re
+import textwrap
 
 import numpy as np
 import pandas as pd
@@ -32,8 +34,7 @@ from configs.loader import load_config
 from ml.plotting import BLUE, GRID, NEUTRAL, RED, TEXT_PRIMARY, apply_report_style
 from ml.reporting import holm, mcnemar_p, wilson_ci
 from scripts.phase11.analyze_geometry import (BASE_KEY, BASE_LABEL, EARLY_GRAY, EARLY_LABEL, LAYOUTS, REGIME_LABEL, RESNET_BASE, TABLES,
-                                              VGG_BASE, band_for, early_handle, int8_bar, noise_bands, pair_band, precision_handles,
-                                              reference_lines, savefig)
+                                              VGG_BASE, band_for, noise_bands, pair_band, reference_lines, savefig)
 from scripts.phase11.design_figures import K4, KCOLOR, KLABEL, cell_label, frame
 
 COMP = "Compensação (profundidade e blocos)"
@@ -193,18 +194,21 @@ def contrasts(df, bands=None):
 
 
 def wrap_dots(s, width=24):
-    """Break a ' · '-joined label only between its terms (textwrap cut 'alternado 3-2 · 2 | pools 2×2'), each line
-    ending in ' ·' when another follows."""
+    """Break a ' · '-joined label between its terms (textwrap cut 'alternado 3-2 · 2 | pools 2×2'), each line ending in
+    ' ·' when another term follows; a term longer than width alone breaks at its spaces (figure 10's '3×3 → dois 3×3
+    empilhados por estágio' ran into its neighbours)."""
     lines = []
     for term in s.split(" · "):
         if lines and len(lines[-1]) + 3 + len(term) <= width:
             lines[-1] += " · " + term
         else:
-            lines.append(term)
-    return " ·\n".join(lines)
+            if lines:
+                lines[-1] += " ·"
+            lines += textwrap.wrap(term, width)
+    return "\n".join(lines)
 
 
-def family_rows(g, per_row=6):
+def family_rows(g, per_row=8):
     """(rows of contrasts, reference net) per family in FAMILY_ROWS order; a family's contrasts split into balanced rows
     (8 -> 4 + 4, not 6 + 2)."""
     out = []
@@ -217,46 +221,49 @@ def family_rows(g, per_row=6):
 
 
 def fig_factor(t, df, factor):
-    """Absolute top-1 of A and B for every contrast of one factor (A_COLOR, B_COLOR), one family per row with its own
-    reference net's line; each group's label states B - A. The legend names A and B from the factor's '(a → b)'."""
-    g, color = t[t.factor == factor], B_COLOR
+    """FP32 top-1 of A and B for every contrast of one factor (A_COLOR, B_COLOR), one family per row with its own
+    reference net's line; under each group B - A in FP32 and INT8, * where a side's best FP32 epoch came early (its INT8 is
+    QAT's extra training). No INT8 bars (2026-10-24): INT8 tracks FP32 but for the starred pairs, and four bars a group
+    made figure 04 four rows tall; the INT8 levels are 01-03 / 14's. The legend names A and B from the factor's '(a → b)'."""
+    g = t[t.factor == factor]
     if g.empty:
         print(f"{FACTOR_FIG[factor]}: no finished pair yet")
         return
     rows = family_rows(g)
     width = max(len(chunk) for chunk, _ in rows)
-    fig, axes = plt.subplots(len(rows), 1, figsize=(max(13.0, 2.5 * width + 1.5), 5.2 * len(rows) + 1.2), squeeze=False,
+    fig, axes = plt.subplots(len(rows), 1, figsize=(max(10.0, 2.0 * width + 1.5), 4.4 * len(rows) + 1.2), squeeze=False,
                              sharey=True, layout="constrained")
-    w = 0.19
-    value = dict(ha="center", va="bottom", fontsize=7.5, zorder=6, bbox=dict(facecolor="white", edgecolor="none", pad=0.3))
+    w = 0.36
+    value = dict(ha="center", va="bottom", fontsize=8, zorder=6, bbox=dict(facecolor="white", edgecolor="none", pad=0.3))
+    star = lambda r: "*" * bool(r.early_A or r.early_B)  # noqa: E731
     for ax, (chunk, base) in zip(axes[:, 0], rows):
         for i, r in enumerate(chunk.itertuples()):
-            for j, (side, c) in enumerate([("A", A_COLOR), ("B", color)]):
-                fp32, int8 = getattr(r, f"fp32_{side}"), getattr(r, f"int8_{side}")
-                ax.bar(i + (2 * j - 1.5) * w, fp32, w, color=c, edgecolor="white")
-                int8_bar(ax, i + (2 * j - 0.5) * w, int8, w, c, early=getattr(r, f"early_{side}"))
-                ax.text(i + (2 * j - 1.5) * w, fp32 + 0.4, f"{fp32:.1f}", **value)
-                if pd.notna(int8):  # INT8 labelled too, as in figures 01-03
-                    ax.text(i + (2 * j - 0.5) * w, int8 + 0.4, f"{int8:.1f}", **value)
+            for j, (side, c) in enumerate([("A", A_COLOR), ("B", B_COLOR)]):
+                fp32 = getattr(r, f"fp32_{side}")
+                ax.bar(i + (j - 0.5) * w, fp32, w, color=c, edgecolor="white")
+                ax.text(i + (j - 0.5) * w, fp32 + 0.4, f"{fp32:.1f}", **value)
         ax.set_xticks(range(len(chunk)))
-        ax.set_xticklabels([wrap_dots(r.contrast)
-                            + f"\nB − A: FP32 {r.d_fp32:+.1f}" + (f" · INT8 {r.d_int8:+.1f}" if pd.notna(r.d_int8) else "") + " pp"
+        ax.set_xticklabels([wrap_dots(r.contrast, 22) + f"\nFP32 {r.d_fp32:+.1f}"
+                            + (f" · INT8 {r.d_int8:+.1f}{star(r)}" if pd.notna(r.d_int8) else "")
                             + (f"\nmédia de {r.n_seeds} seeds" if r.n_seeds > 1 else "") for r in chunk.itertuples()], fontsize=8.5)
         ax.set_xlim(-0.6, width - 0.4)  # same bar width in every row
-        ax.set_ylabel("Top-1 (%)")
+        ax.set_ylabel("Top-1 FP32 (%)")
         ax.margins(y=0.08)
         reference_lines(ax, df, *base)
     notes = {}
     for r in g.itertuples():
         if r.note:
             notes.setdefault(r.note, []).append(r.contrast)
-    fig.suptitle(f"{factor}: cada grupo compara duas redes idênticas exceto por este fator (seed 42)\n{LAYOUTS}"
+    layouts = [v for k, v in LAYOUTS.items() if g.contrast.str.contains(k).any()]
+    fig.suptitle(f"{factor}: cada grupo são duas redes iguais exceto por este fator; sob o grupo, B − A (pp)\n"
+                 "barras = top-1 FP32 no test set · seed 42 (média das seeds onde replicada)"
+                 + "".join(f"\n{s}" for s in layouts)
                  + "".join(f"\nnota — {'; '.join(cs)}: {note}" for note, cs in notes.items()), fontsize=11)
     m = re.fullmatch(r"(.+) \((.+) → (.+)\)", factor)
     a, b = (f"{m[1]}: {m[2]}", f"{m[1]}: {m[3]}") if m else ("antes", "depois")
-    fig.legend(handles=[Patch(color=A_COLOR, label=f"A = {a}"), Patch(color=color, label=f"B = {b}")]
-               + precision_handles() + ([early_handle("hatch")] if (g.early_A | g.early_B).any() else []),
-               loc="outside lower center", ncol=2, fontsize=9)
+    star_note = [Line2D([], [], ls="", label="* no INT8 = " + EARLY_LABEL)] if (g.early_A | g.early_B).any() else []
+    fig.legend(handles=[Patch(color=A_COLOR, label=f"A = {a}"), Patch(color=B_COLOR, label=f"B = {b}")] + star_note,
+               loc="outside lower center", ncol=3, fontsize=9, handlelength=1.5)
     savefig(fig, FACTOR_FIG[factor])
 
 
@@ -311,14 +318,24 @@ def summarize_pairs(pairs):
     return pd.DataFrame(rows)
 
 
+MIN_PAIRS = 3  # figure 11 summarizes a contrast over >= 3 pairs; with 1-2 the median and its CI are the pairs themselves
+
+
 def fig_matched_pairs(pairs, summary, n_cells):
     """FP32 and INT8 only: the INT8 - FP32 change of each net is figures 12/16's. Each pair is judged by its own two cells'
     seed band (band_<m>: hollow = inside it), so no grey spans -- three regimes' spans overlapped into an unreadable
-    background. An INT8 pair with an early-best cell is grey (QAT's extra training, not quantization)."""
+    background. An INT8 pair with an early-best cell is grey (QAT's extra training, not quantization). Only the contrasts
+    with MIN_PAIRS pairs, kernels above a thin line, the other factors below (2026-10-24: 17 rows, 23 once the ResNet block
+    lands); the 1-2 pair ones have bar figures of their own (10, 27, 28) and every one stays in factorial_pair_summary.csv."""
+    summary = summary[summary.n_pairs >= MIN_PAIRS]
+    summary = pd.concat([summary[summary.factor == "kernels"], summary[summary.factor != "kernels"]])
+    n_other = int((summary.factor != "kernels").sum())
     fig, axes = plt.subplots(1, 2, figsize=(12.5, 0.55 * len(summary) + 2.5), sharey=True)
     y = {c: i for i, c in enumerate(summary.contrast[::-1])}
     for ax, m in zip(axes, ["fp32", "int8"]):
         ax.axvline(0, color="k", lw=0.8)
+        if 0 < n_other < len(summary):
+            ax.axhline(n_other - 0.5, color=NEUTRAL, lw=0.8)  # kernels above, the other factors below
         for s in summary.itertuples():
             v = pairs[pairs.contrast == s.contrast][m].dropna()
             if v.empty:
@@ -345,8 +362,9 @@ def fig_matched_pairs(pairs, summary, n_cells):
         handles.append(Line2D([], [], marker="o", color=EARLY_GRAY, ls="", ms=5, label="cinza = " + EARLY_LABEL))
     fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0), ncol=2, fontsize=9)
     fig.suptitle("Efeito de trocar um fator de cada vez (A → B, todo o resto igual)\n"
-                 f"cada ponto = um par de redes, valor = B − A · seed 42 · {n_cells} redes treinadas até agora", fontsize=11)
-    fig.tight_layout(rect=(0, 0, 1, 0.95))
+                 f"cada ponto = um par de redes, valor = B − A · seed 42 · {n_cells} redes treinadas até agora\n"
+                 f"só os contrastes com ≥ {MIN_PAIRS} pares; os de 1–2 pares estão nas figuras 10, 27 e 28", fontsize=11)
+    fig.tight_layout(rect=(0, 0, 1, 0.93))
     savefig(fig, "11_factorial_matched_pairs.png")
 
 

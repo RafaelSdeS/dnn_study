@@ -48,8 +48,9 @@ HEALTHY_LABEL = "AlexNet torchvision com entrada\nampliada a 224 px (mapa 6×6)"
 # the other families' own reference nets, for their rows of the factor figures (figure 03 draws VGG_BASE too)
 VGG_BASE = ("vgg16_k3x3_stride1_5pool2x2_map2_fcdrop_bn", "VGG16 original (3×3)")
 RESNET_BASE = ("resnet18_k7-3_stride2_1pool3x3_map2_gap_bn", "ResNet-18 original (do zero)")
-LAYOUTS = ("layout original = o do AlexNet torchvision: conv1 stride 4 + 3 max-pools 3×3/2 → mapa final 1×1 em 64×64\n"
-           "layout 64px = adaptado a 64×64: conv1 stride 2 + 2 max-pools 2×2 → mapa final 8×8")
+# {term a label uses: its definition} -- a figure states only the ones its labels use
+LAYOUTS = {"layout original": "layout original = o do AlexNet torchvision: conv1 stride 4 + 3 max-pools 3×3/2 → mapa final 1×1 em 64×64",
+           "64px": "64px = layout adaptado a 64×64: conv1 stride 2 + 2 max-pools 2×2 → mapa final 8×8"}
 
 # A run whose best FP32 epoch falls before EARLY_FRAC of its budget was picked while the cosine LR was still high: QAT
 # starts from that un-annealed checkpoint and its own LR decay adds 2-4 pp, so its FP32 -> INT8 is not a quantization
