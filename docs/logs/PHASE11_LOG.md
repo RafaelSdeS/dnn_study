@@ -2040,3 +2040,72 @@ control cells say "pendente"). `outputs/pcad/aggregates/` got the comparison CSV
 (`input224`, `vgg_kernel_blocks`, `vgg_kernel_blocks_seed43`). Two experiments are split between the machines, `vgg_kernel_head_seed43` / `_seed44` (FC + Dropout rows
 on PCAD, GAP rows on nyx): here the two are merged by appending nyx's rows (same header, no repeated model); PCAD's and nyx's own copies keep only theirs.
 No figure reads these CSVs.
+
+## Figures simpler, 27 / 28 / 29 (2026-10-24)
+
+User request: the figures easy to read, without hard-to-decode detail; 11 too big; split if needed; plan for the 38 runs still
+out (114 / 152); "don't forget the ResNet training curve". No number changed (the tables are byte-identical); 01-03, 12, 18, 19,
+21, 24 came out byte-identical; 22 not run (needs the FP32 checkpoints). What changed, one place each:
+- *11* (`factor_effects.fig_matched_pairs`): only the contrasts with >= `MIN_PAIRS` = 3 pairs -- a median and CI over 1-2 pairs are
+  the pairs themselves. 17 rows -> 10 (4 kernel, 6 other factors, a thin line between), and no longer growing: the ResNet block
+  would have taken it to 23 rows of 1 pair. The dropped contrasts have bar figures: stacked in 10, large stem in 27, ResNet in 28;
+  `factorial_pair_summary.csv` keeps every contrast.
+- *04-10, 23* (`fig_factor`), the user's choice among three forms: FP32 bars only (A blue, B red), B - A in FP32 and INT8 under
+  each group, `*` on the INT8 delta where a side's best epoch came early (the note in the legend). Four bars a group made 04 four
+  rows tall (now 3); INT8 tracks FP32 except the starred pairs, and its levels are in 01-03 / 14. The title states only the
+  layout definitions its labels use (`analyze_geometry.LAYOUTS` is now a dict), and "seed 42 (média das seeds onde replicada)":
+  the VGG pairs were already seed means. `wrap_dots` breaks a term longer than the width (10's labels overlapped).
+- *16, 20* (`kernel_groups` / `run_point` / `run_handles`): x = 7 fixed kernel groups (`KGROUPS`: original 11-5-3-3-3 / 7-3,
+  3x3, 2x2, alternating, conv1 / stem large + small body, deeper (stacked / deep stem), other families), every family pooled,
+  marker = family as in 13 / 17 / 25, colour = the group. Before: 14 (family, kernel) groups with overlapping ticks, 19 once
+  the ResNet block lands; head-as-marker and BN-as-fill dropped; legend 14 entries -> 4-6. 16's Spearman sentence (a null result,
+  rho = +0.01, n = 60) is printed, not drawn.
+- *13 / 17 / 25*: `legend_kernels` names the kernels that share a colour in one entry ("11-5-3-3-3 / 7×7 + 3×3 (original)" was
+  two identical orange entries). `KCOLOR["k7-2"]` -> the dark purple of the 2x2-body large stems, as its own comment's rule says
+  (it was conv1 11x11 + 3x3's purple).
+- *14*: title 4 lines -> 3. *26*: panel (a) dots like (b), one shared zoomed y (bars from 0 hid the ~1 pp it asks about);
+  the "pendente" ticks no longer fall outside the axes.
+- *New 27* (`plot_kernel_comparison`, large stem: 11-5-3-3-3 | conv1 11x11 + 3x3 | 3x3 | conv1 11x11 + 2x2 | 2x2, GAP and FC +
+  Dropout, BN) and *28* (ResNet-18, the 7 stem / block kernels), both through `fig_kernel`; a kernel the design plans for a
+  panel (`factor_effects.design_cells`, 64 px) without a seed-42 run is a "pendente" tick, so 28 shows its whole block now
+  (2 of 7 trained) and fills in as runs land; the seed dots of 27 come with `large_stem_seed43/44`.
+- *New 29* (`fig_resnet_curves`, through `fig_curves`, now panel-generic; 18 unchanged): the ResNet-18 FP32 curves, kernels
+  without a final result named in the title. Logs fetched from PCAD for it (rsync of `phase_11_resnet_kernel_stem*/*/logs`).
+  First read: train reaches ~100% by epoch 400 while validation peaks ~43% near epoch 40, dips to ~40% and recovers to ~44% as the
+  cosine anneals -- the ResNet-18 at 64 px memorizes the training set (AlexNet GAP + BN ends ~80% train / ~53% val in 18): a
+  first lead, not yet a cause, for its 43.6% test top-1.
+  PCAD also had logs of k2x2 / k7-2 (QAT logs present) and the deep stems / alternating (halfway); their summaries are not on the
+  laptop yet, so they are not drawn.
+`tests/test_phase11_figures.py` expects 29 figures; passes.
+
+## Progress 2026-10-24: 119 of 152 runs
+
+**Synced.** Five runs finished since 10-23. From PCAD: ResNet-18 k2x2, k7-2 and k7-3 pretrained, and VGG16 3x3 FC + Dropout seed 44.
+From nyx: the VGG kernel blocks 2-3-3-3-3 seed 44, first copied nyx -> PCAD (21 files, 606 MB on both sides). The laptop got
+their tracked files plus logs, without `*.pth` / `*_best.pth.gz`. Every one is on the current quant protocol, clean code
+(04c9b9d on PCAD, 512b834 on nyx), agreement_qat_int8 0.948-0.986.
+`outputs/pcad/aggregates/`: the new rows were appended, and nyx's `vgg_kernel_blocks_seed44` file copied. PCAD writes the same
+values with other float text than the laptop's committed lines, so those lines were kept as they were (checked value by value).
+
+**What they say** (test top-1, FP32 / INT8):
+- *ResNet-18 kernels* (seed 42 only; its own floor waits for `resnet_kernel_stem_seed43/44`):
+
+  | net | FP32 | INT8 |
+  |---|---|---|
+  | 7-3 | 43.6 | 43.7 |
+  | 3x3 | 42.7 | 43.3 |
+  | 2x2 | 42.0 | 41.7 |
+  | stem 7x7 + 2x2 blocks | 44.7 | 44.6 |
+
+  2x2 blocks behind the 7x7 stem lose nothing (+1.0 vs 7-3). The all-2x2 net's -2.6 vs 7-2 is the stem's, the same shape as
+  AlexNet's large stem (figure 27). One seed: AlexNet + BN's ±0.6 pp is only a guide.
+- *Pretrained ResNet-18*: 49.7 / 55.8, best FP32 epoch 29 of 500, so it is flagged early best. Its INT8 +6.2 is QAT's extra
+  training, as for the pretrained 224 px AlexNet.
+- *VGG16 3x3 FC + Dropout* seed 44: 58.3 (seeds 42 / 43: 59.2 / 58.9). VGG16's FP32 floor goes 0.6 -> 0.83 pp.
+- *VGG kernel blocks 2-3-3-3-3*, now 3 seeds: 59.6 / 59.4 / 59.7 FP32, inside the band of the all-3x3 net.
+
+**Regenerated** with `analyze_geometry`, `plot_kernel_comparison`, `factor_effects` and `design_figures`; 22 was not run (needs
+the FP32 checkpoints). Figure 11 stays at 10 rows (3x3 -> 2x2 now 13 pairs, pretraining 4). Figure 28 has 4 of its 7 ResNet
+kernels, figure 29 has 4 curves.
+Left: 33 runs, among them ResNet alternating / deep stems (2 running on PCAD), mobilenetv2_scratch, the large-stem and
+kernel-control seeds, and 7 VGG kernel-block seeds.
