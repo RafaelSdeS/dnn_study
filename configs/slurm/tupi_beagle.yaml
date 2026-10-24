@@ -3,6 +3,7 @@
 # on both: INT8 accuracy is exact on any CPU (ml.quantization.ACCURACY_ENGINE) and TF32 is off (scripts/train.py); only
 # latency is machine-bound (compared within one machine). For the AlexNet / family cells; VGG16 stays on tupi_4090.
 partition: tupi,beagle
+exclude: tupi4  # see tupi_4090.yaml
 gres: gpu:1
 nodes: 1
 cpus_per_task: 8
