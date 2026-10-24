@@ -136,6 +136,16 @@ large_stem,alexnet_k11-3_stride2_2pool2x2_map8_fcdrop_bn,42,fp32,500,True,52.5,4
 large_stem,alexnet_k11-3_stride2_2pool2x2_map8_fcdrop_bn,42,qat,50,True,52.69,41,1,1,0.0799999999999983,42,97.63,True
 large_stem,alexnet_k11-3_stride2_2pool2x2_map8_gap_bn,42,fp32,500,True,54.15,482,383,418,0.6099999999999994,497,77.83,False
 large_stem,alexnet_k11-3_stride2_2pool2x2_map8_gap_bn,42,qat,50,True,54.24,17,1,2,0.0,27,78.36,True
+resnet_kernel_stem,resnet18_k2x2_stride2_1pool3x3_map2_gap_bn,42,fp32,500,True,42.26,465,59,65,0.01999999999999602,50,99.35,True
+resnet_kernel_stem,resnet18_k2x2_stride2_1pool3x3_map2_gap_bn,42,qat,50,True,42.19,44,1,1,0.00999999999999801,12,99.27,True
+resnet_kernel_stem,resnet18_k3x3_stride2_1pool3x3_map2_gap_bn,42,fp32,500,True,43.7,432,37,42,0.35999999999999943,40,99.92,True
+resnet_kernel_stem,resnet18_k3x3_stride2_1pool3x3_map2_gap_bn,42,qat,50,True,43.86,15,1,1,0.0,1,99.89,True
+resnet_kernel_stem,resnet18_k7-2_stride2_1pool3x3_map2_gap_bn,42,fp32,500,True,45.8,480,391,447,0.9699999999999989,47,99.45,False
+resnet_kernel_stem,resnet18_k7-2_stride2_1pool3x3_map2_gap_bn,42,qat,50,True,45.92,21,1,1,0.0,32,99.45,True
+resnet_kernel_stem,resnet18_k7-3_stride2_1pool3x3_map2_gap_bn,42,fp32,500,True,44.62,471,36,407,0.5799999999999983,37,99.92,True
+resnet_kernel_stem,resnet18_k7-3_stride2_1pool3x3_map2_gap_bn,42,qat,50,True,44.65,20,1,1,0.0,12,99.92,True
+resnet_kernel_stem,resnet18_k7-3_stride2_1pool3x3_map2_gap_bn_pretrained,42,fp32,500,True,51.15,30,12,12,0.0,14,99.91,True
+resnet_kernel_stem,resnet18_k7-3_stride2_1pool3x3_map2_gap_bn_pretrained,42,qat,50,True,56.3,30,6,8,0.0,49,79.21,True
 stacked,alexnet_k2x2stacked_stride2_2pool2x2_map8_fcdrop_bn,42,fp32,500,True,56.74,478,404,427,1.0399999999999991,478,98.81,False
 stacked,alexnet_k2x2stacked_stride2_2pool2x2_map8_fcdrop_bn,42,qat,50,True,56.73,46,1,1,0.04999999999999716,45,98.88,True
 stacked,alexnet_k2x2stacked_stride2_2pool2x2_map8_gap_bn,42,fp32,500,True,57.62,446,371,410,0.6999999999999957,461,90.83,False
@@ -168,5 +178,7 @@ vgg_kernel_head_seed43,vgg16_k3x3_stride1_5pool2x2_map2_gap_bn,43,fp32,500,True,
 vgg_kernel_head_seed43,vgg16_k3x3_stride1_5pool2x2_map2_gap_bn,43,qat,50,True,59.31,34,1,1,0.0,6,99.97,True
 vgg_kernel_head_seed44,vgg16_k2x2_stride1_5pool2x2_map2_gap_bn,44,fp32,500,True,57.79,465,407,419,1.2899999999999991,48,99.83,False
 vgg_kernel_head_seed44,vgg16_k2x2_stride1_5pool2x2_map2_gap_bn,44,qat,50,True,57.91,47,1,1,0.11999999999999744,14,99.8,True
+vgg_kernel_head_seed44,vgg16_k3x3_stride1_5pool2x2_map2_fcdrop_bn,44,fp32,500,True,59.53,445,402,428,1.009999999999998,456,99.94,False
+vgg_kernel_head_seed44,vgg16_k3x3_stride1_5pool2x2_map2_fcdrop_bn,44,qat,50,True,59.62,6,1,1,0.0,9,99.91,True
 vgg_kernel_head_seed44,vgg16_k3x3_stride1_5pool2x2_map2_gap_bn,44,fp32,500,True,60.29,460,403,433,1.1700000000000017,30,99.97,False
 vgg_kernel_head_seed44,vgg16_k3x3_stride1_5pool2x2_map2_gap_bn,44,qat,50,True,60.32,31,1,1,0.0,2,99.96,True
