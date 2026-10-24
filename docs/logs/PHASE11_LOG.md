@@ -1982,3 +1982,61 @@ Runs that finish on nyx reach PCAD by one idempotent `rsync -a` of `outputs/pcad
 go to the laptop; no key nyx -> PCAD is installed. *Not yet exercised on a cluster:* the 6 smokes ran on the laptop, so the first new job of each machine is
 the real test (the inline `PCAD_DATASET_ROOT` reaching a Slurm job through `--export ALL`, the cached pretrained weights). Both queues keep the old lines
 in front: the first new cell starts in ~2 days on nyx (2 seed-42 VGG16 + 3 AlexNet in224 first) and in ~10 days on PCAD (24 old lines at ~2.4 a day).
+
+## Progress 2026-10-23: 114 of 152 runs, `input224` closed, 18 of 19 families, two jobs that did not finish clean
+
+**Status.** 114 of 152 done (93 at the 10-22 commit; `design_status.csv`). 21 new: PCAD 16 (11 `families`, `resnet_kernel_stem` k7-3 and
+k3x3, the FC + Dropout VGG16 head seeds: 3x3 seed 43, 2x2 seeds 43 / 44), nyx 5 (the last 3 `input224` cells, `kblocks2-3-3-3-3` and `kblocks3-2-3-3-3`
+seed 43). Their tracked files came to the laptop without `*.pth` / `*_best.pth.gz` / `*.log` / the FC VGG16 INT8 artifacts over 100 MB (PCAD's 16: 619 MB;
+nyx's: 255 MB, then the 5th run).
+**nyx -> PCAD, done the same day** (`ssh -A rafael@nyx`, `rsync -a` of `outputs/pcad/phase_1[12]_*`, `setsid nohup` on nyx): 189 files, 10.1 GB at ~110 MB/s --
+the 4 runs above that had not reached PCAD (the 3 `input224` cells, `kblocks2-3-3-3-3` seed 43) plus 8 files each that 5 earlier nyx runs lacked there --, 0 deleted;
+`rsync -c` dry run afterwards: 0 differences. The running cell was left out and sent alone when it finished (630 MB, `-c` dry run: 0). Laptop, PCAD and nyx
+now agree: a size-only `rsync -n` of `phase_1[123]_*` from each machine to the laptop lists only the runs still training (PCAD: `resnet18_k7-3` pretrained,
+VGG16 3x3 FC + Dropout seed 44, the `mobilenetv2_scratch` dir of the failed job; nyx: `kblocks2-3-3-3-3` seed 44). The 38 left: PCAD 30 (2 running --
+`resnet18_k7-3` pretrained on beagle, VGG16 3x3 FC + Dropout seed 44 on tupi5 --, 7 submitted, 21 in the feeder's file), nyx 8 (`kblocks` seed 43 x 3 and
+seed 44 x 5, 1 running).
+
+**Audit of the 21.** `quant_protocol` 2026-10-07 in all 21; `git_dirty` false; 500 / 50 epochs used in every run; `int8_kernel_max_err_steps` <= 1;
+|INT8 - QAT| <= 0.46 pp; `agreement_qat_int8` >= 0.96 in 20 (the 21st: below). Two commits: 04c9b9d (11) and 512b834 (10). `git diff a216556 04c9b9d`
+over `ml/ models/ scripts/train.py` (read, `tests/` not rerun): `ml/data.py` gains the class-count assert (no-op at 200 classes),
+`models/compensation.py:_ResBlock` and `models/alexnet_variants.py` gain `kernel_size` / `first_kernel` / `width` / `stem_*` / `residual` whose defaults
+build the same layers in the same order (a k=3 `_conv_bn` is the old Conv(pad 1, no bias) + BN), plus new registrations. No change to the training of an
+existing cell found.
+
+**Two jobs that did not finish clean.**
+- `mobilenetv2` (pretrained, job 832731, tupi6): FP32 56.43 -> QAT 61.02 -> INT8 60.56 (test). Its best FP32 epoch falls before 80% of the budget
+  (`early_best`, like the pretrained AlexNet cells): QAT started from an un-annealed checkpoint, so the -4.13 pp is not quantization. **`agreement_qat_int8`
+  = 0.8885 < `MIN_QAT_INT8_AGREEMENT` (0.90)**: the job exited 1 *after* writing its summary and logits, so the numbers exist. The 10-20 audit had every
+  agreement >= 0.98; the other 20 new runs are >= 0.96, and the kernel error of all 21 is <= 1 step. INT8 evaluation is deterministic on qnnpack and the checkpoints are fixed,
+  so a resubmission should trip the same guard: not resubmitted. Open: whether the guard should stop an early-best pretrained run.
+- `mobilenetv2_scratch` (job 832753, tupi4): after "QAT training complete", `UserWarning: must run observer before calling calculate_qparams`, then
+  `Segmentation fault`; no `results/`, FP32 and QAT checkpoints saved. Resubmitted 2026-10-23 as **832951** on `tupi_4090` (re-evaluation only: FP32 / QAT
+  resume as no-ops). A second segfault would point at convert / INT8 evaluation for this net on tupi, not at chance.
+
+**What the 21 say (seed 42 unless stated).**
+- *Families, 11 new (18 of 19 done).* The 10 non-pretrained lose at most 0.23 pp FP32 -> INT8. FP32 / INT8: `tinymobilenetv2` 57.96 / 58.00 (969M MACs),
+  `final_bottleneck_residual` 55.83 / 55.63, `fire_bypass` 55.19 / 55.27, `final_fire_residual` 54.96 / 54.85, `vgg_style` 54.53 / 54.49,
+  `final_bottleneck_fire` 54.40 / 54.17, `dilated_gap` 51.86 / 51.93, `dilated_fc` 47.45 / 47.57; the depthwise nets are the weakest:
+  `tinyhybridnet` 48.36 / 48.45, `final_depthwise_fire` 45.76 / 45.56.
+- *ResNet-18 stem.* k7-3 43.63 / 43.68 against k3x3 42.68 / 43.26: 3x3 -0.95 pp FP32, -0.42 INT8 (`factor_effects`, "Kernel 7-3 (ResNet) -> 3x3", n = 1). The
+  ResNet-18 noise band is still empty (`noise_bands` -> NaN): it needs the seed 43 / 44 pairs (4 runs pending), so this pair is not evidence yet.
+- *Input 224 closed (5 of 5).* FC + Dropout, no BN, map 6x6, against 11-5-3-3-3 (49.54 FP32 / 49.72 INT8): 3x3 46.74 (-2.80 / -3.02), 2x2 43.86
+  (-5.68 / -5.60), alt 3-2 45.73 (-3.81 / -3.98). The same contrasts at 64 px in the original layout (map 1x1) were -3.95 / -7.65 / -3.86 FP32: with the
+  map back at 6x6 the 2x2 deficit shrinks 1.97 pp, the 3x3 one 1.15, alt 3-2 0.05. One seed, no-BN FP32 band +-0.80 pp per run: only the 2x2 change is clearly
+  outside it. Every net gains +14 to +17 pp from the larger input (figure 23; the pretrained twin +16.6).
+- *VGG16 floors.* GAP + BN, 3 seeds: 3x3 59.35 / 59.37 / 59.09, 2x2 56.84 / 56.86 / 56.83 (3x3 - 2x2 = +2.43 pp on the means, ~9x the 3x3 seed range).
+  FC + Dropout, seed 43: 3x3 58.93, 2x2 58.78; 2x2 seeds 42 / 43 / 44 59.45 / 58.78 / 59.29; the 3x3 seed 44 is still training. Bands now:
+  VGG16 + BN +-0.62 FP32 / +-0.52 INT8; AlexNet + BN +-0.60 / +-0.69; AlexNet no-BN +-0.80 / +-4.40 (unchanged).
+- *VGG16 kernel blocks (seed 43 replicates, FP32 / INT8).* `kblocks2-3-3-3-3`: seed 43 59.37 / 59.57, seed 42 59.57 / 59.19 (best epochs 469 / 482);
+  `kblocks3-2-3-3-3`: seed 43 59.19 / 59.39 (agreement QAT / INT8 0.986), seed 42 59.43 / 59.70 (best epochs 476 / 478). The two replicates land 0.20 and 0.24 pp
+  below their seed 42 run in FP32, inside the VGG16 + BN band.
+- `early_best` marks 22 of 114 runs; of the 21 new, only `mobilenetv2`.
+
+**Regenerated.** `analyze_geometry`, `design_figures`, `factor_effects`, `plot_kernel_comparison`: figures 03, 04, 11, 13, 16, 17, 20, 23, 24, 25 and the
+`results/phase_11_geometry_analysis/` tables changed. 18 / 19 (curves, read from each run's gitignored `logs/*.log`, PCAD only) came out unchanged, so
+the new runs are not in them; 22 (needs the FP32 checkpoints) was not run. `26_kernel_controls.png` is drawn for the first time (references only, the
+control cells say "pendente"). `outputs/pcad/aggregates/` got the comparison CSVs of these experiments: PCAD's for its runs, nyx's for its own
+(`input224`, `vgg_kernel_blocks`, `vgg_kernel_blocks_seed43`). Two experiments are split between the machines, `vgg_kernel_head_seed43` / `_seed44` (FC + Dropout rows
+on PCAD, GAP rows on nyx): here the two are merged by appending nyx's rows (same header, no repeated model); PCAD's and nyx's own copies keep only theirs.
+No figure reads these CSVs.
