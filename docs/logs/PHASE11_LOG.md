@@ -2109,3 +2109,19 @@ the FP32 checkpoints). Figure 11 stays at 10 rows (3x3 -> 2x2 now 13 pairs, pret
 kernels, figure 29 has 4 curves.
 Left: 33 runs, among them ResNet alternating / deep stems (2 running on PCAD), mobilenetv2_scratch, the large-stem and
 kernel-control seeds, and 7 VGG kernel-block seeds.
+
+**Machines after the push (a69af25).** PCAD's `~/dnn_study` pulled 174f2b9 -> a69af25, which also brings the 10-24 commits
+e96862e / af7f99d / c4dd50e. Only `scripts/phase11/` changed among ml / models / configs / scripts, so the queued jobs run the
+same training code.
+
+The pull would have stopped on two kinds of file:
+- 337 committed files present untracked: the run dirs of both 10-24 syncs and 3 aggregate CSVs.
+- 1 tracked file modified by the jobs that the pull also changes: `phase_11_families_comparison.csv`. It was copied aside and
+  `git checkout --`.
+
+All 338 went to `~/dnn_study_prepull_untracked_20261024/`. After the pull, 335 `cmp` equal; `phase_11_families_comparison.csv`
+is among them. The 3 that differ are the aggregate CSVs the laptop merges from PCAD + nyx rows: `resnet_kernel_stem` and
+`vgg_kernel_head_seed43` / `_seed44`. Every PCAD row is still there, the values equal, one float written with one more digit.
+The copies (838 MB) were deleted. PCAD's code dirs are clean; the only modified tracked files left are the intentional ones
+(other aggregates, the 74 `archive_adamw_recipe/` files). nyx's sparse clone stays at 512b834: it has the training code, and
+only the analysis changed.
