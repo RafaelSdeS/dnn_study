@@ -404,7 +404,7 @@ A `git pull --ff-only` on PCAD stops on the tracked files of runs committed from
 untracked (byte-identical: the laptop got them from PCAD or nyx). Move exactly those paths aside to
 `~/dnn_study_prepull_untracked_<date>/`, pull, `cmp` each one against the checked-out copy, then delete the copies
 (2026-09-30: 269 files, 2026-10-20: 247, 2026-10-21: 26, 0 different; 2026-10-24: 338, 3 different = aggregate CSVs merged from
-PCAD + nyx on the laptop, every PCAD row kept, float text only). A tracked file PCAD modified that the pull also changes (an aggregate
+PCAD + nyx on the laptop, every PCAD row kept, float text only; 2026-10-25: 261 + 1 aggregate, 0 different). A tracked file PCAD modified that the pull also changes (an aggregate
 CSV): copy it aside, `git checkout --` it, pull, compare its rows. nyx's sparse clone (code dirs only) never hits this. PCAD also
 keeps tracked files modified on purpose: the `outputs/pcad/aggregates/*_comparison.csv` rows its jobs append, and 74
 `archive_adamw_recipe/` files re-evaluated there on 2026-10-01/02 -- leave both as they are.

@@ -2125,3 +2125,28 @@ is among them. The 3 that differ are the aggregate CSVs the laptop merges from P
 The copies (838 MB) were deleted. PCAD's code dirs are clean; the only modified tracked files left are the intentional ones
 (other aggregates, the 74 `archive_adamw_recipe/` files). nyx's sparse clone stays at 512b834: it has the training code, and
 only the analysis changed.
+
+## Progress 2026-10-25: 125 of 152 runs
+
+Six Phase 11 runs landed (test top-1, FP32 / INT8):
+- PCAD: `large_stem_seed43` 11x11 + 3x3 GAP + BN 54.33 / 54.08 and FC + Dropout 52.38 / 52.17; ResNet-18 alternating 3-2
+  43.68 / 43.82 and 3x3 deep stem 45.97 / 46.11.
+- nyx: `vgg_kernel_blocks_seed43` 3-3-2-3-3 59.24 / 59.29 and `_seed44` 3-2-3-3-3 59.41 / 59.55.
+
+Phase 12 (same commit, nyx), seed 42 only: lr x0.5 and x2 for the three AlexNet kernels (51.6-52.3 and 53.2-54.2 in FP32,
+3x3 > 11-5-3-3-3 > 2x2 at both, as at 0.01), the 7 CIFAR-100 nets (AlexNet 62.3-63.6, VGG16 70.3-71.0, INT8 within 0.4 pp)
+and the first fine-tune (AlexNet in224 pretrained, lr 1e-3: 62.23 / 63.13). `scripts.phase12.robustness` drew its figures
+01-03 for the first time; the seeds and the other 11 fine-tunes are queued.
+
+**Where the rest runs.** nyx's queue ends ~23:00 Sunday (CIFAR-100 trains fast there: an AlexNet 500 + 50 epochs in ~32 min, a
+VGG16 in ~65-77 min), so five kernel-control cells moved from PCAD's queue to nyx's tail: `phase_11_kernel_controls` w150 /
+w67, `_seed43` w150 / w67, `_seed44` w150. Each line was removed from PCAD's queue first (one cell, one machine) and carries a
+latest-start guard of Mon 05:45, so none runs into the 07:45 stop; a line past it lands in `.failed` and goes back to PCAD.
+nyx's clone (512b834) builds both nets exactly as main does (parameters, state_dict shapes and module repr compared). The
+k5x5 cells and `_seed44` w67 stay on PCAD (42 lines left).
+
+**Sync and pull.** The 11 runs that existed only on nyx were rsynced to PCAD whole (checksums equal); the laptop took the
+tracked files of 20 runs from PCAD (checksums equal) and appended their rows to 8 aggregate CSVs (rows of a model present on
+both sides numerically equal). PCAD's `~/dnn_study` pulled a69af25 -> 6362d41 (no code change): 261 committed files present
+untracked, all identical, plus `phase_11_resnet_kernel_stem_comparison.csv` (modified by the jobs, same 7 rows as the commit)
+went aside, the pull ran, all 261 `cmp` equal, the copies were deleted.
