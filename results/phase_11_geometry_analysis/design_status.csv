@@ -91,8 +91,8 @@ large_stem,alexnet_k11-3_stride2_2pool2x2_map8_gap_bn,42,beagle,54.5499980449676
 large_stem,alexnet_k11-3_stride2_2pool2x2_map8_fcdrop_bn,42,beagle,52.399998903274536,52.799999713897705,52.82999873161316,True
 large_stem,alexnet_k11-2_stride2_2pool2x2_map8_gap_bn,42,beagle,55.640000104904175,55.87000250816345,55.83999752998352,True
 large_stem,alexnet_k11-2_stride2_2pool2x2_map8_fcdrop_bn,42,tupi4,49.8199999332428,49.959999322891235,49.97999966144562,True
-large_stem_seed43,alexnet_k11-3_stride2_2pool2x2_map8_gap_bn,43,,,,,False
-large_stem_seed43,alexnet_k11-3_stride2_2pool2x2_map8_fcdrop_bn,43,,,,,False
+large_stem_seed43,alexnet_k11-3_stride2_2pool2x2_map8_gap_bn,43,tupi5,54.329997301101685,54.1700005531311,54.079997539520264,True
+large_stem_seed43,alexnet_k11-3_stride2_2pool2x2_map8_fcdrop_bn,43,tupi4,52.38000154495239,52.160000801086426,52.170002460479736,True
 large_stem_seed43,alexnet_k11-2_stride2_2pool2x2_map8_gap_bn,43,,,,,False
 large_stem_seed43,alexnet_k11-2_stride2_2pool2x2_map8_fcdrop_bn,43,,,,,False
 large_stem_seed44,alexnet_k11-3_stride2_2pool2x2_map8_gap_bn,44,,,,,False
@@ -103,9 +103,9 @@ resnet_kernel_stem,resnet18_k7-3_stride2_1pool3x3_map2_gap_bn,42,tupi3,43.630000
 resnet_kernel_stem,resnet18_k7-3_stride2_1pool3x3_map2_gap_bn_pretrained,42,beagle,49.66000020503998,55.73999881744385,55.809998512268066,True
 resnet_kernel_stem,resnet18_k3x3_stride2_1pool3x3_map2_gap_bn,42,tupi3,42.6800012588501,43.459999561309814,43.25999915599823,True
 resnet_kernel_stem,resnet18_k2x2_stride2_1pool3x3_map2_gap_bn,42,tupi1,42.0199990272522,41.62000119686127,41.65999889373779,True
-resnet_kernel_stem,resnet18_kalt3-2_stride2_1pool3x3_map2_gap_bn,42,,,,,False
+resnet_kernel_stem,resnet18_kalt3-2_stride2_1pool3x3_map2_gap_bn,42,beagle,43.68000030517578,43.880000710487366,43.81999969482422,True
 resnet_kernel_stem,resnet18_k7-2_stride2_1pool3x3_map2_gap_bn,42,tupi5,44.65999901294708,44.4599986076355,44.56000030040741,True
-resnet_kernel_stem,resnet18_k3x3deepstem_stride2_1pool3x3_map2_gap_bn,42,,,,,False
+resnet_kernel_stem,resnet18_k3x3deepstem_stride2_1pool3x3_map2_gap_bn,42,tupi2,45.969998836517334,46.18000090122223,46.11000120639801,True
 resnet_kernel_stem,resnet18_k2x2deepstem_stride2_1pool3x3_map2_gap_bn,42,,,,,False
 resnet_kernel_stem_seed43,resnet18_k3x3_stride2_1pool3x3_map2_gap_bn,43,,,,,False
 resnet_kernel_stem_seed43,resnet18_k2x2_stride2_1pool3x3_map2_gap_bn,43,,,,,False
@@ -126,11 +126,11 @@ vgg_kernel_blocks,vgg16_kblocks3-3-3-2-3_stride1_5pool2x2_map2_gap_bn,42,Nyx,58.
 vgg_kernel_blocks,vgg16_kblocks3-3-3-3-2_stride1_5pool2x2_map2_gap_bn,42,Nyx,59.31000113487244,59.299999475479126,59.2199981212616,True
 vgg_kernel_blocks_seed43,vgg16_kblocks2-3-3-3-3_stride1_5pool2x2_map2_gap_bn,43,Nyx,59.369999170303345,59.689998626708984,59.57000255584717,True
 vgg_kernel_blocks_seed43,vgg16_kblocks3-2-3-3-3_stride1_5pool2x2_map2_gap_bn,43,Nyx,59.18999910354614,59.390002489089966,59.390002489089966,True
-vgg_kernel_blocks_seed43,vgg16_kblocks3-3-2-3-3_stride1_5pool2x2_map2_gap_bn,43,,,,,False
+vgg_kernel_blocks_seed43,vgg16_kblocks3-3-2-3-3_stride1_5pool2x2_map2_gap_bn,43,Nyx,59.24000144004822,59.170001745224,59.289997816085815,True
 vgg_kernel_blocks_seed43,vgg16_kblocks3-3-3-2-3_stride1_5pool2x2_map2_gap_bn,43,,,,,False
 vgg_kernel_blocks_seed43,vgg16_kblocks3-3-3-3-2_stride1_5pool2x2_map2_gap_bn,43,,,,,False
 vgg_kernel_blocks_seed44,vgg16_kblocks2-3-3-3-3_stride1_5pool2x2_map2_gap_bn,44,Nyx,59.689998626708984,59.630000591278076,59.689998626708984,True
-vgg_kernel_blocks_seed44,vgg16_kblocks3-2-3-3-3_stride1_5pool2x2_map2_gap_bn,44,,,,,False
+vgg_kernel_blocks_seed44,vgg16_kblocks3-2-3-3-3_stride1_5pool2x2_map2_gap_bn,44,Nyx,59.40999984741211,59.390002489089966,59.54999923706055,True
 vgg_kernel_blocks_seed44,vgg16_kblocks3-3-2-3-3_stride1_5pool2x2_map2_gap_bn,44,,,,,False
 vgg_kernel_blocks_seed44,vgg16_kblocks3-3-3-2-3_stride1_5pool2x2_map2_gap_bn,44,,,,,False
 vgg_kernel_blocks_seed44,vgg16_kblocks3-3-3-3-2_stride1_5pool2x2_map2_gap_bn,44,,,,,False
