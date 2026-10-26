@@ -589,9 +589,12 @@ def fig_curves(df, figs, note, panels=None, kernels=K4, name="18_training_curves
         ax.set_xlabel("Época (FP32)")
     for ax in axes[:, 0]:
         ax.set_ylabel("Top-1 (%)")
-    # one legend for the four panels (it was repeated in each)
+    # one legend for the four panels (it was repeated in each). The baseline is one more colour, a patch like the kernels
+    # (2026-10-26: a black line among the patches, "(mapa 1×1) (validação)", read as a different kind of entry); the
+    # line styles below hold for it too, but only its validation curve is drawn
     fig.legend(handles=legend_kernels(shown)
-               + ([Line2D([], [], color="k", lw=1.2, label=f"{BASE_LABEL} (validação)")] if cb is not None else [])
+               + ([Patch(color="k", label=f"{BASE_LABEL}: a referência, a mesma em todos os painéis (só a validação)")]
+                  if cb is not None else [])
                + [Line2D([], [], color=TEXT_SECONDARY, lw=1.6, label="validação (split 90/10)"),
                   # Trainer's train_acc: the running mean over the epoch, in train mode, on the augmented batches
                   Line2D([], [], color=TEXT_SECONDARY, lw=0.8, ls="--", label="treino: média da época, com augmentation"
