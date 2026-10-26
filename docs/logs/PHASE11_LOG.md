@@ -2150,3 +2150,76 @@ tracked files of 20 runs from PCAD (checksums equal) and appended their rows to 
 both sides numerically equal). PCAD's `~/dnn_study` pulled a69af25 -> 6362d41 (no code change): 261 committed files present
 untracked, all identical, plus `phase_11_resnet_kernel_stem_comparison.csv` (modified by the jobs, same 7 rows as the commit)
 went aside, the pull ran, all 261 `cmp` equal, the copies were deleted.
+
+## Progress 2026-10-26: 133 of 152 runs
+
+**Synced to Hestia** (a desktop without a GPU; the laptop was not touched): the tracked files and logs of 23 runs, without
+`*.pth` / `*_best.pth.gz` -- nyx 18, PCAD 5 -- `rsync -c` dry run 0 differences against both sources. Audit: quant_protocol
+2026-10-07, git_dirty false, full budgets, int8_kernel_max_err_steps 1, agreement_qat_int8 0.988-0.995. Aggregates: 6 new CSVs,
+2 rows appended to `large_stem_seed43` (the rows on both sides equal). Hestia also took the 176 per-run logs it lacked (figures
+18 / 19 / 29, convergence.csv); one of them, `vgg_kernel_blocks` 3-2-3-3-3 seed 42, exists only on nyx.
+
+New numbers (test top-1, FP32 / INT8):
+- *Large stem seeds.* 11x11 + 2x2 GAP + BN 56.10 / 56.03 (seed 43), 56.06 / 56.46 (seed 44); FC + Dropout seed 43 50.06 / 49.85;
+  11x11 + 3x3 seed 44 GAP 53.54 / 53.70, FC + Dropout 52.30 / 52.35.
+- *Kernel controls.* 2x2 at 1.5x channels (167M MACs, 3x3's) 53.97 / 54.02 (seed 42), 53.71 / 53.80 (seed 43), against 3x3's
+  53.81 (3 seeds); 3x3 at 0.67x (75M, 2x2's) 52.44 / 52.53, against 2x2's 52.58. At equal MACs the kernel gap is gone.
+- *CIFAR-100, 3 seeds* (FP32 means): AlexNet alternating 63.42, 3x3 63.34, 11-5-3-3-3 63.00, 2x2 62.09; VGG16 3x3 71.08,
+  alternating 70.99, 2x2 70.31.
+- *Fine-tune* AlexNet in224 pretrained, lr 1e-4: 60.50 / 60.58 (lr 1e-3: 62.23 / 63.13).
+
+**The two nyx lines past their guard.** `kernel_controls_seed43` w67 and `_seed44` w150 met the Mon 05:45 latest-start guard
+(06:58 / 07:01) and went to `~/queue_nyx.txt.failed`; neither had started anywhere (not in PCAD's queue, `.done`, `.failed` or
+outputs). Both were prepended to `~/queue_phase11_full.txt` (39 lines, backup `.bak_20261026`) after a `--dry-run`, while the
+Slurm queue was full (8 / 8): the feeder could not pop in between.
+
+**Open.** PCAD has only the tracked files of `vgg_kernel_blocks/vgg16_kblocks3-2-3-3-3` seed 42 and none of the 18 nyx runs
+above: nyx keeps their only weights and logs until the next nyx -> PCAD rsync. `~/queue_nyx.log` on nyx is 2.3 GB.
+
+## Figures as one story (2026-10-26)
+
+User request: review every figure, are they easy to read, do they tell one story, is there a further Phase 12 figure worth
+having; nothing changed drastically without asking. 32 figures reviewed; the plan was approved with the user's three choices
+(21 per regime, Phase 12's 03 in figure 26's form, three new figures). No number changed: every CSV under results/ came out
+byte-identical.
+
+**Reading order** -- the numbers stay; this is the order the story is told in:
+1. The starting point is broken and geometry outweighs the kernel: 01 (AlexNet unadapted, 1x1 map, 35.5%), 05, 06, 23, 15.
+2. With healthy training (GAP + BN) the kernel weighs little: 02, 14, 03, 28; 11 sets the kernel deltas against the other
+   factors; 21 per regime.
+3. 2x2 loses by capacity (MACs), not by its kernel: 26; in VGG16 a single 2x2 block costs <= 0.8 pp: 24.
+4. A small-kernel body gets it back: large conv1 + 2x2 body (27, 28), stacking (10); the effective receptive field in 22.
+5. INT8 costs ~0 for every kernel; the large "gains" are QAT training from an un-annealed checkpoint: 16, 12, 19, 20.
+6. Cost and hardware: 13, 25, 17, and 30 (the share of MACs a Winograd engine runs).
+7. It holds: Phase 12's 01 (lr), 03 and 05 (CIFAR-100), 02 (fine-tuning), and 04 -- the whole story in one figure.
+Appendix: 18, 19, 29 (convergence); 04, 07-09 are the per-factor bars behind 11.
+
+**What changed.**
+- *21*: pooled, the 7 no-BN configurations outvoted the 2 with BN, and 11-5-3-3-3 "won overall" (mean rank 1.29) where it only
+  wins without BN; with BN, 11-5-3-3-3, 3x3 and alternating tie at 2.00 and 2x2 is last. Now the two regimes apart: without BN
+  the CD diagram and its table, with BN the table only (2 configurations, under `MIN_FRIEDMAN` = 3); seed 42 in both, as before.
+- *13 / 25*: the INT8 front leaves out the early-best runs -- it ran through the pretrained MobileNetV2 (60.6% INT8 = QAT's extra
+  training). It now passes the large conv1 + 2x2 body and the stacked 2x2.
+- *30, new*: top-1 INT8 against the % of effective MACs in stride-1, dilation-1, groups-1 2x2 / 3x3 convs (`*_layer_stats.json`):
+  MobileNetV2 0% (depthwise + 1x1), the original-kernel AlexNets 33-57%, large conv1 + 2x2 body 75%, the 64px small-kernel
+  AlexNets ~98%, VGG16 98-100%. The front is all VGG16 at >= 98%: the most accurate nets are almost entirely Winograd-eligible.
+  Layer geometry only; Winograd-FPGA's `eligibility_wino.audit_net` also tiles the map.
+- *Phase 12 04, new*: a forest plot of 3x3 -> 2x2 and original -> 3x3 (B - A, paired by seed) per scenario, plus 3x3 -> 2x2 at
+  equal MACs. 3x3 -> 2x2 costs 0.7-2.4 pp in every scenario (AlexNet at 3 lrs, VGG16, ResNet-18, CIFAR-100) and ~0 at equal MACs
+  (+0.09 over 2 seeds, -0.05 over 1).
+- *Phase 12 05, new*: Tiny ImageNet against CIFAR-100, seed means +- SD, one panel per family: Kendall's tau = +1.00 for AlexNet
+  (4 nets) and VGG16 (3).
+- *Phase 12 03*: a dot per seed and a tick at the FP32 mean, zoomed y (figure 26's form, `design_figures.seed_dots`); bars from 0
+  hid the ~1 pp, and seed 42's VGG16 3x3 (70.4) sat level with 2x2 while the 3-seed means are 71.1 and 70.3.
+- *Text and layout*: 26's subtitle said "seed 42" (each dot is a seed); 03 / 28 say bars = seed 42, dots = each seed; Phase 12's
+  01 / 03 titles no longer touch the panel titles, 01's legend moved below; 08 says its pretraining ran the one recipe (lr 0.01)
+  and points to Phase 12's 02; `reference_lines` rescales y after drawing (05 / 06's 224 px line sat on the frame: axhline only
+  rescales when the line falls outside the limits).
+- *17*: INT8 on the CPU at batch 1 is slower than FP32 at batch 1 (AlexNet 3x3 15 ms vs 1.2 ms, ResNet-18 ~105 ms vs 2.4 ms),
+  while the same INT8 nets take 0.2-0.3 ms per image batched. Said on the panel; the cause is not investigated (needs a
+  benchmark on a tupi3-6 node).
+- *22*: conv1 11x11 + 2x2 showed "pendente" although it had trained -- drawn now (half the influence in 18.5% of the image); the
+  4 FP32 checkpoints were fetched from PCAD and deleted afterwards (md5 equal to PCAD's).
+
+`tests/test_phase11_figures.py` expects 30 Phase 11 and 5 Phase 12 figures (its fake `layer_stats` now carry the real geometry
+fields); passes.

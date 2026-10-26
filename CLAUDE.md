@@ -239,9 +239,9 @@ scripts/                  # CLI entry points (used instead of notebooks for PCAD
     prune_channels.py      # Task 2: structured (channel) pruning CLI;
                            #   --finetune-epochs fine-tunes the pruned model then runs it through QAT->INT8
   phase11/                 # `python -m scripts.phase11.<name>`
-    # The 28 PNGs in results/figures_generated/phase_11_kernel_size_comparison/ (01-22 renumbered without gaps 2026-10-14, 23-24 added 2026-10-19, 26 on 2026-10-21 = phase_11_kernel_controls,
-    # 25 on 2026-10-20 with a readability pass: PHASE11_LOG "Figures made lighter"; 27-28 on 2026-10-24 with a second one:
-    # PHASE11_LOG "Figures simpler, 27 / 28";
+    # The 30 PNGs in results/figures_generated/phase_11_kernel_size_comparison/ (01-22 renumbered without gaps 2026-10-14, 23-24 added 2026-10-19, 26 on 2026-10-21 = phase_11_kernel_controls,
+    # 25 on 2026-10-20 with a readability pass: PHASE11_LOG "Figures made lighter"; 27-29 on 2026-10-24 with a second one:
+    # PHASE11_LOG "Figures simpler, 27 / 28"; 30 on 2026-10-26 with the reading order of all of them: PHASE11_LOG "Figures as one story";
     # rewritten 2026-10-04 for the 76-run design): runs are picked by their factors (CELL_FACTORS, via design_figures.frame),
     # never by name, each AlexNet figure with two reference lines (analyze_geometry.reference_lines): torchvision's AlexNet
     # unadapted trained from scratch (BASE_KEY, 1x1 map, 35.5%: dashed) and the same net at the 6x6 map it was designed for
@@ -259,7 +259,8 @@ scripts/                  # CLI entry points (used instead of notebooks for PCAD
     factor_effects.py          # 04-10 and 23 (input 64 -> 224 px) one figure per factor over every matched pair (+ FAMILY_CONTRASTS),
                                #   FP32 bars only, B - A in FP32 and INT8 under each group;
                                #   11 every matched pair per contrast with >= MIN_PAIRS (3) pairs, FP32 and INT8 (hollow = inside its seed band), 21 critical-difference
-                               #   diagram of the 4 kernels' mean ranks (Friedman + Nemenyi, Demšar 2006) + the per-configuration ranks it averages
+                               #   diagram of the 4 kernels' mean ranks (Friedman + Nemenyi, Demšar 2006) + the per-configuration ranks it averages,
+                               #   without BN and with BN apart (pooled, the 7 no-BN configurations outvoted the 2 with BN)
     analyze_geometry.py        # 12 QAT-vs-conversion INT8 change + the shared loader/plot helpers + main_grid/kernel_geometry tables
                                #   + all_runs.csv (every run, with host) and design_status.csv (every planned run of the yamls:
                                #   done where / pending). Figures 01-22 read design_figures.core() = the 64 px design without
@@ -271,7 +272,8 @@ scripts/                  # CLI entry points (used instead of notebooks for PCAD
                                #   right <-> wrong flips from the test logits (Hooker et al. 2019) -- 16/20 on 7 fixed kernel groups (KGROUPS,
                                #   families pooled, marker = family) --, 24 VGG16 kernel blocks against its all-3x3 / all-2x2
                                #   nets (dot plot; patterns still queued are named in its title), 26 kernel controls (dots, every seed),
-                               #   29 ResNet-18 training curves per stem / block kernel (18/19/29 need
+                               #   29 ResNet-18 training curves per stem / block kernel, 30 accuracy x % of MACs a Winograd engine runs
+                               #   (stride-1 2x2 / 3x3 convs, from *_layer_stats.json); INT8 fronts leave the early-best runs out (18/19/29 need
                                #   the gitignored logs, analyze_geometry.convergence's rsync); --archive previews them on the
                                #   superseded runs (results/archive_adamw_recipe/figures_generated/phase_11_preview/)
     receptive_field.py         # 22 effective receptive field per kernel (Luo et al. 2016); needs the gitignored FP32
@@ -282,7 +284,9 @@ scripts/                  # CLI entry points (used instead of notebooks for PCAD
                                #   so ml/data.py loads it unchanged: `PCAD_DATASET_ROOT=<dir> python -m scripts.train --experiment phase_12_cifar100`
                                #   (ml/data.py asserts len(classes) == data.num_classes: a CIFAR yaml on Tiny ImageNet, or the reverse, stops)
     robustness.py              # 01 lr sensitivity (half / 0.01 / double), 02 pretrained twins fine-tuned (lr 1e-3 / 1e-4, val-best starred),
-                               #   03 CIFAR-100 kernel contrast -> results/figures_generated/phase_12_robustness/, results/phase_12_robustness/all_runs.csv;
+                               #   03 CIFAR-100 kernel contrast (dots, every seed), 04 the kernel effect in every scenario (forest: lrs,
+                               #   families, CIFAR-100, equal MACs), 05 Tiny ImageNet x CIFAR-100 per family (Kendall's tau)
+                               #   -> results/figures_generated/phase_12_robustness/, results/phase_12_robustness/all_runs.csv;
                                #   reads phase_12_* through analyze_geometry.load(prefix="phase_12_") (phase_11_* is the default)
   phase13/                 # `python -m scripts.phase13.hybrids` (2026-10-22, docs/logs/PHASE13_LOG.md)
     hybrids.py                 # 01_hybrids.png (bodies 5 convs / stacked / residual x conv1 kernel / 11x11 x conv1 stride 2 / 1), contrasts.csv
