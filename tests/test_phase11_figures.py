@@ -24,7 +24,7 @@ FIGURES = {f"{n}.png" for n in ["01_kernel_original_layout", "02_kernel_64px_lay
                                 "16_quantization_robustness", "17_latency_vs_macs", "18_training_curves", "19_qat_curves", "20_int8_prediction_flips",
                                 "21_kernel_rank_critical_difference", "22_effective_receptive_field", "23_input_224", "24_vgg_kernel_blocks",
                                 "25_accuracy_vs_size", "26_kernel_controls", "27_large_stem", "28_resnet_kernel_stem",
-                                "29_resnet_training_curves"]}
+                                "29_resnet_training_curves", "30_winograd_eligible"]}
 
 
 def _early(m):  # the fake runs whose best FP32 epoch comes early, so every figure draws its early-best mark
@@ -53,8 +53,10 @@ def _fake_runs(root, keep, experiments=EXPERIMENTS):
                        "epochs": 50 if _early(m) else 400, "epochs_budget": 500, "test_fp32_ece": 0.05, "fp32_bs1_latency_ms_per_image": 1.0,
                        "fp32_cpu_bs1_latency_ms_per_image": 5.0, "int8_bs1_latency_ms_per_image": 3.0}
             (run / "results" / f"{m}_summary.json").write_text(json.dumps(summary))
-            stats = {"features.0": {"activation_in": {"max": 2.6, "p999": 2.6}},
-                     "features.3": {"activation_in": {"max": 2 + 10 * rng.random(), "p999": 2.0}}}
+            conv = dict(type="Conv2d", dilation=[1, 1], groups=1)  # the real file's geometry fields: figure 30 reads them
+            stats = {"features.0": {**conv, "kernel_size": [11, 11], "stride": [2, 2], "macs": 2e7, "activation_in": {"max": 2.6, "p999": 2.6}},
+                     "features.3": {**conv, "kernel_size": [3, 3], "stride": [1, 1], "macs": 6e7,
+                                    "activation_in": {"max": 2 + 10 * rng.random(), "p999": 2.0}}}
             (run / "results" / f"{m}_layer_stats.json").write_text(json.dumps(stats))
             labels = rng.integers(0, 200, 50)  # test logits: figure 20's flips and the McNemar tests read them
             for stage in ("fp32", "int8"):
@@ -162,5 +164,6 @@ def test_every_phase_12_figure_renders(tmp_path, monkeypatch):
     for name, value in [("RUNS", (runs,)), ("FIGS", tmp_path / "figs"), ("TABLES", tmp_path / "tables")]:
         monkeypatch.setattr(robustness, name, value)
     robustness.main()
-    assert {p.name for p in (tmp_path / "figs").glob("*.png")} == {"01_lr_sensitivity.png", "02_finetune_pretrained.png", "03_cifar100.png"}
+    assert {p.name for p in (tmp_path / "figs").glob("*.png")} == {"01_lr_sensitivity.png", "02_finetune_pretrained.png", "03_cifar100.png",
+                                                                  "04_kernel_effect_everywhere.png", "05_dataset_transfer.png"}
     assert (tmp_path / "tables" / "all_runs.csv").exists()

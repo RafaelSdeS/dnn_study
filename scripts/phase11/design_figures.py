@@ -1,4 +1,4 @@
-"""Phase 11 figures 13-20, 24-26, 29 -- the design read through its factors (ml/model_registrations.py:CELL_FACTORS), not run names.
+"""Phase 11 figures 13-20, 24-26, 29, 30 -- the design read through its factors (ml/model_registrations.py:CELL_FACTORS), not run names.
 Selecting by factor is what lets one file draw the live runs and, with --archive, the superseded AdamW-recipe runs
 (LEGACY maps their names onto the same factors) -- a preview of each figure's form, not its numbers: validation split,
 pre-fix INT8, latencies that still timed the DataLoader, and some only-approximate twins (marked †).
@@ -16,6 +16,7 @@ pre-fix INT8, latencies that still timed the DataLoader, and some only-approxima
     20_int8_prediction_flips.png    % of test images right -> wrong and wrong -> right under INT8 (from the test logits)
     24_vgg_kernel_blocks.png        VGG16 one kernel per block between its all-3x3 and all-2x2 nets (every seed a dot)
     26_kernel_controls.png          phase_11_kernel_controls: (a) width-matched 2x2 / 3x3 pairs, (b) 2x2 -> 3x3 -> 5x5 dose-response
+    30_winograd_eligible.png        top-1 INT8 vs the % of MACs in stride-1 2x2 / 3x3 convs (winograd_share), front numbered
 
 18, 19 and 29 read the per-epoch logs, which only PCAD keeps -- fetch them first (analyze_geometry.convergence's rsync; add
 archive_adamw_recipe/ to both paths for --archive).
@@ -222,12 +223,19 @@ def family_handles(d):
     return [Line2D([], [], marker=m, color=TEXT_SECONDARY, ls="", ms=8, label=FLABEL[f]) for f, m in FMARK.items() if f in set(d.family)]
 
 
-def fig_pareto(df, figs, note, panels, name, question):
+def fig_pareto(df, figs, note, panels, name, question, high_x=False,
+               front_label="fronteira: nenhuma rede é mais barata e melhor"):
     """Top-1 against one cost per panel, panels = [(accuracy column, cost column, x label)] (figure 13: INT8 x MACs, 25:
     FP32 x FP32 size and INT8 x INT8 size): colour = kernel, marker = family. The fronts' nets are numbered (one numbering
-    for all panels) and named in a key beside the plot (names on the points overlapped)."""
+    for all panels) and named in a key beside the plot (names on the points overlapped). An INT8 front leaves out the
+    early-best runs (2026-10-26: QAT's extra training, not quantization, put the pretrained MobileNetV2 on it; they stay
+    drawn, ringed). high_x: x is a benefit, not a cost (figure 30's Winograd share): more is better, linear axis."""
     d = seed42(df).dropna(subset=["int8"])
-    fronts = [d[pareto_front(d[x], d[acc])].sort_values(x) for acc, x, _ in panels]
+    sign = -1 if high_x else 1
+    fronts = []
+    for acc, x, _ in panels:
+        e = d[~d.early_best] if acc == "int8" else d
+        fronts.append(e[pareto_front(sign * e[x], e[acc])].sort_values(x))
     num = {i: n + 1 for n, i in enumerate(d.loc[pd.concat(fronts).index.unique()].sort_values("int8").index)}
     fig, axes = plt.subplots(1, len(panels), figsize=(10 if len(panels) == 1 else 16, 7), sharey=True, squeeze=False)
     for ax, (acc, x, xlabel), front in zip(axes[0], panels, fronts):
@@ -236,7 +244,7 @@ def fig_pareto(df, figs, note, panels, name, question):
                        **(dict(edgecolors="k", lw=1.3) if r.pretrained else dict(edgecolors="white", lw=0.5)))
             if r.early_best and acc == "int8":  # the mark is about the INT8 number
                 early_ring(ax, getattr(r, x), r.int8)
-        ax.step(front[x], front[acc], where="post", color=TEXT_PRIMARY, lw=1, ls="--", zorder=1)
+        ax.step(front[x], front[acc], where="pre" if high_x else "post", color=TEXT_PRIMARY, lw=1, ls="--", zorder=1)
         for r in front.itertuples():
             n = num[r.Index]  # odd left, even right: neighbours on the front don't print over each other
             ax.annotate(str(n), (getattr(r, x), getattr(r, acc)), xytext=(-5, 4) if n % 2 else (5, 4),
@@ -244,7 +252,8 @@ def fig_pareto(df, figs, note, panels, name, question):
         b = baseline(df)
         if b is not None:
             base_ring(ax, b[x], b[acc])
-        plain_log(ax, "x")
+        if not high_x:
+            plain_log(ax, "x")
         ax.set_xlabel(xlabel)
         if len(panels) > 1:
             ax.set_title(acc.upper(), fontsize=10)
@@ -254,7 +263,9 @@ def fig_pareto(df, figs, note, panels, name, question):
                + family_handles(d)
                + ([Line2D([], [], marker="o", color=TEXT_SECONDARY, mec="k", mew=1.3, ls="", ms=8, label="contorno preto = pré-treino ImageNet")]
                   if d.pretrained.any() else [])
-               + [Line2D([], [], color=TEXT_PRIMARY, ls="--", label="fronteira: nenhuma rede é mais barata e melhor"), BASE_HANDLE]
+               + [Line2D([], [], color=TEXT_PRIMARY, ls="--", label=front_label
+                         + (" (no INT8, sem as de anel)" if d.early_best.any() and any(acc == "int8" for acc, *_ in panels) else "")),
+                  BASE_HANDLE]
                + ([early_handle("ring")] if d.early_best.any() else []))
     fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=3, fontsize=9)
     fig.legend(handles=[Line2D([], [], ls="", label=f"{n}  {short(d.loc[i])}") for i, n in num.items()], loc="center left",
@@ -375,6 +386,19 @@ def worst_input_ratio(r):
     return max((a["max"] / a["p999"] for a in acts if a.get("p999")), default=np.nan)
 
 
+def winograd_share(r):
+    """% of a run's effective MACs (macs_eff_m, figure 13's x) in convs a Winograd F(m, r) engine runs, from its
+    *_layer_stats.json: stride 1, dilation 1, groups 1, a 2x2 or 3x3 kernel -- the small kernels the study is about.
+    ponytail: layer geometry only; Winograd-FPGA's eligibility_wino.audit_net also tiles the map, not modelled here."""
+    p = r.results / f"{r.key}_layer_stats.json"
+    if not p.exists():
+        return np.nan
+    ok = sum(v["macs"] for v in json.loads(p.read_text()).values()
+             if v["type"] == "Conv2d" and v["stride"] == [1, 1] and v["dilation"] == [1, 1] and v["groups"] == 1
+             and v["kernel_size"] in ([2, 2], [3, 3]))
+    return 100 * ok / (r.macs_eff_m * 1e6)
+
+
 def kernel_groups(d):
     """[(label, colour, runs)] of figures 16/20 in KGROUPS order, only the groups that have a run."""
     own = d.family != "família"
@@ -484,7 +508,10 @@ def fig_latency(df, figs, note):
     fig, axes = plt.subplots(1, 3, figsize=(17, 5.8))
     axes[2].sharey(axes[1])  # FP32 and INT8 on the same CPU, one scale
     for ax, m, title in [(axes[0], "lat_gpu", f"FP32 na GPU ({gpu}), batch 1"), (axes[1], "lat_cpu", "FP32 na CPU, batch 1"),
-                         (axes[2], "lat_int8", "INT8 na CPU, batch 1")]:
+                         # 2026-10-26: INT8 batch 1 is slower than FP32 batch 1 here, while the same INT8 nets take < 1 ms
+                         # per image batched -- unexplained yet, so said on the panel
+                         (axes[2], "lat_int8", "INT8 na CPU, batch 1\n(mais lento que o FP32 neste batch: a investigar; "
+                                               "em lote, < 1 ms por imagem)")]:
         for r in d.dropna(subset=[m]).itertuples():
             ax.scatter(r.macs_eff_m, getattr(r, m), marker=FMARK[r.family], s=55, zorder=3, color=color(r), edgecolors="white", lw=0.5)
         plain_log(ax, "x", "y")
@@ -629,6 +656,22 @@ def fig_qat_curves(df, figs, note):
     savefig(fig, "19_qat_curves.png", figs)
 
 
+def seed_dots(ax, x, r, c):
+    """Every seed of one net at x (FP32 filled, INT8 hollow) and a tick at the FP32 seed mean -- figure 26 and Phase 12's
+    03, where the ~1 pp a contrast asks about would vanish on a bar axis from 0. True when an INT8 got the early-best ring."""
+    ax.scatter([x] * len(r), r.fp32, color=c, s=55, zorder=3)
+    ax.scatter([x] * len(r), r.int8, marker="D", facecolors="white", edgecolors=c, lw=1.6, s=55, zorder=3)
+    ax.plot([x], [r.fp32.mean()], color=c, marker="_", ms=22, zorder=2)
+    for e in r[r.early_best].itertuples():
+        early_ring(ax, x, e.int8)
+    return bool(r.early_best.any())
+
+
+SEED_HANDLES = [Line2D([], [], marker="o", color=TEXT_SECONDARY, ls="", ms=7, label="FP32 (uma seed por ponto)"),
+                Line2D([], [], marker="D", mfc="white", mec=TEXT_SECONDARY, ls="", ms=7, label="INT8 (uma seed por ponto)"),
+                Line2D([], [], marker="_", color=TEXT_SECONDARY, ls="", ms=12, label="média FP32 das seeds")]
+
+
 VGG_CONVS = (2, 2, 3, 3, 3)  # convs per VGG16 block
 
 
@@ -708,15 +751,6 @@ def fig_controls(df, figs, note):
     fig, (axa, axb) = plt.subplots(1, 2, figsize=(14, 5.6), sharey=True, gridspec_kw={"width_ratios": [1.15, 1]})
     ringed = False
 
-    def seeds(ax, x, r, c):  # every seed of one net at x
-        nonlocal ringed
-        ax.scatter([x] * len(r), r.fp32, color=c, s=55, zorder=3)
-        ax.scatter([x] * len(r), r.int8, marker="D", facecolors="white", edgecolors=c, lw=1.6, s=55, zorder=3)
-        ax.plot([x], [r.fp32.mean()], color=c, marker="_", ms=22, zorder=2)
-        for e in r[r.early_best].itertuples():
-            early_ring(ax, x, e.int8)
-            ringed = True
-
     def ticks(ax, items):  # [(x, label, runs)]: MACs under a trained net, "pendente" under one still queued
         ax.set_xticks([x for x, *_ in items])
         ax.set_xticklabels([f"{lb}\n{r.macs_eff_m.iloc[0]:.0f}M MACs" if len(r) else f"{lb}\npendente" for _, lb, r in items], fontsize=9)
@@ -726,7 +760,7 @@ def fig_controls(df, figs, note):
                                                                      ("k3x3", 1.0, "3×3"), ("k2x2", 1.5, "2×2, canais ×1,5")])]
     for x, _, r, k in items:
         if len(r):
-            seeds(axa, x, r, colors[k])
+            ringed |= seed_dots(axa, x, r, colors[k])
     ticks(axa, [i[:3] for i in items])
     axa.set_ylabel("Top-1 (%)")
     axa.set_title("(a) mesmo custo de cálculo: o kernel ou a capacidade?", fontsize=10)
@@ -736,17 +770,14 @@ def fig_controls(df, figs, note):
     items = [(j, lb, runs(k), k) for j, (k, lb) in enumerate([("k2x2", "2×2"), ("k3x3", "3×3"), ("k5x5", "5×5"), ("k11-5-3", "11-5-3-3-3")])]
     for j, _, r, k in items:
         if len(r):
-            seeds(axb, j, r, colors[k])
+            ringed |= seed_dots(axb, j, r, colors[k])
     means = [(j, r.fp32.mean()) for j, _, r, _ in items[:3] if len(r)]  # 11-5-3-3-3 is a different kind of net: off the line
     if len(means) > 1:
         axb.plot(*zip(*means), color=NEUTRAL, lw=1.2, zorder=1)
     ticks(axb, [i[:3] for i in items])
     axb.set_xlim(-0.5, 3.5)
     axb.margins(y=0.15)
-    handles = [Line2D([], [], marker="o", color=TEXT_SECONDARY, ls="", ms=7, label="FP32 (uma seed por ponto)"),
-               Line2D([], [], marker="D", mfc="white", mec=TEXT_SECONDARY, ls="", ms=7, label="INT8 (uma seed por ponto)"),
-               Line2D([], [], marker="_", color=TEXT_SECONDARY, ls="", ms=12, label="média FP32 das seeds")]
-    fig.legend(handles=handles + ([early_handle("ring")] if ringed else []), loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=4, fontsize=9)
+    fig.legend(handles=SEED_HANDLES + ([early_handle("ring")] if ringed else []), loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=4, fontsize=9)
     fig.suptitle("Controles do kernel: custo de cálculo igual e kernel maior (AlexNet, layout 64px, GAP + BN)\n" + note, fontsize=11, y=1.04)
     savefig(fig, "26_kernel_controls.png", figs)
 
@@ -782,8 +813,14 @@ def main(argv=None):
         fig_resnet_curves(df, figs, curves_note)
     fig_qat_curves(df, figs, curves_note)
     if not archive:
-        fig_kblocks(frame(everything=True), figs, note, bands)
-        fig_controls(frame(everything=True), figs, note)
+        every = frame(everything=True)
+        fig_kblocks(every, figs, note, bands)
+        fig_controls(every, figs, "cada ponto = uma seed (42/43/44) · top-1 no test set (val oficial do Tiny ImageNet)")
+        fig_pareto(every.assign(wino_pct=[winograd_share(r) for r in every.itertuples()]), figs, note,
+                   [("int8", "wino_pct", "MACs em convs que um acelerador Winograd executa (% dos MACs: stride 1, kernel 2×2 ou 3×3)")],
+                   "30_winograd_eligible.png", "Acurácia × quanto da rede cabe num acelerador Winograd: à direita, mais cálculo no "
+                   "Winograd; as redes na fronteira são as que valem a pena", high_x=True,
+                   front_label="fronteira: nenhuma rede tem mais MACs no Winograd e é melhor")
 
 
 if __name__ == "__main__":

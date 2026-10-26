@@ -47,8 +47,8 @@ FIGURES = {  # file: (title, [(panel title, factor filter)], baseline key, basel
           {**PX64, "head": h, "bn": bn, "dropout": h == "fc"}) for h in ("gap", "fc") for bn in (False, True)],
         BASE_KEY, BASE_LABEL, 2),  # 2 x 2: four panels in a row were ~4300 px wide, the text too small on a page
     "03_kernel_vgg16.png": (
-        "Kernel na VGG16 (13 convs + BatchNorm, stride 1, 5 max-pools 2×2 → mapa 2×2), treino do zero, seed 42\n"
-        "em cada painel só o kernel das 13 convs muda",
+        "Kernel na VGG16 (13 convs + BatchNorm, stride 1, 5 max-pools 2×2 → mapa 2×2)\n"
+        "em cada painel só o kernel das 13 convs muda; treino do zero, barras = seed 42 (pontos = cada seed, onde replicada)",
         [("GAP (média global + 1 linear)", {**VGG, "head": "gap"}), ("FC sem Dropout", {**VGG, "head": "fc", "dropout": False}),
          ("FC + Dropout 0,5 (a cabeça da VGG16 original)", {**VGG, "head": "fc", "dropout": True})],
         *VGG_BASE, 3),
@@ -60,7 +60,8 @@ FIGURES = {  # file: (title, [(panel title, factor filter)], baseline key, basel
         BASE_KEY, BASE_LABEL, 2, ["k11-5-3", "k11-3", "k3x3", "k11-2", "k2x2"]),
     "28_resnet_kernel_stem.png": (
         "Kernel na ResNet-18 (BatchNorm, cabeça GAP, conv1 stride 2 + 1 max-pool 3×3 → mapa final 2×2)\n"
-        "só o kernel do stem e/ou dos blocos muda; stem profundo = três convs pequenas no lugar da conv1 (ResNet-C); treino do zero, seed 42",
+        "só o kernel do stem e/ou dos blocos muda; stem profundo = três convs pequenas no lugar da conv1 (ResNet-C)\n"
+        "treino do zero, barras = seed 42 (pontos = cada seed, onde replicada)",
         [("GAP + BatchNorm (a cabeça da ResNet-18 original)", {"family": "resnet18"})],
         *RESNET_BASE, 1, RESNET_K),
 }

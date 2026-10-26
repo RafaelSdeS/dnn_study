@@ -232,6 +232,9 @@ def reference_lines(ax, df, key=BASE_KEY, label=BASE_LABEL, stage="fp32", text="
             ax.text(1.01 if out else 0.01, r[stage], f"{name}\n{r['fp32']:.1f}% FP32 · {r['int8']:.1f}% INT8",
                     transform=ax.get_yaxis_transform(), ha="left", va="center" if out else "bottom", fontsize=8.5, clip_on=False,
                     zorder=6, bbox=dict(facecolor="white", edgecolor="none", alpha=0.85, pad=0.5))
+    # axhline only rescales when the line falls outside the current limits: one inside the top margin sat on the frame
+    # (figures 05 / 06). The lines are in the data limits already, so the margin goes above them too
+    ax.autoscale_view(scalex=False)
 
 
 def main_grid_table(df):
