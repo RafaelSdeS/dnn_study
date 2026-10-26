@@ -371,6 +371,8 @@ docs/                     # Research docs, split by kind (was research/ until 71
   plans/                  # Research notes (flat):
     BEST_MODELS.md        #   cross-phase rankings & recommendations
     MODELS.md             #   architecture notes & design rationale
+    PROTOCOL.tex / .pdf   #   every protocol value of Phases 11-13 with its reason and reference, in one place (pt-BR;
+                          #   the yaml _protocols/no_patience.yaml stays the enforced source); build command in the .tex header
     EFFICIENCY_IDEAS.md   #   candidate efficiency techniques not yet executed
     WINOGRAD_FPGA_BITWIDTH_PLAN.md  # satellite study for a separate repo (Winograd-FPGA), not a dnn_study phase
     PHASE6_PLAN.md PHASE7_PLAN.md PHASE8_PLAN.md PHASE9_PLAN.md  # research & execution plans (6/7/8/9 executed)

@@ -4,7 +4,8 @@
 # (uniform_hparams bypasses the registry's per-model lr; one fixed setup to compare architectures: Radosavovic et al.,
 # ICCV 2019 -- limitation: it is not MobileNetV2's or ResNet's own recipe, and the recipe can reorder architectures,
 # Bello et al., NeurIPS 2021; Wightman et al. 2021). Every value from a reference (docs/logs/PHASE11_LOG.md, "One
-# recipe, every number from a reference", 2026-10-03, and "Protocol audit", 2026-10-07):
+# recipe, every number from a reference", 2026-10-03, and "Protocol audit", 2026-10-07; all of them, with the
+# analysis and Phase 12 choices, summarized in docs/plans/PROTOCOL.pdf, source PROTOCOL.tex):
 #   optimizer  SGD, momentum 0.9, lr 0.01, L2 weight decay 5e-4, batch 128 -- AlexNet's (Krizhevsky et al., NeurIPS 2012
 #              Sec. 5); VGG used the same values (Simonyan & Zisserman, ICLR 2015 Sec. 3.1, batch 256)
 #   schedule   cosine annealing to 0, label smoothing 0.1 (configs/training.yaml) -- the two training refinements He, T.

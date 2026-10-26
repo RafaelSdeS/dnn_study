@@ -1,0 +1,219 @@
+% Protocolo experimental das Phases 11-13: cada valor, o porquê e a referência.
+% Compilar (a partir da raiz do repo; os auxiliares ficam fora do repo):
+%   latexmk -pdf -outdir=/tmp/protocol docs/plans/PROTOCOL.tex && cp /tmp/protocol/PROTOCOL.pdf docs/plans/
+% Os valores que valem são os de configs/experiments/_protocols/no_patience.yaml (tests/test_config.py os exige);
+% este documento os explica.
+\documentclass[10pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{tgpagella}
+\usepackage{tgheros}
+\usepackage{textcomp}
+\usepackage{amsmath}
+\usepackage{microtype}
+\usepackage[a4paper,margin=2cm,top=2.2cm,bottom=2.2cm,headsep=0.8cm]{geometry}
+\usepackage[table]{xcolor}
+\usepackage{booktabs,array,xltabular}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{tcolorbox}
+\usepackage[hidelinks]{hyperref}
+\usepackage{url}
+
+\definecolor{accent}{RGB}{28,74,122}
+\definecolor{muted}{RGB}{90,90,90}
+\definecolor{zebra}{RGB}{244,246,249}
+\definecolor{head}{RGB}{226,232,240}
+\definecolor{own}{RGB}{176,96,20}
+
+\renewcommand{\tablename}{Tabela}
+\renewcommand{\contentsname}{Sumário}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.55em}
+\linespread{1.06}
+
+\titleformat{\section}{\sffamily\Large\bfseries\color{accent}}{\thesection}{0.6em}{}[\vspace{-0.4em}{\color{accent!30}\titlerule[0.6pt]}]
+\titlespacing*{\section}{0pt}{1.4em}{0.8em}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\sffamily\footnotesize\color{muted}Protocolo experimental · Phases 11--13}
+\fancyhead[R]{\sffamily\footnotesize\color{muted}\thepage}
+\fancyfoot[L]{\sffamily\scriptsize\color{muted}dnn\_study · restrição do tamanho de kernel para aceleração Winograd}
+\fancyfoot[R]{\sffamily\scriptsize\color{muted}26/10/2026}
+\renewcommand{\headrulewidth}{0pt}
+
+% four-column table: choice | value | reason | reference
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newenvironment{ptable}[1][Escolha]
+  {\footnotesize\renewcommand{\arraystretch}{1.35}\rowcolors{2}{white}{zebra}%
+   % \leavevmode: a \color opening a p-cell starts a paragraph of its own, which pushed the column one line down
+   \xltabular{\linewidth}{@{}>{\raggedright\arraybackslash\bfseries\sffamily}p{2.45cm}L{3.15cm}Y>{\raggedright\arraybackslash\leavevmode\color{muted}}p{3.35cm}@{}}
+   \toprule
+   \rowcolor{head}\sffamily #1 & \sffamily Valor & \sffamily Justificativa & \sffamily\color{black}Referência\\
+   \midrule\endhead
+   \bottomrule\endfoot}
+  {\endxltabular}
+\newcommand{\own}[1]{{\color{own}\itshape #1}}
+\newcommand{\x}{\ensuremath{\times}}
+
+\begin{document}
+
+%----------------------------------------------------------------------------------------------------------------------
+\begin{center}
+  {\sffamily\small\color{muted}PROJETO DNN\_STUDY · UFRGS}\\[0.6em]
+  {\sffamily\huge\bfseries\color{accent}Protocolo experimental e suas justificativas}\\[0.4em]
+  {\sffamily\large Phases 11--13: cada parâmetro, o porquê e a referência}\\[0.3em]
+  {\small\color{muted}26 de outubro de 2026}
+\end{center}
+\vspace{0.4em}
+
+\begin{tcolorbox}[colback=zebra,colframe=accent,boxrule=0.6pt,arc=2pt,left=8pt,right=8pt,top=6pt,bottom=6pt,
+                  fonttitle=\sffamily\bfseries,title=Como ler este documento]
+\small
+\textbf{Princípio.} Uma única receita para todas as redes, com cada número vindo de uma referência: comparar arquiteturas
+exige um setup fixo (Radosavovic et al., 2019). Um valor que nenhuma referência fixa está na seção~\ref{sec:own},
+marcado \own{em laranja} nas tabelas.
+
+\textbf{Onde estão os valores.} Quem manda é \path{configs/experiments/_protocols/no_patience.yaml}. Todo
+\path{phase_11_*.yaml} herda dele; cada \path{phase_12_*} declara uma diferença, e os \path{phase_13_*} usam a receita
+exata. \path{tests/test_config.py} falha se algum yaml se desviar. Este documento explica os valores, não os define.
+
+\textbf{Histórico das decisões.} \path{docs/logs/PHASE11_LOG.md}, nas seções ``Literature-standard INT8 + held-out test
+set'' e ``One recipe, every number from a reference'' (03/10/2026) e ``Protocol audit'' (07/10/2026).
+\end{tcolorbox}
+
+%----------------------------------------------------------------------------------------------------------------------
+\section{Treino FP32}
+
+\begin{ptable}
+Otimizador & SGD, momentum 0,9, weight decay (L2) 5e-4 & A receita do AlexNet; o VGG usa os mesmos valores. & Krizhevsky et al.\ 2012, Sec.~5; Simonyan \& Zisserman 2015, Sec.~3.1 \\
+lr e batch & 0,01; batch 128; igual em toda rede & Os valores do AlexNet (o VGG usa 0,01 com batch 256). & Krizhevsky et al.\ 2012 \\
+Schedule & cosine até 0, sem warmup & Um dos dois refinamentos de treino que valem em ResNet, Inception e MobileNet. Warmup serve para lr escalado com batch grande, o que não é o caso aqui. & He, T.\ et al.\ 2019, Sec.~5; Goyal et al.\ 2017 \\
+Loss & cross-entropy com label smoothing 0,1 & O outro refinamento do mesmo trabalho. & He, T.\ et al.\ 2019, Sec.~5; Szegedy et al.\ 2016 \\
+Orçamento & 500 épocas fixas, sem early stopping & Com o lr indo a zero no fim, um orçamento maior agiria num platô. A convergência é verificada run a run (\texttt{convergence()}). & Li, Yumer \& Ramanan 2020; \own{o valor 500: escolha própria} \\
+Inicialização & He (normal, fan\_out) nas convs; N(0;\,0,01) nas Linear & Com a std fixa do AlexNet nas convs, a escala do sinal cresce com $\sqrt{\text{fan-in}}$, isto é, com o tamanho do kernel, que é a variável do estudo. He normaliza pelo fan. & He et al.\ 2015, Eq.~10; Krizhevsky et al.\ 2012 (Linear) \\
+Precisão & treino em precisão mista, avaliação em FP32 & O padrão de treino misto. & Micikevicius et al.\ 2018 \\
+Cabeça FC & com Dropout 0,5 & A cabeça original do AlexNet e da VGG. A FC sem Dropout, que nenhuma referência usa, memorizou o treino (99,9\% treino / 38,5\% validação) e só aparece como o contraste do Dropout. & Krizhevsky et al.\ 2012, Sec.~4.2; Simonyan \& Zisserman 2015 \\
+\end{ptable}
+
+%----------------------------------------------------------------------------------------------------------------------
+\section{Dados e avaliação}
+
+\begin{ptable}
+Dataset & Tiny ImageNet, 64\x64, 200 classes & Velocidade. Conclusões de hiperparâmetros passam do ImageNet reduzido ao completo. & Chrabaszcz et al.\ 2017 \\
+Augmentation & deslocamento de até 4\,px (pad 4 + crop) + flip horizontal; depois AutoAugment (política ImageNet) & O ImageNet 64\x64 usa exatamente esses deslocamentos. Equivale à faixa de crop do AlexNet relativa à imagem (32/256 = 8/64). & Chrabaszcz et al.\ 2017, Sec.~3; Cubuk et al.\ 2019 \\
+Escolha da época & split 90/10 do train & O hold-out de treino padrão (45k/5k no CIFAR). & He et al.\ 2016, Sec.~4.2 \\
+Número reportado & top-1 no val oficial do Tiny ImageNet (10 mil imagens), usado como test set & Quem escolhe o modelo não pode ser quem o mede. O test set é o mesmo para todo seed; o split 90/10 muda com o seed. & Cawley \& Talbot 2010 \\
+Calibração & ECE com 15 bins & A medida padrão. & Guo et al.\ 2017 \\
+\end{ptable}
+
+%----------------------------------------------------------------------------------------------------------------------
+\section{QAT e INT8}
+
+\begin{ptable}
+Duração e lr do QAT & 50 épocas (1/10 do FP32); lr 1e-4 (1/100 do FP32), cosine até 1e-6; mesmo SGD & A regra de fine-tuning do QAT: só o lr e o schedule mudam. & Wu et al.\ 2020, App.~A.2 \\
+BatchNorm no QAT & intacto, nunca congelado & O BN fica fora da quantização no treino e entra na escala de cada canal depois, ``igual ou melhor'' que dobrar estático. Congelar o BN com lr 1e-4 custou $\sim$1,5\,pp (medido). & Wu et al.\ 2020; Nagel et al.\ 2021, Sec.~4.2, Tab.~7 \\
+Faixa das ativações & observers EMA durante todo o QAT & A definição do QAT. & Jacob et al.\ 2018, Sec.~3.1 \\
+Ativações & 8 bits, per-tensor, afim & A definição de INT8 da literatura; afim não custa nada a mais que simétrica. & Jacob et al.\ 2018; Wu et al.\ 2020, Sec.~3.3 \\
+Pesos & 8 bits, per-channel, simétricos em $[-127, 127]$ & A mesma definição; spec int8 do LiteRT. & Wu et al.\ 2020, Sec.~6 \\
+O que é quantizado & entrada e pesos de toda Conv/Linear; logits em FP32; ativação fundida à camada que a produz & ``Uma operação é quantizada quantizando suas entradas.'' A saída dos logits não alimenta nenhuma camada quantizada. & Wu et al.\ 2020, Sec.~4; Jacob et al.\ 2018 \\
+Motor da acurácia INT8 & qnnpack (soma exata em int32) & onednn e fbgemm saturam pares u8\x s8 em int16 em CPUs sem VNNI (beagle, tupi1/2), o que custou 1--5\,pp. A acurácia não pode depender da máquina. & oneDNN dev guide; PyTorch issue \#103646 \\
+Motor da latência INT8 & onednn & Só para medir tempo. & --- \\
+\end{ptable}
+
+%----------------------------------------------------------------------------------------------------------------------
+\section{Desenho experimental e análise}
+
+\begin{ptable}
+Padding do kernel 2\x2 & simétrico (C2sp) & Padding de um lado só desloca o mapa 0,5\,px por camada. O C2sp ganha 2,5\% sobre ele no ImageNet, a ordem do efeito de kernel medido aqui (1--3\,pp): o padding antigo inflaria o custo do 2\x2. & Wu, S.\ et al.\ 2019, Sec.~3--6 \\
+Stem profundo da ResNet & três convs pequenas no lugar da conv1 & O stem de kernel pequeno da literatura (ResNet-C). & He, T.\ et al.\ 2019, Sec.~4.2 \\
+Redes pré-treinadas & cada uma com uma gêmea do zero & O pré-treino é a única variável do contraste. & desenho do fatorial \\
+Ruído entre seeds & seeds 42/43/44 em células-chave de cada regime; faixa $2\sqrt{2}\cdot$SD & A diferença de duas runs tem SD $\sqrt{2}\cdot$SD, e $\pm 2$\,SD $\approx$ 95\%. Um contraste de uma seed dentro da faixa é ``sem evidência de diferença'', nunca um ranking. & Bouthillier et al.\ 2021 \\
+Efeito de cada fator & pares iguais em tudo menos no fator; mediana com IC 95\% por bootstrap & A réplica que um fatorial sem repetição tem. & Efron \& Tibshirani 1993 \\
+Ranking dos kernels & Friedman + Nemenyi, com e sem BN separados & Comparação de vários tratamentos em vários blocos. & Demšar 2006 \\
+Testes pareados & McNemar exato entre duas redes nas mesmas imagens; Holm na tabela; IC de Wilson & Testes pareados e correção para múltiplas comparações. & Dietterich 1998; Holm 1979; Wilson 1927 \\
+Respostas trocadas & imagens que mudam de certo para errado entre FP32 e INT8 & A mesma acurácia pode esconder respostas diferentes. & Hooker et al.\ 2019 \\
+Campo receptivo efetivo & gradiente do neurônio central em 200 imagens de teste & A medida padrão. & Luo et al.\ 2016 \\
+Latência & \texttt{torch.utils.benchmark}: mediana + IQR, um lote já no dispositivo, threads fixas & Só se compara dentro da mesma máquina. & PyTorch benchmark utilities \\
+Reprodutibilidade & seeds fixas, \texttt{cudnn.deterministic}, TF32 desligado, dependências fixas; git, CUDA, GPU e hash do dataset na proveniência & O que os checklists de reprodutibilidade pedem. & Pineau et al.\ 2021 \\
+\end{ptable}
+
+%----------------------------------------------------------------------------------------------------------------------
+\section{Phase 12: a mesma receita com uma mudança declarada}
+
+\begin{ptable}[Experimento]
+\path{lr_half} / \path{lr_double} & lr do FP32: 0,005 / 0,02 & Uma oitava para cada lado de 0,01: o ranking dos kernels depende do lr? & \own{escolha própria} \\
+\path{finetune_*} & pré-treinadas com fine-tuning de verdade: 100 épocas, lr 1e-3 e 1e-4; QAT de 10 épocas a 1/100 do lr & O melhor lr de fine-tuning depende do dataset alvo, então nenhum lr único é afirmado. Cada rede é lida no lr com melhor top-1 na \emph{validação}. O QAT segue a regra da seção~3. & Li, H.\ et al.\ 2020 (grade da App.~D); Wu et al.\ 2020, App.~A.2 \\
+\path{cifar100} (+ seeds) & CIFAR-100 32\x32 no lugar do Tiny ImageNet; mesmas redes, receita e augmentation & Só o dado muda; trocar a política do AutoAugment seria uma segunda mudança. Hold-out 45k/5k. & He et al.\ 2016, Sec.~4.2 \\
+\path{kernel_controls} (Phase 11) & larguras \x1,5 (2\x2) e \x0,67 (3\x3) & Iguala os MACs do outro kernel (dentro de 2\%, testado): separa o kernel da capacidade. & cálculo a partir das formas das camadas \\
+\end{ptable}
+
+%----------------------------------------------------------------------------------------------------------------------
+\section{Escolhas próprias e limitações declaradas}\label{sec:own}
+
+\textbf{Escolhas sem referência que as fixe}, todas constantes do protocolo e iguais para toda run:
+\begin{itemize}[leftmargin=1.2em,itemsep=0.25em,topsep=0.2em]
+  \item \textbf{500 épocas.} Nenhum trabalho no Tiny ImageNet prescreve um orçamento. São 352 mil iterações: entre os
+        schedules longos do CIFAR (78k--234k) e os do ImageNet (AlexNet $\sim$844k), numa faixa de retorno decrescente
+        (Wightman et al., 2021). A convergência é checada run a run.
+  \item \textbf{4 workers no DataLoader.} Mudar o número mudaria o fluxo aleatório da augmentation das runs já treinadas.
+  \item \textbf{Marca de ``melhor época cedo'' (\texttt{EARLY\_FRAC} = 0,8).} Uma run cuja melhor época FP32 cai antes de
+        80\% do orçamento tem o INT8 marcado nas figuras. Nesse caso o QAT parte de um checkpoint ainda não recozido, e o
+        ganho FP32~$\rightarrow$~INT8 é treino extra, não quantização. O limiar separa os dois grupos observados (melhor
+        época em 56--197 ou em 396--499).
+  \item \textbf{Guarda \texttt{MIN\_QAT\_INT8\_AGREEMENT} = 0,90.} Verifica que o código está certo; não é métrica
+        reportada.
+  \item \textbf{lr \x0,5 e \x2 na Phase 12.}
+\end{itemize}
+
+\textbf{Limitações}:
+\begin{itemize}[leftmargin=1.2em,itemsep=0.25em,topsep=0.2em]
+  \item \textbf{Receita única.} Não é a receita própria da MobileNetV2 (wd 4e-5) nem da ResNet (lr 0,1, wd 1e-4), e uma
+        receita pode reordenar arquiteturas (Bello et al., 2021; Wightman et al., 2021). A Phase 12 testa a robustez a isso.
+  \item \textbf{Pré-treino com a receita única.} Com lr 0,01 por 500 épocas, o pré-treino é quase todo apagado, e as
+        redes pré-treinadas atingem a melhor época cedo. O fine-tuning de verdade está na Phase 12.
+  \item \textbf{Datasets.} Tiny ImageNet e, na Phase 12, CIFAR-100.
+\end{itemize}
+
+%----------------------------------------------------------------------------------------------------------------------
+\section*{Referências}
+\begingroup\small\color{black!85}
+\begin{itemize}[leftmargin=1.2em,itemsep=0.1em,topsep=0.2em,label={\color{accent}\textbullet}]
+\item Bello, I.\ et al. Revisiting ResNets: Improved Training and Scaling Strategies. \emph{NeurIPS}, 2021.
+\item Bouthillier, X.\ et al. Accounting for Variance in Machine Learning Benchmarks. \emph{MLSys}, 2021.
+\item Cawley, G.\ \& Talbot, N. On Over-fitting in Model Selection and Subsequent Selection Bias in Performance Evaluation. \emph{JMLR}, 2010.
+\item Chrabaszcz, P., Loshchilov, I.\ \& Hutter, F. A Downsampled Variant of ImageNet as an Alternative to the CIFAR datasets. 2017.
+\item Cubuk, E.\ et al. AutoAugment: Learning Augmentation Strategies from Data. \emph{CVPR}, 2019.
+\item Demšar, J. Statistical Comparisons of Classifiers over Multiple Data Sets. \emph{JMLR}, 2006.
+\item Dietterich, T. Approximate Statistical Tests for Comparing Supervised Classification Learning Algorithms. \emph{Neural Computation}, 1998.
+\item Efron, B.\ \& Tibshirani, R. \emph{An Introduction to the Bootstrap}. 1993.
+\item Goyal, P.\ et al. Accurate, Large Minibatch SGD: Training ImageNet in 1 Hour. 2017.
+\item Guo, C.\ et al. On Calibration of Modern Neural Networks. \emph{ICML}, 2017.
+\item He, K.\ et al. Delving Deep into Rectifiers. \emph{ICCV}, 2015.
+\item He, K.\ et al. Deep Residual Learning for Image Recognition. \emph{CVPR}, 2016.
+\item He, T.\ et al. Bag of Tricks for Image Classification with Convolutional Neural Networks. \emph{CVPR}, 2019.
+\item Holm, S. A Simple Sequentially Rejective Multiple Test Procedure. \emph{Scandinavian Journal of Statistics}, 1979.
+\item Hooker, S.\ et al. What Do Compressed Deep Neural Networks Forget? 2019.
+\item Jacob, B.\ et al. Quantization and Training of Neural Networks for Efficient Integer-Arithmetic-Only Inference. \emph{CVPR}, 2018.
+\item Krizhevsky, A., Sutskever, I.\ \& Hinton, G. ImageNet Classification with Deep Convolutional Neural Networks. \emph{NeurIPS}, 2012.
+\item Li, H.\ et al. Rethinking the Hyperparameters for Fine-tuning. \emph{ICLR}, 2020.
+\item Li, M., Yumer, E.\ \& Ramanan, D. Budgeted Training: Rethinking Deep Neural Network Training Under Resource Constraints. \emph{ICLR}, 2020.
+\item Luo, W.\ et al. Understanding the Effective Receptive Field in Deep Convolutional Neural Networks. \emph{NeurIPS}, 2016.
+\item Micikevicius, P.\ et al. Mixed Precision Training. \emph{ICLR}, 2018.
+\item Nagel, M.\ et al. A White Paper on Neural Network Quantization. 2021.
+\item Pineau, J.\ et al. Improving Reproducibility in Machine Learning Research. \emph{JMLR}, 2021.
+\item Radosavovic, I.\ et al. On Network Design Spaces for Visual Recognition. \emph{ICCV}, 2019.
+\item Simonyan, K.\ \& Zisserman, A. Very Deep Convolutional Networks for Large-Scale Image Recognition. \emph{ICLR}, 2015.
+\item Szegedy, C.\ et al. Rethinking the Inception Architecture for Computer Vision. \emph{CVPR}, 2016.
+\item Wightman, R., Touvron, H.\ \& Jégou, H. ResNet Strikes Back: An Improved Training Procedure in timm. 2021.
+\item Wilson, E. Probable Inference, the Law of Succession, and Statistical Inference. \emph{JASA}, 1927.
+\item Wu, H.\ et al. Integer Quantization for Deep Learning Inference: Principles and Empirical Evaluation. 2020.
+\item Wu, S.\ et al. Convolution with Even-Sized Kernels and Symmetric Padding. \emph{NeurIPS}, 2019.
+\end{itemize}
+\endgroup
+
+\end{document}
