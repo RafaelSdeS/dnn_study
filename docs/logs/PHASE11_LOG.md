@@ -2247,3 +2247,12 @@ dots now get the grey ring (`early_ring`, as `design_figures.seed_dots`), with a
 **Queue.** The 209 runs the `phase_1[123]_*` yamls plan, against PCAD: 166 done; every one of the other 43 is queued once --
 Slurm 2 running + 6 pending (incl. nyx's two lines past their guard), `~/queue_phase11_full.txt` 35 (Phase 11 seeds 7, Phase 12
 fine-tunes 10, Phase 13 18); none duplicated, done or unplanned. PCAD's 7a9afd7 differs from main in one yaml comment only.
+
+**Later the same day: 138 of 152.** ResNet-18 2x2 seed 43 (job 833124, beagle, 7a9afd7 clean, quant_protocol 2026-10-07,
+500 + 50 epochs, int8_kernel_max_err_steps 1, agreement_qat_int8 0.98) synced from PCAD the same way (md5 equal), its row
+appended to `resnet_kernel_stem_seed43`. Test top-1 41.81 / 47.35: early best again, FP32 checkpoint at epoch 66 -- here a
+plateau, not a lone peak (41.97% val; 41.87 at most afterwards), and QAT from it gains +5.5 pp, as the 3x3 seed 43 did. Marked
+(ring in 28). In FP32 the ResNet 3x3 -> 2x2 contrast now has two seeds and they agree: -0.66 pp (42), -0.70 pp (43).
+The figure scripts read the gitignored logs: 124 of them (phase_1[12]_* runs synced without logs) were fetched from PCAD
+(6.5 MB, kept) before regenerating -- without them `convergence.csv` loses 48 rows and 29 its curves. Left: 7 Phase 11 runs
+in Slurm (ResNet seed 44 x2, kernel controls x5), 7 in `~/queue_phase11_full.txt`, then Phase 12 fine-tunes 10, Phase 13 18.

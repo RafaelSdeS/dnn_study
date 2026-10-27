@@ -185,6 +185,8 @@ resnet_kernel_stem,resnet18_k7-3_stride2_1pool3x3_map2_gap_bn_pretrained,42,fp32
 resnet_kernel_stem,resnet18_k7-3_stride2_1pool3x3_map2_gap_bn_pretrained,42,qat,50,True,56.3,30,6,8,0.0,49,79.21,True
 resnet_kernel_stem,resnet18_kalt3-2_stride2_1pool3x3_map2_gap_bn,42,fp32,500,True,43.91,476,42,422,0.519999999999996,38,99.84,True
 resnet_kernel_stem,resnet18_kalt3-2_stride2_1pool3x3_map2_gap_bn,42,qat,50,True,43.95,21,1,1,0.0,14,99.84,True
+resnet_kernel_stem_seed43,resnet18_k2x2_stride2_1pool3x3_map2_gap_bn,43,fp32,500,True,41.97,66,50,66,0.0,50,99.32,True
+resnet_kernel_stem_seed43,resnet18_k2x2_stride2_1pool3x3_map2_gap_bn,43,qat,50,True,47.22,31,6,12,0.0,34,66.69,True
 resnet_kernel_stem_seed43,resnet18_k3x3_stride2_1pool3x3_map2_gap_bn,43,fp32,500,True,43.54,37,37,37,0.0,37,99.91,True
 resnet_kernel_stem_seed43,resnet18_k3x3_stride2_1pool3x3_map2_gap_bn,43,qat,50,True,48.53,46,7,12,0.060000000000002274,42,66.59,True
 stacked,alexnet_k2x2stacked_stride2_2pool2x2_map8_fcdrop_bn,42,fp32,500,True,56.74,478,404,427,1.0399999999999991,478,98.81,False
