@@ -41,6 +41,8 @@ families,alexnet_small_kernel_with_bn,42,fp32,500,True,57.11,472,423,450,1.89000
 families,alexnet_small_kernel_with_bn,42,qat,50,True,57.02,23,1,2,0.0,46,65.05,True
 families,mobilenetv2,42,fp32,500,True,56.41,13,4,6,0.0,11,98.17,True
 families,mobilenetv2,42,qat,50,True,61.01,32,12,28,0.0,48,63.89,True
+families,mobilenetv2_scratch,42,fp32,500,True,48.64,427,123,408,0.7000000000000028,92,98.63,True
+families,mobilenetv2_scratch,42,qat,50,True,48.72,11,1,1,0.0,3,98.24,True
 families,tinyhybridnet,42,fp32,500,True,48.37,481,416,449,1.8299999999999983,481,47.28,False
 families,tinyhybridnet,42,qat,50,True,48.3,44,1,2,0.02999999999999403,49,46.98,True
 families,tinymobilenetv2,42,fp32,500,True,58.18,482,385,430,0.8599999999999994,487,96.48,False
@@ -159,6 +161,8 @@ large_stem_seed43,alexnet_k11-3_stride2_2pool2x2_map8_fcdrop_bn,43,fp32,500,True
 large_stem_seed43,alexnet_k11-3_stride2_2pool2x2_map8_fcdrop_bn,43,qat,50,True,51.65,36,1,1,0.0,43,97.54,True
 large_stem_seed43,alexnet_k11-3_stride2_2pool2x2_map8_gap_bn,43,fp32,500,True,53.88,490,394,435,0.7899999999999991,490,77.91,False
 large_stem_seed43,alexnet_k11-3_stride2_2pool2x2_map8_gap_bn,43,qat,50,True,53.92,48,1,1,0.10999999999999943,15,78.17,True
+large_stem_seed44,alexnet_k11-2_stride2_2pool2x2_map8_fcdrop_bn,44,fp32,500,True,50.15,461,381,408,0.8699999999999974,475,96.9,False
+large_stem_seed44,alexnet_k11-2_stride2_2pool2x2_map8_fcdrop_bn,44,qat,50,True,50.16,3,1,1,0.0,47,97.0,True
 large_stem_seed44,alexnet_k11-2_stride2_2pool2x2_map8_gap_bn,44,fp32,500,True,55.62,482,422,450,1.5899999999999963,493,65.3,False
 large_stem_seed44,alexnet_k11-2_stride2_2pool2x2_map8_gap_bn,44,qat,50,True,55.54,39,1,1,0.0,31,65.12,True
 large_stem_seed44,alexnet_k11-3_stride2_2pool2x2_map8_fcdrop_bn,44,fp32,500,True,52.52,500,394,434,0.980000000000004,500,97.47,False
@@ -167,6 +171,8 @@ large_stem_seed44,alexnet_k11-3_stride2_2pool2x2_map8_gap_bn,44,fp32,500,True,54
 large_stem_seed44,alexnet_k11-3_stride2_2pool2x2_map8_gap_bn,44,qat,50,True,54.29,47,1,1,0.0799999999999983,6,77.65,True
 resnet_kernel_stem,resnet18_k2x2_stride2_1pool3x3_map2_gap_bn,42,fp32,500,True,42.26,465,59,65,0.01999999999999602,50,99.35,True
 resnet_kernel_stem,resnet18_k2x2_stride2_1pool3x3_map2_gap_bn,42,qat,50,True,42.19,44,1,1,0.00999999999999801,12,99.27,True
+resnet_kernel_stem,resnet18_k2x2deepstem_stride2_1pool3x3_map2_gap_bn,42,fp32,500,True,46.35,471,56,56,0.14000000000000057,58,99.63,True
+resnet_kernel_stem,resnet18_k2x2deepstem_stride2_1pool3x3_map2_gap_bn,42,qat,50,True,46.32,43,1,1,0.020000000000003126,13,99.68,True
 resnet_kernel_stem,resnet18_k3x3_stride2_1pool3x3_map2_gap_bn,42,fp32,500,True,43.7,432,37,42,0.35999999999999943,40,99.92,True
 resnet_kernel_stem,resnet18_k3x3_stride2_1pool3x3_map2_gap_bn,42,qat,50,True,43.86,15,1,1,0.0,1,99.89,True
 resnet_kernel_stem,resnet18_k3x3deepstem_stride2_1pool3x3_map2_gap_bn,42,fp32,500,True,45.87,473,34,38,0.14000000000000057,35,99.96,True
@@ -179,6 +185,8 @@ resnet_kernel_stem,resnet18_k7-3_stride2_1pool3x3_map2_gap_bn_pretrained,42,fp32
 resnet_kernel_stem,resnet18_k7-3_stride2_1pool3x3_map2_gap_bn_pretrained,42,qat,50,True,56.3,30,6,8,0.0,49,79.21,True
 resnet_kernel_stem,resnet18_kalt3-2_stride2_1pool3x3_map2_gap_bn,42,fp32,500,True,43.91,476,42,422,0.519999999999996,38,99.84,True
 resnet_kernel_stem,resnet18_kalt3-2_stride2_1pool3x3_map2_gap_bn,42,qat,50,True,43.95,21,1,1,0.0,14,99.84,True
+resnet_kernel_stem_seed43,resnet18_k3x3_stride2_1pool3x3_map2_gap_bn,43,fp32,500,True,43.54,37,37,37,0.0,37,99.91,True
+resnet_kernel_stem_seed43,resnet18_k3x3_stride2_1pool3x3_map2_gap_bn,43,qat,50,True,48.53,46,7,12,0.060000000000002274,42,66.59,True
 stacked,alexnet_k2x2stacked_stride2_2pool2x2_map8_fcdrop_bn,42,fp32,500,True,56.74,478,404,427,1.0399999999999991,478,98.81,False
 stacked,alexnet_k2x2stacked_stride2_2pool2x2_map8_fcdrop_bn,42,qat,50,True,56.73,46,1,1,0.04999999999999716,45,98.88,True
 stacked,alexnet_k2x2stacked_stride2_2pool2x2_map8_gap_bn,42,fp32,500,True,57.62,446,371,410,0.6999999999999957,461,90.83,True

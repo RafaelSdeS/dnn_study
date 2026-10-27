@@ -2223,3 +2223,27 @@ Appendix: 18, 19, 29 (convergence); 04, 07-09 are the per-factor bars behind 11.
 
 `tests/test_phase11_figures.py` expects 30 Phase 11 and 5 Phase 12 figures (its fake `layer_stats` now carry the real geometry
 fields); passes.
+
+## Progress 2026-10-27: 137 of 152 runs
+
+**Synced to Hestia** from PCAD: the tracked files and logs of 4 runs, without `*.pth` / `*_best.pth.gz`, `rsync -c` dry run
+0 differences. Audit: quant_protocol 2026-10-07, 7a9afd7 clean, full budgets (500 + 50), int8_kernel_max_err_steps 1,
+agreement_qat_int8 0.94-0.99. Aggregates: 3 rows appended (`families`, `large_stem_seed44`, `resnet_kernel_stem`), new
+`resnet_kernel_stem_seed43`; the rows on both sides numerically equal. nyx's 55 runs: all on PCAD (size + checksum dry run)
+and on Hestia (598 tracked files, md5 equal); its queue is empty.
+
+New numbers (test top-1, FP32 / INT8):
+- `mobilenetv2_scratch` 47.83 / 47.88 (the pretrained twin's from-scratch partner).
+- 11x11 + 2x2 FC + Dropout seed 44 49.76 / 49.90 (seeds 42 / 43: 49.82 / 49.98, 50.06 / 49.85).
+- ResNet-18 2x2 deep stem 45.92 / 45.69 (3x3 deep stem 46.0, 7x7 + 3x3 43.6).
+- ResNet-18 3x3 seed 43 42.51 / 48.82: early best -- the FP32 checkpoint is a lone validation peak at epoch 37 (43.54%; never
+  above 42.83 afterwards), QAT from it gains +6.3 pp (seed 42: best epoch 431, 42.68 / 43.26). Kept as is and marked.
+
+**Figure fix.** `plot_kernel_comparison` drew every seed's INT8 as a dot but marked only the seed-42 bar, so an early-best
+seed-43 / 44 dot looked like a plain INT8 -- against "the INT8 of these runs is marked wherever it is drawn" (above). Its seed
+dots now get the grey ring (`early_ring`, as `design_figures.seed_dots`), with a legend entry when a figure has one: 02 (the
+6 no-BN FC + Dropout seed runs) and 28 (ResNet 3x3 seed 43); 01 / 03 / 27 come out byte-identical.
+
+**Queue.** The 209 runs the `phase_1[123]_*` yamls plan, against PCAD: 166 done; every one of the other 43 is queued once --
+Slurm 2 running + 6 pending (incl. nyx's two lines past their guard), `~/queue_phase11_full.txt` 35 (Phase 11 seeds 7, Phase 12
+fine-tunes 10, Phase 13 18); none duplicated, done or unplanned. PCAD's 7a9afd7 differs from main in one yaml comment only.
