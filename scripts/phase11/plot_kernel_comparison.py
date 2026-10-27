@@ -24,8 +24,8 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
 from ml.plotting import NEUTRAL, apply_report_style
-from scripts.phase11.analyze_geometry import (BASE_KEY, BASE_LABEL, RESNET_BASE, VGG_BASE, early_handle, int8_bar, precision_handles,
-                                              reference_lines, savefig)
+from scripts.phase11.analyze_geometry import (BASE_KEY, BASE_LABEL, RESNET_BASE, VGG_BASE, early_handle, early_ring, int8_bar,
+                                              precision_handles, reference_lines, savefig)
 from scripts.phase11.design_figures import K4, KCOLOR, KLABEL, RESNET_K, frame
 from scripts.phase11.factor_effects import design_cells
 
@@ -83,7 +83,7 @@ def fig_kernel(df, filename, title, panels, base_key, base_label, ncols, kernels
     widths = [max(sizes[c::ncols]) for c in range(ncols)]  # a column as wide as its widest panel
     fig, axes = plt.subplots(nrows, ncols, figsize=(1.6 * sum(widths) + 3, 5.6 * nrows + 0.6), sharey=True, squeeze=False,
                              gridspec_kw={"width_ratios": widths})
-    shown, seeded, flagged = set(), False, False
+    shown, seeded, flagged, ringed = set(), False, False, False
     for n, (ax, (panel, filt), panel_ks) in enumerate(zip(axes.flat, panels, ks)):
         sel = select(df, filt, kernels)
         if not panel_ks:
@@ -109,6 +109,9 @@ def fig_kernel(df, filename, title, panels, base_key, base_label, ncols, kernels
                 seeded = True
                 ax.scatter([i - 0.19] * len(runs), runs.fp32, color="k", s=12, zorder=5)
                 ax.scatter([i + 0.19] * len(runs), runs.int8, color="k", s=12, zorder=5)
+                for e in runs[runs.early_best].itertuples():  # an early-best INT8 is marked wherever drawn, a seed's dot too
+                    early_ring(ax, i + 0.19, e.int8, s=60)
+                ringed |= bool(runs.early_best.any())
             ticks.append(f"{KLABEL[k]}\n{r42.macs_eff_m:.0f}M MACs")
         ax.set_xticks(range(len(ticks)))
         ax.set_xticklabels(ticks, fontsize=9)
@@ -120,7 +123,7 @@ def fig_kernel(df, filename, title, panels, base_key, base_label, ncols, kernels
         ax.axis("off")
     for ax in axes[:, 0]:
         ax.set_ylabel("Top-1 (%)")
-    rest = precision_handles() + ([early_handle("hatch")] if flagged else [])
+    rest = precision_handles() + ([early_handle("hatch")] if flagged else []) + ([early_handle("ring")] if ringed else [])
     if seeded:
         rest.append(Line2D([], [], marker="o", color="k", ls="", ms=4, label="uma seed (42/43/44)"))
     fig.legend(handles=[Patch(color=KCOLOR[k], label=KLABEL[k]) for k in kernels if k in shown], loc="upper right",
