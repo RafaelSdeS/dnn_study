@@ -211,6 +211,7 @@ class Int8Conv(nn.Module):
 
 
 HW_PARAMS = {"f23": "f23", "f43": "f43", "f63": "f63ab18"}   # os mesmos do `_hw` do AlexNet
+PACK_W = dict(u_w=9, v_w=8, k_dsp=2)   # (U_W, V_W, K) do packing; --u-w/--v-w/--k-dsp mudam (K=4 do OJCAS)
 # ponytail: a mesma raiz do ml.winograd_bridge, sem importar o pacote `ml` (puxa torchmetrics)
 BRIDGE = Path(os.environ.get("WINOGRAD_FPGA_ROOT",
                              Path.home() / "Documents/Winograd-FPGA/scripts/avaliacao_redes")).expanduser()
@@ -248,7 +249,7 @@ def quantize(model: YOLOv2, numerics: str, pack: str = "hw") -> list[str]:
     cfg = _bridge("yolov2_cfg")
     W = None
     if numerics != "int8":
-        W = _bridge("qat_wino").make_wino_conv(numerics, pack=pack != "off",
+        W = _bridge("qat_wino").make_wino_conv(numerics, pack=pack != "off", **PACK_W,
                                                hw_params=HW_PARAMS[numerics] if pack == "hw" else None)
     no_accel = []
     for (name, _, cin, cout, k), s in zip(cfg.LAYERS, model.convs(), strict=True):
@@ -368,7 +369,15 @@ if __name__ == "__main__":
     ap.add_argument("--voc", default=str(Path.home() / ".cache/torchvision/datasets/VOCdevkit/VOC2007"))
     ap.add_argument("--limit", type=int)
     ap.add_argument("--out-json", type=Path)
+    ap.add_argument("--hw-params", help="params.txt ou linha do netlist no lugar de HW_PARAMS[numerics] "
+                    "(ex.: f43v3/f63c, a escala calibrada de 26/10)")
+    ap.add_argument("--u-w", type=int, default=9)
+    ap.add_argument("--v-w", type=int, default=8)
+    ap.add_argument("--k-dsp", type=int, default=2)
     a = ap.parse_args()
+    if a.hw_params:
+        HW_PARAMS[a.numerics] = a.hw_params
+    PACK_W.update(u_w=a.u_w, v_w=a.v_w, k_dsp=a.k_dsp)
     _selftest()
     if a.weights:
         t0 = time.time()
@@ -386,7 +395,7 @@ if __name__ == "__main__":
             rec = dict(net="yolov2_voc_416", weights=a.weights, act=a.act, numerics=a.numerics,
                        pack=a.pack if no_accel else None,
                        hw_params=HW_PARAMS.get(a.numerics) if a.pack == "hw" else None, calib=a.calib, batch=a.batch,
-                       limit=a.limit, n_test=a.limit or 4952, dataset="VOC2007 test", metric="mAP@0.5 VOC07 11-pt",
+                       **PACK_W, limit=a.limit, n_test=a.limit or 4952, dataset="VOC2007 test", metric="mAP@0.5 VOC07 11-pt",
                        map=round(100 * mp, 2), ap_per_class=dict(zip(VOC_CLASSES, (round(100 * v, 2) for v in aps))),
                        no_acelerador=no_accel, dnn_study=_git(Path(__file__).parent),
                        bridge=_git(BRIDGE), wino_calib=wino or None,
