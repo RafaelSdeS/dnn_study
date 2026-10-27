@@ -150,17 +150,15 @@ For each variant:
 
 Results in `results/phase_2_kernel_restriction/` (57 epochs, full QAT + INT8).
 
-Open follow-up (2026-09-24/25, see `docs/logs/PHASE11_LOG.md` "Geometry confound" and "Geometry factorial + seed replicates"): the
-adapted-geometry AlexNet family had no large-kernel control, and Bottleneck/Fire were confounded with BN and lr. Submitted to PCAD under the
-Phase 11 protocol (500 ep / QAT 100): `phase_11_geometry_controls` (8 models, jobs 824460-824467; 4 done, 4 running as of 2026-09-25),
-`phase_11_geometry_factorial` (10 models: stride x pooling split, Dropout, head x geometry, pretraining at both geometries, 3x3 pair;
-824667-824676) and `phase_11_geometry_seeds_s43/_s44` (4 kernel-pair models each; 824677-824684). When they land: aggregate, fill the
-read-outs in the yaml headers/log, then rewrite the report's abstract/kernel-cost discussion with them.
+Closed by the Phase 11 redesign (2026-10-03/04, `docs/logs/PHASE11_LOG.md` "One recipe", "Minimal design"): the old
+`phase_11_geometry_controls` / `_geometry_factorial` / `_geometry_seeds_*` runs are archived (`outputs/pcad/archive_adamw_recipe/`),
+and the one-recipe design has what they were for -- the large-kernel control at the adapted geometry (`alexnet_k11-5-3_stride2_...`)
+and Bottleneck / Fire next to their parents under one recipe (`phase_11_families`). Still open: the report (`report/ic_report.tex`)
+quotes the archived numbers -- rewrite it once Phase 11 closes (user, 2026-10-27: not before).
 
-Open (2026-09-25, M7 extension — `docs/logs/PHASE11_LOG.md` "M7 extension"): PCAD's `~/dnn_study_m7` holds a commit not on `origin`
-(`c9750c0`, qat_wino-only run-summary fix in `ml/reporting.py`/`scripts/train.py`) and uncommitted 14-model `wino_f{23,43,63}_pack.yaml` lists;
-bring both into this repo (or push from PCAD), otherwise the 42 packed-`qat_wino` results cannot be reproduced from `main`. Then update the
-`wino_f*_pack` mentions that still say "2 models" and the `budget_unico` `≠HW` tables with the F43 packed numbers.
+M7 extension (2026-09-25, `docs/logs/PHASE11_LOG.md` "M7 extension"): ✅ reproducible from `main` since 2026-10-19 (the qat_wino-only
+fix is f87b6a7, the 14-model `wino_f{23,43,63}_pack.yaml` lists d5084d9). Still open: the `budget_unico` `≠HW` tables with the F43
+packed numbers.
 
 ---
 
@@ -330,11 +328,26 @@ plan: `docs/plans/PHASE9_PLAN.md`.
 
 ---
 
-## Phase 11 — Kernel size comparison (running on PCAD/tupi, 76 runs)
+## Phase 11 — Kernel size comparison (138 of 152 runs done, 2026-10-27; the 14 left are queued on PCAD)
 
-- [ ] After all 76 runs finish: `build_runs_index`, `aggregate_results` per `phase_11_<block>`, rsync the tracked provenance files from PCAD, rerun `scripts/phase11/*` figures.
+Status: `results/phase_11_geometry_analysis/design_status.csv`; findings: `docs/plans/BEST_MODELS.md` "Cross-phase synthesis",
+`docs/logs/PHASE11_LOG.md` "Progress ...".
+
+- [ ] After all 152 runs finish: `build_runs_index`, `aggregate_results` per `phase_11_<block>`, rsync the tracked provenance files (and the gitignored logs: figures 18 / 19 / 29 read them) from PCAD, rerun `scripts/phase11/*` figures.
+- [ ] Re-evaluate every cell on one machine type so latency compares across cells (CLAUDE.md "Running": tupi3-6).
+- [ ] Drop `exclude: tupi4` from `configs/slurm/tupi_4090.yaml` / `tupi_beagle.yaml` once the node is checked (2026-10-24: 3 of its 10 jobs crashed; the two crashed runs finished on tupi3).
+- [ ] Report: a Phase 11-12 section and the archived Phase 11 numbers replaced (see Phase 2 above).
 - [ ] (Optional, only once all runs are done) Group the 8 flat `outputs/<runtime>/phase_11_*` dirs under one parent, e.g. `outputs/pcad/phase_11/<block>/<model>/`: needs `ml/runtime.py:make_model_runs`, `scripts/build_runs_index.py`, `scripts/phase11/*` and the tests changed, plus a `mv` on PCAD. Not done mid-queue: the submitted jobs write to the flat paths and `refuse_foreign_run_dir` keys on them.
-- [ ] Pilot 828512/828513/828514 ran with `tupi,beagle` eligibility (beagle's GPU/CPU latency and INT8 kernel path differ from tupi's): check which node each run used (`SLURM_JOB_ID` in provenance) before comparing latencies.
+- ✅ Pilot 828512/828513/828514 ran with `tupi,beagle` eligibility: figure 17 compares latency within one machine only (it names the machines it leaves out), and INT8 accuracy is machine-independent on qnnpack.
+
+## Phase 12 — Robustness (29 of 39 runs done, 2026-10-27)
+
+- [ ] The 10 fine-tunes of the other 5 pretrained nets (`phase_12_finetune_pretrained_lr1e3` / `_lr1e4`, queued on PCAD), then `python -m scripts.phase12.robustness` (figure 02 gets them).
+
+## Phase 13 — Hybrids (0 of 18 runs, 2026-10-27; `docs/logs/PHASE13_LOG.md`)
+
+- [ ] The 18 cells are the last lines of PCAD's `~/queue_phase11_full.txt`; when they land, `python -m scripts.phase13.hybrids`.
+- [ ] Seeds 43 / 44 only after seed 42, and only on contrasts inside 2x the noise band; Stage B (Bottleneck / Fire on the best body) waits for these.
 
 ## Phase 10 — Extended Architecture Search (Future)
 

@@ -69,3 +69,9 @@ restored exactly to 510734c.
 **Next, not in this block.** Seeds 43 / 44 once seed 42 lands, on the contrasts inside 2x the noise band (likely stacked -> residual, with
 the stacked partners that have one seed). Stage B -- Bottleneck / Fire blocks on the best body (compression at equal accuracy) -- waits for
 these, the `alexnet_final_*` and `alexnet_fire_bypass` runs; it needs a kernel parameter in `_AlexBottleneck` / `_FireModule`.
+
+**Status 2026-10-27.** None of the 18 has run. They are still the last 18 lines of PCAD's `~/queue_phase11_full.txt` (35 lines: 7
+Phase 11 seeds, 10 Phase 12 fine-tunes, then these), behind 7 Phase 11 jobs in Slurm; at the ~2-3 jobs a day PCAD has finished
+lately, the first hybrid starts in ~1-1.5 weeks. Everything they are read against is in: the 6 Phase 11 reference cells, and for
+Stage B the `alexnet_final_*` and `alexnet_fire_bypass` runs (`phase_11_families`, seed 42: FinalBottleneckResidual 55.83, FireBypass
+55.19, FinalFireResidual 54.96, FinalBottleneckFire 54.40, FinalDepthwiseFire 45.76 FP32).
