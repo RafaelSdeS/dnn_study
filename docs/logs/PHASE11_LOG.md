@@ -2256,3 +2256,29 @@ plateau, not a lone peak (41.97% val; 41.87 at most afterwards), and QAT from it
 The figure scripts read the gitignored logs: 124 of them (phase_1[12]_* runs synced without logs) were fetched from PCAD
 (6.5 MB, kept) before regenerating -- without them `convergence.csv` loses 48 rows and 29 its curves. Left: 7 Phase 11 runs
 in Slurm (ResNet seed 44 x2, kernel controls x5), 7 in `~/queue_phase11_full.txt`, then Phase 12 fine-tunes 10, Phase 13 18.
+
+## Progress 2026-10-28: 143 of 152 runs
+
+**PCAD pulled** from 2e3a039 to 01fe1e1: the 13 files of ResNet-18 2x2 seed 43 sat there untracked (moved aside, `cmp` equal
+after the pull); `resnet_kernel_stem_seed43_comparison.csv` differed in float text only. **5 runs synced to the laptop** from
+PCAD, without `*.pth` / `*_best.pth.gz`, logs included. Audit: quant_protocol 2026-10-07, git_dirty false (2e3a039; ResNet 3x3
+seed 44 on 7a9afd7), 500 + 50 epochs, int8_kernel_max_err_steps 1, agreement_qat_int8 0.96-0.99. Aggregates: PCAD's
+`kernel_controls` / `_seed43` CSVs hold every laptop row plus the new ones (float text only differs), taken as they are; new
+`kernel_controls_seed44`, `resnet_kernel_stem_seed44`.
+
+New numbers (test top-1, FP32 / INT8):
+- *5x5 everywhere* (GAP + BN, 464M MACs): 49.16 / 49.30 (seed 42), 49.24 / 49.01 (seed 43), against 3x3's 53.81 (3 seeds,
+  167M): -4.6 pp for 2.8x the MACs. Capacity is not MACs spent on kernel size -- widening the 2x2 net to 3x3's MACs ties, a
+  larger kernel with the same layout loses (figure 26 (b)). Its FC + Dropout cell and seed 44 still run.
+- *2x2 at 1.5x channels*, seed 44: 53.81 / 53.49; 3 seeds 53.83 +- 0.13 against 3x3's 53.81 +- 0.27.
+- *ResNet-18 seed 44*: 3x3 43.43 / 43.48; 2x2 41.75 / 47.46, early best (FP32 epoch 77), ringed in 28 like both seed-43 runs.
+  3x3 -> 2x2 in FP32 over three seeds: -0.66 / -0.70 / -1.68 pp (mean -1.01); ResNet's FP32 band is now +-1.0 pp.
+- INT8 - FP32 over the 117 runs without the early-best flag: median +0.04, range -0.38 to +0.58 pp; 26 of 143 early best.
+
+**Figure fix.** `plot_kernel_comparison` put a bar's INT8 value above the highest seed dot; with an early-best ring 5 pp up
+(28: ResNet 3x3 / 2x2, 02) the value sat on the ring and read as the ring's. It now sits above the bar and the dots that are
+not early best; 02 and 28 changed, 01 / 03 / 27 byte-identical.
+
+**Left: 9 Phase 11 runs**, all on PCAD -- kernel controls (3x3 at 0.67x seeds 43 / 44, 5x5 FC + Dropout seed 42, 5x5 GAP seed
+44) and 5 VGG kernel-block seeds -- then Phase 12's 10 fine-tunes and Phase 13's 18. nyx idle: its `wino_f43v3_hw` /
+`wino_f63c_hw` VGG16 lines finished on 2026-10-27.

@@ -103,8 +103,9 @@ def fig_kernel(df, filename, title, panels, base_key, base_label, ncols, kernels
             int8_bar(ax, i + 0.19, int8, 0.38, color, early=early)
             value = dict(ha="center", va="bottom", fontsize=8, zorder=6, bbox=dict(facecolor="white", edgecolor="none", pad=0.3))
             ax.text(i - 0.19, runs.fp32.max() + 0.5, f"{fp32:.1f}", **value)
-            if np.isfinite(int8):
-                ax.text(i + 0.19, runs.int8.max() + 0.5, f"{int8:.1f}", **value)
+            if np.isfinite(int8):  # above the bar and the non-early dots: over an early-best ring it read as the ring's value
+                top8 = np.nanmax([int8, runs.int8.where(~runs.early_best.astype(bool)).max()])
+                ax.text(i + 0.19, top8 + 0.5, f"{int8:.1f}", **value)
             if len(runs) > 1:
                 seeded = True
                 ax.scatter([i - 0.19] * len(runs), runs.fp32, color="k", s=12, zorder=5)

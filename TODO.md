@@ -328,7 +328,7 @@ plan: `docs/plans/PHASE9_PLAN.md`.
 
 ---
 
-## Phase 11 — Kernel size comparison (138 of 152 runs done, 2026-10-27; the 14 left are queued on PCAD)
+## Phase 11 — Kernel size comparison (143 of 152 runs done, 2026-10-28; the 9 left are queued on PCAD)
 
 Status: `results/phase_11_geometry_analysis/design_status.csv`; findings: `docs/plans/BEST_MODELS.md` "Cross-phase synthesis",
 `docs/logs/PHASE11_LOG.md` "Progress ...".
@@ -340,11 +340,11 @@ Status: `results/phase_11_geometry_analysis/design_status.csv`; findings: `docs/
 - [ ] (Optional, only once all runs are done) Group the 8 flat `outputs/<runtime>/phase_11_*` dirs under one parent, e.g. `outputs/pcad/phase_11/<block>/<model>/`: needs `ml/runtime.py:make_model_runs`, `scripts/build_runs_index.py`, `scripts/phase11/*` and the tests changed, plus a `mv` on PCAD. Not done mid-queue: the submitted jobs write to the flat paths and `refuse_foreign_run_dir` keys on them.
 - ✅ Pilot 828512/828513/828514 ran with `tupi,beagle` eligibility: figure 17 compares latency within one machine only (it names the machines it leaves out), and INT8 accuracy is machine-independent on qnnpack.
 
-## Phase 12 — Robustness (29 of 39 runs done, 2026-10-27)
+## Phase 12 — Robustness (29 of 39 runs done, 2026-10-28)
 
 - [ ] The 10 fine-tunes of the other 5 pretrained nets (`phase_12_finetune_pretrained_lr1e3` / `_lr1e4`, queued on PCAD), then `python -m scripts.phase12.robustness` (figure 02 gets them).
 
-## Phase 13 — Hybrids (0 of 18 runs, 2026-10-27; `docs/logs/PHASE13_LOG.md`)
+## Phase 13 — Hybrids (0 of 18 runs, 2026-10-28; `docs/logs/PHASE13_LOG.md`)
 
 - [ ] The 18 cells are the last lines of PCAD's `~/queue_phase11_full.txt`; when they land, `python -m scripts.phase13.hybrids`.
 - [ ] Seeds 43 / 44 only after seed 42, and only on contrasts inside 2x the noise band; Stage B (Bottleneck / Fire on the best body) waits for these.

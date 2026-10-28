@@ -12,7 +12,7 @@ Results after implementing phases 1–4, 6, 8, and 9. **Most baselines (MobileNe
 
 ---
 
-## Cross-phase synthesis (2026-10-27; Phase 11 at 138 of 152 runs, Phase 12 at 29 of 39)
+## Cross-phase synthesis (2026-10-28; Phase 11 at 143 of 152 runs, Phase 12 at 29 of 39)
 
 What the project supports so far, strongest evidence first. **Phases 11-13 are the only phases run under one recipe** (500 epochs,
 no early stopping, SGD, one augmentation, the literature's INT8, reported on Tiny ImageNet's official val split as the test set;
@@ -48,8 +48,9 @@ figures 02, 11, 14 and 16.
 1. **Restricting the kernel costs little, and what it costs is compute.** 11-5-3-3-3 → 3×3 loses ~1.5 pp (the CI includes zero)
    for −25% MACs; 3×3 → 2×2 loses another ~2.5 pp (CI excludes zero) for −54% MACs; alternating 3-2 equals 3×3 at −24% MACs. The
    width-matched controls (`phase_11_kernel_controls`, GAP + BN) remove the 2×2 deficit: a 2×2 net widened to 3×3's MACs reaches
-   53.84% (2 seeds) against 3×3's 53.81% (3 seeds), and a 3×3 net narrowed to 2×2's MACs 52.44% (1 seed) against 2×2's 52.58%
-   (3 seeds), figure 26. In VGG16 + GAP + BN the all-2×2 net costs 2.4 pp (56.84 vs 59.27%, 3 seeds each), one 2×2 block ≤ 0.8 pp
+   53.83% (3 seeds) against 3×3's 53.81% (3 seeds), and a 3×3 net narrowed to 2×2's MACs 52.44% (1 seed) against 2×2's 52.58%
+   (3 seeds), figure 26. The other direction does not buy accuracy: 5×5 in every conv (464M MACs, 2.8× 3×3's) reaches 49.20%
+   (2 seeds), 4.6 pp under 3×3 -- MACs pay off as width, not as kernel size. In VGG16 + GAP + BN the all-2×2 net costs 2.4 pp (56.84 vs 59.27%, 3 seeds each), one 2×2 block ≤ 0.8 pp
    (figure 24).
 2. **Kernel size is a second-order factor.** conv1 stride, BatchNorm, Dropout and pretraining move accuracy by 4-10 pp, the kernel
    by 1.5-2.5 pp. The original-AlexNet baseline's 35.5% is mostly its 1×1 final map at 64 px (the same net, kernels and recipe reach
@@ -59,8 +60,8 @@ figures 02, 11, 14 and 16.
 3. **A small-kernel body gets the loss back.** Two small convs per stage add +5.3 (3×3) / +8.0 pp (2×2) for +130-150% MACs; at GAP
    + BN the stacked 2×2 net (57.3%) is ahead of the stacked 3×3 (55.9%) at less than half its MACs (one seed each). AlexNet's
    11×11 conv1 in front of a 2×2 body reaches 55.93% at GAP + BN (3 seeds, 98M MACs), above the all-3×3 net (53.81%, 167M); conv1
-   has stride 2, outside a Winograd transform anyway. ResNet-18 (seed 42): 2×2 blocks behind the 7×7 stem lose nothing (+1.0 pp
-   vs 7-3), the all-2×2 net's −2.6 pp is the stem's, and a ResNet-C deep stem adds +3.3 / +3.9 pp (3×3 / 2×2).
+   has stride 2, outside a Winograd transform anyway. ResNet-18: 3×3 → 2×2 costs 1.0 pp FP32 (−0.66 / −0.70 / −1.68 over
+   seeds 42-44); seed 42: 2×2 blocks behind the 7×7 stem lose nothing (+1.0 pp vs 7-3), the all-2×2 net's −2.6 pp is the stem's, and a ResNet-C deep stem adds +3.3 / +3.9 pp (3×3 / 2×2).
 4. **Compensation under one recipe (`families`, 19 nets, seed 42), FP32 / INT8.** TinyMobileNetV2 57.96 / 58.00 (969M MACs),
    AlexNetSmallKernelWithBN 57.20, AlexNetResidual 55.96, AlexNetFinalBottleneckResidual 55.83 / 55.63 (0.57M params, 54M MACs),
    AlexNetFireBypass 55.19 / 55.27 (0.52M, 178M), FinalFireResidual 54.96, Factorized 54.85, Fire 54.57, VGGStyle 54.53,
@@ -68,8 +69,8 @@ figures 02, 11, 14 and 16.
    48.36, MobileNetV2 from scratch 47.83, DepthwiseSep 46.53, GroupConv 46.12, FinalDepthwiseFire 45.76). Fire, FireBypass and the
    Fire / Bottleneck hybrids now sit within 1.5 pp of each other, against ~6 pp between Fire and FireBypass / FinalFireResidual
    in the earlier protocols (finding 12).
-5. **INT8 is robust, and the big "INT8 gains" are not quantization.** 25 of 138 runs reach their best FP32 epoch before 80% of the
-   budget (most no-BN FC + Dropout cells, 4 of the 6 pretrained nets, both ResNet-18 seed 43 runs); QAT starts there from an un-annealed
+5. **INT8 is robust, and the big "INT8 gains" are not quantization.** 26 of 143 runs reach their best FP32 epoch before 80% of the
+   budget (most no-BN FC + Dropout cells, 4 of the 6 pretrained nets, both ResNet-18 seed 43 runs and the 2×2 seed 44); QAT starts there from an un-annealed
    checkpoint and gains up to +6 pp from its extra training. Everywhere else |INT8 − FP32| stays within ~±0.5 pp (the 18
    non-pretrained families lose at most 0.23 pp) and shows no dependence on kernel size (Spearman ρ = +0.06 between a net's worst
    activation outlier ratio and its INT8 change, over the 66 runs without the early-best flag, figure 16).
@@ -110,12 +111,12 @@ figures 02, 11, 14 and 16.
 
 ### What is not established yet
 
-- **Runs still out (2026-10-27, all queued on PCAD).** Phase 11: 14 -- kernel-control seeds and the 5×5 cells (7), ResNet-18 seed 44
-  (2), VGG kernel-block seeds (5). Phase 12: the 10 fine-tunes of the other 5 pretrained nets (AlexNet original layout and 64px,
+- **Runs still out (2026-10-28, all queued on PCAD).** Phase 11: 9 -- kernel controls (3×3 at 0.67× seeds 43 / 44, 5×5 FC + Dropout
+  seed 42, 5×5 GAP seed 44), VGG kernel-block seeds (5). Phase 12: the 10 fine-tunes of the other 5 pretrained nets (AlexNet original layout and 64px,
   VGG16, ResNet-18, MobileNetV2, at lr 1e-3 / 1e-4). Phase 13 (do two convs per stage, a residual skip, an 11×11 conv1 and conv1
   stride 1 add up?, `docs/logs/PHASE13_LOG.md`): 0 of 18.
 - **Seeds.** Most contrasts are seed 42 against a pooled floor of ±0.7-0.8 pp FP32; differences below ~1.5 pp are not resolved, and
-  the 11-5-3-3-3 → 3×3 point is one of them. ResNet-18's floor rests on 2 seeds of 2 cells, both seed-43 runs early best.
+  the 11-5-3-3-3 → 3×3 point is one of them. ResNet-18's floor rests on 3 seeds of 2 cells (±1.0 pp FP32); its INT8 band is wide (3 of the 6 runs early best).
 - **Scope.** Two low-resolution datasets (Tiny ImageNet at 64 px, CIFAR-100 at 32 px; the 224 runs are enlarged 64 px images, no
   new information), AlexNet / VGG / ResNet / compact families, one recipe plus lr ×0.5 / ×2. Latency is measured on a GPU / CPU,
   not on the FPGA accelerator (the throughput study is blocked on Vivado); INT8 on the CPU at batch 1 is slower than FP32 (figure
