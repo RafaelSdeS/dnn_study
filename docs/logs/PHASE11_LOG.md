@@ -2282,3 +2282,33 @@ not early best; 02 and 28 changed, 01 / 03 / 27 byte-identical.
 **Left: 9 Phase 11 runs**, all on PCAD -- kernel controls (3x3 at 0.67x seeds 43 / 44, 5x5 FC + Dropout seed 42, 5x5 GAP seed
 44) and 5 VGG kernel-block seeds -- then Phase 12's 10 fine-tunes and Phase 13's 18. nyx idle: its `wino_f43v3_hw` /
 `wino_f63c_hw` VGG16 lines finished on 2026-10-27.
+
+## Progress 2026-10-28 (later): 146 of 152 runs
+
+**3 runs synced to the laptop** from PCAD, without `*.pth` / `*_best.pth.gz`, logs included. Audit: quant_protocol
+2026-10-07, git_dirty false (2e3a039), 500 + 50 epochs, int8_kernel_max_err_steps 1, agreement_qat_int8 0.990-0.993, none
+early best. Their 3 rows appended to the `kernel_controls` / `_seed43` / `_seed44` aggregate CSVs (same header as PCAD's).
+
+New numbers (test top-1, FP32 / INT8):
+- *3x3 at 0.67x channels* (75M MACs, 2x2's), seeds 43 / 44: 52.90 / 53.07, 52.42 / 52.17; 3 seeds 52.59 +- 0.27 against
+  2x2's 52.58 +- 0.16. At equal MACs the kernel gap is gone in both directions, 3 seeds each (figure 12-04: +0.02 / -0.01 pp).
+- *5x5 everywhere, FC + Dropout + BN* (519M MACs), seed 42: 52.14 / 51.91, train 98.1 %. With GAP the 5x5 loses 4.6 pp to
+  3x3; with FC it beats 3x3 FC (50.75) and ties 11-5-3-3-3 FC (52.23) -- the head rule (with FC the large kernel wins) holds
+  for 5x5 too.
+
+**Figure 26.** Black lines join FP32 means in both panels: (a) each equal-MACs pair (flat = same accuracy), (b) the 2x2 ->
+3x3 -> 5x5 series (was grey); one legend entry. Regenerated: 25, 26, 30, Phase 12's 04; 18 / 19 / 29 byte-identical; 22 not
+rerun (needs checkpoints).
+
+**Number audit (deck + Narrativa).** Corrected against the CSVs: QAT -> INT8 conversion moves at most 0.20 pp over the
+non-early-best runs (0.46 worst, `mobilenetv2` pretrained, early best) -- not 0.32; of the 27 runs with INT8 - FP32 > +0.6,
+26 are early best (the non-early max is +0.76, `lr_half` 3x3); INT8 - FP32 median +0.04 over 148 non-early runs of Phases 11 +
+12; VGG16 Winograd-eligible share 95-100 % (2x2 FC heads 95 %), not 98-100; AlexNet small-kernel GAP 98-99 %, FC 57-89 %.
+
+**Why the 64px layout has no third pool** (user question): inherited from Phase 2-4's AlexNet3x3FC (stride 2, two 2x2
+pools, 8x8 map; a third 2x2 pool would give 4x4), never optimized. Its only test is the pooling contrast at stride 2 (figure
+06, FC + Dropout, no BN): three 3x3 pools (3x3 map) beat the two 2x2 by 0.5-2.0 pp FP32 with 24-34 % fewer MACs. Untested with
+GAP + BN; stated as a caveat in the deck and the Narrativa.
+
+**Left: 6 Phase 11 runs** on PCAD -- 5x5 GAP seed 44 and 5 VGG kernel-block seeds -- then Phase 12's 10 fine-tunes and Phase
+13's 18 (34 of 209).

@@ -743,7 +743,8 @@ def fig_controls(df, figs, note):
     (a) capacity: is 2x2's loss its kernel or its 4/9 of the MACs? Width-matched pairs side by side (2x2 against the 3x3 net
     narrowed to its MACs; 3x3 against the 2x2 net widened to its). (b) dose-response: 2x2 -> 3x3 -> 5x5, with 11-5-3-3-3.
     Both panels: every seed a point (FP32 filled, INT8 hollow), a tick at the FP32 seed mean, one zoomed y -- (a) were bars
-    from 0 until 2026-10-24, which hid the ~1 pp it asks about; (b)'s line runs through the 2 -> 3 -> 5 FP32 means."""
+    from 0 until 2026-10-24, which hid the ~1 pp it asks about; black lines join FP32 means: each equal-MACs pair in (a)
+    (2026-10-28), the 2 -> 3 -> 5 series in (b)."""
     sel = df[(df.family == "alexnet") & (df.stride == 2) & (df.pooling == "2pool2x2") & (df["head"] == "gap") & df.bn
              & ~df.pretrained & (df.input_size == 64)]
     runs = lambda k, w=1.0: sel[(sel.kernels == k) & np.isclose(sel.width, w)]  # noqa: E731
@@ -764,6 +765,9 @@ def fig_controls(df, figs, note):
     for x, _, r, k in items:
         if len(r):
             ringed |= seed_dots(axa, x, r, colors[k])
+    for (x0, _, r0, _), (x1, _, r1, _) in (items[:2], items[2:]):  # a flat line = same MACs, same accuracy
+        if len(r0) and len(r1):
+            axa.plot([x0, x1], [r0.fp32.mean(), r1.fp32.mean()], color="k", lw=1.2, zorder=1)
     ticks(axa, [i[:3] for i in items])
     axa.set_ylabel("Top-1 (%)")
     axa.set_title("(a) mesmo custo de cálculo: o kernel ou a capacidade?", fontsize=10)
@@ -776,11 +780,12 @@ def fig_controls(df, figs, note):
             ringed |= seed_dots(axb, j, r, colors[k])
     means = [(j, r.fp32.mean()) for j, _, r, _ in items[:3] if len(r)]  # 11-5-3-3-3 is a different kind of net: off the line
     if len(means) > 1:
-        axb.plot(*zip(*means), color=NEUTRAL, lw=1.2, zorder=1)
+        axb.plot(*zip(*means), color="k", lw=1.2, zorder=1)
     ticks(axb, [i[:3] for i in items])
     axb.set_xlim(-0.5, 3.5)
     axb.margins(y=0.15)
-    fig.legend(handles=SEED_HANDLES + ([early_handle("ring")] if ringed else []), loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=4, fontsize=9)
+    line = Line2D([], [], color="k", lw=1.2, label="liga as médias FP32: (a) mesmos MACs, (b) 2×2 → 3×3 → 5×5")
+    fig.legend(handles=SEED_HANDLES + [line] + ([early_handle("ring")] if ringed else []), loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=4, fontsize=9)
     fig.suptitle("Controles do kernel: custo de cálculo igual e kernel maior (AlexNet, layout 64px, GAP + BN)\n" + note, fontsize=11, y=1.04)
     savefig(fig, "26_kernel_controls.png", figs)
 
