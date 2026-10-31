@@ -1,0 +1,126 @@
+{
+  "experiment": {
+    "seed": 42,
+    "uniform_hparams": true,
+    "stages": [
+      "fp32",
+      "qat",
+      "int8"
+    ],
+    "data": {
+      "batch_size": 128,
+      "train_aug": "crop_flip_autoaug"
+    },
+    "training": {
+      "epochs": 100,
+      "early_stopping_patience": null,
+      "optimizer": "sgd",
+      "momentum": 0.9,
+      "lr": 0.001,
+      "weight_decay": 0.0005
+    },
+    "qat": {
+      "epochs": 10,
+      "lr": 1e-05,
+      "eta_min": 1e-07,
+      "weight_decay": 0.0005,
+      "freeze_bn_epoch": null,
+      "disable_observer_epoch": null
+    },
+    "name": "phase_12_finetune_pretrained_lr1e3",
+    "models": [
+      "alexnet_k11-5-3_stride2_2pool2x2_map8_fcdrop_nobn_pretrained"
+    ]
+  },
+  "runtime": {
+    "name": "pcad",
+    "root": "outputs/pcad",
+    "dataset_root": "${PCAD_DATASET_ROOT}",
+    "device": "cuda",
+    "conda_env": "alexnet_rafael",
+    "wandb": true,
+    "wandb_mode": "offline",
+    "tensorboard": true,
+    "distributed": false,
+    "devices": 1,
+    "launcher": "single",
+    "use_kagglehub_fallback": true,
+    "persistent_workers": false
+  },
+  "data": {
+    "dataset_path": "/home/users/rsdsouza/.cache/kagglehub/datasets/akash2sharma/tiny-imagenet/versions/1/tiny-imagenet-200/train",
+    "img_size": 64,
+    "num_classes": 200,
+    "batch_size": 128,
+    "num_workers": 4,
+    "pin_memory": true,
+    "train_val_split": 0.9,
+    "seed": 42,
+    "train_aug": "crop_flip_autoaug",
+    "upscale_to": null
+  },
+  "training": {
+    "epochs": 100,
+    "lr": 0.001,
+    "weight_decay": 0.0005,
+    "label_smoothing": 0.1,
+    "grad_clip_norm": null,
+    "optimizer": "sgd",
+    "momentum": 0.9,
+    "use_amp": true,
+    "early_stopping_patience": null,
+    "warmup_epochs": 0,
+    "eta_min": 0.0,
+    "reset_scheduler_on_resume": false
+  },
+  "qat": {
+    "epochs": 10,
+    "lr": 1e-05,
+    "weight_decay": 0.0005,
+    "eta_min": 1e-07,
+    "freeze_bn_epoch": null,
+    "disable_observer_epoch": null
+  },
+  "qat_wino": {
+    "epochs": 15,
+    "lr": 5e-05,
+    "weight_decay": 0.0005,
+    "eta_min": 0.0,
+    "freeze_bn_epoch": 999,
+    "disable_observer_epoch": 999,
+    "variant": "f43",
+    "pack": false,
+    "u_w": 9,
+    "v_w": 8,
+    "k_dsp": 2,
+    "hw_params": null
+  },
+  "selected_model": "alexnet_k11-5-3_stride2_2pool2x2_map8_fcdrop_nobn_pretrained",
+  "stage_list": [
+    "fp32",
+    "qat",
+    "int8"
+  ],
+  "provenance": {
+    "git_hash": "01fe1e1088a3458b47285259015e6dd501c986ef",
+    "git_dirty": false,
+    "git_dirty_files": [],
+    "hostname": "tupi5",
+    "timestamp_utc": "2026-10-29T21:26:18.628090+00:00",
+    "torch_version": "2.5.1+cu121",
+    "torchvision_version": "0.20.1+cu121",
+    "cuda_version": "12.1",
+    "cudnn_version": 90100,
+    "gpu_name": "NVIDIA GeForce RTX 4090",
+    "python_version": "3.11.2",
+    "cpu_count": 32,
+    "cpu_model": "Intel(R) Core(TM) i9-14900KF",
+    "slurm_job_id": "834137",
+    "dataset": {
+      "root": "/home/users/rsdsouza/.cache/kagglehub/datasets/akash2sharma/tiny-imagenet/versions/1/tiny-imagenet-200",
+      "sha256": "932bfab8d48cad33429a81435b1fe98336629b5adca6e6cff0eb54b8c24c3bda",
+      "n_files": 110201
+    }
+  },
+  "provenance_history": []
+}
