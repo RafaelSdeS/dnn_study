@@ -12,7 +12,7 @@ Results after implementing phases 1–4, 6, 8, and 9. **Most baselines (MobileNe
 
 ---
 
-## Cross-phase synthesis (2026-10-30; Phase 11 complete, 152 runs; Phase 12 at 38 of 39)
+## Cross-phase synthesis (2026-10-31; Phase 11 complete, 152 runs; Phase 12 complete, 39 runs)
 
 What the project supports so far, strongest evidence first. **Phases 11-13 are the only phases run under one recipe** (500 epochs,
 no early stopping, SGD, one augmentation, the literature's INT8, reported on Tiny ImageNet's official val split as the test set;
@@ -87,9 +87,9 @@ figures 02, 11, 14 and 16.
    11-5-3-3-3 63.00 > 2×2 62.09, VGG16 3×3 71.08 ≈ alternating 70.99 > 2×2 70.31: Kendall's τ against the Tiny ImageNet order is
    +1.00 for both families (Phase 12 figure 05). 3×3 → 2×2 costs 0.7-2.4 pp in every scenario and ~0 at equal MACs (Phase 12
    figure 04). Fine-tuning the pretrained AlexNet at 224 px: 62.23 / 63.13 at lr 1e-3 and 60.50 / 60.58 at 1e-4, against 53.42 FP32
-   when the one recipe's lr 0.01 trains it (best epoch 10). At 64 px, lr 1e-3 beats 1e-4 for every net that has both (FP32: AlexNet 64px
-   layout 56.33 vs 53.26, original layout 40.94 vs 35.57, ResNet-18 57.42 vs 51.34, MobileNetV2 62.68 vs 52.47; VGG16 67.27 at 1e-3,
-   1e-4 pending) and lr 0.01 (51.89 / 36.82 / 49.66 / 56.43 / 61.38). Fine-tuned, pretraining is worth +5.5 to +14.9 pp over the
+   when the one recipe's lr 0.01 trains it (best epoch 10). At 64 px, lr 1e-3 beats 1e-4 for every net (FP32: AlexNet 64px
+   layout 56.33 vs 53.26, original layout 40.94 vs 35.57, ResNet-18 57.42 vs 51.34, MobileNetV2 62.68 vs 52.47, VGG16 67.27 vs
+   62.87) and lr 0.01 (51.89 / 36.82 / 49.66 / 56.43 / 61.38). Fine-tuned, pretraining is worth +5.5 to +14.9 pp over the
    scratch twin, more than the +4.1 of the factor table, which lr 0.01 measures (Phase 12 figure 02). 4 of the 5 lr 1e-3 runs peak
    before 80% of their 100 epochs (early best: read their INT8 with the ring).
 7. **The most accurate nets are almost all Winograd-eligible.** Share of effective MACs in stride-1, dense 2×2 / 3×3 convs
@@ -123,8 +123,9 @@ figures 02, 11, 14 and 16.
 
 ### What is not established yet
 
-- **Runs still out (2026-10-30, all on PCAD).** Phase 11: none. Phase 12: VGG16's fine-tune at lr 1e-4. Phase 13 (do two convs per
-  stage, a residual skip, an 11×11 conv1 and conv1 stride 1 add up?, `docs/logs/PHASE13_LOG.md`): 0 of 18, the first running.
+- **Runs still out (2026-10-31, all on PCAD).** Phases 11 and 12: none. Phase 13 (do two convs per stage, a residual skip, an 11×11
+  conv1 and conv1 stride 1 add up?, `docs/logs/PHASE13_LOG.md`): 1 of 18. The first, an 11×11 conv1 on the two-conv 3×3 body, 55.52 FP32 /
+  55.45 INT8, sits 0.35 / 0.70 pp under the same body with a 3×3 conv1: one seed, inside the noise floor, no gain from the 11×11 so far.
 - **Seeds.** Most contrasts are seed 42 against a pooled floor of ±0.7-0.8 pp FP32; differences below ~1.5 pp are not resolved, and
   the 11-5-3-3-3 → 3×3 point is one of them. ResNet-18's floor rests on 3 seeds of 2 cells (±1.0 pp FP32); its INT8 band is wide (3 of the 6 runs early best).
 - **Scope.** Two low-resolution datasets (Tiny ImageNet at 64 px, CIFAR-100 at 32 px; the 224 runs are enlarged 64 px images, no

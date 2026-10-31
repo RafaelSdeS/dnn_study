@@ -75,3 +75,15 @@ Phase 11 seeds, 10 Phase 12 fine-tunes, then these), behind 7 Phase 11 jobs in S
 lately, the first hybrid starts in ~1-1.5 weeks. Everything they are read against is in: the 6 Phase 11 reference cells, and for
 Stage B the `alexnet_final_*` and `alexnet_fire_bypass` runs (`phase_11_families`, seed 42: FinalBottleneckResidual 55.83, FireBypass
 55.19, FinalFireResidual 54.96, FinalBottleneckFire 54.40, FinalDepthwiseFire 45.76 FP32).
+
+**Status 2026-10-31: the first hybrid.** `alexnet_k11-3stacked_stride2_2pool2x2_map8_gap_bn` (11x11 conv1 + the two-conv 3x3 body,
+stride 2, seed 42; job 834529 on beagle, 15.6 h) finished 2026-10-31 04:29 and is on the laptop: 55.52 FP32 / 55.45 INT8 (test
+top-1), 5.20 M params, 473 M MACs; best FP32 epoch 491 of 500, agreement_qat_int8 0.984, quant_protocol 2026-10-07, git_dirty false.
+Its two matched pairs, B - A in FP32 / INT8 (negative = loses):
+- conv1 3x3 -> 11x11 on the stacked body (`k3x3stacked`, 55.87 / 56.15, 5.18 M, 451 M MACs): -0.35 / -0.70 pp.
+- body 5 convs -> stacked under the 11x11 conv1 (`k11-3`, 54.55 / 54.24 at seed 42; 54.14 FP32 over 3 seeds): +0.97 / +1.21 pp,
+  against +2.37 / +2.50 for the same step under a 3x3 conv1 (`k3x3` 53.50 / 53.65 -> `k3x3stacked`).
+
+One seed, and the conv1 contrast sits inside the AlexNet GAP + BN floor (±0.7-0.8 pp FP32): so far no sign that the 11x11 conv1 adds
+anything on the stacked body. `scripts.phase13.hybrids` not run yet (1 of 18). Queue: `k11-2stacked` running on beagle since ~04:30,
+7 pending in Slurm (the 3 stride-1 cells on `tupi_4090` held by Priority), 9 lines in the feeder file.

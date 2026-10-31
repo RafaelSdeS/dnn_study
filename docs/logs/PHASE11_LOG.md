@@ -2358,3 +2358,21 @@ the guard stays as it is (it exits only after the summary and logits are written
 
 **Left:** Phase 12's VGG16 fine-tune at lr 1e-4 and Phase 13's 18 (the first running on beagle since 2026-10-30 ~13:00, 6
 pending, 11 in the feeder file).
+
+## Progress 2026-10-31: Phase 12 complete (39 of 39)
+
+**2 runs synced to the laptop** from PCAD, md5 identical (25 files), without `*.pth` / `*_best.pth.gz` / tensorboard: Phase 12's
+last, VGG16 fine-tuned at lr 1e-4 (job 834496, tupi1, logs included; its 109.6 MB `qat_*.pth.gz` stays on PCAD, gitignored), and
+Phase 13's first (PHASE13_LOG "Status 2026-10-31"). Audit: quant_protocol 2026-10-07, git_dirty false, every budget used (100 + 10),
+int8_kernel_max_err_steps 1, agreement_qat_int8 0.983, best FP32 epoch 91 of 100 (not early best). Its row appended to
+`phase_12_finetune_pretrained_lr1e4_comparison.csv` (the 4 committed rows kept; PCAD's text differs in float digits only).
+
+*VGG16 fine-tuned at lr 1e-4*: 62.87 / 62.89 (FP32 / INT8, test top-1), against 67.27 at lr 1e-3, 61.38 at the one recipe's lr 0.01
+and 59.22 from scratch. lr 1e-3 wins for all 5 nets at 64 px, on test and on validation (the star in Phase 12 figure 02); none of the
+lr 1e-4 runs is early best. The other fine-tunes: "Progress 2026-10-30".
+
+**Updated.** Phase 12's `robustness` rerun (02 changed, the rest byte-identical; `all_runs.csv` +1 row); `results/runs_index.csv`
+483 -> 485 rows (the 54 `archive_adamw_recipe` rows carried over again, sparse-checkout still hides that archive). BEST_MODELS,
+TODO, CLAUDE.md.
+
+**Left:** Phase 13's other 17 (PHASE13_LOG).
