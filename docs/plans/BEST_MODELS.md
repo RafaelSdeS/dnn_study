@@ -80,7 +80,8 @@ figures 02, 11, 14 and 16.
    the 0.90 agreement guard, while INT8 − QAT stays ≤ 0.34 pp. Fine-tuned (Phase 12, QAT 10 epochs at 1/100 of the lr) it is also the
    one net that loses in INT8: −1.49 / −1.16 pp FP32 → INT8 at lr 1e-4 / 1e-3, nearly all in QAT itself (−1.15 / −1.25); the other
    158 non-early-best runs of Phases 11-12 stay within −0.38 / +0.76 pp (median +0.03 over all 159). The only pretrained depthwise
-   net; cause not investigated.
+   net. Its QAT validation is already ~1 pp under FP32 at QAT epoch 1 (62.76 → 61.82, 53.25 → 51.54) and stays flat for the 10
+   epochs: QAT at 1/100 of the lr does not train the quantization error away. Recipe kept as is (user, 2026-10-30).
 6. **It holds under another lr and another dataset (Phase 12).** At lr ×0.5 and ×2 the AlexNet order 3×3 > 11-5-3-3-3 > 2×2 stays
    (52.27 / 52.15 / 51.57 and 54.22 / 53.89 / 53.22, one seed each). On CIFAR-100 (3 seeds) AlexNet alternating 63.42 ≈ 3×3 63.34 >
    11-5-3-3-3 63.00 > 2×2 62.09, VGG16 3×3 71.08 ≈ alternating 70.99 > 2×2 70.31: Kendall's τ against the Tiny ImageNet order is

@@ -333,22 +333,25 @@ plan: `docs/plans/PHASE9_PLAN.md`.
 Status: `results/phase_11_geometry_analysis/design_status.csv`; findings: `docs/plans/BEST_MODELS.md` "Cross-phase synthesis",
 `docs/logs/PHASE11_LOG.md` "Progress ...".
 
-- [ ] All 152 runs are on the laptop (tracked provenance files + the gitignored logs figures 18 / 19 / 29 read) and `scripts/phase11/*` figures are rerun (2026-10-30). Still to do: `build_runs_index` (`results/runs_index.csv` is from 2026-10-03), `aggregate_results` per `phase_11_<block>`, and figure 22 (`receptive_field`, needs the FP32 checkpoints rsynced first).
-- [ ] Re-evaluate every cell on one machine type so latency compares across cells (CLAUDE.md "Running": tupi3-6).
-- [ ] Drop `exclude: tupi4` from `configs/slurm/tupi_4090.yaml` / `tupi_beagle.yaml` once the node is checked (2026-10-24: 3 of its 10 jobs crashed; the two crashed runs finished on tupi3).
-- [ ] Report: a Phase 11-12 section and the archived Phase 11 numbers replaced (see Phase 2 above).
+- ✅ All 152 runs are on the laptop (tracked provenance files + the gitignored logs figures 18 / 19 / 29 read), `scripts/phase11/*` figures rerun and `results/runs_index.csv` rebuilt (2026-10-30). Dropped: `aggregate_results` per `phase_11_<block>` (it would only duplicate `analyze_geometry`'s `all_runs.csv`; nothing reads `results/<exp>/*_final_comparison.csv`) and regenerating figure 22 (its 9 seed-42 cells have not changed since it was drawn on 2026-10-26).
 - [ ] (Optional, only once all runs are done) Group the 8 flat `outputs/<runtime>/phase_11_*` dirs under one parent, e.g. `outputs/pcad/phase_11/<block>/<model>/`: needs `ml/runtime.py:make_model_runs`, `scripts/build_runs_index.py`, `scripts/phase11/*` and the tests changed, plus a `mv` on PCAD. Not done mid-queue: the submitted jobs write to the flat paths and `refuse_foreign_run_dir` keys on them.
 - ✅ Pilot 828512/828513/828514 ran with `tupi,beagle` eligibility: figure 17 compares latency within one machine only (it names the machines it leaves out), and INT8 accuracy is machine-independent on qnnpack.
 
 ## Phase 12 — Robustness (38 of 39 runs done, 2026-10-30)
 
 - [ ] VGG16's fine-tune at lr 1e-4 (job 834496, the last Phase 12 run, pending on PCAD), then `python -m scripts.phase12.robustness` (figure 02 gets its bar). The other 9 fine-tunes are in (2026-10-30).
-- [ ] Decide whether `MIN_QAT_INT8_AGREEMENT` (0.90) should stop pretrained MobileNetV2: all 3 of its runs trip it (0.8885 one recipe, 0.8992 / 0.8594 fine-tuned; the scratch twin 0.94) while INT8 stays within 0.34 pp of QAT; fine-tuned, it loses 1.2-1.5 pp FP32 -> INT8, nearly all in the 10-epoch QAT. The lr 1e-4 run is not early best, so early best does not explain it (PHASE11_LOG "Progress 2026-10-30").
+- ✅ Pretrained MobileNetV2 trips `MIN_QAT_INT8_AGREEMENT` (0.90) in all 3 runs and, fine-tuned, loses 1.2-1.5 pp FP32 -> INT8, present from QAT epoch 1 and not recovered by the 10-epoch QAT at 1/100 of the lr. Decided 2026-10-30: recorded only; guard and recipe unchanged (PHASE11_LOG "Progress 2026-10-30").
 
 ## Phase 13 — Hybrids (0 of 18 runs done, 2026-10-30, the first running; `docs/logs/PHASE13_LOG.md`)
 
 - [ ] The 18 cells: 1 running, 6 pending in Slurm, 11 left in PCAD's `~/queue_phase11_full.txt` (2026-10-30); when they land, `python -m scripts.phase13.hybrids`.
 - [ ] Seeds 43 / 44 only after seed 42, and only on contrasts inside 2x the noise band; Stage B (Bottleneck / Fire on the best body) waits for these.
+
+## After Phase 13 (in this order; user, 2026-10-30)
+
+1. [ ] Drop `exclude: tupi4` from `configs/slurm/tupi_4090.yaml` / `tupi_beagle.yaml`, commit, pull on PCAD (2026-10-24: 3 of its 10 jobs crashed, the two crashed runs finished on tupi3; 2026-10-28: ~13 short Winograd-FPGA jobs ran there clean).
+2. [ ] Re-evaluate the 152 Phase 11 cells on one machine type so latency compares across cells (CLAUDE.md "Running": tupi3-6). Resubmitting a finished run only re-evaluates it.
+3. [ ] Report (`report/ic_report.tex`): an Eixo 8 for Phases 11-13 from BEST_MODELS' synthesis, figures referenced straight from `results/figures_generated/`, and the 4 archived Phase 11 citations replaced (see Phase 2 above).
 
 ## Phase 10 — Extended Architecture Search (Future)
 

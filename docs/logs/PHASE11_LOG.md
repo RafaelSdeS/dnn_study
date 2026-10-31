@@ -2345,7 +2345,13 @@ un-annealed start. Its |INT8 - QAT| (0.34 pp) is the largest of the 159 non-earl
 it is also the only net that loses in INT8: FP32 -> INT8 -1.16 pp (lr 1e-3, 62.68 -> 61.52, early best) and -1.49 (lr 1e-4, 52.47 ->
 50.98), nearly all in the 10-epoch QAT (-1.25 / -1.15). The other 158 non-early-best runs of Phases 11 + 12 stay within -0.38 / +0.76 pp
 (median over all 159: +0.03); of the 31 early-best runs, 30 gain 0 to +6.69 pp. Not
-resubmitted (deterministic); whether the guard should stop these runs stays open (TODO.md, Phase 12).
+resubmitted (deterministic).
+
+**Where the fine-tuned MobileNetV2 loses it (logs only, no new run).** The QAT validation is already ~1 pp under the FP32 best
+at QAT epoch 1 -- 62.76 -> 61.82 (lr 1e-3), 53.25 -> 51.54 (lr 1e-4) -- and stays flat over the 10 epochs (61.1-62.2, 51.4-51.9):
+the error is there as soon as fake-quant is on, and QAT at 1/100 of the fine-tuning lr (1e-5 / 1e-6) is too weak to train it
+away. The other nets' QAT under the same schedule does not need to. User, 2026-10-30: record it, change nothing in the recipe;
+the guard stays as it is (it exits only after the summary and logits are written, so nothing is lost).
 
 **Figures.** `analyze_geometry`, `plot_kernel_comparison`, `factor_effects`, `design_figures` and Phase 12's `robustness` rerun:
 24, 26 and Phase 12's 02 changed, the rest byte-identical; 22 not rerun (needs checkpoints). `design_status.csv`: 152 of 152.
