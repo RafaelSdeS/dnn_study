@@ -87,3 +87,40 @@ Its two matched pairs, B - A in FP32 / INT8 (negative = loses):
 One seed, and the conv1 contrast sits inside the AlexNet GAP + BN floor (±0.7-0.8 pp FP32): so far no sign that the 11x11 conv1 adds
 anything on the stacked body. `scripts.phase13.hybrids` not run yet (1 of 18). Queue: `k11-2stacked` running on beagle since ~04:30,
 7 pending in Slurm (the 3 stride-1 cells on `tupi_4090` held by Priority), 9 lines in the feeder file.
+
+**2026-10-31, nyx for the weekend.** The user lent nyx for 10-31..11-02 only. The 5 last feeder lines -- `k11-2stacked`,
+`k3x3residual`, `k2x2residual`, `k11-3residual`, `k11-2residual`, all stride 1 -- moved from PCAD's `~/queue_phase11_full.txt`
+(backup `.bak_20261031`, list in `~/moved_to_nyx_20261031.txt`) to `~/queue_nyx.txt`, each guarded to start before Mon 2026-11-02
+10:00; the first started 08:02 at 61 s per FP32 epoch (GPU-bound, 99%), ~10 h per cell with QAT, so all 5 should end Monday
+afternoon. A line skipped by the guard returns to the end of PCAD's feeder. nyx's disk had 2.2 GB free (~250 MB per run).
+
+**Status 2026-10-31 evening: 5 of 18, stride 2 nearly complete.** PCAD's tupi freed up: `k11-2stacked` (beagle, 15.1 h),
+`k3x3residual`, `k2x2residual`, `k11-3residual` (tupi3 / tupi6, ~4 h each) finished the same day and are on the laptop (tracked
+files, md5 identical; aggregate rows appended, PCAD's rewrite of the `k11-3stacked` row differs in float digits only, committed
+text kept). All 5: quant_protocol 2026-10-07, git_dirty false, every budget used, int8_kernel_max_err_steps 1, agreement_qat_int8
+0.971-0.984, best FP32 epoch 450-498 of 500 (none early best). `scripts.phase13.hybrids` rerun: figure 01 (stride-1 panels still
+"pendente"), `contrasts.csv`, `all_runs.csv`; `results/runs_index.csv` 485 -> 489.
+
+Test top-1 FP32 (INT8), seed 42, stride 2, last map 8x8; MACs per image:
+
+| body | 3x3, conv1 3x3 | 3x3, conv1 11x11 | 2x2, conv1 2x2 | 2x2, conv1 11x11 |
+|---|---|---|---|---|
+| 5 convs (Phase 11) | 53.50 (53.65), 167 M | 54.55 (54.24), 189 M | 52.39 (52.36), 75 M | 55.64 (55.84), 98 M |
+| two per stage | 55.87 (56.15), 451 M (Phase 11) | 55.52 (55.45), 473 M | 57.25 (57.55), 201 M (Phase 11) | 57.12 (57.06), 224 M |
+| two per stage + skip | 56.24 (56.05), 465 M | 56.12 (55.83), 487 M | 57.67 (57.86), 215 M | running |
+
+Matched pairs, B - A in FP32 (`contrasts.csv`, median over the pairs in the script's table):
+- *5 convs -> two per stage*: +2.37 (3x3), +4.86 (2x2), +0.97 (11x11 + 3x3), +1.48 (11x11 + 2x2). The largest step, larger under
+  a small conv1.
+- *two per stage -> + residual skip*: +0.37, +0.60, +0.42 (INT8 -0.10, +0.38, +0.31). Same sign every time, each inside the seed
+  floor (±0.7 pp FP32): a candidate for seeds 43 / 44.
+- *conv1 -> 11x11*: +1.05 (3x3) and +3.25 (2x2) on the 5-conv body, -0.35 / -0.13 / -0.12 on the two-conv bodies. The two do not
+  add up: the second conv per stage buys what the 11x11 conv1 bought.
+- *body 3x3 -> 2x2*: -1.11 on the 5-conv body, +1.38 / +1.43 / +1.60 on every deeper body (and +1.09 under the 11x11 conv1).
+
+Best so far: `k2x2residual`, 57.67 FP32 / 57.86 INT8 at 2.52 M params and 215 M MACs -- 1.8 pp above the two-conv 3x3 body at half
+its MACs, every conv a stride-1 2x2 but conv1 (stride 2). One seed each.
+
+**nyx.** At ~15:30 a lab colleague moved nyx out of the user's tailscale into his own account to run simulations over the weekend
+(user agreed; runs not stopped). `ssh nyx` times out until the user moves it back, so the 5 stride-1 cells there cannot be checked
+from here; the start guard runs locally, so none starts after Mon 2026-11-02 10:00 either way.

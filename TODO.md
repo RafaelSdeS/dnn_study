@@ -342,9 +342,10 @@ Status: `results/phase_11_geometry_analysis/design_status.csv`; findings: `docs/
 - ✅ VGG16's fine-tune at lr 1e-4 (job 834496, the last Phase 12 run) synced and figure 02 rerun (2026-10-31): 62.87 FP32, under lr 1e-3's 67.27 like every other net.
 - ✅ Pretrained MobileNetV2 trips `MIN_QAT_INT8_AGREEMENT` (0.90) in all 3 runs and, fine-tuned, loses 1.2-1.5 pp FP32 -> INT8, present from QAT epoch 1 and not recovered by the 10-epoch QAT at 1/100 of the lr. Decided 2026-10-30: recorded only; guard and recipe unchanged (PHASE11_LOG "Progress 2026-10-30").
 
-## Phase 13 — Hybrids (1 of 18 runs done, 2026-10-31; `docs/logs/PHASE13_LOG.md`)
+## Phase 13 — Hybrids (5 of 18 runs done, 2026-10-31; `docs/logs/PHASE13_LOG.md`)
 
-- [ ] The 18 cells: 1 done and on the laptop (`k11-3stacked` stride 2), 1 running, 7 pending in Slurm, 9 left in PCAD's `~/queue_phase11_full.txt` (2026-10-31); when they land, `python -m scripts.phase13.hybrids` (not run at 1 of 18).
+- [ ] The 18 cells: the 5 stride-2 cells but `k11-2residual` done and on the laptop, figure 01 + contrasts.csv rerun (2026-10-31 evening); on PCAD `k11-2residual` stride 2 and `k3x3` stride 1 running, the other 6 stride-1 cells pending in Slurm, feeder file empty (the feeder exited); 5 stride-1 cells on nyx (next item). When they land, sync + `python -m scripts.phase13.hybrids`.
+- [ ] nyx, lent for 2026-10-31..11-02 only (user): 5 stride-1 cells (`k11-2stacked`, `k{3x3,2x2,11-3,11-2}residual`) in `~/queue_nyx.txt`, ~10 h each, none starts after Mon 10:00. After Monday: rsync each finished run to PCAD + its tracked files to the laptop; a line skipped by the guard goes back to the END of PCAD's feeder (`~/moved_to_nyx_20261031.txt` on PCAD lists the 5). nyx left Rafael's tailscale on 2026-10-31 ~15:30 (a lab colleague took it into his own account for weekend simulations; runs not stopped): `ssh nyx` times out until it is moved back.
 - [ ] Seeds 43 / 44 only after seed 42, and only on contrasts inside 2x the noise band; Stage B (Bottleneck / Fire on the best body) waits for these.
 
 ## After Phase 13 (in this order; user, 2026-10-30)

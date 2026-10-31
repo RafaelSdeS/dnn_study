@@ -124,8 +124,10 @@ figures 02, 11, 14 and 16.
 ### What is not established yet
 
 - **Runs still out (2026-10-31, all on PCAD).** Phases 11 and 12: none. Phase 13 (do two convs per stage, a residual skip, an 11×11
-  conv1 and conv1 stride 1 add up?, `docs/logs/PHASE13_LOG.md`): 1 of 18. The first, an 11×11 conv1 on the two-conv 3×3 body, 55.52 FP32 /
-  55.45 INT8, sits 0.35 / 0.70 pp under the same body with a 3×3 conv1: one seed, inside the noise floor, no gain from the 11×11 so far.
+  conv1 and conv1 stride 1 add up?, `docs/logs/PHASE13_LOG.md`): 5 of 18, every stride-2 cell but one (seed 42, FP32). Two convs per stage is the
+  big step (+2.4 pp 3×3, +4.9 pp 2×2; +1.0 / +1.5 under an 11×11 conv1); a residual skip adds +0.4 to +0.6, inside the noise; the
+  11×11 conv1, +1.0 / +3.3 on the 5-conv body, adds nothing once the body has two convs per stage (−0.1 to −0.35). Best so far: the
+  all-2×2 residual net, 57.67 FP32 / 57.86 INT8 at 215 M MACs (the two-conv 3×3 body: 55.87 at 451 M). Stride 1: none yet.
 - **Seeds.** Most contrasts are seed 42 against a pooled floor of ±0.7-0.8 pp FP32; differences below ~1.5 pp are not resolved, and
   the 11-5-3-3-3 → 3×3 point is one of them. ResNet-18's floor rests on 3 seeds of 2 cells (±1.0 pp FP32); its INT8 band is wide (3 of the 6 runs early best).
 - **Scope.** Two low-resolution datasets (Tiny ImageNet at 64 px, CIFAR-100 at 32 px; the 224 runs are enlarged 64 px images, no
