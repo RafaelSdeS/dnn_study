@@ -2312,3 +2312,40 @@ GAP + BN; stated as a caveat in the deck and the Narrativa.
 
 **Left: 6 Phase 11 runs** on PCAD -- 5x5 GAP seed 44 and 5 VGG kernel-block seeds -- then Phase 12's 10 fine-tunes and Phase
 13's 18 (34 of 209).
+
+## Progress 2026-10-30: 152 of 152 runs, Phase 11 complete; Phase 12 at 38 of 39
+
+**15 runs synced to the laptop** from PCAD, without `*.pth` / `*_best.pth.gz`, logs included; `rsync -n` afterwards: 0
+differences. Phase 11: the last 6 (5x5 GAP seed 44, VGG kernel blocks 3-3-3-2-3 / 3-3-3-3-2 seed 43 and 3-3-2-3-3 / 3-3-3-2-3 /
+3-3-3-3-2 seed 44). Phase 12: 9 of the 10 fine-tunes (VGG16 at lr 1e-4, job 834496, still pending). Audit: quant_protocol
+2026-10-07, git_dirty false (01fe1e1), every budget used (500 + 50, fine-tunes 100 + 10), int8_kernel_max_err_steps 1;
+agreement_qat_int8 0.970-0.992 except both MobileNetV2 fine-tunes (below). Rows appended to the `kernel_controls_seed44` /
+`vgg_kernel_blocks_seed43` / `_seed44` aggregate CSVs (PCAD's text for the rows already here differs only in float digits,
+<= 1e-13 relative, kept as committed); `phase_12_finetune_pretrained_lr1e3` / `_lr1e4` CSVs copied as they are. The VGG16 lr
+1e-3 fine-tune's `qat_*.pth.gz` is 104.5 MB, over GitHub's limit: `.gitignore` gains
+`outputs/*/phase_12_finetune_pretrained*/vgg16_*_fc*/checkpoints/qat_*.pth.gz`, like the Phase 11 VGG16 FC cells.
+
+New numbers (test top-1, FP32 / INT8):
+- *5x5 everywhere, GAP + BN*, seed 44: 49.36 / 49.37; 3 seeds 49.25 (49.16-49.36), 4.6 pp under 3x3's 53.81. Figure 26 (b) now
+  has 3 seeds at every kernel.
+- *VGG16 kernel blocks* (one 2x2 block, 3 seeds per pattern, GAP + BN; 3x3 everywhere 59.27): block 1 59.54, block 2 59.34, block 3
+  59.05, block 5 59.18, block 4 (3-3-3-2-3) 58.56 -- the only one below its 3x3 twin at every seed (-0.82 / -0.85 / -0.47). None
+  early best. Figure 24.
+- *Fine-tunes* (Phase 12 figure 02), lr 1e-3 / lr 1e-4, against the one recipe's lr 0.01 and the scratch twin: AlexNet 64px
+  layout 56.33 / 53.26 (51.89, 44.00), original layout 40.94 / 35.57 (36.82, 35.47), ResNet-18 57.42 / 51.34 (49.66, 43.63),
+  MobileNetV2 62.68 / 52.47 (56.43, 47.83), VGG16 67.27 / pending (61.38, 59.22). lr 1e-3 wins everywhere, also on validation
+  (the star). 4 of the 5 lr 1e-3 runs are early best (best FP32 epoch 39-73 of 100), the original-layout AlexNet is not (84); no lr
+  1e-4 run is.
+
+**MobileNetV2 pretrained trips the agreement guard in every run.** Both fine-tunes exit 1 after writing summary and logits:
+agreement_qat_int8 0.8992 (lr 1e-3, QAT 61.43 -> INT8 61.52) and 0.8594 (lr 1e-4, 51.32 -> 50.98), after 0.8885 under the one
+recipe (2026-10-23); the scratch twin has 0.9396. The lr 1e-4 run's best FP32 epoch is 98 of 100, so the early-best explanation
+suggested for the first one does not hold: the low agreement comes with the pretrained MobileNetV2 weights, not with an
+un-annealed start. Its |INT8 - QAT| (0.34 pp) is the largest of the 159 non-early-best runs of Phases 11 + 12 (next 0.20). Not
+resubmitted (deterministic); whether the guard should stop these runs stays open (TODO.md, Phase 12).
+
+**Figures.** `analyze_geometry`, `plot_kernel_comparison`, `factor_effects`, `design_figures` and Phase 12's `robustness` rerun:
+24, 26 and Phase 12's 02 changed, the rest byte-identical; 22 not rerun (needs checkpoints). `design_status.csv`: 152 of 152.
+
+**Left:** Phase 12's VGG16 fine-tune at lr 1e-4 and Phase 13's 18 (the first running on beagle since 2026-10-30 ~13:00, 6
+pending, 11 in the feeder file).

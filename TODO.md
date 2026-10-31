@@ -328,25 +328,26 @@ plan: `docs/plans/PHASE9_PLAN.md`.
 
 ---
 
-## Phase 11 — Kernel size comparison (143 of 152 runs done, 2026-10-28; the 9 left are queued on PCAD)
+## Phase 11 — Kernel size comparison (all 152 runs done, 2026-10-30)
 
 Status: `results/phase_11_geometry_analysis/design_status.csv`; findings: `docs/plans/BEST_MODELS.md` "Cross-phase synthesis",
 `docs/logs/PHASE11_LOG.md` "Progress ...".
 
-- [ ] After all 152 runs finish: `build_runs_index`, `aggregate_results` per `phase_11_<block>`, rsync the tracked provenance files (and the gitignored logs: figures 18 / 19 / 29 read them) from PCAD, rerun `scripts/phase11/*` figures.
+- [ ] All 152 runs are on the laptop (tracked provenance files + the gitignored logs figures 18 / 19 / 29 read) and `scripts/phase11/*` figures are rerun (2026-10-30). Still to do: `build_runs_index` (`results/runs_index.csv` is from 2026-10-03), `aggregate_results` per `phase_11_<block>`, and figure 22 (`receptive_field`, needs the FP32 checkpoints rsynced first).
 - [ ] Re-evaluate every cell on one machine type so latency compares across cells (CLAUDE.md "Running": tupi3-6).
 - [ ] Drop `exclude: tupi4` from `configs/slurm/tupi_4090.yaml` / `tupi_beagle.yaml` once the node is checked (2026-10-24: 3 of its 10 jobs crashed; the two crashed runs finished on tupi3).
 - [ ] Report: a Phase 11-12 section and the archived Phase 11 numbers replaced (see Phase 2 above).
 - [ ] (Optional, only once all runs are done) Group the 8 flat `outputs/<runtime>/phase_11_*` dirs under one parent, e.g. `outputs/pcad/phase_11/<block>/<model>/`: needs `ml/runtime.py:make_model_runs`, `scripts/build_runs_index.py`, `scripts/phase11/*` and the tests changed, plus a `mv` on PCAD. Not done mid-queue: the submitted jobs write to the flat paths and `refuse_foreign_run_dir` keys on them.
 - ✅ Pilot 828512/828513/828514 ran with `tupi,beagle` eligibility: figure 17 compares latency within one machine only (it names the machines it leaves out), and INT8 accuracy is machine-independent on qnnpack.
 
-## Phase 12 — Robustness (29 of 39 runs done, 2026-10-28)
+## Phase 12 — Robustness (38 of 39 runs done, 2026-10-30)
 
-- [ ] The 10 fine-tunes of the other 5 pretrained nets (`phase_12_finetune_pretrained_lr1e3` / `_lr1e4`, queued on PCAD), then `python -m scripts.phase12.robustness` (figure 02 gets them).
+- [ ] VGG16's fine-tune at lr 1e-4 (job 834496, the last Phase 12 run, pending on PCAD), then `python -m scripts.phase12.robustness` (figure 02 gets its bar). The other 9 fine-tunes are in (2026-10-30).
+- [ ] Decide whether `MIN_QAT_INT8_AGREEMENT` (0.90) should stop pretrained MobileNetV2: all 3 of its runs trip it (0.8885 one recipe, 0.8992 / 0.8594 fine-tuned; the scratch twin 0.94) while INT8 stays within 0.34 pp of QAT. The lr 1e-4 run is not early best, so early best does not explain it (PHASE11_LOG "Progress 2026-10-30").
 
-## Phase 13 — Hybrids (0 of 18 runs, 2026-10-28; `docs/logs/PHASE13_LOG.md`)
+## Phase 13 — Hybrids (0 of 18 runs done, 2026-10-30, the first running; `docs/logs/PHASE13_LOG.md`)
 
-- [ ] The 18 cells are the last lines of PCAD's `~/queue_phase11_full.txt`; when they land, `python -m scripts.phase13.hybrids`.
+- [ ] The 18 cells: 1 running, 6 pending in Slurm, 11 left in PCAD's `~/queue_phase11_full.txt` (2026-10-30); when they land, `python -m scripts.phase13.hybrids`.
 - [ ] Seeds 43 / 44 only after seed 42, and only on contrasts inside 2x the noise band; Stage B (Bottleneck / Fire on the best body) waits for these.
 
 ## Phase 10 — Extended Architecture Search (Future)

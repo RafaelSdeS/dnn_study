@@ -1,6 +1,6 @@
 # Summary
 
-Results after implementing phases 1–4, 6, 8, and 9. **Most baselines (MobileNetV2, ResNet18, VGGStyle) show superior accuracy to pure AlexNet models, but Phase 2–4 AlexNet variants achieve competitive accuracy at 100–1000× smaller model sizes.** Phase 4's final hybrid architectures push AlexNet-family accuracy past 49% for the first time — within 3pp of VGGStyle — while Phase 9 shows a single residual bypass, with zero added parameters, now *exceeds* that hybrid's own FP32 gain outright (see Phase 9 below; corrected 2026-08-29 after a `Trainer.fit()` checkpoint-restore bug, `ml/trainer.py`). Phase 7 detection has completed a valid retrain (anchor-recall bug fixed) across all 3 backbones — see the Phase 7 section below; segmentation has also completed PCAD runs for all 3 backbones, not yet analyzed. Phase 8 (does local self-attention match small-kernel CNNs?) has results in for all 7 models — see the Phase 8 section below. Phase 5 is this document plus `results/phase_5_cross_phase_analysis/`. **A cross-phase synthesis (2026-10-27, with what is and is not established) follows the size note below; Phase 11's one-recipe contrasts are the evidence to trust there, and under that recipe Fire, FireBypass and the Phase 4 hybrids land within 1.5 pp of each other.**
+Results after implementing phases 1–4, 6, 8, and 9. **Most baselines (MobileNetV2, ResNet18, VGGStyle) show superior accuracy to pure AlexNet models, but Phase 2–4 AlexNet variants achieve competitive accuracy at 100–1000× smaller model sizes.** Phase 4's final hybrid architectures push AlexNet-family accuracy past 49% for the first time — within 3pp of VGGStyle — while Phase 9 shows a single residual bypass, with zero added parameters, now *exceeds* that hybrid's own FP32 gain outright (see Phase 9 below; corrected 2026-08-29 after a `Trainer.fit()` checkpoint-restore bug, `ml/trainer.py`). Phase 7 detection has completed a valid retrain (anchor-recall bug fixed) across all 3 backbones — see the Phase 7 section below; segmentation has also completed PCAD runs for all 3 backbones, not yet analyzed. Phase 8 (does local self-attention match small-kernel CNNs?) has results in for all 7 models — see the Phase 8 section below. Phase 5 is this document plus `results/phase_5_cross_phase_analysis/`. **A cross-phase synthesis (2026-10-30, with what is and is not established) follows the size note below; Phase 11's one-recipe contrasts are the evidence to trust there, and under that recipe Fire, FireBypass and the Phase 4 hybrids land within 1.5 pp of each other.**
 
 >**Size convention (corrected 2026-09-02).** All `Size (MB)` figures are **weights only**
 >(the serialized `model_state_dict`). They previously reported the raw `{model}_best.pth`
@@ -12,7 +12,7 @@ Results after implementing phases 1–4, 6, 8, and 9. **Most baselines (MobileNe
 
 ---
 
-## Cross-phase synthesis (2026-10-28; Phase 11 at 143 of 152 runs, Phase 12 at 29 of 39)
+## Cross-phase synthesis (2026-10-30; Phase 11 complete, 152 runs; Phase 12 at 38 of 39)
 
 What the project supports so far, strongest evidence first. **Phases 11-13 are the only phases run under one recipe** (500 epochs,
 no early stopping, SGD, one augmentation, the literature's INT8, reported on Tiny ImageNet's official val split as the test set;
@@ -48,10 +48,12 @@ figures 02, 11, 14 and 16.
 1. **Restricting the kernel costs little, and what it costs is compute.** 11-5-3-3-3 → 3×3 loses ~1.5 pp (the CI includes zero)
    for −25% MACs; 3×3 → 2×2 loses another ~2.5 pp (CI excludes zero) for −54% MACs; alternating 3-2 equals 3×3 at −24% MACs. The
    width-matched controls (`phase_11_kernel_controls`, GAP + BN) remove the 2×2 deficit: a 2×2 net widened to 3×3's MACs reaches
-   53.83% (3 seeds) against 3×3's 53.81% (3 seeds), and a 3×3 net narrowed to 2×2's MACs 52.44% (1 seed) against 2×2's 52.58%
-   (3 seeds), figure 26. The other direction does not buy accuracy: 5×5 in every conv (464M MACs, 2.8× 3×3's) reaches 49.20%
-   (2 seeds), 4.6 pp under 3×3 -- MACs pay off as width, not as kernel size. In VGG16 + GAP + BN the all-2×2 net costs 2.4 pp (56.84 vs 59.27%, 3 seeds each), one 2×2 block ≤ 0.8 pp
-   (figure 24).
+   53.83% (3 seeds) against 3×3's 53.81% (3 seeds), and a 3×3 net narrowed to 2×2's MACs 52.59% (3 seeds) against 2×2's 52.58%
+   (3 seeds), figure 26. The other direction does not buy accuracy: 5×5 in every conv (464M MACs, 2.8× 3×3's) reaches 49.25%
+   (3 seeds, 49.16-49.36), 4.6 pp under 3×3 -- MACs pay off as width, not as kernel size. Only with an FC + Dropout head does the 5×5
+   pay (52.14%, 1 seed, above 3×3 FC 50.75% and level with 11-5-3-3-3 FC 52.23%). In VGG16 + GAP + BN the all-2×2 net costs 2.4 pp
+   (56.84 vs 59.27%, 3 seeds each); a single 2×2 block costs nothing measurable except in block 4 (3 seeds per pattern: block
+   1 / 2 / 3 / 5 59.54 / 59.34 / 59.05 / 59.18%, block 4 58.56%, −0.71 pp, below its 3×3 twin at all three seeds) (figure 24).
 2. **Kernel size is a second-order factor.** conv1 stride, BatchNorm, Dropout and pretraining move accuracy by 4-10 pp, the kernel
    by 1.5-2.5 pp. The original-AlexNet baseline's 35.5% is mostly its 1×1 final map at 64 px (the same net, kernels and recipe reach
    44.0% at the 64px layout and 49.5% with the input enlarged to 224): 8.5-14 pp that belong to the geometry, not to AlexNet.
@@ -69,17 +71,23 @@ figures 02, 11, 14 and 16.
    48.36, MobileNetV2 from scratch 47.83, DepthwiseSep 46.53, GroupConv 46.12, FinalDepthwiseFire 45.76). Fire, FireBypass and the
    Fire / Bottleneck hybrids now sit within 1.5 pp of each other, against ~6 pp between Fire and FireBypass / FinalFireResidual
    in the earlier protocols (finding 12).
-5. **INT8 is robust, and the big "INT8 gains" are not quantization.** 26 of 143 runs reach their best FP32 epoch before 80% of the
+5. **INT8 is robust, and the big "INT8 gains" are not quantization.** 26 of 152 runs reach their best FP32 epoch before 80% of the
    budget (most no-BN FC + Dropout cells, 4 of the 6 pretrained nets, both ResNet-18 seed 43 runs and the 2×2 seed 44); QAT starts there from an un-annealed
    checkpoint and gains up to +6 pp from its extra training. Everywhere else |INT8 − FP32| stays within ~±0.5 pp (the 18
    non-pretrained families lose at most 0.23 pp) and shows no dependence on kernel size (Spearman ρ = +0.06 between a net's worst
-   activation outlier ratio and its INT8 change, over the 66 runs without the early-best flag, figure 16).
+   activation outlier ratio and its INT8 change, over the 66 runs without the early-best flag, figure 16). One exception to watch: pretrained MobileNetV2's INT8 disagrees with its own
+   QAT model on 10-14% of test images in all 3 of its runs (one recipe, fine-tuned at lr 1e-3 / 1e-4; the scratch twin 6%), tripping
+   the 0.90 agreement guard, while INT8 − QAT stays ≤ 0.34 pp; cause not investigated.
 6. **It holds under another lr and another dataset (Phase 12).** At lr ×0.5 and ×2 the AlexNet order 3×3 > 11-5-3-3-3 > 2×2 stays
    (52.27 / 52.15 / 51.57 and 54.22 / 53.89 / 53.22, one seed each). On CIFAR-100 (3 seeds) AlexNet alternating 63.42 ≈ 3×3 63.34 >
    11-5-3-3-3 63.00 > 2×2 62.09, VGG16 3×3 71.08 ≈ alternating 70.99 > 2×2 70.31: Kendall's τ against the Tiny ImageNet order is
    +1.00 for both families (Phase 12 figure 05). 3×3 → 2×2 costs 0.7-2.4 pp in every scenario and ~0 at equal MACs (Phase 12
    figure 04). Fine-tuning the pretrained AlexNet at 224 px: 62.23 / 63.13 at lr 1e-3 and 60.50 / 60.58 at 1e-4, against 53.42 FP32
-   when the one recipe's lr 0.01 trains it (best epoch 10).
+   when the one recipe's lr 0.01 trains it (best epoch 10). At 64 px, lr 1e-3 beats 1e-4 for every net that has both (FP32: AlexNet 64px
+   layout 56.33 vs 53.26, original layout 40.94 vs 35.57, ResNet-18 57.42 vs 51.34, MobileNetV2 62.68 vs 52.47; VGG16 67.27 at 1e-3,
+   1e-4 pending) and lr 0.01 (51.89 / 36.82 / 49.66 / 56.43 / 61.38). Fine-tuned, pretraining is worth +5.5 to +14.9 pp over the
+   scratch twin, more than the +4.1 of the factor table, which lr 0.01 measures (Phase 12 figure 02). 4 of the 5 lr 1e-3 runs peak
+   before 80% of their 100 epochs (early best: read their INT8 with the ring).
 7. **The most accurate nets are almost all Winograd-eligible.** Share of effective MACs in stride-1, dense 2×2 / 3×3 convs
    (figure 30, layer geometry only, no tiling): VGG16 98-100%, the 64px small-kernel AlexNets ~98%, large conv1 + 2×2 body 75%, the
    original-kernel AlexNets 33-57%, MobileNetV2 0%. The INT8 accuracy front is all VGG16 at ≥ 98%.
@@ -111,10 +119,8 @@ figures 02, 11, 14 and 16.
 
 ### What is not established yet
 
-- **Runs still out (2026-10-28, all queued on PCAD).** Phase 11: 9 -- kernel controls (3×3 at 0.67× seeds 43 / 44, 5×5 FC + Dropout
-  seed 42, 5×5 GAP seed 44), VGG kernel-block seeds (5). Phase 12: the 10 fine-tunes of the other 5 pretrained nets (AlexNet original layout and 64px,
-  VGG16, ResNet-18, MobileNetV2, at lr 1e-3 / 1e-4). Phase 13 (do two convs per stage, a residual skip, an 11×11 conv1 and conv1
-  stride 1 add up?, `docs/logs/PHASE13_LOG.md`): 0 of 18.
+- **Runs still out (2026-10-30, all on PCAD).** Phase 11: none. Phase 12: VGG16's fine-tune at lr 1e-4. Phase 13 (do two convs per
+  stage, a residual skip, an 11×11 conv1 and conv1 stride 1 add up?, `docs/logs/PHASE13_LOG.md`): 0 of 18, the first running.
 - **Seeds.** Most contrasts are seed 42 against a pooled floor of ±0.7-0.8 pp FP32; differences below ~1.5 pp are not resolved, and
   the 11-5-3-3-3 → 3×3 point is one of them. ResNet-18's floor rests on 3 seeds of 2 cells (±1.0 pp FP32); its INT8 band is wide (3 of the 6 runs early best).
 - **Scope.** Two low-resolution datasets (Tiny ImageNet at 64 px, CIFAR-100 at 32 px; the 224 runs are enlarged 64 px images, no
