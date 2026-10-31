@@ -343,7 +343,7 @@ Status: `results/phase_11_geometry_analysis/design_status.csv`; findings: `docs/
 ## Phase 12 — Robustness (38 of 39 runs done, 2026-10-30)
 
 - [ ] VGG16's fine-tune at lr 1e-4 (job 834496, the last Phase 12 run, pending on PCAD), then `python -m scripts.phase12.robustness` (figure 02 gets its bar). The other 9 fine-tunes are in (2026-10-30).
-- [ ] Decide whether `MIN_QAT_INT8_AGREEMENT` (0.90) should stop pretrained MobileNetV2: all 3 of its runs trip it (0.8885 one recipe, 0.8992 / 0.8594 fine-tuned; the scratch twin 0.94) while INT8 stays within 0.34 pp of QAT. The lr 1e-4 run is not early best, so early best does not explain it (PHASE11_LOG "Progress 2026-10-30").
+- [ ] Decide whether `MIN_QAT_INT8_AGREEMENT` (0.90) should stop pretrained MobileNetV2: all 3 of its runs trip it (0.8885 one recipe, 0.8992 / 0.8594 fine-tuned; the scratch twin 0.94) while INT8 stays within 0.34 pp of QAT; fine-tuned, it loses 1.2-1.5 pp FP32 -> INT8, nearly all in the 10-epoch QAT. The lr 1e-4 run is not early best, so early best does not explain it (PHASE11_LOG "Progress 2026-10-30").
 
 ## Phase 13 — Hybrids (0 of 18 runs done, 2026-10-30, the first running; `docs/logs/PHASE13_LOG.md`)
 

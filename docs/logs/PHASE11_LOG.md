@@ -2341,7 +2341,10 @@ New numbers (test top-1, FP32 / INT8):
 agreement_qat_int8 0.8992 (lr 1e-3, QAT 61.43 -> INT8 61.52) and 0.8594 (lr 1e-4, 51.32 -> 50.98), after 0.8885 under the one
 recipe (2026-10-23); the scratch twin has 0.9396. The lr 1e-4 run's best FP32 epoch is 98 of 100, so the early-best explanation
 suggested for the first one does not hold: the low agreement comes with the pretrained MobileNetV2 weights, not with an
-un-annealed start. Its |INT8 - QAT| (0.34 pp) is the largest of the 159 non-early-best runs of Phases 11 + 12 (next 0.20). Not
+un-annealed start. Its |INT8 - QAT| (0.34 pp) is the largest of the 159 non-early-best runs of Phases 11 + 12 (next 0.20). Fine-tuned,
+it is also the only net that loses in INT8: FP32 -> INT8 -1.16 pp (lr 1e-3, 62.68 -> 61.52, early best) and -1.49 (lr 1e-4, 52.47 ->
+50.98), nearly all in the 10-epoch QAT (-1.25 / -1.15). The other 158 non-early-best runs of Phases 11 + 12 stay within -0.38 / +0.76 pp
+(median over all 159: +0.03); of the 31 early-best runs, 30 gain 0 to +6.69 pp. Not
 resubmitted (deterministic); whether the guard should stop these runs stays open (TODO.md, Phase 12).
 
 **Figures.** `analyze_geometry`, `plot_kernel_comparison`, `factor_effects`, `design_figures` and Phase 12's `robustness` rerun:

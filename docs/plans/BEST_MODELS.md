@@ -77,7 +77,10 @@ figures 02, 11, 14 and 16.
    non-pretrained families lose at most 0.23 pp) and shows no dependence on kernel size (Spearman ρ = +0.06 between a net's worst
    activation outlier ratio and its INT8 change, over the 66 runs without the early-best flag, figure 16). One exception to watch: pretrained MobileNetV2's INT8 disagrees with its own
    QAT model on 10-14% of test images in all 3 of its runs (one recipe, fine-tuned at lr 1e-3 / 1e-4; the scratch twin 6%), tripping
-   the 0.90 agreement guard, while INT8 − QAT stays ≤ 0.34 pp; cause not investigated.
+   the 0.90 agreement guard, while INT8 − QAT stays ≤ 0.34 pp. Fine-tuned (Phase 12, QAT 10 epochs at 1/100 of the lr) it is also the
+   one net that loses in INT8: −1.49 / −1.16 pp FP32 → INT8 at lr 1e-4 / 1e-3, nearly all in QAT itself (−1.15 / −1.25); the other
+   158 non-early-best runs of Phases 11-12 stay within −0.38 / +0.76 pp (median +0.03 over all 159). The only pretrained depthwise
+   net; cause not investigated.
 6. **It holds under another lr and another dataset (Phase 12).** At lr ×0.5 and ×2 the AlexNet order 3×3 > 11-5-3-3-3 > 2×2 stays
    (52.27 / 52.15 / 51.57 and 54.22 / 53.89 / 53.22, one seed each). On CIFAR-100 (3 seeds) AlexNet alternating 63.42 ≈ 3×3 63.34 >
    11-5-3-3-3 63.00 > 2×2 62.09, VGG16 3×3 71.08 ≈ alternating 70.99 > 2×2 70.31: Kendall's τ against the Tiny ImageNet order is
