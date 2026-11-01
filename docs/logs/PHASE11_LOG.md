@@ -2376,3 +2376,18 @@ lr 1e-4 runs is early best. The other fine-tunes: "Progress 2026-10-30".
 TODO, CLAUDE.md.
 
 **Left:** Phase 13's other 17 (PHASE13_LOG).
+
+## INT8 noise floor without the early-best jump (2026-10-31)
+
+Figure 11's points are seed-42 pairs, each differing in one factor only (all 115 checked against `CELL_FACTORS`; the head
+contrast moves head + Dropout, pooling moves the map with it): a row's spread is the factor's interaction with the rest of the
+net, not seed noise -- the 26 replicated cells span 0.32 pp FP32 (median), 1.01 at most. Seeds of one cell do differ by
+3-6 pp in INT8, but only where one seed is early best and its twin is not (QAT keeps training the un-annealed checkpoint):
+5 cells, e.g. `resnet18_k3x3` INT8 43.3 / 48.8 / 43.5 over FP32 42.7 / 42.5 / 43.4.
+
+`noise_band` pooled those jumps into the INT8 floor: AlexNet no-BN +-4.40 pp, ResNet-18 +-9.15 (FP32 0.80 / 1.02), so figure
+11's INT8 panel drew real no-BN effects (kernel 3x3 -> 2x2: -3.4 to -4.2 pp) hollow, "inside the noise". The INT8 floor now
+pools seeds of the same QAT start only (`groupby(["key", "early_best"])`; no-BN has no cell with two normal seeds, so its
+early ones set it): AlexNet no-BN 0.85, BN 0.73, VGG16 0.75, ResNet-18 0.35 (two cells). INT8 hollow pairs: 21 of 115. The
+FP32 floors are unchanged; only figure 11 and `factor_effects.csv` / `factorial_pairs.csv` read the INT8 one
+(`design_figures`, Phase 13's `hybrids` read FP32). Test: `test_int8_noise_band_leaves_early_best_out`.

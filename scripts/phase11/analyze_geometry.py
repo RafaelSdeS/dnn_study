@@ -328,12 +328,16 @@ def pair_band(a: dict, b: dict) -> dict:
 def noise_band(df, keys):
     """2*sqrt(2)*pooled SD across seeds, for the cells replicated at seeds 42-44 (phase_11_kernel_head_bn_seed43/44):
     the training-noise floor a single-seed difference has to clear (Bouthillier et al., MLSys 2021: seed variance is a
-    first-order source of variance in benchmark comparisons). NaN until the replicates have run."""
+    first-order source of variance in benchmark comparisons). NaN until the replicates have run. The INT8 floor compares
+    only seeds of the same QAT start (2026-10-31): an early-best seed's QAT kept training an un-annealed checkpoint, 3-6 pp
+    above its normal twins -- not seed noise; pooled with them AlexNet no-BN's INT8 floor was +-4.4 pp and ResNet-18's
+    +-9.2 (FP32: 0.8 / 1.0). No-BN has no cell with two normal seeds, so the early ones' own spread is its floor."""
     rep = df[df.key.isin(keys)] if len(df) else df
     if rep.empty:
         return {"fp32": float("nan"), "int8": float("nan")}
-    g = rep.groupby("key")
-    return {c: 2 * np.sqrt(2) * np.sqrt((g[c].var(ddof=1)).mean()) for c in ["fp32", "int8"]}
+    by_start = ["key", "early_best"] if "early_best" in rep else ["key"]
+    return {c: 2 * np.sqrt(2) * np.sqrt(rep.groupby(by)[c].var(ddof=1).mean())
+            for c, by in (("fp32", ["key"]), ("int8", by_start))}
 
 
 LOG_EPOCH = re.compile(r"Epoch\s+(\d+)/(\d+) \| train_loss=[\d.]+ train_acc=([\d.]+)% \| val_loss=([\d.]+) val_acc=([\d.]+)%")

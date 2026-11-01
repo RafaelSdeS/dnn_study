@@ -167,3 +167,14 @@ def test_every_phase_12_figure_renders(tmp_path, monkeypatch):
     assert {p.name for p in (tmp_path / "figs").glob("*.png")} == {"01_lr_sensitivity.png", "02_finetune_pretrained.png", "03_cifar100.png",
                                                                   "04_kernel_effect_everywhere.png", "05_dataset_transfer.png"}
     assert (tmp_path / "tables" / "all_runs.csv").exists()
+
+
+def test_int8_noise_band_leaves_early_best_out():
+    """An early-best seed's INT8 is QAT's extra training, not seed noise: the INT8 floor compares it only with early seeds."""
+    from scripts.phase11.analyze_geometry import noise_band
+
+    df = pd.DataFrame({"key": ["a"] * 3 + ["b"] * 3, "fp32": [40.0, 40.5, 41.0] * 2,
+                       "int8": [40.0, 40.5, 46.0, 41.0, 40.5, 41.0], "early_best": [False, False, True, False, False, False]})
+    band = noise_band(df, {"a", "b"})
+    assert band["fp32"] == pytest.approx(2 * np.sqrt(2) * 0.5)
+    assert band["int8"] == pytest.approx(2 * np.sqrt(2) * np.sqrt((0.125 + 1 / 12) / 2))  # a: 40 / 40.5 only
