@@ -14,7 +14,7 @@ def test_phase_13_figure_and_contrasts(tmp_path, monkeypatch):
 
     runs = tmp_path / "runs"
     _fake_runs(runs, lambda e, m: True)
-    _fake_runs(runs, lambda e, m: True, ["phase_13_hybrids"])
+    _fake_runs(runs, lambda e, m: True, ["phase_13_hybrids", "phase_13_hybrids_seed43"])
     for mod, name, value in [(hybrids, "RUNS", (runs,)), (design_figures, "RUNS", (runs,)),
                              (hybrids, "FIGS", tmp_path / "figs"), (hybrids, "TABLES", tmp_path / "tables")]:
         monkeypatch.setattr(mod, name, value)
@@ -25,3 +25,8 @@ def test_phase_13_figure_and_contrasts(tmp_path, monkeypatch):
     assert c.groupby("factor").size().to_dict() == {f: n for f, _, _, _ in hybrids.CHANGES
                                                     for n in [8 if f.startswith("corpo") else 12]}
     assert set(pd.read_csv(tmp_path / "tables" / "all_runs.csv").key) == set(hybrids.GRID.values()) | {hybrids.VGG_REF}
+    # the seed-43 replicates (k2x2 two-conv body at stride 1, +/- skip) give the skip contrast at seed 43, next to seed 42's
+    by_seed = pd.read_csv(tmp_path / "tables" / "contrasts_by_seed.csv")
+    skip = by_seed[(by_seed.A == hybrids.GRID[(2, False, "stacked", 1)]) & (by_seed.B == hybrids.GRID[(2, False, "residual", 1)])]
+    assert sorted(skip.seed) == [42, 43]
+    assert (by_seed[by_seed.seed == 42].drop(columns="seed").values == c.values).all()  # seed 42 = contrasts.csv

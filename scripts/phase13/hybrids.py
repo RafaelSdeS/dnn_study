@@ -4,8 +4,10 @@ add up? A factorial on the 64px GAP + BN AlexNet: body (5 convs / two per stage 
 5 convs or two per stage) are read from its runs as references, never retrained; the 18 others are phase_13_hybrids. Phase
 11's figures and tables never read these runs.
 
-    01_hybrids.png   one panel per conv1 stride; per conv1 the three bodies, 3x3 and 2x2 side by side, FP32 / INT8, seed 42
+    01_hybrids.png   one panel per conv1 stride; per conv1 the three bodies, 3x3 and 2x2 side by side, FP32 / INT8, seed 42;
+                     a cell's other seeds (43 / 44) as small FP32 dots beside it
     contrasts.csv    every matched pair of the 24 cells (one factor changed, B - A), seed 42
+    contrasts_by_seed.csv  the same pairs at every seed where both cells ran (a `seed` column; 42 = contrasts.csv)
     all_runs.csv     every run of the 24 cells (the Phase 11 references with their replicates) and VGG16's reference
 
 Phase 11's conventions: test top-1, INT8 hollow, early-best ring.
@@ -59,10 +61,18 @@ def contrasts(s42):
     return pd.DataFrame(rows)
 
 
-def fig_hybrids(s42, bands, figs):
+def contrasts_by_seed(df):
+    """`contrasts` at each seed: a pair appears for a seed only if both of its cells ran at that seed."""
+    parts = [contrasts(g).assign(seed=s) for s, g in df.groupby("seed")]
+    return pd.concat([p for p in parts if "factor" in p], ignore_index=True)
+
+
+def fig_hybrids(s42, bands, figs, reps=None):
     """One panel per conv1 stride; per conv1 (the body's kernel / 11x11) the three bodies left to right, 3x3 and 2x2 side by
-    side (FP32 filled, INT8 hollow), a line through each kernel's FP32 across the bodies, VGG16 3x3 GAP + BN dashed."""
+    side (FP32 filled, INT8 hollow), a line through each kernel's FP32 across the bodies, VGG16 3x3 GAP + BN dashed. `reps`: the
+    runs at other seeds, drawn as small FP32 dots beside their cell."""
     v = s42.set_index("key")
+    extra = {k: g.fp32.tolist() for k, g in reps.groupby("key")} if reps is not None and len(reps) else {}
     kernels = ((3, -0.14), (2, 0.14))
     fig, axes = plt.subplots(1, 2, figsize=(16, 6), sharey=True)
     queued, ringed = 0, False
@@ -79,6 +89,8 @@ def fig_hybrids(s42, bands, figs):
                     r, c = v.loc[key], KCOLOR[f"k{k}x{k}"]
                     ax.scatter(x + dx, r.fp32, s=60, color=c, zorder=3)
                     ax.scatter(x + dx, r.int8, s=60, marker="D", facecolors="white", edgecolors=c, lw=1.6, zorder=3)
+                    for y in extra.get(key, []):
+                        ax.scatter(x + dx, y, s=18, color=c, alpha=0.5, zorder=2)
                     if r.early_best:
                         early_ring(ax, x + dx, r.int8)
                         ringed = True
@@ -102,7 +114,9 @@ def fig_hybrids(s42, bands, figs):
         Line2D([], [], marker="o", color=TEXT_SECONDARY, ls="", ms=8, label="FP32"),
         Line2D([], [], marker="D", mfc="white", mec=TEXT_SECONDARY, ls="", ms=8, label="INT8"),
         Line2D([], [], color=NEUTRAL, ls="--", label="VGG16 3×3 (GAP + BN)")]
-    fig.legend(handles=handles + ([early_handle("ring")] if ringed else []), loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=6, fontsize=9)
+    if extra:
+        handles.append(Line2D([], [], marker="o", color=TEXT_SECONDARY, alpha=0.5, ls="", ms=4, label="outras seeds (FP32)"))
+    fig.legend(handles=handles + ([early_handle("ring")] if ringed else []), loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=7, fontsize=9)
     band = band_for(bands, "alexnet", True)["fp32"]
     fig.suptitle("Híbridos: profundidade, skip residual, conv1 11×11 e stride 1 somam? (AlexNet, 2 max-pools 2×2, GAP + BN)\n"
                  "sob cada corpo: MACs por imagem do 3×3 · do 2×2\n" + LIVE_NOTE
@@ -123,9 +137,13 @@ def main():
     s42 = df[df.seed == 42]
     c = contrasts(s42)
     c.to_csv(TABLES / "contrasts.csv", index=False)
-    fig_hybrids(s42, noise_bands(frame()), FIGS)
+    contrasts_by_seed(df).to_csv(TABLES / "contrasts_by_seed.csv", index=False)
+    fig_hybrids(s42, noise_bands(frame()), FIGS, df[df.seed != 42])
     if len(c):
         print(c.groupby("factor", sort=False)[["d_fp32", "d_int8"]].agg(["median", "count"]).round(2).to_string())
+    n = df.groupby("key").seed.nunique()
+    if (n > 1).any():  # cells with replicates: mean and SD over their seeds
+        print(df[df.key.isin(n[n > 1].index)].groupby("key")[["fp32", "int8"]].agg(["mean", "std", "count"]).round(2).to_string())
 
 
 if __name__ == "__main__":

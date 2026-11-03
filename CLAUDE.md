@@ -301,7 +301,8 @@ scripts/                  # CLI entry points (used instead of notebooks for PCAD
                                #   reads phase_12_* through analyze_geometry.load(prefix="phase_12_") (phase_11_* is the default)
   phase13/                 # `python -m scripts.phase13.hybrids` (2026-10-22, docs/logs/PHASE13_LOG.md)
     hybrids.py                 # 01_hybrids.png (bodies 5 convs / stacked / residual x conv1 kernel / 11x11 x conv1 stride 2 / 1), contrasts.csv
-                               #   (every matched pair of the 24-cell grid), all_runs.csv -> results/figures_generated/phase_13_hybrids/,
+                               #   (every matched pair of the 24-cell grid), contrasts_by_seed.csv (the pairs at every seed where both cells ran;
+                               #   other seeds are dots in 01), all_runs.csv -> results/figures_generated/phase_13_hybrids/,
                                #   results/phase_13_hybrids/; reads phase_13_* plus the 6 Phase 11 reference cells, never writes Phase 11's
   oneoff/                  # Retired one-shot fixups, kept for provenance (`python -m scripts.oneoff.<name>`)
     backfill_model_size.py / backfill_best_epoch_eval.py / dilated_gap_local.py
