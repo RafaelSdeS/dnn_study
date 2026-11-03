@@ -130,7 +130,7 @@ figures 02, 11, 14 and 16.
   adds +0.4 pp median but 2 of 7 pairs are negative, inside the noise; the 11×11 conv1 adds nothing once the body has two convs per stage
   (median −0.1). The gains add up only partly (each big step keeps 37-82% of its gain once the other is in). Best: all-2×2 residual at stride 1,
   60.75 FP32 / 60.46 INT8 at 862 M MACs and 2.5 M params, and all-2×2 stacked at stride 1, 60.35 / 60.79 at 803 M, against VGG16 3×3 GAP + BN
-  59.35 (14.8 M, 1255 M) -- one seed each, seeds 43 / 44 prepared, not run.
+  59.35 (14.8 M, 1255 M) -- one seed each, seeds 43 / 44 submitted 2026-11-03 (PCAD jobs 835242-835245), not finished.
 - **Seeds.** Most contrasts are seed 42 against a pooled floor of ±0.7-0.8 pp FP32; differences below ~1.5 pp are not resolved, and
   the 11-5-3-3-3 → 3×3 point is one of them. ResNet-18's floor rests on 3 seeds of 2 cells (±1.0 pp FP32); its INT8 band is wide (3 of the 6 runs early best).
 - **Scope.** Two low-resolution datasets (Tiny ImageNet at 64 px, CIFAR-100 at 32 px; the 224 runs are enlarged 64 px images, no

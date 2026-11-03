@@ -181,10 +181,10 @@ The 2x2 body overlaps less. The skip and the 11x11 conv1 add nothing on top.
 params, 1255 M MACs. So the two best AlexNets sit 1.0-1.4 pp above it with 1/6 of the params and 64-69% of the MACs -- against an AlexNet floor
 of ±0.7-0.8 pp, so a sign, not a size, until seeds 43 / 44 land. Every layer of the 2x2 two-conv nets but conv1 is a stride-1 2x2.
 
-**Seeds 43 / 44 -- prepared 2026-11-03, not submitted.** `configs/experiments/phase_13_hybrids_seed43.yaml` / `_seed44.yaml`: `k2x2stacked`
+**Seeds 43 / 44 -- submitted 2026-11-03 (PCAD jobs 835242 / 835243 seed 43, 835244 / 835245 seed 44; `tupi_4090`, pending on Resources).** `configs/experiments/phase_13_hybrids_seed43.yaml` / `_seed44.yaml`: `k2x2stacked`
 and `k2x2residual`, both stride 1, 4 runs, ~4.5-5 h each on a 4090 (the stacked stride-1 cells took 4.5-4.9 h), ~19 GPU-h. Why these two:
 they hold the open contrast (skip, +0.40 FP32 / -0.33 INT8 at stride 1, sign flipping elsewhere) and they are the nets to compare with VGG16, so
 their own noise is what the comparison needs. Not replicated: the 11x11 conv1 (≈0 on every two-conv body, nothing to confirm) and the 3x3
-partners (`k3x3stacked` / `k3x3residual` stride 1, +4 runs, only if "2x2 beats 3x3 at stride 1" (+1.82 / +1.59) is to be quoted). Submitting needs the
-yamls committed, pushed and pulled on PCAD first (`scripts.cluster` refuses a dirty tree). `scripts.phase13.hybrids` reads seed 42 for the
+partners (`k3x3stacked` / `k3x3residual` stride 1, +4 runs, only if "2x2 beats 3x3 at stride 1" (+1.82 / +1.59) is to be quoted). Committed (ac3c926), pushed
+and pulled on PCAD (`--ff-only`, no untracked file in the way) before `scripts.cluster submit-sweep`. `scripts.phase13.hybrids` reads seed 42 for the
 figure and contrasts and writes every seed to `all_runs.csv`; the replicates need a band or error bar added to the figure once they land.
