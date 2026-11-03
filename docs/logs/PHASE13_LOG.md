@@ -124,3 +124,67 @@ its MACs, every conv a stride-1 2x2 but conv1 (stride 2). One seed each.
 **nyx.** At ~15:30 a lab colleague moved nyx out of the user's tailscale into his own account to run simulations over the weekend
 (user agreed; runs not stopped). `ssh nyx` times out until the user moves it back, so the 5 stride-1 cells there cannot be checked
 from here; the start guard runs locally, so none starts after Mon 2026-11-02 10:00 either way.
+
+## Status 2026-11-03: 17 of 18, the stride-1 cells are in
+
+**What landed.** The 12 remaining cells except one are on the laptop (`399e223`, `7e2b1b6`): the 7 stride-1 cells that ran on PCAD
+(`k{3x3,2x2,11-3,11-2}` plain and `k{3x3,2x2,11-3}stacked`; tupi3 / tupi5 / tupi6, 4.1-4.9 h each), `k11-2residual` stride 2 (beagle), and 4 of the 5 on nyx (`k11-2stacked`, `k3x3residual`,
+`k2x2residual`, `k11-3residual`, all stride 1; RTX 4060 Ti). All 17: seed 42, `quant_protocol` 2026-10-07, `git_dirty` false, best FP32 epoch
+430-499 of 500 (none early best), INT8 - FP32 median -0.10 pp (-0.44 to +0.77). Hosts differ (11 x 4090, 4 x 4060 Ti, 2 x 1080 Ti):
+bit-for-bit retraining of a GAP cell was measured on one GPU model only (CLAUDE.md), so a cell's last digit is not comparable across
+hosts -- the contrasts below rest on tenths of a pp and more.
+
+**The 18th: `alexnet_k11-2residual_stride1_2pool2x2_map16_gap_bn`.** It was the 5th nyx cell: FP32 finished (final val top-1 59.73),
+QAT stopped at epoch 13 of 50 (log 2026-11-02 19:40) when nyx's loan ended; its checkpoints are on PCAD. Resubmitted as job 835178
+(`tupi`, 2026-11-03 11:03, pending on Priority); `scripts/train.py` should resume the QAT from its checkpoint (not checked), ~2.5 h of QAT
+left plus the evaluations. This run is the one cell trained on two GPU models (QAT epochs 1-13 on nyx's 4060 Ti, the rest on a 4090;
+`provenance_history` in its `resolved_config.json` will list both jobs) -- keep that in mind when reading its last digit. Four matched pairs wait for it (skip at stride 1, conv1 11x11 on the
+skip body at stride 1, 3x3 -> 2x2 under the 11x11 skip body at stride 1, stride on the 11x11 skip body).
+
+Test top-1 FP32 (INT8), seed 42, **conv1 stride 1 (last map 16x16)**; MACs per image:
+
+| body | 3x3, conv1 3x3 | 3x3, conv1 11x11 | 2x2, conv1 2x2 | 2x2, conv1 11x11 |
+|---|---|---|---|---|
+| 5 convs | 57.66 (57.56), 669 M | 57.29 (57.12), 757 M | 56.38 (56.22), 298 M | 57.07 (56.63), 390 M |
+| two per stage | 58.53 (58.27), 1803 M | 59.16 (59.04), 1891 M | 60.35 (60.79), 803 M | 59.86 (60.63), 895 M |
+| two per stage + skip | 59.16 (59.53), 1862 M | 59.11 (59.14), 1950 M | 60.75 (60.46), 862 M | pending (835178) |
+
+`k11-2residual` stride 2, the cell the 2026-10-31 table marked running: 56.59 (56.59), 238 M MACs, 2.54 M params.
+
+Matched pairs, B - A, 48 of the grid's 52 (`contrasts.csv`); median FP32 / INT8, pairs with B > A, range of the FP32 delta:
+
+| change | pairs | median FP32 / INT8 | B > A | range |
+|---|---|---|---|---|
+| conv1 stride 2 -> 1 (4x the MACs) | 11 | +2.99 / +3.31 | 11 of 11 | +1.43 to +4.16 |
+| 5 convs -> two per stage | 8 | +2.12 / +2.21 | 8 of 8 | +0.87 to +4.86 |
+| body 3x3 -> 2x2 | 11 | +1.09 / +1.40 | 8 of 11 | -1.28 to +1.82 |
+| two per stage -> + skip | 7 | +0.40 / +0.10 | 5 of 7 | -0.53 to +0.63 |
+| conv1 -> 11x11 | 11 | -0.12 / -0.22 | 4 of 11 | -1.08 to +3.25 |
+
+- *Stride 1 is the largest factor and never fails* (all 11 pairs, 3.0 pp at 4x the MACs). Two per stage comes second and never fails either,
+  but at stride 1 its step is smaller under a 3x3 body (+0.87) than at stride 2 (+2.37).
+- *Skip: the 2026-10-31 reading ("same sign every time") did not survive.* +0.37, +0.60, +0.42 at the first five became -0.53 (`k11-2`, stride
+  2) and -0.05 (`k11-3`, stride 1) with the rest; INT8 flips sign too (4 of 7). Every pair is inside the ±0.7 pp floor: no measurable
+  gain from the skip on this base, at 3% to 7% more MACs.
+- *11x11 conv1: only helps the 5-conv body.* +1.05 / +3.25 (3x3 / 2x2, stride 2) and +0.69 (2x2, stride 1); on the 7 two-conv pairs the
+  median is -0.13 (-1.08 to +0.63), and `k2x2residual` -> `k11-2residual` at stride 2 (-1.08 / -1.27) is the only pair there outside the floor.
+- *3x3 -> 2x2 depends on the body.* It loses on the 5-conv body (-1.11, -1.28) and wins on **every one of the 7 two-conv pairs** (+0.47 to
+  +1.82, median +1.43) with 51-55% fewer MACs.
+
+**Do the gains add up? Partly.** From `k3x3` (stride 2, 5 convs) to `k3x3stacked` stride 1, the two steps measured separately (+2.37, +4.16) would
+give 60.03; measured 58.53 (-1.50). For 2x2: 52.39 + 4.86 + 3.99 = 61.24 predicted, 60.35 measured (-0.89). Each of the two big steps keeps 37-82% of its gain
+once the other is in (3x3: two per stage +2.37 -> +0.87 at stride 1, stride +4.16 -> +2.66 on the stacked body; 2x2: +4.86 -> +3.97, +3.99 -> +3.10).
+The 2x2 body overlaps less. The skip and the 11x11 conv1 add nothing on top.
+
+**Best nets (one seed, so nothing is picked on it):** FP32 `k2x2residual` stride 1, 60.75 (INT8 60.46), 2.52 M params, 862 M MACs; INT8
+`k2x2stacked` stride 1, 60.79 (FP32 60.35), 2.33 M, 803 M. VGG16 3x3 GAP + BN (Phase 11): 59.35 / 59.47 at seed 42, 59.09-59.37 over 3 seeds, 14.8 M
+params, 1255 M MACs. So the two best AlexNets sit 1.0-1.4 pp above it with 1/6 of the params and 64-69% of the MACs -- against an AlexNet floor
+of ±0.7-0.8 pp, so a sign, not a size, until seeds 43 / 44 land. Every layer of the 2x2 two-conv nets but conv1 is a stride-1 2x2.
+
+**Seeds 43 / 44 -- prepared 2026-11-03, not submitted.** `configs/experiments/phase_13_hybrids_seed43.yaml` / `_seed44.yaml`: `k2x2stacked`
+and `k2x2residual`, both stride 1, 4 runs, ~4.5-5 h each on a 4090 (the stacked stride-1 cells took 4.5-4.9 h), ~19 GPU-h. Why these two:
+they hold the open contrast (skip, +0.40 FP32 / -0.33 INT8 at stride 1, sign flipping elsewhere) and they are the nets to compare with VGG16, so
+their own noise is what the comparison needs. Not replicated: the 11x11 conv1 (≈0 on every two-conv body, nothing to confirm) and the 3x3
+partners (`k3x3stacked` / `k3x3residual` stride 1, +4 runs, only if "2x2 beats 3x3 at stride 1" (+1.82 / +1.59) is to be quoted). Submitting needs the
+yamls committed, pushed and pulled on PCAD first (`scripts.cluster` refuses a dirty tree). `scripts.phase13.hybrids` reads seed 42 for the
+figure and contrasts and writes every seed to `all_runs.csv`; the replicates need a band or error bar added to the figure once they land.
