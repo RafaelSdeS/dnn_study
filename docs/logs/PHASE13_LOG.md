@@ -190,3 +190,31 @@ and pulled on PCAD (`--ff-only`, no untracked file in the way) before `scripts.c
 `contrasts.csv` stay seed 42; a cell's other seeds are small FP32 dots beside it, `contrasts_by_seed.csv` gives every matched pair at each
 seed where both cells ran (the skip contrast at seeds 42 / 43 / 44 once the jobs land), and the run prints mean / SD for cells with replicates.
 Checked on the fake tree (tests/test_phase13_hybrids.py, seed 43 added); not rerun on the real runs.
+
+## Status 2026-11-04: 18 of 18
+
+**The 18th landed.** `alexnet_k11-2residual_stride1_2pool2x2_map16_gap_bn` (PCAD job 835178, tupi1, RTX 4090, 04:46-06:23, 1 h 37): `scripts/train.py`
+resumed the QAT at epoch 14 of 50 from nyx's checkpoint (log: epoch 13 on 2026-11-02 19:40 at 234 s/epoch, epoch 14 on 2026-11-04 04:51 at 87 s/epoch);
+`provenance_history` lists both jobs (Nyx 4060 Ti, then tupi1 4090), `git_dirty` false. Test top-1 **60.48 FP32 / 60.76 QAT / 60.85 INT8**, 954 M MACs,
+agreement QAT/INT8 0.977. INT8 - FP32 = +0.37. The cell trained on two GPU models, so its last digit is soft.
+
+| body | 3x3, conv1 3x3 | 3x3, conv1 11x11 | 2x2, conv1 2x2 | 2x2, conv1 11x11 |
+|---|---|---|---|---|
+| two per stage + skip, stride 1 | 59.16 (59.53) | 59.11 (59.14) | 60.75 (60.46) | 60.48 (60.85), 954 M |
+
+Matched pairs with the 18th (52 of the grid's 52; `contrasts.csv`), B - A, median FP32 / INT8:
+
+| change | pairs | median FP32 / INT8 | B > A | range FP32 |
+|---|---|---|---|---|
+| conv1 stride 2 -> 1 | 12 | +3.03 / +3.40 | 12 of 12 | +1.43 to +4.16 |
+| 5 convs -> two per stage | 8 | +2.12 / +2.21 | 8 of 8 | +0.87 to +4.86 |
+| body 3x3 -> 2x2 | 12 | +1.23 / +1.50 | 9 of 12 | -1.28 to +1.82 |
+| two per stage -> + skip | 8 | +0.41 / +0.16 | 6 of 8 | -0.53 to +0.63 |
+| conv1 -> 11x11 | 12 | -0.12 / -0.19 | 4 of 12 | -1.08 to +3.25 |
+
+New pairs: skip at stride 1 on the 11x11 / 2x2 body +0.62 / +0.22; 11x11 conv1 on the 2x2 skip body at stride 1 -0.27 / +0.39 (stride 2: -1.08 / -1.27);
+3x3 -> 2x2 under the 11x11 skip body at stride 1 +1.37 / +1.71; stride 2 -> 1 on that body +3.89 / +4.26. None changes a reading of 2026-11-03: stride 1 never
+fails (12 of 12), two per stage never fails, 2x2 beats 3x3 on **all 8 two-conv pairs** (+0.47 to +1.82), the skip stays inside the ±0.7 pp floor, the 11x11 conv1
+is still ~0 on the two-conv bodies. The only new skip pair, +0.62, is the largest of the 8 and still at the floor. Seeds 43 / 44 of the two best nets:
+835242 / 835243 running (tupi6, tupi1), 835244 / 835245 pending.
+
