@@ -29,6 +29,7 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
 from matplotlib.patches import Patch
 from matplotlib.lines import Line2D
+from matplotlib.text import Text
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # so `import ml` resolves when run as a script
@@ -66,20 +67,23 @@ df = pd.concat([df, _fire_residual_row], ignore_index=True)
 # exploratory compensation attempts not detailed individually in the report text, so they
 # share one color.
 models_fig1 = [
-    "mobilenetv2", "vgg_style", "resnet18_tv", "alexnet_tv",
+    "mobilenetv2", "vgg_style", "resnet18_tv", "alexnet_tv", "alexnet_tv_scratch",
     "alexnet_3x3_fc", "alexnet_2x2_fc",
     "alexnet_mixed", "alexnet_small_kernel", "alexnet_residual",
     "alexnet_final_fire_residual",
 ]
+# Labels use the names the report text uses, plus how each baseline was trained -- "(irrestrita)"
+# only repeated the legend, and left readers looking for the unmodified AlexNet.
 labels_fig1 = [
-    "MobileNetV2 (irrestrita)", "VGG-Style (irrestrita)", "ResNet18 (irrestrita)",
-    "AlexNet (irrestrita)",
-    "Apenas 3×3 (ingênua)", "Apenas 2×2 (ingênua)",
-    "Mista (3×3+2×2)", "SmallKernel (exploratória)", "Residual (exploratória)",
-    "Fire-Residual (híbrida final)",
+    "MobileNetV2 (pré-treinada)", "VGG-Style (do zero)", "ResNet18 (pré-treinada)",
+    "AlexNet original (pré-treinada)", "AlexNet original (do zero)",
+    "AlexNet3x3-FC", "AlexNet2x2-FC",
+    "AlexNetMixed (3×3 e 2×2)", "AlexNetSmallKernel", "AlexNetResidual",
+    "Fire + Residual (híbrida final)",
 ]
 group_fig1 = [
     "Baselines irrestritos", "Baselines irrestritos", "Baselines irrestritos", "Baselines irrestritos",
+    "Baselines irrestritos",
     "Restrição ingênua", "Restrição ingênua",
     "Tentativas de compensação", "Tentativas de compensação", "Tentativas de compensação",
     "Arquitetura híbrida final",
@@ -109,10 +113,17 @@ rows = df[df["base_model"].isin(models_fig1)
           & ~((df["base_model"] == "alexnet_tv") & (df["phase"] != "Phase 1 — Baselines"))]
 model_to_acc = dict(zip(rows["base_model"], rows["top1_%_FP32"]))
 model_to_size = dict(zip(rows["base_model"], rows["size_MB_FP32"]))
+# The unmodified AlexNet trained from scratch is not in the cross-phase CSV: its only run is the
+# supplementary Phase 11 one (500 epochs, same AdamW recipe as this report), archived when Phase 11
+# moved to a new recipe. The report text already cites this run (27.51%).
+_scratch = json.load(open(
+    "results/archive_adamw_recipe/phase_11_kernel_size_comparison/alexnet_tv_scratch_summary.json"))
+model_to_acc["alexnet_tv_scratch"] = _scratch["fp32_top1"]
+model_to_size["alexnet_tv_scratch"] = _scratch["fp32_size_mb"]
 accuracies = [model_to_acc[m] for m in models_fig1]
 sizes = [model_to_size[m] for m in models_fig1]
 
-fig, ax = plt.subplots(figsize=(5.4, 7))
+fig, ax = plt.subplots(figsize=(5.4, 7.6))
 
 y_pos = range(len(labels_fig1))
 bars = ax.barh(y_pos, accuracies, color=colors_fig1, height=0.6, edgecolor="none")
@@ -149,18 +160,18 @@ plt.close()
 comp_df = pd.read_csv("results/phase_4_compression_and_final_architecture/compression_by_method.csv")
 COMP_METHOD_ORDER = ["int8", "int4_ptq", "int4_qat", "mixed", "ternary_qat", "int2_qat", "binary_qat"]
 COMP_LABELS = {
-    "int8": "INT8 (âncora)", "int4_ptq": "INT4 PTQ (sem retreino)",
+    "int8": "INT8 (referência)", "int4_ptq": "INT4 PTQ (sem retreino)",
     "int4_qat": "INT4 QAT (com retreino)", "mixed": "Mista INT4/INT8 (QAT)",
-    "ternary_qat": "Ternary QAT", "int2_qat": "INT2 QAT", "binary_qat": "Binary QAT",
+    "ternary_qat": "Ternária (QAT)", "int2_qat": "INT2 (QAT)", "binary_qat": "Binária (QAT)",
 }
 COMP_GROUP = {
-    "int8": "INT8 (âncora)", "int4_ptq": "INT4 PTQ (sem retreino)",
+    "int8": "INT8 (referência)", "int4_ptq": "INT4 PTQ (sem retreino)",
     "int4_qat": "INT4 QAT (com retreino)", "mixed": "Mista INT4/INT8 (QAT)",
     "ternary_qat": "Sub-INT4 agressivo (QAT)", "int2_qat": "Sub-INT4 agressivo (QAT)",
     "binary_qat": "Sub-INT4 agressivo (QAT)",
 }
 COMP_GROUP_COLORS = {
-    "INT8 (âncora)": BLUE, "INT4 PTQ (sem retreino)": RED,
+    "INT8 (referência)": BLUE, "INT4 PTQ (sem retreino)": RED,
     "INT4 QAT (com retreino)": GREEN, "Mista INT4/INT8 (QAT)": PURPLE,
     "Sub-INT4 agressivo (QAT)": AMBER,
 }
@@ -185,14 +196,7 @@ ax.set_xlabel("Acurácia top-1 média (%)", fontsize=13, color=TEXT_PRIMARY)
 ax.tick_params(axis="x", labelsize=11)
 ax.set_xlim(0, 82)
 ax.grid(False, axis="y")
-
-legend_handles = [Patch(facecolor=c, label=g) for g, c in COMP_GROUP_COLORS.items()]
-# bbox_to_anchor is in axes-fraction coords; plt.tight_layout() (removed below) fights this by
-# shrinking the axes to fit the legend inside the original figsize, which paradoxically pushes the
-# per-bar annotation text further into the legend's column -- bbox_inches="tight" on savefig alone
-# already crops the canvas to content, so tight_layout() isn't needed here.
-ax.legend(handles=legend_handles, loc="center left", bbox_to_anchor=(1.02, 0.5),
-          ncol=1, frameon=False, fontsize=LEGEND_FONTSIZE)
+# ponytail: no legend -- each bar is already named on the y axis, a legend only repeated the names.
 
 fig.suptitle("Métodos de compressão além de INT8\n"
              "(taxa = tamanho teórico dos pesos em FP32 ÷ tamanho teórico após compressão)",
@@ -220,21 +224,48 @@ P6_DISPLAY_NAME = {
 }
 
 
-def _label_points(ax, xs, ys, labels, fontsize=7.5):
-    """Offset-search collision avoidance for point labels (same approach as the source notebook)."""
-    candidates = [(7, 5), (7, -13), (-7, 5), (-7, -13), (7, 15), (-7, 15), (7, -23), (-7, -23)]
-    placed = []
-    min_dist_px = 16
+_LABEL_OFFSETS = [(7, 4), (7, -13), (-7, 4), (-7, -13), (7, 14), (-7, 14), (9, -4), (-9, -4),
+                  (7, -23), (-7, -23), (0, 22), (0, -32), (7, 26), (-7, 26), (7, 38), (-7, 38),
+                  (7, -36), (-7, -36)]
+_LEADER_MIN_DY = 22  # offsets this far from the point get a thin line back to it
+
+
+def _label_points(ax, xs, ys, labels, fontsize=7.5, avoid_xy=(), avoid=(), **text_kw):
+    """Put each label at the first offset whose text box clears every data point (the labelled
+    ones plus `avoid_xy`), every label placed before it and the `avoid` artists (legends).
+    Measures in display coordinates, so call it once the layout is final (after tight_layout)."""
+    fig = ax.figure
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    marker_px = 7 * fig.dpi / 72  # a marker's radius (s=90-110) plus a small gap
+    pts = ax.transData.transform(np.asarray(list(zip(xs, ys)) + list(avoid_xy), dtype=float))
+    taken = [a.get_window_extent(renderer) for a in avoid]
+    inside = ax.get_window_extent(renderer)
+
+    def _place(x, y, label, dx, dy):
+        leader = dict(arrowstyle="-", color="0.55", lw=0.6, shrinkA=1, shrinkB=5) \
+            if abs(dy) >= _LEADER_MIN_DY else None
+        t = ax.annotate(label, (x, y), xytext=(dx, dy), textcoords="offset points", fontsize=fontsize,
+                        ha="left" if dx > 0 else "right" if dx < 0 else "center", va="bottom",
+                        arrowprops=leader, **text_kw)
+        t.get_window_extent(renderer)  # lays the annotation out
+        # Text-only box: Annotation's own extent also spans the leader line down to the point.
+        return t, Text.get_window_extent(t, renderer)
+
     for x, y, label in zip(xs, ys, labels):
-        anchor = np.array(ax.transData.transform((x, y)))
-        chosen = candidates[0]
-        for dx, dy in candidates:
-            cand = anchor + np.array([dx, dy])
-            if all(np.hypot(*(cand - p)) > min_dist_px for p in placed):
-                chosen = (dx, dy)
+        # The label's own point is not an obstacle: every offset already clears its marker.
+        anchor = ax.transData.transform((x, y))
+        others = [p for p in pts if np.hypot(*(p - anchor)) > 1]
+        for dx, dy in _LABEL_OFFSETS:
+            t, bb = _place(x, y, label, dx, dy)
+            if (inside.contains(bb.x0, bb.y0) and inside.contains(bb.x1, bb.y1)
+                    and not any(bb.overlaps(o) for o in taken)
+                    and not any(bb.padded(marker_px).contains(px, py) for px, py in others)):
                 break
-        placed.append(anchor + np.array(chosen))
-        ax.annotate(label, (x, y), fontsize=fontsize, xytext=chosen, textcoords="offset points")
+            t.remove()
+        else:  # ponytail: no free spot -- first offset, overlap accepted; swap for adjustText if this recurs
+            t, bb = _place(x, y, label, *_LABEL_OFFSETS[0])
+        taken.append(bb)
 
 
 fig, ax = plt.subplots(figsize=(9, 6.5))
@@ -265,9 +296,6 @@ ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:g}"))
 acc_pad = (pareto_df["accuracy"].max() - pareto_df["accuracy"].min()) * 0.18
 ax.set_ylim(pareto_df["accuracy"].min() - acc_pad, pareto_df["accuracy"].max() + acc_pad)
 
-_label_points(ax, pareto_df["latency_ms"].to_numpy(), pareto_df["accuracy"].to_numpy(),
-              pareto_df["model"].map(P6_DISPLAY_NAME).to_numpy())
-
 # Pareto frontier: points where no other point is both faster and more accurate.
 rows = pareto_df.reset_index(drop=True)
 pareto_mask = pareto_front_mask(rows["latency_ms"], rows["accuracy"])
@@ -276,9 +304,9 @@ if len(pareto_points) > 1:
     ax.plot(pareto_points["latency_ms"], pareto_points["accuracy"], linestyle="--", color="0.35",
             linewidth=2, label="Fronteira de Pareto", zorder=2)
 
-ax.set_xlabel("Latência (ms, escala log)", fontsize=11, color=TEXT_PRIMARY)
+ax.set_xlabel("Latência por imagem, lote 1 (ms, escala log)", fontsize=11, color=TEXT_PRIMARY)
 ax.set_ylabel("Acurácia top-1 (%)", fontsize=11, color=TEXT_PRIMARY)
-ax.set_title("RTX 4060 Laptop (local)", fontsize=11)
+ax.set_title("FP32 na GPU RTX 4060 Laptop; INT8 na CPU do mesmo notebook", fontsize=11)
 
 shape_legend = [
     Line2D([0], [0], marker="o", color="w", markerfacecolor="0.4", markersize=8, label="FP32"),
@@ -290,11 +318,18 @@ leg1 = ax.legend(handles=shape_legend, loc="upper left", fontsize=LEGEND_FONTSIZ
 group_handles = group_legend(pareto_df["model"])
 # Smaller than the other legends in this script -- at LEGEND_FONTSIZE it covered the
 # alexnet_tv INT8 point and label sitting right behind it in the lower-right corner.
-ax.legend(handles=group_handles, loc="lower right", fontsize=8, frameon=False)
+leg2 = ax.legend(handles=group_handles, loc="lower right", fontsize=8, frameon=False)
 ax.add_artist(leg1)
 
-fig.suptitle("Acurácia vs. latência: fronteira de Pareto e referência", fontsize=12)
+fig.suptitle("Acurácia vs. latência", fontsize=12)
 fig.tight_layout()
+# One label per model, on its FP32 point: the grey line already ties it to its INT8 square, and
+# labelling both printed every name twice.
+_fp32_pts = pareto_df[pareto_df["precision"] == "fp32"]
+_int8_pts = pareto_df[pareto_df["precision"] == "int8"]
+_label_points(ax, _fp32_pts["latency_ms"].to_numpy(), _fp32_pts["accuracy"].to_numpy(),
+              _fp32_pts["model"].map(P6_DISPLAY_NAME).to_numpy(), fontsize=8.5,
+              avoid_xy=list(zip(_int8_pts["latency_ms"], _int8_pts["accuracy"])), avoid=[leg1, leg2])
 plt.savefig(OUTPUT_DIR / "phase6_accuracy_vs_latency_pareto.png")
 print("✓ phase6_accuracy_vs_latency_pareto.png")
 plt.close()
@@ -309,9 +344,9 @@ KSIZES = [2, 3, 5, 7, 9, 11]
 IN_CH_COLORS = {16: BLUE, 32: RED, 64: GREEN, 128: PURPLE}
 IN_CH_MARKERS = {16: "o", 32: "s", 64: "^", 128: "D"}
 PANELS = [
-    ("fp32", 1, "FP32 GPU, lote=1"),
-    ("fp32", 64, "FP32 GPU, lote=64"),
-    ("int8", 1, "INT8 CPU, lote=1"),
+    ("fp32", 1, "FP32 na GPU, lote 1"),
+    ("fp32", 64, "FP32 na GPU, lote 64"),
+    ("int8", 1, "INT8 na CPU, lote 1"),
 ]
 
 fig, axes = plt.subplots(1, 3, figsize=(15, 5))
@@ -332,7 +367,7 @@ for ax, (prec, batch, subtitle) in zip(axes, PANELS):
     ax.set_xlabel("tamanho de kernel ($k$)", color=TEXT_PRIMARY)
     ax.set_title(subtitle, fontsize=10.5, color=TEXT_PRIMARY)
     ax.grid(True, which="both")
-axes[0].set_ylabel("latência / $k^2$ (ms por unidade de FLOP)", color=TEXT_PRIMARY)
+axes[0].set_ylabel("latência ÷ $k^2$ (ms; ∝ latência por FLOP)", color=TEXT_PRIMARY)
 
 # One shared legend below all 3 panels instead of one per panel -- a per-panel legend sat right
 # on top of the "canais de entrada = 128" curve, which stays near the top of every panel.
@@ -340,8 +375,8 @@ handles, labels = axes[0].get_legend_handles_labels()
 fig.legend(handles, labels, loc="lower center", bbox_to_anchor=(0.5, -0.06), ncol=4,
            frameon=False, fontsize=LEGEND_FONTSIZE)
 
-fig.suptitle("RTX 4060 Laptop (local): latência de camada por FLOP vs. tamanho de kernel "
-             "(densa/groups=1, resolução 64)",
+fig.suptitle("Latência por FLOP de uma camada convolucional densa vs. tamanho de kernel "
+             "(RTX 4060 Laptop, entrada 64×64)",
              fontsize=12, color=TEXT_PRIMARY)
 fig.tight_layout(rect=[0, 0.08, 1, 1])
 plt.savefig(OUTPUT_DIR / "phase6_latency_vs_kernel_size.png")
@@ -433,7 +468,7 @@ assert size_acc_df["macs_m"].notna().all(), \
     f"MACs ausentes: {size_acc_df.loc[size_acc_df['macs_m'].isna(), 'model'].tolist()}"
 
 DISPLAY_NAME = {
-    "alexnet_tv": "AlexNet (irrestrita)", "alexnet_3x3_fc": "AlexNet3x3-FC",
+    "alexnet_tv": "AlexNetTV (pré-treinada)", "alexnet_3x3_fc": "AlexNet3x3-FC",
     "alexnet_3x3_gap": "AlexNet3x3-GAP", "alexnet_2x2_fc": "AlexNet2x2-FC",
     "alexnet_small_kernel": "AlexNetSmallKernel", "alexnet_bottleneck": "AlexNetBottleneck",
     "alexnet_fire": "AlexNetFire", "mobilenetv2": "MobileNetV2", "resnet18_tv": "ResNet18",
@@ -520,6 +555,7 @@ _panels = [
 # absolute vertical room for the crowded 33-point scatter and its labels, at the same
 # print-scale factor (unaffected by height, only by width) as before.
 fig, axes = plt.subplots(1, 2, figsize=(15, 8.5))
+_size_labels = []  # labelled after tight_layout, which moves the axes
 for ax, (size_col, acc_col, precision, metric) in zip(axes.flat, _panels):
     df_size = df_all_classification[
         df_all_classification[acc_col].notna() & df_all_classification[size_col].notna()
@@ -537,14 +573,9 @@ for ax, (size_col, acc_col, precision, metric) in zip(axes.flat, _panels):
                c=np.array(point_colors)[elig_mask], s=110, hatch="////",
                edgecolors="black", lw=0.7, alpha=0.9, zorder=3)
     ax.step(pf[size_col], pf[acc_col], where="post", color="black", lw=1.2, ls="--", alpha=0.6, zorder=2)
-    # ponytail: labels alternate above/below the point instead of a fixed offset, since the
-    # Pareto front is a monotonic up-right staircase and same-direction offsets stack labels
-    # from adjacent points on top of each other. Swap for adjustText if this stops being enough.
-    for i, (_, row) in enumerate(pf.iterrows()):
-        dy = 6 if i % 2 == 0 else -14
-        ax.annotate(DISPLAY_NAME[row["model_name"]], (row[size_col], row[acc_col]), xytext=(6, dy),
-                   textcoords="offset points", fontsize=9, fontweight="bold",
-                   va="bottom" if dy > 0 else "top")
+    _size_labels.append((ax, pf[size_col].to_numpy(), pf[acc_col].to_numpy(),
+                         [DISPLAY_NAME[m] for m in pf["model_name"]],
+                         list(zip(df_size[size_col], df_size[acc_col]))))
     ax.set_xscale("log")
     ax.set_xlabel(f"Tamanho {precision} do modelo (MB, escala log)")
     ax.set_ylabel(f"Acurácia {precision} {metric} (%)")
@@ -561,7 +592,7 @@ labels.append("Elegível a Winograd")
 fig.legend(handles, labels, loc="lower center", bbox_to_anchor=(0.5, -0.11), ncol=3,
           fontsize=LEGEND_FONTSIZE + 2, title="Grupo de modelos", title_fontsize=LEGEND_FONTSIZE + 4,
           handlelength=1.4, handleheight=1.4, markerscale=1.1)
-fig.suptitle("Acurácia vs. Tamanho — Fronteiras de Pareto (todos os modelos de classificação)",
+fig.suptitle("Acurácia vs. tamanho do modelo, com fronteiras de Pareto (todos os modelos de classificação)",
             fontsize=13)
 # rect[1] (the axes' bottom edge) and the legend's bbox_to_anchor y are independent knobs --
 # the legend sits entirely below y=0 (outside the rect-reserved margin), so rect[1] only needs
@@ -569,6 +600,8 @@ fig.suptitle("Acurácia vs. Tamanho — Fronteiras de Pareto (todos os modelos d
 # (rect[1] up to 0.19 against anchor -0.14) reserved a margin far bigger than the x-labels
 # need, which is exactly the dead blank band between the panels and the legend.
 plt.tight_layout(rect=[0, 0.05, 1, 0.95])
+for ax, xs, ys, names, all_xy in _size_labels:
+    _label_points(ax, xs, ys, names, fontsize=9.5, fontweight="bold", avoid_xy=all_xy)
 plt.savefig(OUTPUT_DIR / "accuracy_vs_size_all_models.png")
 print("✓ accuracy_vs_size_all_models.png")
 plt.close()
@@ -611,13 +644,8 @@ ax.plot([p[0] for p in int8_frontier], [p[1] for p in int8_frontier], linestyle=
 
 ax.set_xscale("log")
 ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:g}"))
-
-# One label per model, not one per point: FP32/INT8 share an x position here, so labelling both
-# just prints every name twice on top of itself. Anchor on whichever of the pair is higher so the
-# label sits above the vertical connector rather than between the two markers.
-_label_points(ax, size_acc_df["macs_m"].to_numpy(),
-              size_acc_df[["fp32_top1", "int8_top1"]].max(axis=1).to_numpy(),
-              [DISPLAY_NAME[m] for m in size_acc_df["model"]], fontsize=9)
+ax.xaxis.set_minor_formatter(FuncFormatter(
+    lambda v, _: f"{round(v)}" if round(v) in (20, 30, 40, 60, 200, 300, 400) else ""))
 
 ax.set_xlabel("MACs (M, escala log)", fontsize=11, color=TEXT_PRIMARY)
 ax.set_ylabel("Acurácia top-1 (%)", fontsize=11, color=TEXT_PRIMARY)
@@ -645,7 +673,18 @@ ax.add_artist(leg1)
 fig.suptitle("Acurácia vs. MACs: todos os modelos discutidos neste relatório (FP32 e INT8)",
              fontsize=12, color=TEXT_PRIMARY)
 fig.tight_layout()
-plt.savefig(OUTPUT_DIR / "macs_vs_accuracy_all_models.png")
+# One label per model, not one per point: FP32/INT8 share an x position here, so labelling both
+# just prints every name twice on top of itself. Anchor on whichever of the pair is higher so the
+# label sits above the vertical connector rather than between the two markers.
+_label_points(ax, size_acc_df["macs_m"].to_numpy(),
+              size_acc_df[["fp32_top1", "int8_top1"]].max(axis=1).to_numpy(),
+              [DISPLAY_NAME[m] for m in size_acc_df["model"]], fontsize=9,
+              avoid_xy=list(zip(size_acc_df["macs_m"], size_acc_df[["fp32_top1", "int8_top1"]].min(axis=1))))
+# The tight crop skips legends added back with add_artist -- that is how leg1's right edge got cut
+# off ("Tentativas de compensaç"); name it explicitly, on top of the default list (which holds the
+# suptitle -- passing [leg1] alone dropped it).
+plt.savefig(OUTPUT_DIR / "macs_vs_accuracy_all_models.png",
+            bbox_extra_artists=fig.get_default_bbox_extra_artists() + [leg1])
 print("✓ macs_vs_accuracy_all_models.png")
 plt.close()
 
@@ -674,6 +713,7 @@ for _model in _p7_models:
         _p7_rows.append({"model": _model, "stage": _stage, "mAP": _mAP, "size_mb": _size_mb,
                          "is_true": _true is not None})
 p7_df = pd.DataFrame(_p7_rows)
+p7_df["mAP"] *= 100  # percent, as in the report's tables and text
 
 fig, ax = plt.subplots(figsize=(7.5, 5))
 for _model in _p7_models:
@@ -690,9 +730,11 @@ for _, row in p7_df.iterrows():
               edgecolor=_p7_colors[row["model"]], linewidth=0.7 if row["is_true"] else 1.6, zorder=3)
 
 ax.set_xscale("log")
-ax.set_xlabel("Tamanho do modelo (MB, escala log)")
-ax.set_ylabel("mAP de detecção")
-_title = "Acurácia vs. tamanho real do modelo (FP32/QAT/INT8"
+ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:g}"))
+ax.xaxis.set_minor_formatter(FuncFormatter(lambda v, _: f"{v:g}"))
+ax.set_xlabel("Tamanho real do modelo (MB, escala log)")
+ax.set_ylabel("mAP de detecção (%)")
+_title = "mAP vs. tamanho do modelo (FP32, QAT e INT8"
 _title += "; vazado = tamanho não corrigido/estimado)" if any_estimated else ")"
 ax.set_title(_title)
 
@@ -774,7 +816,7 @@ for ax, col, precision, color in zip(axes, ["fp32_top1", "int8_top1"], ["FP32", 
             ax.text(bar.get_x() + bar.get_width() / 2, h + 0.6, f"{h:.1f}%",
                     ha="center", va="bottom", fontsize=8.5, color=TEXT_PRIMARY)
     for i, (b, a) in enumerate(zip(before, after)):
-        ax.annotate(f"+{a - b:.2f}pp", xy=(i, max(b, a) + 3.4), ha="center", va="bottom",
+        ax.annotate(f"+{a - b:.2f} p.p.", xy=(i, max(b, a) + 3.4), ha="center", va="bottom",
                     fontsize=9, fontweight="bold", color=TEXT_PRIMARY)
 
     ax.set_xticks(x)
@@ -787,7 +829,7 @@ for ax, col, precision, color in zip(axes, ["fp32_top1", "int8_top1"], ["FP32", 
     ax.legend(frameon=False, fontsize=9.5, loc="upper left")
     ax.grid(False, axis="x")
 
-fig.suptitle("Acurácia antes/depois de acrescentar um stem 3×3 Winograd-elegível",
+fig.suptitle("Acurácia antes e depois de acrescentar ao stem uma camada 3×3 elegível a Winograd",
              fontsize=12.5, fontweight="normal", color=TEXT_PRIMARY, y=1.0)
 fig.tight_layout()
 plt.savefig(OUTPUT_DIR / "phase8_h5_convstem_gain.png")
