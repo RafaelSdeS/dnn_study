@@ -17,11 +17,13 @@ if [[ -z "${FEED_QUEUE_NICED:-}" ]]; then
   exec nice -n 19 ionice -c3 bash "$(realpath "$0")" "$@"
 fi
 QUEUE=$(realpath "$1"); MAX=${MAX:-8}; SLEEP=${SLEEP:-600}; GAP=${GAP:-60}  # 2 slots left for manual submits
+# QOS=normal counts only that QOS's jobs against MAX (2026-11-05: the Winograd-FPGA study's `grace` jobs run under QOS
+# `medium` and filled MAX on their own, so this feeder never submitted; each QOS has its own submit limit)
 RETRY='QOSMaxSubmitJobPerUserLimit|Unable to contact slurm controller|Socket timed out|temporarily unable'
 cd "$(dirname "$(realpath "$0")")/../.." && source .venv/bin/activate
 
 while [[ -s "$QUEUE" ]]; do
-  if ! n=$(squeue -h -u "$USER" | wc -l) || (( n >= MAX )); then sleep "$SLEEP"; continue; fi
+  if ! n=$(squeue -h -u "$USER" ${QOS:+-q "$QOS"} | wc -l) || (( n >= MAX )); then sleep "$SLEEP"; continue; fi
   cmd=$(head -n1 "$QUEUE"); sed -i 1d "$QUEUE"
   if out=$(bash -c "$cmd" 2>&1); then
     echo "$cmd" >> "$QUEUE.done"; echo "$(date -Is) OK $cmd :: $(tail -n1 <<<"$out")"; sleep "$GAP"
