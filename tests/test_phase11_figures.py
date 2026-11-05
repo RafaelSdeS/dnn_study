@@ -116,14 +116,14 @@ def test_figure_numbers_get_a_decimal_comma(tmp_path):
 # months later -- as the 2026-10-07 FC -> FC + Dropout swap did (the head contrast fell from 17 pairs to 6 until
 # factor_effects paired GAP with the real FC head). Change these numbers only with the design.
 DESIGN_PAIRS = {"Kernel 11-5-3-3-3 → 3×3": 10, "Kernel 3×3 → 2×2": 14, "Kernel 11-5-3-3-3 → 2×2": 10,
-                "Kernel 3×3 → alternado 3-2": 13, "3×3 → dois 3×3 empilhados por estágio": 2,
-                "2×2 → dois 2×2 empilhados por estágio": 2, "Cabeça FC (+ Dropout) → GAP": 19, "BatchNorm não → sim": 8,
-                "Stride da conv1 4 → 2": 8, "3 max-pools 3×3 → 2 max-pools 2×2": 8, "Dropout 0 → 0,5 (só cabeça FC)": 6,
+                "Kernel 3×3 → alternado 3-2": 13, "3×3 → dois 3×3 por estágio": 2,
+                "2×2 → dois 2×2 por estágio": 2, "Classificador FC (+ Dropout) → GAP": 19, "BatchNorm não → sim": 8,
+                "Stride da conv1 4 → 2": 8, "3 max-pools 3×3 → 2 max-pools 2×2": 8, "Dropout 0 → 0,5 (só classificador FC)": 6,
                 "Pré-treino ImageNet": 5,
                 # the ResNet-18 block (2026-10-13): +1 each to 3x3 -> 2x2 / alternating / pretraining above, and its own
-                "Kernel 7-3 (ResNet) → 3×3": 1, "Kernel 7-3 (ResNet) → 2×2": 1, "Kernel blocos 3×3 → 2×2, stem 7×7 mantido": 1,
-                "Kernel stem 7×7 → 2×2, blocos 2×2": 1, "Kernel 3×3 → 2×2, stem profundo": 1,
-                "Stem 3×3 → três 3×3 (ResNet-C)": 1, "Stem 2×2 → três 2×2": 1,
+                "Kernel 7-3 (ResNet) → 3×3": 1, "Kernel 7-3 (ResNet) → 2×2": 1, "Kernel blocos 3×3 → 2×2, conv1 7×7 mantida": 1,
+                "Kernel conv1 7×7 → 2×2, blocos 2×2": 1, "Kernel 3×3 → 2×2, conv1 profunda": 1,
+                "Conv1 3×3 → três 3×3 (ResNet-C)": 1, "Conv1 2×2 → três 2×2": 1,
                 # the large-stem block (2026-10-14): +2 to the head contrast above, and its own, at GAP and FC + Dropout
                 "Conv1 3×3 → 11×11, corpo 3×3": 2, "Conv1 2×2 → 11×11, corpo 2×2": 2, "Conv2 3×3 → 5×5, conv1 11×11": 2,
                 "Corpo 3×3 → 2×2, conv1 11×11 mantida": 2,

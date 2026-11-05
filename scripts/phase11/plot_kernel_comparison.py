@@ -37,7 +37,7 @@ FIGURES = {  # file: (title, [(panel title, factor filter)], baseline key, basel
     "01_kernel_original_layout.png": (
         "Kernel no AlexNet de layout original (o do torchvision: conv1 stride 4 + 3 max-pools 3×3/2 → mapa final 1×1 em 64×64)\n"
         "em cada painel só o kernel muda; treino do zero, sem BN, seed 42",
-        [("FC + Dropout 0,5 (a cabeça do AlexNet original)", {**ORIGINAL, "head": "fc", "dropout": True}),
+        [("FC + Dropout 0,5 (o classificador do AlexNet original)", {**ORIGINAL, "head": "fc", "dropout": True}),
          ("GAP (média global + 1 linear)", {**ORIGINAL, "head": "gap"})],
         BASE_KEY, BASE_LABEL, 2),
     "02_kernel_64px_layout.png": (
@@ -50,7 +50,7 @@ FIGURES = {  # file: (title, [(panel title, factor filter)], baseline key, basel
         "Kernel na VGG16 (13 convs + BatchNorm, stride 1, 5 max-pools 2×2 → mapa 2×2)\n"
         "em cada painel só o kernel das 13 convs muda; treino do zero, barras = seed 42 (pontos = cada seed, onde replicada)",
         [("GAP (média global + 1 linear)", {**VGG, "head": "gap"}), ("FC sem Dropout", {**VGG, "head": "fc", "dropout": False}),
-         ("FC + Dropout 0,5 (a cabeça da VGG16 original)", {**VGG, "head": "fc", "dropout": True})],
+         ("FC + Dropout 0,5 (o classificador da VGG16 original)", {**VGG, "head": "fc", "dropout": True})],
         *VGG_BASE, 3),
     "27_large_stem.png": (
         "Conv1 grande + corpo de kernel pequeno (AlexNet de layout 64px, com BatchNorm): a vantagem do 11-5-3-3-3 vem da conv1 11×11?\n"
@@ -59,10 +59,10 @@ FIGURES = {  # file: (title, [(panel title, factor filter)], baseline key, basel
          for h in ("gap", "fc")],
         BASE_KEY, BASE_LABEL, 2, ["k11-5-3", "k11-3", "k3x3", "k11-2", "k2x2"]),
     "28_resnet_kernel_stem.png": (
-        "Kernel na ResNet-18 (BatchNorm, cabeça GAP, conv1 stride 2 + 1 max-pool 3×3 → mapa final 2×2)\n"
-        "só o kernel do stem e/ou dos blocos muda; stem profundo = três convs pequenas no lugar da conv1 (ResNet-C)\n"
+        "Kernel na ResNet-18 (BatchNorm, classificador GAP, conv1 stride 2 + 1 max-pool 3×3 → mapa final 2×2)\n"
+        "só o kernel da conv1 e/ou dos blocos muda; conv1 profunda = três convs pequenas no lugar da conv1 (ResNet-C)\n"
         "treino do zero, barras = seed 42 (pontos = cada seed, onde replicada)",
-        [("GAP + BatchNorm (a cabeça da ResNet-18 original)", {"family": "resnet18"})],
+        [("GAP + BatchNorm (o classificador da ResNet-18 original)", {"family": "resnet18"})],
         *RESNET_BASE, 1, RESNET_K),
 }
 

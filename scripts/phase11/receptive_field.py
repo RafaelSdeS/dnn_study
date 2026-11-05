@@ -114,7 +114,7 @@ def main():
                  label="influência do pixel (1 = o mais influente; cada painel na cor do seu kernel)")
     fig.suptitle("Que região da imagem cada rede usa? Campo receptivo efetivo do neurônio central da última conv (Luo et al. 2016):\n"
                  f"quanto cada pixel move esse neurônio, média de {N_IMAGES} imagens de teste 64×64; contorno = a menor região com "
-                 "metade da influência\n(o campo receptivo teórico cobre a imagem inteira em todas) · cabeça GAP + BN, menos o AlexNet original "
+                 "metade da influência\n(o campo receptivo teórico cobre a imagem inteira em todas) · classificador GAP + BN, menos o AlexNet original "
                  "(FC + Dropout, sem BN) · seed 42", fontsize=11)
     savefig(fig, "22_effective_receptive_field.png")
 

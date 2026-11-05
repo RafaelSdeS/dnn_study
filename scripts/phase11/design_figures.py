@@ -43,12 +43,12 @@ from scripts.phase11.analyze_geometry import (ARCHIVE, BASE_KEY, BASE_LABEL, EAR
 PREVIEW = ROOT / "results/archive_adamw_recipe/figures_generated/phase_11_preview"
 PREVIEW_NOTE = ("PRÉVIA — runs antigas: receita AdamW, split de validação, INT8 antes das correções de 30/09–03/10; "
                 "† = só aproximadamente a célula nova")
-LIVE_NOTE = "seed 42 · top-1 no test set (val oficial do Tiny ImageNet)"
+LIVE_NOTE = "seed 42 · top-1 no conjunto de teste (val oficial do Tiny ImageNet)"
 
 K4 = ["k11-5-3", "k3x3", "k2x2", "kalt3-2"]
-KLABEL = {"k11-5-3": "11-5-3-3-3", "k3x3": "3×3", "k2x2": "2×2", "kalt3-2": "alternado 3-2", "k3x3stacked": "3×3 empilhado",
-          "k2x2stacked": "2×2 empilhado", "k11-3": "conv1 11×11 + 3×3", "k11-2": "conv1 11×11 + 2×2", "k7-3": "7×7 + 3×3 (original)", "k7-2": "stem 7×7 + 2×2",
-          "k3x3deepstem": "3×3, stem profundo", "k2x2deepstem": "2×2, stem profundo"}
+KLABEL = {"k11-5-3": "11-5-3-3-3", "k3x3": "3×3", "k2x2": "2×2", "kalt3-2": "alternado 3-2", "k3x3stacked": "3×3, dois por estágio",
+          "k2x2stacked": "2×2, dois por estágio", "k11-3": "conv1 11×11 + 3×3", "k11-2": "conv1 11×11 + 2×2", "k7-3": "7×7 + 3×3 (original)", "k7-2": "conv1 7×7 + 2×2",
+          "k3x3deepstem": "3×3, conv1 profunda", "k2x2deepstem": "2×2, conv1 profunda"}
 # every Phase 11 colour comes from ml/plotting.py's report palette; a deeper variant of a kernel = a darker shade of its hue
 KCOLOR = {"k11-5-3": AMBER, "k3x3": GREEN, "k2x2": BLUE, "kalt3-2": RED, "k3x3stacked": shade(GREEN, 0.45), "k2x2stacked": shade(BLUE, 0.45),
           "k11-3": PURPLE, "k11-2": shade(PURPLE, 0.45),  # purple = a large conv1 / stem before a small-kernel body (as k7-2); darker = 2x2 body
@@ -58,8 +58,8 @@ FAMILY_TAG = {"vgg16": "VGG16", "resnet18": "ResNet-18"}  # nets kept at their o
 # figures 16 / 20: one x group per kind of kernel, every family pooled -- (family, kernel) groups were 14, 19 once the ResNet
 # block lands; these stay 7. The colour repeats the group (no legend), the marker is the family, as in 13 / 17 / 25
 KGROUPS = [("kernel original\n11-5-3-3-3 / 7-3", {"k11-5-3", "k7-3"}, AMBER), ("3×3", {"k3x3"}, GREEN), ("2×2", {"k2x2"}, BLUE),
-           ("alternado 3-2", {"kalt3-2"}, RED), ("conv1 / stem grande\n+ corpo pequeno", {"k11-3", "k11-2", "k7-2"}, PURPLE),
-           ("mais profundo\n(empilhado /\nstem profundo)", {"k3x3stacked", "k2x2stacked", "k3x3deepstem", "k2x2deepstem"}, shade(GREEN, 0.45)),
+           ("alternado 3-2", {"kalt3-2"}, RED), ("conv1 grande\n+ corpo pequeno", {"k11-3", "k11-2", "k7-2"}, PURPLE),
+           ("mais profundo\n(dois por estágio /\nconv1 profunda)", {"k3x3stacked", "k2x2stacked", "k3x3deepstem", "k2x2deepstem"}, shade(GREEN, 0.45)),
            ("outras famílias", None, NEUTRAL)]
 GEOMS = {(2, 2, 2): "layout 64px\nconv1 s2, 2 pools 2×2", (4, 2, 2): "conv1 s4,\n2 pools 2×2",
          (2, 3, 3): "conv1 s2,\n3 pools 3×3", (4, 3, 3): "layout original\nconv1 s4, 3 pools 3×3"}
@@ -216,7 +216,7 @@ BASE_HANDLE = Line2D([], [], marker="o", mfc="none", mec="k", mew=1.5, ls="", ms
 
 FMARK = {"alexnet": "o", "vgg16": "s", "resnet18": "D", "família": "X"}  # figures 13/17/25: the marker is the family
 FLABEL = {"alexnet": "AlexNet", "vgg16": "VGG16", "resnet18": "ResNet-18", "família": "rede de compensação / outra família"}
-EFF_NOTE = "custo efetivo: sem os pesos da cabeça FC que só multiplicam as cópias repetidas pelo AdaptiveAvgPool"
+EFF_NOTE = "custo efetivo: sem os pesos da classificador FC que só multiplicam as cópias repetidas pelo AdaptiveAvgPool"
 
 
 def family_handles(d):
@@ -287,7 +287,7 @@ def fig_grid(df, figs, note, bands):
     # each column against its own regime's floor (no BN / BN); NaN while a floor's replicates run -> nothing greyed
     braw = np.array([band_for(bands, "alexnet", bn)["fp32"] for _, bn in cols])
     bcol = np.nan_to_num(braw)
-    btxt = lambda b: f"±{b:.1f} pp" if np.isfinite(b) else "pendente"  # noqa: E731
+    btxt = lambda b: f"±{b:.1f} p.p." if np.isfinite(b) else "pendente"  # noqa: E731
     fig, axes = plt.subplots(1, 2, figsize=(15, 5.8))
     lim = np.nanmax(np.abs(dfp[1:])) if np.isfinite(dfp[1:]).any() else 1
     shown = np.where(np.abs(dfp) < bcol, np.nan, dfp)  # inside the seed band: no colour, it is not a difference
@@ -311,8 +311,8 @@ def fig_grid(df, figs, note, bands):
                     txt, c = "sem referência", NEUTRAL
                 else:
                     small = abs(dfp[i, j]) < bcol[j]
-                    txt = (f"FP32 {dfp[i, j]:+.1f} pp" + (" ≈ ruído" if small else "")
-                           + (f"\nINT8 {d8[i, j]:+.1f} pp" + ("*" if star[i, j] else "") if np.isfinite(d8[i, j]) else ""))
+                    txt = (f"FP32 {dfp[i, j]:+.1f} p.p." + (" ≈ ruído" if small else "")
+                           + (f"\nINT8 {d8[i, j]:+.1f} p.p." + ("*" if star[i, j] else "") if np.isfinite(d8[i, j]) else ""))
                     c = NEUTRAL if small else "k"
                 ax.text(j, i, txt, ha="center", va="center", fontsize=9, color="white" if c == "k" and on_dark[i, j] else c)
         ax.set_xticks(range(len(cols)))
@@ -325,7 +325,7 @@ def fig_grid(df, figs, note, bands):
     axes[1].set_title(f"Diferença para o 11-5-3-3-3 da mesma coluna: azul = melhor, vermelho = pior\n"
                       f"cinza = FP32 dentro do ruído entre seeds ({btxt(braw[1])} com BN, {btxt(braw[0])} sem BN)", fontsize=10)
     b = baseline(df)
-    fig.suptitle("Fatorial principal: kernel × cabeça × BatchNorm no AlexNet de layout 64px (mapa final 8×8)\n" + note
+    fig.suptitle("Fatorial principal: kernel × classificador × BatchNorm no AlexNet de layout 64px (mapa final 8×8)\n" + note
                  + (" · * = " + EARLY_LABEL if early.any() else "")
                  + (f"\nreferência: AlexNet sem adaptar (mapa 1×1) FP32 {b.fp32:.1f} · INT8 {b.int8:.1f}"
                     + (f"; com entrada ampliada a 224 px (mapa 6×6) FP32 {h['fp32']:.1f} · INT8 {h['int8']:.1f}" if (h := healthy_run()) else "")
@@ -369,7 +369,7 @@ def fig_geometry(df, figs, note, pending=True):
             missing.setdefault(GEOMS[(r.stride, r.pool_kernel, r.pool_count)].replace("\n", " "), []).append(KLABEL[r.kernels])
     handles = legend_kernels(K4) + ([BASE_HANDLE] if b is not None else []) + ([early_handle("ring")] if ringed else [])
     fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=4, fontsize=9)
-    fig.suptitle("O custo do kernel depende da geometria? Mesmas redes (AlexNet sem BN, cabeça FC + Dropout), só muda como a rede reduz o mapa\n"
+    fig.suptitle("O custo do kernel depende da geometria? Mesmas redes (AlexNet sem BN, classificador FC + Dropout), só muda como a rede reduz o mapa\n"
                  "da esquerda (layout 64px) para a direita (layout do AlexNet original); linhas não paralelas = interação kernel × geometria\n"
                  + note + "".join(f"\nainda na fila: {' e '.join(ks)} em {g}" for g, ks in missing.items()), fontsize=11)
     fig.tight_layout()
@@ -443,7 +443,7 @@ def fig_quant(df, figs, note):
     rho = q[["ratio", "dq"]].corr(method="spearman").iloc[0, 1]
     print(f"16: Spearman rho(worst layer-input max / p99.9, INT8 - FP32) = {rho:+.2f}, n = {len(q)} (early-best runs left out)")
     ax.axhline(0, color="k", lw=0.8)
-    ax.set_ylabel("INT8 − FP32 (pp; negativo = perde no INT8)")
+    ax.set_ylabel("INT8 − FP32 (p.p.; negativo = perde no INT8)")
     fig.legend(handles=run_handles(d), loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=3, fontsize=9)
     fig.suptitle("Robustez à quantização: quanto cada rede perde do FP32 ao INT8 real, por tipo de kernel\n"
                  "cada ponto = uma rede · " + note, fontsize=11)
@@ -598,7 +598,7 @@ def fig_curves(df, figs, note, panels=None, kernels=K4, name="18_training_curves
                + [Line2D([], [], color=TEXT_SECONDARY, lw=1.6, label="validação (split 90/10)"),
                   # Trainer's train_acc: the running mean over the epoch, in train mode, on the augmented batches
                   Line2D([], [], color=TEXT_SECONDARY, lw=0.8, ls="--", label="treino: média da época, com augmentation"
-                         + (" (e Dropout ligado na cabeça FC)" if any((runs["head"] == "fc").any() for _, runs in panels) else "")),
+                         + (" (e Dropout ligado na classificador FC)" if any((runs["head"] == "fc").any() for _, runs in panels) else "")),
                   Line2D([], [], marker="D", color=TEXT_SECONDARY, ls="", ms=7, label="época escolhida: a melhor na validação, de onde o QAT parte")],
                loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=4 if ncols > 1 else 2, fontsize=9)
     fig.suptitle(f"Curvas de treino {what}: convergiu? quanto o treino se afasta da validação?\n" + note, fontsize=11)
@@ -616,7 +616,7 @@ def fig_resnet_curves(df, figs, note):
     queued = [KLABEL[k] for k in RESNET_K if k in set(c[(c.family == "resnet18") & ~c.pretrained].kernels) and k not in set(runs.kernels)]
     fig_curves(df, figs, note + (f"\nainda sem resultado final: {' · '.join(queued)}" if queued else ""),
                panels=[("ResNet-18 · GAP + BN · do zero", runs)], kernels=RESNET_K, name="29_resnet_training_curves.png",
-               what="da ResNet-18 por kernel do stem / dos blocos", base=False)
+               what="da ResNet-18 por kernel da conv1 / dos blocos", base=False)
 
 
 def fig_qat_curves(df, figs, note):
@@ -728,7 +728,7 @@ def fig_kblocks(df, figs, note, bands):
                Line2D([], [], color=KCOLOR["k3x3"], ls="--", label="3×3 em todos os blocos"),
                Line2D([], [], color=KCOLOR["k2x2"], ls="--", label="2×2 em todos os blocos")]
     if pd.notna(band["fp32"]):
-        handles.append(Patch(color=GRID, alpha=0.6, label=f"ruído entre seeds em torno do 3×3 (±{band['fp32']:.1f} pp FP32, {src})"))
+        handles.append(Patch(color=GRID, alpha=0.6, label=f"ruído entre seeds em torno do 3×3 (±{band['fp32']:.1f} p.p. FP32, {src})"))
     if seeded:
         handles.append(Line2D([], [], marker="o", color="k", ls="", ms=4, label="uma seed (42/43/44), onde replicado"))
     fig.legend(handles=handles + ([early_handle("ring")] if ringed else []), loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=3, fontsize=9)
@@ -815,7 +815,7 @@ def main(argv=None):
     fig_quant(df, figs, note)
     fig_flips(df, figs, note)
     fig_latency(df, figs, note if archive else "seed 42 · latência por imagem, batch 1")
-    curves_note = note if archive else "seed 42 · curvas no split de validação (10% do train), não no test set"
+    curves_note = note if archive else "seed 42 · curvas no split de validação (10% do train), não no conjunto de teste"
     fig_curves(df, figs, curves_note)
     if not archive:  # the ResNet block has no superseded runs
         fig_resnet_curves(df, figs, curves_note)
@@ -823,7 +823,7 @@ def main(argv=None):
     if not archive:
         every = frame(everything=True)
         fig_kblocks(every, figs, note, bands)
-        fig_controls(every, figs, "cada ponto = uma seed (42/43/44) · top-1 no test set (val oficial do Tiny ImageNet)")
+        fig_controls(every, figs, "cada ponto = uma seed (42/43/44) · top-1 no conjunto de teste (val oficial do Tiny ImageNet)")
         fig_pareto(every.assign(wino_pct=[winograd_share(r) for r in every.itertuples()]), figs, note,
                    [("int8", "wino_pct", "MACs em convs que um acelerador Winograd executa (% dos MACs: stride 1, kernel 2×2 ou 3×3)")],
                    "30_winograd_eligible.png", "Acurácia × quanto da rede cabe num acelerador Winograd: à direita, mais cálculo no "

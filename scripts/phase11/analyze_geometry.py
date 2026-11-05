@@ -286,7 +286,7 @@ def fig_convert(df):
     ax.set_xticks(range(len(d)))
     ax.set_xticklabels(["AlexNet sem adaptar\n(baseline)" if r.key == BASE_KEY else cell_label(r, skip=("bn",)) for r in d.itertuples()],
                        rotation=40, ha="right", fontsize=9)
-    ax.set_ylabel("INT8 − FP32 (pp; negativo = perde no INT8)")
+    ax.set_ylabel("INT8 − FP32 (p.p.; negativo = perde no INT8)")
     ax.set_title("De onde vem a diferença INT8 − FP32: do treino QAT ou da conversão para INT8 real? (seed 42)\n"
                  "fatorial principal, layout 64px (conv1 stride 2, 2 max-pools 2×2); a barra termina em INT8 − FP32", fontsize=11)
     fig.tight_layout()

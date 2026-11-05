@@ -45,7 +45,7 @@ A_COLOR, B_COLOR = BLUE, RED  # A and B in every factor figure (report palette, 
 # the factor figures' rows: one family per row, each with its own reference net's line (the families compare to AlexNet)
 FAMILY_ROWS = [("alexnet", (BASE_KEY, BASE_LABEL)), ("família", (BASE_KEY, BASE_LABEL)), ("vgg16", VGG_BASE),
                ("resnet18", RESNET_BASE)]
-FACTOR_FIG = {"Cabeça (FC + Dropout → GAP)": "04_head_fc_vs_gap.png", "Stride da conv1 (4 → 2)": "05_conv1_stride.png",
+FACTOR_FIG = {"Classificador (FC + Dropout → GAP)": "04_head_fc_vs_gap.png", "Stride da conv1 (4 → 2)": "05_conv1_stride.png",
               POOL: "06_pooling.png", "Dropout (0 → 0,5)": "07_dropout.png", PRE: "08_pretraining.png",
               "BatchNorm (sem → com)": "09_batchnorm.png", COMP: "10_compensation_block.png",
               "Entrada (64 → 224 px)": "23_input_224.png"}  # Kernel: figures 01-03 (VGG kernel blocks: design_figures 24)
@@ -62,26 +62,26 @@ FACTORS = ["family", "kernels", "stride", "pooling", "head", "bn", "dropout", "p
 FC_HEAD, GAP_HEAD = {"head": "fc", "dropout": True}, {"head": "gap", "dropout": False}
 PAIRS = [("kernels", "k11-5-3", "k3x3", "Kernel 11-5-3-3-3 → 3×3"), ("kernels", "k3x3", "k2x2", "Kernel 3×3 → 2×2"),
          ("kernels", "k11-5-3", "k2x2", "Kernel 11-5-3-3-3 → 2×2"), ("kernels", "k3x3", "kalt3-2", "Kernel 3×3 → alternado 3-2"),
-         ("kernels", "k3x3", "k3x3stacked", "3×3 → dois 3×3 empilhados por estágio"),
-         ("kernels", "k2x2", "k2x2stacked", "2×2 → dois 2×2 empilhados por estágio"),
+         ("kernels", "k3x3", "k3x3stacked", "3×3 → dois 3×3 por estágio"),
+         ("kernels", "k2x2", "k2x2stacked", "2×2 → dois 2×2 por estágio"),
          # the large-stem block (phase_11_large_stem.yaml): AlexNet's 11x11 conv1 kept, a 3x3 / 2x2 body
          ("kernels", "k3x3", "k11-3", "Conv1 3×3 → 11×11, corpo 3×3"), ("kernels", "k2x2", "k11-2", "Conv1 2×2 → 11×11, corpo 2×2"),
          ("kernels", "k11-3", "k11-5-3", "Conv2 3×3 → 5×5, conv1 11×11"),
          ("kernels", "k11-3", "k11-2", "Corpo 3×3 → 2×2, conv1 11×11 mantida"),
-         ("head", FC_HEAD, GAP_HEAD, "Cabeça FC (+ Dropout) → GAP"), ("bn", False, True, "BatchNorm não → sim"),
+         ("head", FC_HEAD, GAP_HEAD, "Classificador FC (+ Dropout) → GAP"), ("bn", False, True, "BatchNorm não → sim"),
          ("stride", 4, 2, "Stride da conv1 4 → 2"), ("pooling", "3pool3x3", "2pool2x2", "3 max-pools 3×3 → 2 max-pools 2×2"),
-         ("dropout", False, True, "Dropout 0 → 0,5 (só cabeça FC)"), ("pretrained", False, True, "Pré-treino ImageNet"),
+         ("dropout", False, True, "Dropout 0 → 0,5 (só classificador FC)"), ("pretrained", False, True, "Pré-treino ImageNet"),
          # the input-size block (phase_11_input224.yaml): the same net fed Tiny ImageNet enlarged to 224x224
          ("input_size", 64, 224, "Entrada 64 → 224 px (ampliada)"),
          # ResNet-18 (phase_11_resnet_kernel_stem.yaml): its own kernels are k7-3 (7x7 stem, 3x3 blocks); stem and blocks
          # apart through k7-2; the deep stems (ResNet-C) are a depth compensation, like stacked
          ("kernels", "k7-3", "k3x3", "Kernel 7-3 (ResNet) → 3×3"), ("kernels", "k7-3", "k2x2", "Kernel 7-3 (ResNet) → 2×2"),
-         ("kernels", "k7-3", "k7-2", "Kernel blocos 3×3 → 2×2, stem 7×7 mantido"),
-         ("kernels", "k7-2", "k2x2", "Kernel stem 7×7 → 2×2, blocos 2×2"),
-         ("kernels", "k3x3deepstem", "k2x2deepstem", "Kernel 3×3 → 2×2, stem profundo"),
-         ("kernels", "k3x3", "k3x3deepstem", "Stem 3×3 → três 3×3 (ResNet-C)"),
-         ("kernels", "k2x2", "k2x2deepstem", "Stem 2×2 → três 2×2")]
-FIGURE_OF = {"head": "Cabeça (FC + Dropout → GAP)", "stride": "Stride da conv1 (4 → 2)", "pooling": POOL, "dropout": "Dropout (0 → 0,5)",
+         ("kernels", "k7-3", "k7-2", "Kernel blocos 3×3 → 2×2, conv1 7×7 mantida"),
+         ("kernels", "k7-2", "k2x2", "Kernel conv1 7×7 → 2×2, blocos 2×2"),
+         ("kernels", "k3x3deepstem", "k2x2deepstem", "Kernel 3×3 → 2×2, conv1 profunda"),
+         ("kernels", "k3x3", "k3x3deepstem", "Conv1 3×3 → três 3×3 (ResNet-C)"),
+         ("kernels", "k2x2", "k2x2deepstem", "Conv1 2×2 → três 2×2")]
+FIGURE_OF = {"head": "Classificador (FC + Dropout → GAP)", "stride": "Stride da conv1 (4 → 2)", "pooling": POOL, "dropout": "Dropout (0 → 0,5)",
              "pretrained": PRE, "bn": "BatchNorm (sem → com)",
              "input_size": "Entrada (64 → 224 px)"}
 K3_GAP_BN = "alexnet_k3x3_stride2_2pool2x2_map8_gap_bn"
@@ -258,8 +258,8 @@ def fig_factor(t, df, factor):
         if r.note:
             notes.setdefault(r.note, []).append(r.contrast)
     layouts = [v for k, v in LAYOUTS.items() if g.contrast.str.contains(k).any()]
-    fig.suptitle(f"{factor}: cada grupo são duas redes iguais exceto por este fator; sob o grupo, B − A (pp)\n"
-                 "barras = top-1 FP32 no test set · seed 42 (média das seeds onde replicada)"
+    fig.suptitle(f"{factor}: cada grupo são duas redes iguais exceto por este fator; sob o grupo, B − A (p.p.)\n"
+                 "barras = top-1 FP32 no conjunto de teste · seed 42 (média das seeds onde replicada)"
                  + "".join(f"\n{s}" for s in layouts)
                  + (f"\n{FACTOR_NOTE[factor]}" if factor in FACTOR_NOTE else "")
                  + "".join(f"\nnota — {'; '.join(cs)}: {note}" for note, cs in notes.items()), fontsize=11)
@@ -351,7 +351,7 @@ def fig_matched_pairs(pairs, summary, n_cells):
             ax.scatter(v[inside], yy[inside], s=12, facecolors="none", edgecolors=list(c[inside]), lw=0.9)
             ax.scatter(v.median(), y[s.contrast], marker="D", s=50, zorder=3, color=RED)
             ax.hlines(y[s.contrast], *bootstrap_median_ci(v), color=RED, lw=2, zorder=2)
-        ax.set_title(f"Top-1 {m.upper()}: B − A (pp)", fontsize=10)
+        ax.set_title(f"Top-1 {m.upper()}: B − A (p.p.)", fontsize=10)
         ax.set_xlabel("← A melhor   ·   B melhor →", fontsize=9)
     axes[0].text(0, 1.0, "fator trocado: A → B", transform=axes[0].transAxes, ha="right", va="bottom", fontsize=9, weight="bold")
     n = dict(zip(summary.contrast, summary.n_pairs))
@@ -477,7 +477,7 @@ def fig_critical_difference(cells):
               f"configurations:\n{t.round(2).to_string()}")
     fig.suptitle("Que kernel fica à frente depende do regime de treino: posição de cada kernel (1 = mais acurado) nas configurações\n"
                  "do AlexNet em que os quatro foram treinados, sem BN e com BN em separado; sem BN, kernels ligados por uma barra preta\n"
-                 "não se distinguem (Friedman + Nemenyi, α = 0,05; Demšar 2006) · seed 42 · top-1 no test set", fontsize=11, y=1.06)
+                 "não se distinguem (Friedman + Nemenyi, α = 0,05; Demšar 2006) · seed 42 · top-1 no conjunto de teste", fontsize=11, y=1.06)
     savefig(fig, "21_kernel_rank_critical_difference.png")
 
 

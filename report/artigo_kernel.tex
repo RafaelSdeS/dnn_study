@@ -1,7 +1,8 @@
 % RASCUNHO. Resultados das fases 11 a 13, no formato de ic_report.tex.
 % Compilar a partir de report/:  latexmk -pdf -outdir=<pasta fora do repo> artigo_kernel.tex
 % As figuras vêm direto de results/figures_generated/; os títulos embutidos são cortados com trim e a informação vai para a legenda.
-% \pendente{...} marca, em vermelho, o que depende das seeds 43 e 44 da fase 13 (jobs 835245, 835347 e 835352).
+% \pendente{...} marca, em vermelho, o que depende de treinos em andamento: as seeds 43 e 44 da fase 13 (2x2: jobs 835245,
+% 835347 e 835352; 3x3: submetidas em 2026-11-05) e a fase 14 (Winograd-FPGA na receita única, docs/logs/PHASE14_LOG.md).
 \documentclass[conference]{IEEEtran}
 \IEEEoverridecommandlockouts
 \renewcommand{\figurename}{Figura}
@@ -48,6 +49,9 @@ mateus.grellert@inf.ufrgs.br}
 }
 
 \maketitle
+% IEEEtran em modo conference não numera as páginas; o estilo plain põe o número no rodapé.
+\thispagestyle{plain}
+\pagestyle{plain}
 
 \begin{abstract}
 O algoritmo de Winograd faz convoluções com menos multiplicações, mas só compensa com kernels pequenos, como 2\by2 e 3\by3.
@@ -150,11 +154,6 @@ Algumas comparações usam o \textit{custo efetivo}. Quando o mapa final é meno
 valores, e os pesos que só multiplicam essas cópias não acrescentam nada à função da rede. A AlexNet sem adaptação em 64 px, por exemplo, tem 57,8M
 de parâmetros, mas só 21M fazem diferença. O custo efetivo desconta esses pesos. Ele é usado nas variações de custo da Tabela~\ref{tab:fatores_efeito}
 e nas Figuras~\ref{fig:pareto} e~\ref{fig:winograd}.
-
-\subsection{Nomes usados nas figuras}
-
-As figuras vêm direto dos scripts de análise e abreviam alguns nomes. Nelas, \textit{pp} é o mesmo que p.p., \textit{stem} é a conv1, \textit{cabeça} é o
-classificador, \textit{empilhado} é o corpo com duas convoluções por estágio, \textit{skip residual} é o atalho, \textit{stem profundo} é a troca da conv1 da ResNet-18 por três convoluções pequenas, e \textit{test set} é o conjunto de teste.
 
 \section{Metodologia}
 \label{sec:metodo}
@@ -561,7 +560,7 @@ vir de enxergar mais da imagem. Não testamos a causa.
 \begin{figure*}[!t]
 \centering
 \includegraphics[width=0.8\textwidth,trim=0 0 0 52.8,clip]{phase_11_kernel_size_comparison/22_effective_receptive_field.png}
-\caption{Que região da imagem cada rede usa: quanto cada pixel move a unidade central da última convolução (média de 200 imagens de teste, seed 42). O contorno marca a menor região com metade da influência. Todas têm GAP e BN, menos a AlexNet original (FC + Dropout, sem BN). Compare, na segunda linha, 2\by2 com 2\by2 empilhado e 3\by3 com 3\by3 empilhado.}
+\caption{Que região da imagem cada rede usa: quanto cada pixel move a unidade central da última convolução (média de 200 imagens de teste, seed 42). O contorno marca a menor região com metade da influência. Todas têm GAP e BN, menos a AlexNet original (FC + Dropout, sem BN). Compare, na segunda linha, cada kernel com sua versão de dois por estágio.}
 \label{fig:erf}
 \end{figure*}
 
@@ -727,8 +726,8 @@ Conv1 $\rightarrow$ 11\by11 & $-$0,12 & $-$0,19 & 4 de 12 & $-$1,08 a $+$3,25 \\
 
 \textbf{Atalho e conv1 11\by11.} O atalho residual fica dentro da variação entre seeds, e seu sinal muda entre os pares. A conv1 11\by11 só ajuda no corpo de 5 convoluções (3 de 4 pares). Com dois por estágio, sua mediana é de $-$0,20 p.p., ou seja, a segunda convolução por estágio já entrega o que ela entregava.
 
-\textbf{Kernel do corpo.} Este é o resultado mais curioso. Com 5 convoluções, a troca de 3\by3 por 2\by2 varia de $-$1,28 a $+$1,09 p.p. Com dois por estágio, o 2\by2 vence nos 8 pares (de $+$0,47 a $+$1,82 p.p., mediana de $+$1,4), com cerca de metade dos MACs. Seis desses 8 pares passam da faixa de $\pm$0,7 p.p. É um indício forte, mas de uma seed: as repetições em andamento só
-incluem redes 2\by2, então esta comparação continuará dependendo da seed 42.
+\textbf{Kernel do corpo.} Este é o resultado mais curioso. Com 5 convoluções, a troca de 3\by3 por 2\by2 varia de $-$1,28 a $+$1,09 p.p. Com dois por estágio, o 2\by2 vence nos 8 pares (de $+$0,47 a $+$1,82 p.p., mediana de $+$1,4), com cerca de metade dos MACs. Seis desses 8 pares passam da faixa de $\pm$0,7 p.p. É um indício forte, mas de uma seed.
+\pendente{As seeds 43 e 44 das redes 3\by3 com dois por estágio e stride 1 (com e sem atalho) foram submetidas em 05/11; com elas, os dois pares de stride 1 passam a ter 3 seeds. Atualizar esta frase e o resumo com as médias.}
 
 \textbf{Os dois maiores ganhos não se somam por inteiro.} Partindo do 3\by3 com stride 2 (53,50\%), os ganhos separados de usar dois por estágio ($+$2,37) e stride 1 ($+$4,16) levariam a 60,03\%. O valor medido é 58,53\%. No 2\by2, a soma levaria a 61,24\%, e o valor medido é 60,35\%. O corpo 2\by2 perde menos nessa combinação.
 
@@ -757,6 +756,7 @@ A escolha depende do hardware. Em acurácia, com dois por estágio, o 2\by2 fica
 
 Em um estudo paralelo do grupo, treinamos 14 redes simulando a aritmética de aceleradores F($m$,3) em FPGA. Essa acurácia vem da simulação, não do hardware. O kernel 2\by2 fica fora dessas transformações. O tamanho da transformação define o custo em acurácia: em relação ao FP32, F(2,3) fica praticamente igual ($+$0,05 p.p., mediana), F(4,3) perde 5,1 p.p. e F(6,3) perde 18,9 p.p.
 Assim, um acelerador com F(2,3) e redes 3\by3 é hoje a opção sem custo de acurácia medido.
+\pendente{Esses números vêm da receita anterior (AdamW, FP32 de até 100 épocas, 15 épocas de QAT medidas na validação). A Fase 14 refaz as 16 redes com a receita única e mede no teste; substituir quando terminar.}
 
 \subsection{O que muda em relação ao trabalho anterior}
 
@@ -790,7 +790,7 @@ Para quem projeta redes para aceleradores Winograd, a mensagem é simples: não 
 
 O passo seguinte é concluir as seeds 43 e 44 das melhores redes. Depois, queremos:
 \begin{itemize}
-\item repetir com outras seeds a rede 3\by3 com dois por estágio e stride 1, para confirmar a comparação com o 2\by2;
+\item concluir as seeds 43 e 44 das redes 3\by3 com dois por estágio e stride 1, já submetidas, para confirmar a comparação com o 2\by2;
 \item fazer o controle de capacidade com classificador FC, para explicar o custo do 2\by2 na AlexNet;
 \item reavaliar todas as redes no mesmo tipo de máquina, para comparar latência;
 \item medir a vazão em um acelerador real;

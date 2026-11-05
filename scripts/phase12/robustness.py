@@ -70,7 +70,7 @@ def fig_lr(p11, p12, figs):
                                                                label="uma seed (as 3 em 0,01)")]
     fig.legend(handles=handles, title="kernel (todas as convs)", loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=4, fontsize=9)
     fig.suptitle("O ranking dos kernels depende do lr? AlexNet, layout 64px, GAP + BN\n"
-                 "linha = seed 42, pontos = cada seed (as 3 em 0,01) · top-1 no test set", fontsize=11, y=1.04)
+                 "linha = seed 42, pontos = cada seed (as 3 em 0,01) · top-1 no conjunto de teste", fontsize=11, y=1.04)
     savefig(fig, "01_lr_sensitivity.png", figs)
 
 
@@ -107,7 +107,7 @@ def fig_finetune(p11, p12, figs):
               [Line2D([], [], ls="", label="★ = lr com melhor top-1 na validação")]
     fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=3, fontsize=9)
     fig.suptitle("Os gêmeos pré-treinados com fine-tuning de verdade: lr 1e-3 e 1e-4, 100 épocas, QAT de 10 (seed 42)\n"
-                 "a receita única (lr 0,01) apaga o pré-treino; aqui ele é mantido · top-1 no test set", fontsize=11)
+                 "a receita única (lr 0,01) apaga o pré-treino; aqui ele é mantido · top-1 no conjunto de teste", fontsize=11)
     savefig(fig, "02_finetune_pretrained.png", figs)
 
 
@@ -134,7 +134,7 @@ def fig_cifar(p12, figs):
         ax.margins(y=0.15)
     axes[0].set_ylabel("Top-1 (%)")
     band = noise_band(c, set(c.key))
-    note = (f"\nruído entre seeds (2√2·SD): ±{band['fp32']:.1f} pp FP32, ±{band['int8']:.1f} pp INT8" if np.isfinite(band["fp32"]) else "")
+    note = (f"\nruído entre seeds (2√2·SD): ±{band['fp32']:.1f} p.p. FP32, ±{band['int8']:.1f} p.p. INT8" if np.isfinite(band["fp32"]) else "")
     fig.legend(handles=SEED_HANDLES + ([early_handle("ring")] if ringed else []), loc="upper center", bbox_to_anchor=(0.5, 0.0),
                ncol=3, fontsize=9)
     fig.suptitle("O contraste de kernels no CIFAR-100 (32×32, 100 classes), as mesmas redes e a mesma receita\n"
@@ -147,7 +147,7 @@ VK = "vgg16_{}_stride1_5pool2x2_map2_gap_bn".format
 RK = "resnet18_{}_stride2_1pool3x3_map2_gap_bn".format
 CAK = "alexnet_{}_stride2_2pool2x2_map4_gap_bn_in32".format  # the same nets on CIFAR-100
 CVK = "vgg16_{}_stride1_5pool2x2_map1_gap_bn_in32".format
-SMALL, ORIG, SAME = "3×3 → 2×2", "kernel original → 3×3 (AlexNet 11-5-3-3-3, ResNet-18 stem 7×7)", "3×3 → 2×2 com os mesmos MACs"
+SMALL, ORIG, SAME = "3×3 → 2×2", "kernel original → 3×3 (AlexNet 11-5-3-3-3, ResNet-18 conv1 7×7)", "3×3 → 2×2 com os mesmos MACs"
 
 
 def everywhere_rows(p11, p12):
@@ -199,7 +199,7 @@ def fig_everywhere(p11, p12, figs):
             ax.scatter(d[~inside], yy[~inside], s=22, color=list(c[~inside]), zorder=3)
             ax.scatter(d[inside], yy[inside], s=18, facecolors="none", edgecolors=list(c[inside]), lw=1, zorder=3)
             ax.scatter(d.mean(), -y[(group, label)], marker="D", s=55, color=RED, zorder=4)
-        ax.set_title(f"Top-1 {m.upper()}: B − A (pp)", fontsize=10)
+        ax.set_title(f"Top-1 {m.upper()}: B − A (p.p.)", fontsize=10)
         ax.set_xlabel("← A melhor   ·   B melhor →", fontsize=9)
     axes[0].set_yticks([-i for i in range(len(ticks))])
     axes[0].set_yticklabels([text for text, _ in ticks], fontsize=9)
@@ -212,7 +212,7 @@ def fig_everywhere(p11, p12, figs):
         handles.append(Line2D([], [], marker="o", color=EARLY_GRAY, ls="", ms=5, label="cinza (INT8) = " + EARLY_LABEL))
     fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=2, fontsize=9)
     fig.suptitle("O custo do kernel pequeno é o mesmo em todo lugar? Duas redes iguais exceto pelo kernel, em cada cenário\n"
-                 "datasets, lr e famílias diferentes; e o 3×3 → 2×2 com o custo de cálculo igualado · top-1 no test set de cada dataset",
+                 "datasets, lr e famílias diferentes; e o 3×3 → 2×2 com o custo de cálculo igualado · top-1 no conjunto de teste de cada dataset",
                  fontsize=11, y=1.02)
     fig.tight_layout()
     savefig(fig, "04_kernel_effect_everywhere.png", figs)

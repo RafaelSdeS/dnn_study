@@ -26,7 +26,7 @@ from scripts.phase11.design_figures import KCOLOR, LIVE_NOTE, frame, legend_kern
 
 FIGS = ROOT / "results/figures_generated/phase_13_hybrids"
 TABLES = ROOT / "results/phase_13_hybrids"
-BODIES = [("", "5 convs"), ("stacked", "2 por estágio"), ("residual", "2 por estágio\n+ skip residual")]
+BODIES = [("", "5 convs"), ("stacked", "2 por estágio"), ("residual", "2 por estágio\n+ atalho residual")]
 VGG_REF = "vgg16_k3x3_stride1_5pool2x2_map2_gap_bn"  # the reference line: VGG16 3x3 + BN + GAP, Phase 11
 
 
@@ -37,7 +37,7 @@ def cell(k, big, body, s):
 
 GRID = {(k, big, body, s): cell(k, big, body, s) for k, big, (body, _), s in product((3, 2), (False, True), BODIES, (2, 1))}
 # (label, position in the GRID key, level A, level B): every matched pair = two cells equal but in that position
-CHANGES = [("corpo: 5 convs → 2 por estágio", 2, "", "stacked"), ("corpo: 2 por estágio → + skip residual", 2, "stacked", "residual"),
+CHANGES = [("corpo: 5 convs → 2 por estágio", 2, "", "stacked"), ("corpo: 2 por estágio → + atalho residual", 2, "stacked", "residual"),
            ("conv1: kernel do corpo → 11×11", 1, False, True), ("kernel do corpo: 3×3 → 2×2", 0, 3, 2),
            ("stride da conv1: 2 → 1", 3, 2, 1)]
 
@@ -118,9 +118,9 @@ def fig_hybrids(s42, bands, figs, reps=None):
         handles.append(Line2D([], [], marker="o", color=TEXT_SECONDARY, alpha=0.5, ls="", ms=4, label="outras seeds (FP32)"))
     fig.legend(handles=handles + ([early_handle("ring")] if ringed else []), loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=7, fontsize=9)
     band = band_for(bands, "alexnet", True)["fp32"]
-    fig.suptitle("Híbridos: profundidade, skip residual, conv1 11×11 e stride 1 somam? (AlexNet, 2 max-pools 2×2, GAP + BN)\n"
+    fig.suptitle("Híbridos: profundidade, atalho residual, conv1 11×11 e stride 1 somam? (AlexNet, 2 max-pools 2×2, GAP + BN)\n"
                  "sob cada corpo: MACs por imagem do 3×3 · do 2×2\n" + LIVE_NOTE
-                 + (f" · ruído entre seeds (GAP + BN): ±{band:.1f} pp FP32" if pd.notna(band) else "")
+                 + (f" · ruído entre seeds (GAP + BN): ±{band:.1f} p.p. FP32" if pd.notna(band) else "")
                  + (f"\nainda na fila: {queued} de 24 células" if queued else ""), fontsize=11)
     fig.tight_layout()
     savefig(fig, "01_hybrids.png", figs)
