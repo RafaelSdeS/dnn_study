@@ -505,8 +505,10 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
             # *is* the accelerator-numeric accuracy (top1_int8_accel proxy).
             qat_wino_model = load_qat_wino_model(model_name, spec, checkpoints_dir, device,
                                                  qat_wino_cfg)
+            # eta_min as in the QAT stage: Phase 14 runs qat_wino on the QAT recipe (cosine to 1/100 of its lr, Wu et al.
+            # 2020 App. A.2); until 2026-11-05 it was dropped here and the cosine went to the FP32 floor (0)
             qat_wino_cfg_run = replace(
-                model_cfg, epochs=qat_wino_cfg.epochs, lr=qat_wino_cfg.lr,
+                model_cfg, epochs=qat_wino_cfg.epochs, lr=qat_wino_cfg.lr, eta_min=qat_wino_cfg.eta_min,
                 weight_decay=qat_wino_cfg.weight_decay, use_amp=False,
             )
             wino_best_path = checkpoints_dir / f"qat_wino_{model_name}_best.pth"
@@ -536,15 +538,20 @@ def run_experiment(experiment_cfg: dict[str, Any], runtime_cfg: dict[str, Any]) 
                 trainer.logger.info("qat_wino training complete for %s", model_name)
             qat_wino_logits_path = results_dir / f"{model_name}_qat_wino_val_logits.npz"
             qat_wino_eval = trainer.evaluate(topk=(1, 5), save_logits=qat_wino_logits_path)
+            _test_eval(trainer, "qat_wino")  # the held-out test set, like every other stage (2026-11-05)
             wino_summary = {
                 "name": model_name,
                 "stage": "qat_wino",
                 "fit": qat_wino_fit,
                 "eval": qat_wino_eval,
+                "test_eval": test_evals["qat_wino"],
                 "calibration": dump_wino_calibration(qat_wino_model),
                 "checkpoint": str(wino_best_path),
                 "agreement_fp32_qat_wino": prediction_agreement(
                     results_dir / f"{model_name}_fp32_val_logits.npz", qat_wino_logits_path),
+                "agreement_fp32_qat_wino_test": prediction_agreement(
+                    results_dir / f"{model_name}_fp32_test_logits.npz",
+                    results_dir / f"{model_name}_qat_wino_test_logits.npz"),
             }
             create_results_summary(wino_summary, resolved_config, results_dir / f"{model_name}_qat_wino_summary.json")
 

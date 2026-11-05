@@ -1,0 +1,27 @@
+# Phase 14 (2026-11-05, docs/logs/PHASE14_LOG.md): the Winograd-FPGA accelerator numerics on Phase 11's one recipe.
+# The FP32 half: the 14 *_fpga nets of budget_unico (geometry from the sibling Winograd-FPGA repo, ml/winograd_bridge.py,
+# He init since 2026-11-05) trained from scratch on _protocols/no_patience.yaml exactly -- 500 epochs, SGD, no early
+# stopping -- where budget_unico trained them up to 100 epochs with AdamW and early stopping (its runs are the old
+# recipe's, kept until these replace them). Only the fp32 stage: these nets have no fbgemm QAT path, their quantized
+# contract is qat_wino, run by the three phase_14_winograd_f{23,43,63}_pack arms on these checkpoints.
+# On PCAD: WINOGRAD_FPGA_ROOT=~/winograd_bridge_m7/avaliacao_redes (bridge f44da9a, the numerics of the old arms; the
+# older ~/winograd_bridge has no packing), `--slurm tupi_4090`. tests/test_config.py holds this file to the recipe.
+extends: _protocols/no_patience
+name: phase_14_winograd_fp32
+stages:
+  - fp32
+models:
+  - vgg_style_fpga
+  - alexnet_stacked_fpga
+  - repvgg_a0_fpga
+  - vgg13_fpga
+  - alexnet_3x3_fc_fpga
+  - alexnet_fire_fpga
+  - alexnet_fire_bypass_fpga
+  - alexnet_bottleneck_fpga
+  - alexnet_final_fire_residual_fpga
+  - alexnet_final_bottleneck_residual_fpga
+  - googlenet_fpga
+  - resnet18_fpga
+  - wrn_16_4_fpga
+  - wrn_28_2_fpga

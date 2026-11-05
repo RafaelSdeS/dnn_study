@@ -119,6 +119,34 @@ def test_every_phase_11_experiment_shares_the_protocol_exactly():
         assert cfg == reference, f"{name} differs from the Phase 11 protocol: {cfg} vs {reference}"
 
 
+def test_phase_14_runs_the_phase_11_recipe_on_the_winograd_numerics():
+    """Phase 14 (the Winograd-FPGA numerics on the one recipe, 2026-11-05) differs from the Phase 11 protocol only where
+    it says so: the FP32 file trains the fp32 stage alone; each arm runs only qat_wino -- the recipe's QAT against its
+    own accelerator line -- on the FP32 file's nets plus two Phase 11 cells whose FP32 it reuses."""
+    reference = load_config("experiments/phase_11_kernel_head_bn.yaml")
+    for key in ("name", "models", "seed", "stages"):
+        reference.pop(key)
+    fp32 = load_config("experiments/phase_14_winograd_fp32.yaml")
+    assert (fp32.pop("name"), fp32.pop("seed"), fp32.pop("stages")) == ("phase_14_winograd_fp32", 42, ["fp32"])
+    nets = fp32.pop("models")
+    assert fp32 == reference
+    phase_11_nets = {m for n in _experiment_names() if n.startswith("phase_11_") and "_seed" not in n
+                     for m in load_config(f"experiments/{n}.yaml")["models"]}
+    arms = [n for n in _experiment_names() if n.startswith("phase_14_") and n != "phase_14_winograd_fp32"]
+    assert arms == [f"phase_14_winograd_f{v}_pack" for v in (23, 43, 63)]
+    recipe_qat = {k: reference["qat"][k] for k in ("epochs", "lr", "eta_min", "weight_decay")}
+    for name in arms:
+        cfg = load_config(f"experiments/{name}.yaml")
+        assert (cfg.pop("name"), cfg.pop("seed"), cfg.pop("stages")) == (name, 42, ["qat_wino"])
+        wino = cfg.pop("qat_wino")
+        assert {k: wino.pop(k) for k in recipe_qat} == recipe_qat, name
+        assert wino == {"variant": name.split("_")[3], "pack": True, "u_w": 9, "v_w": 8, "k_dsp": 2}, name
+        models = cfg.pop("models")
+        assert models[:len(nets)] == nets and len(models) == len(nets) + 2, name
+        assert set(models[len(nets):]) <= phase_11_nets, name  # their FP32 run exists at seed 42
+        assert cfg == reference, name
+
+
 def test_every_pretrained_phase_11_net_has_a_scratch_twin():
     """Pretraining is a contrast, never a silent default: every Phase 11 net whose ctor loads ImageNet weights (an
     explicit pretrained=True, or a class that defaults to it) runs next to its from-scratch twin -- the same name

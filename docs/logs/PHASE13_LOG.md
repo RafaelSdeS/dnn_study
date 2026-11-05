@@ -218,3 +218,11 @@ fails (12 of 12), two per stage never fails, 2x2 beats 3x3 on **all 8 two-conv p
 is still ~0 on the two-conv bodies. The only new skip pair, +0.62, is the largest of the 8 and still at the floor. Seeds 43 / 44 of the two best nets:
 835242 / 835243 running (tupi6, tupi1), 835244 / 835245 pending.
 
+
+## 2026-11-05: the 3x3 side of the two-conv contrast gets seeds too
+
+"2x2 beats 3x3 on all 8 two-conv pairs" is a line of the article's abstract, and the replicates above only cover the 2x2
+nets. `phase_13_hybrids_seed43/_seed44.yaml` gain `alexnet_k3x3stacked_stride1_...` and `alexnet_k3x3residual_stride1_...`
+(4 runs, ~20 GPU-h at seed 42's times), so the two stride-1 pairs compare at 3 seeds. The stride-2 pairs would mean
+seed files for Phase 11's `phase_11_stacked` cells, a Phase 11 design change -- left out. Seed state today: 835242
+(k2x2stacked s43) done; 835243 / 835244 hit the 24 h wall and were resubmitted (835347, 835352); 835245 running.

@@ -371,3 +371,26 @@ def test_controls_and_cifar_cells_are_what_their_names_say():
     assert len(cifar) == 7, cifar  # 4 AlexNet kernel sets + VGG16 3x3 / 2x2 / alternating
     for name in cifar:
         assert MODEL_REGISTRY[name]["ctor"]().eval()(torch.randn(1, 3, 32, 32)).shape == (1, 100), name
+
+
+def test_fpga_nets_start_from_the_studys_he_init():
+    """Phase 14 trains the *_fpga nets on the one recipe, He init included (models/baselines.py:he_init, 2026-11-05):
+    conv weights ~ N(0, 2 / fan_out), Linear weights ~ N(0, 0.01). Skipped without the sibling Winograd-FPGA repo."""
+    import pytest
+    import torch.nn as nn
+
+    from ml.winograd_bridge import bridge_root
+
+    if not (bridge_root() / "models_custom_wino.py").exists():
+        pytest.skip("Winograd-FPGA bridge not available")
+    torch.manual_seed(0)
+    for name in ("alexnet_fire_fpga", "resnet18_fpga"):  # one models_custom_wino net, one torchvision-built one
+        model = MODEL_REGISTRY[name]["ctor"]()
+        convs = [m for m in model.modules() if isinstance(m, nn.Conv2d) and m.weight.numel() >= 4096]
+        linears = [m for m in model.modules() if isinstance(m, nn.Linear)]
+        assert convs and linears, name
+        for c in convs:
+            fan_out = c.weight.shape[0] * c.weight[0, 0].numel()
+            assert abs(c.weight.std().item() / (2 / fan_out) ** 0.5 - 1) < 0.1, (name, c)
+        for lin in linears:
+            assert abs(lin.weight.std().item() / 0.01 - 1) < 0.1, (name, lin)
