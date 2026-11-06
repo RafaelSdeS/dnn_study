@@ -49,3 +49,10 @@ split. The user asked for everything on one recipe, so this phase reruns them on
 ## Status
 
 - 2026-11-05: configs, code and tests in; submission queued on PCAD (`~/queue_phase14.txt`).
+- 2026-11-05: smoke job 835396 (`alexnet_fire_fpga`, FP32, `--smoke`) COMPLETED in 4 min 45 s on tupi1 with the M7 bridge (it only tests the FP32 stage; the `qat_wino` path
+  is tested by the canary arms). Feeder started 21:33 (`QOS=normal`, MAX 8): first the 4 Phase 13 3x3 seeds (835433, 835435-835437), then the 3 canary arms of the Phase 11
+  `alexnet_k3x3_stride4...` cell (835438-835440, F23 / F43 / F63).
+- 2026-11-06 09:20: `~/queue_phase14.txt` reordered (backup `.bak_20261106`, content checked): the 14 FP32 first -- heavy nets (`resnet18`, `vgg13`, `vgg_style`, `repvgg_a0`, `wrn_16_4`,
+  `wrn_28_2`, `googlenet`) on `tupi_4090` alternating with the 7 `alexnet_*_fpga` on `tupi_beagle` (partition `tupi,beagle`; beagle was idle while tupi was saturated by other users) --
+  and the 3 `vgg16` canary arms last. The FP32 are the critical path: the 42 remaining arms (14 nets x 3) are queued by hand after each FP32 lands. Nothing of Phase 14 has finished
+  beyond the smoke. `exclude: tupi4` stays (PHASE13_LOG "2026-11-06"): the 4090 nodes tupi3 / tupi5 / tupi6 had crashes too, so a Phase 14 run killed by a signal is rerun, not resumed.

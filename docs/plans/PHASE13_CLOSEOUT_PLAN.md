@@ -39,7 +39,7 @@ Sem mudar arquivos agora; é a lista de checagens para não errar quando chegare
 caminhos untracked que o pull sobrescreve; copiar o CSV modificado e `git checkout --` nele; `git pull --ff-only`; `cmp` cada arquivo
 movido contra o checked-out; só então apagar as cópias (CLAUDE.md, Layout).
 
-## Bloco B -- `exclude: tupi4`
+## Bloco B -- `exclude: tupi4` (decisão de 2026-11-06: **manter**; ver "Atualização 2026-11-06" no fim)
 Mudança: remover a linha em `configs/slurm/tupi_4090.yaml` e `configs/slurm/tupi_beagle.yaml` (nenhum teste fixa `exclude`: grep em tests/).
 Só afeta submissões futuras via `scripts.cluster`. Sequência segura:
 1. Esperar 835244/835245 **iniciarem** (evita mexer no HEAD do PCAD sob jobs pendentes que gravam `git_hash`).
@@ -90,3 +90,18 @@ Depende das seeds para escolher o corpo (candidatos: `k2x2stacked` e `k2x2residu
 ## Ordem recomendada
 A (quando as seeds terminarem) · B (após as seeds iniciarem + smoke em tupi4) · C-piloto (após aprovação explícita) · D (código
 após as seeds escolherem o corpo). Nada além do plano é executado agora.
+
+## Atualização 2026-11-06
+- **Bloco B (`exclude: tupi4`): manter.** Com os jobs de todos os usuários (>= 30 min, desde 01/10): tupi4 perdeu 10 de 126 por sinal (9 SIGSEGV + 1 SIGABRT)
+  contra 9 de 903 nos outros nós (Fisher p = 2e-5); os nós i9 (tupi3-6) juntos 19 de 678 contra 0 de 351 nos Xeon tupi1/2 (p = 3e-4). O 835348 morreu no tupi3
+  com "Illegal instruction". Causa não verificada (degradação Vmin-shift do Raptor Lake ou RAM); só o admin lê dmesg/MCE e roda memtest. O smoke de 1 época
+  **deixa de ser o critério**: não detecta esse tipo de falha (os crashes vieram após 1h45, 5h49 ou segundos depois dos logits). Para tirar o `exclude`: admin
+  confere o nó, ou várias runs longas reais terminam lá. Run que morre por sinal num nó i9 é refeita do zero, não retomada (retomar não restaura o RNG).
+  Detalhes e ressalvas: `docs/logs/PHASE13_LOG.md`, "2026-11-06".
+- **Bloco C (piloto de reavaliação): adiado** a pedido do usuário até concluir as runs mais importantes (seeds da Fase 13, Fase 14). Quando for feito: são só
+  avaliações, cabem na QOS `short` (2 h, prioridade 1000, 10 em execução / 25 enviados); tupi3-6 são os nós com crashes, então uma reavaliação morta por sinal
+  é refeita.
+- **Bloco A (seeds), estado:** 2x2 -- 3 de 4 prontas no PCAD (não sincronizadas); a 4ª (`k2x2stacked` seed 44, 835352) roda no beagle desde 06/11 09:20
+  (`scontrol update JobId=835352 MinMemoryNode=15360 Partition=tupi,beagle`; limite 07/11 09:20). 3x3 -- 835433 rodando (tupi1), 835435-835437 pendentes
+  (primeiras linhas de `~/queue_phase14.txt`). Sincronizar tudo quando o 835352 terminar.
+- **Bloco D (etapa B):** continua esperando as seeds.

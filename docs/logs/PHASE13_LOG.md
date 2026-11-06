@@ -226,3 +226,55 @@ nets. `phase_13_hybrids_seed43/_seed44.yaml` gain `alexnet_k3x3stacked_stride1_.
 (4 runs, ~20 GPU-h at seed 42's times), so the two stride-1 pairs compare at 3 seeds. The stride-2 pairs would mean
 seed files for Phase 11's `phase_11_stacked` cells, a Phase 11 design change -- left out. Seed state today: 835242
 (k2x2stacked s43) done; 835243 / 835244 hit the 24 h wall and were resubmitted (835347, 835352); 835245 running.
+
+
+## 2026-11-06: where the seeds are, and what the crashes say about tupi4
+
+**Seeds** (PCAD; nothing synced to the laptop yet). Stride 1, GAP + BN, test top-1 FP32 / INT8; seed 42 for reference: `k2x2stacked` 60.35 / 60.79, `k2x2residual` 60.75 / 60.46.
+
+| run | job | state |
+|---|---|---|
+| `k2x2stacked` s43 | 835242 | done, 60.65 / 60.56 |
+| `k2x2residual` s43 | 835347 | done, 60.38 / 60.48 (fresh run; 835243 froze, see below) |
+| `k2x2residual` s44 | 835245 | done, 59.92 / 60.09 |
+| `k2x2stacked` s44 | 835352 | **running on beagle** since 2026-11-06 09:20:27 (wall 11-07 09:20) |
+| `k3x3stacked` s43 / s44 | 835433 / 835436 | running (tupi1, in QAT) / pending |
+| `k3x3residual` s43 / s44 | 835435 / 835437 | pending |
+
+The three finished 2x2 runs had `git_dirty` false, the current quant protocol, best FP32 epoch 456-492 of 500 (no early best) and `agreement_qat_int8` 0.976-0.984. The
+residual net's FP32 spans 0.83 pp across its three seeds. `k2x2stacked` seed 44 took three tries: 835244 froze mid-epoch with the PCAD freeze of 2026-11-04 ~10:14 (as
+835243 did on tupi1) and was killed at the wall; a fresh 835348 died on tupi3 at FP32 epoch 41/500 with "Illegal instruction" (exit 4:0); 835352 excluded tupi1-4 and sat pending
+for 21 h because only tupi5/6 were left, until it was also allowed on beagle (idle), with MinMemoryNode=15360. A beagle run is a different GPU (GTX 1080 Ti): the accuracy
+protocol is the same (exact INT8, TF32 off), the latency is recorded with its host; if it reaches the wall it requeues and resumes, which is not bit-reproducible. The
+interrupted attempts are in `outputs/pcad/archive_interrupted_seeds/` on PCAD, with a `SUPERSEDED.md`.
+
+**Signals by node.** `exclude: tupi4` dates from 2026-10-24 (3 of its 10 jobs crashed). `sacct -a`, jobs of >= 30 min since 2026-10-01, every user, FAILED by exit code
+(11 = SIGSEGV, 6 = SIGABRT, 4 = SIGILL -- read as the signal; verified only for 835348, "Illegal instruction"):
+
+| node | CPU | long jobs | killed by a signal |
+|---|---|---|---|
+| tupi1 | Xeon | 163 | 0 |
+| tupi2 | Xeon | 188 | 0 |
+| tupi3 | i9 | 117 | 3 (SIGSEGV) |
+| **tupi4** | i9 | 126 | **10** (9 SIGSEGV, 1 SIGABRT) |
+| tupi5 | i9 | 215 | 5 (1 SIGSEGV, 4 SIGILL) |
+| tupi6 | i9 | 220 | 1 (SIGILL) |
+
+tupi4: 10 of 126 against 9 of 903 elsewhere (Fisher one-sided p = 2e-5; SIGSEGV alone 9/126 vs 4/903, two-sided p = 2e-6). The i9 nodes together 19 of 678 against 0 of 351 on the
+Xeons (one-sided p = 3e-4). Job 835348 (17 min, so under the 30 min cut) is a fourth tupi3 case. Our three tupi4 crashes: 832921 (`TypeError: list_iterator doesn't define
+__round__` inside `PIL.Image.point`, after 1 h 45, impossible from Pillow's code), 832753 (SIGSEGV right after "QAT training complete", 5 h 49) and 832951 (SIGSEGV 38 s after a
+resume, after the FP32 summary). After 2026-10-24 the node only ran 18 short Winograd-FPGA jobs (clean), so it has no long-job evidence since the exclude.
+
+*Caveats.* The counts include other users' code and only the exit code, not their error text; tupi1/2 carry a different job mix; the signals are small numbers. *Cause:* not
+verified. The pattern (random SIGSEGV / SIGILL / a Python TypeError that cannot happen, under load, on the i9 desktop parts, worst on one node) fits Raptor Lake Vmin-shift
+degradation -- Intel's 0x12B microcode stops further damage but does not repair a chip that already degraded (Intel scopes it to Raptor Lake-S desktop parts such as the
+i9-14900KF; the sources do not mention segfaults, only crashes and instability) -- but bad RAM would look the same. Only someone with the node can tell
+(`dmesg` is restricted for us): dmesg/MCE, BIOS and microcode version, a memtest.
+
+**Decision (2026-11-06): keep.** `exclude: tupi4` stays in `tupi_4090.yaml` / `tupi_beagle.yaml`. The 1-epoch smoke on tupi4 that the close-out plan asked for is dropped
+as a criterion: it cannot catch a crash that came at epoch 242 or after 5 h. tupi3 is not excluded: its 2.6% and tupi5's 2.3% cannot be told apart from each other with these
+numbers. Rule for the i9 nodes: a long run that dies by a signal is rerun from scratch, not resumed. Open: ask the GPPD admin about tupi4 (and tupi3 / tupi5). The re-evaluation
+pilot (Bloco C) is postponed until the Phase 13 seeds and Phase 14 are done, and then fits QOS `short` (2 h, priority 1000).
+
+Sources for the Intel part: Tom's Hardware, "Intel finds root cause of CPU crashing and instability errors, prepares new and final microcode update" (2024); WePC,
+"Intel confirms 0x12B as the final patch for 13th and 14th gen instability issues" (2024).
