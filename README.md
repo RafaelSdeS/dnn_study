@@ -1,230 +1,53 @@
 # CNN Kernel Research: Winograd Acceleration & Efficiency
 
-This repository investigates how convolutional kernel-size restrictions affect deep neural network accuracy, efficiency, and quantization robustness. The motivation is **Winograd-accelerated convolution**, which achieves high computational efficiency for small kernels (2×2, 3×3) but faces scalability limitations for larger filters.
+How convolutional **kernel-size restriction** affects CNN accuracy, efficiency and quantization robustness. The motivation is **Winograd-accelerated convolution**: efficient for small kernels (2×2, 3×3), poorly scalable to large filters. The study measures the accuracy / efficiency trade-off to recommend Winograd-friendly architectures.
 
-**Current scope:** Classification on Tiny ImageNet-200 (64×64 RGB, 200 classes) with FP32 training, Quantization-Aware Training (QAT), and INT8 conversion for edge deployment.
+**Scope:** classification on Tiny ImageNet-200 (64×64 RGB, 200 classes), FP32 → quantization-aware training (QAT) → INT8. Phase 7 tests detection / segmentation on PASCAL VOC; Phase 8 tests windowed attention (Swin / ViT) against small-kernel CNNs.
 
----
+| Phases | What | Where to read |
+|---|---|---|
+| 1–4 | AlexNet-style vs efficient nets, kernel restriction, compensation (Fire, bottleneck, depthwise), final hybrids | `docs/plans/BEST_MODELS.md`, `notebooks/` |
+| 5, 10 | cross-phase and cross-project roll-ups | `notebooks/phase_5_*`, `phase_10_*` |
+| 6 | hardware profiling (latency, power, GPU use) | `docs/plans/PHASE6_PLAN.md` |
+| 7, 8, 9 | detection / segmentation, efficient ViT, bypass ablation + pruning | `docs/logs/PHASE7_LOG.md`, `PHASE8_LOG.md`, `docs/plans/PHASE9_PLAN.md` |
+| **11–13** | **the main study**: kernel size on one recipe (152 runs), its robustness (39), hybrids (18 + seeds) | `docs/plans/BEST_MODELS.md` ("Cross-phase synthesis"), `docs/logs/PHASE11_LOG.md`, `PHASE13_LOG.md`, `docs/plans/PROTOCOL.pdf` |
+| 14 | Winograd-FPGA accelerator numerics (F23 / F43 / F63) on the same recipe — running | `docs/logs/PHASE14_LOG.md` |
 
-## Quick Start
+Results and rankings: **`docs/plans/BEST_MODELS.md`**; open work: `TODO.md`; machine-readable tables: `results/` (`results_aggregate/*.csv`, `runs_index.csv`).
 
-**Activate environment:**
+## Quick start
+
 ```bash
+python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt   # first time
 source .venv/bin/activate
+python -m scripts.train --experiment default --runtime local          # FP32 → QAT → INT8, one config
+python -m scripts.cluster submit --experiment default --runtime pcad --slurm single_gpu
+python -m scripts.cluster status <job_id>                             # / cancel / resume
+pytest tests/test_config.py -q                                        # run tests by file
 ```
 
-**Launch notebooks:**
-```bash
-jupyter lab
-```
+Phases 1–5 and 7–10 have analysis notebooks under `notebooks/<phase slug>/`; Phases 11–14 are CLI-driven (`scripts/train.py`, `scripts/cluster.py`) and analysed by `scripts/phase11/`, `phase12/`, `phase13/`. Tiny ImageNet downloads through `kagglehub` on first use (set `PCAD_DATASET_ROOT` on the cluster to use staged data). Detection / segmentation: `docs/logs/PHASE7_QUICKSTART.md`.
 
-**Notebooks (in order of execution):**
-1. `notebooks/phase_1_baseline/baselines_qat.ipynb` — Phase 1: Reference pretrained models (ResNet18, MobileNetV2, AlexNet, VGG-style)
-2. `notebooks/phase_2_kernel_restriction/alexnet_qat.ipynb` — Phase 2: AlexNet kernel-restriction variants (3×3, 2×2, stacked, mixed, small-kernel)
-3. `notebooks/phase_3_compensation_and_hybrids/compensation_qat.ipynb` — Phase 3a: Compensation mechanisms (bottleneck, residual, factorized, etc.)
-4. `notebooks/phase_3_compensation_and_hybrids/efficient_hybrids_qat.ipynb` — Phase 3b: Efficient hybrids (TinyHybridNet, TinyMobileNetV2)
-5. `notebooks/phase_4_compression_and_final_architecture/compression_phase4_1.ipynb` — Phase 4.1: Aggressive compression (INT4/INT2/ternary/binary) of the best Phase 1–3 models
-6. `notebooks/phase_4_compression_and_final_architecture/final_architecture_qat.ipynb` — Phase 4: Combines Phase 3's best mechanisms into final hybrid architectures
-7. `notebooks/phase_5_cross_phase_analysis/final_analysis_phase5.ipynb` — Phase 5: Cross-phase results analysis and figure generation
-8. `notebooks/phase_6_hardware_profiling/hardware_profiling_phase6.ipynb` — Phase 6: Hardware profiling & Winograd efficiency validation (RTX 4090)
-9. `notebooks/phase_7_detection_segmentation/phase7_results_analysis.ipynb` — Phase 7: Detection/segmentation results analysis (training itself is CLI-only via `scripts/train_det_seg.py`; see `docs/logs/PHASE7_QUICKSTART.md`)
-10. `notebooks/phase_8_efficient_vit/vit_qat_phase8.ipynb` — Phase 8: vit_tiny/deit_tiny FP32→distill/QAT→INT8 (the 2 of 7 Phase 8 models `scripts/train.py` can't drive)
-11. `notebooks/phase_8_efficient_vit/phase8_results_analysis.ipynb` — Phase 8: cross-phase results analysis
-12. `notebooks/phase_9_bypass_ablation/phase9_ablation_analysis.ipynb` — Phase 9: Cross-phase PCAD results (bypass ablation, large-scale runs)
-13. `notebooks/phase_10_final_summary/` — Phase 10: final cross-project rollup (classification + detection + segmentation) across Phases 1–4/8/9
-
-Full model/phase inventory: `CLAUDE.md`.
-
----
-
-## Repository Layout
+## Layout
 
 ```
-ml/          core package (data, trainer, quantization, profiling, reporting)
+ml/          core package: data, trainer, quantization, reporting, registry, profiling
 models/      architectures, one file per phase
-configs/     YAML: data/training/qat + runtime/ + slurm/ + experiments/
-scripts/     6 CLI entry points; per-phase tooling in phase6/ phase7/ phase9/ oneoff/ pcad/
+configs/     YAML: data / training / qat + runtime/ + slurm/ + experiments/ (+ _protocols/)
+scripts/     CLI entry points; per-phase tooling in phase6/ … phase13/, winograd_fpga/, pcad/, lab/
 notebooks/   one dir per phase slug
-outputs/     RAW per-run artifacts — local/ pcad/ notebooks/ (by where the run happened)
-results/     CURATED tracked CSVs/JSON + figures_generated/, feeds report/ and presentation/
-docs/        plans/ (research notes) + logs/ (execution history)
+outputs/     RAW per-run artifacts: local/ pcad/ notebooks/ (by where the run happened)
+results/     CURATED tracked CSVs / JSON / figures, feeds report/ and presentation/
+docs/        plans/ (research notes) + logs/ (dated execution history) + REFERENCE.md
 report/      LaTeX writeup      presentation/  slides
 ```
 
-Two conventions hold this together:
+Two conventions hold it together: **`outputs/` is raw, `results/` is curated**; and **one slug per phase** (`phase_N_description`), identical in `notebooks/`, `results/`, `results/figures_generated/`, `outputs/*/` and `configs/experiments/` (the experiment name *is* the output directory name).
 
-1. **`outputs/` is raw, `results/` is curated.** Nothing else at the top level holds artifacts.
-2. **One slug per phase** — `phase_N_description` — identical in `notebooks/`, `results/`,
-   `results/figures_generated/`, `outputs/*/` and `configs/experiments/`. Because the experiment
-   name *is* the output directory name, renaming a phase means renaming its experiment config,
-   not the folder it produced.
+## QAT in one paragraph
 
-Pulled on a machine with artifacts under older folder names? Run
-`scripts/pcad/migrate_pcad_gitignored.sh` (idempotent).
+FP32 `Trainer.fit()` → `build_qat()` (load best, fuse Conv-BN-ReLU, `prepare_qat`) → QAT `fit` → `convert_to_int8()` on CPU → evaluate. Requirements: ReLU `inplace=False`; residual adds through `FloatFunctional`; BN right after its Conv. INT8 is CPU-only; accuracy is measured on the qnnpack engine (exact int32 accumulation on any CPU). Details: `CLAUDE.md` "Key patterns", `docs/REFERENCE.md`.
 
----
+## Cluster (PCAD)
 
-## Results & Recommendations
-
-**See `docs/plans/BEST_MODELS.md`** for:
-- Overall accuracy rankings (FP32 + INT8)
-- Analysis by dimension (accuracy-first, efficiency-first, quantization stability, kernel impact, compensation mechanisms)
-- Tiered model recommendations (Tier 1 production-ready, Tier 2 high-accuracy, Tier 3 exploratory)
-- Next steps for Phase 3.5 (deployment fine-tuning, Winograd benchmarking)
-
----
-
-## Architecture & Design
-
-### `ml/` — Core ML Package (Authority)
-
-All notebooks import from `ml/`:
-
-- **`config.py`** — `DataConfig`, `TrainerConfig`, `QATConfig` dataclasses with explicit defaults
-- **`data.py`** — `create_imagenet_loaders()` with deterministic train/val split
-- **`trainer.py`** — `Trainer` class: `fit()`, `evaluate()`, checkpoint management
-- **`quantization.py`** — `build_qat()`, `prepare_qat_model()`, `convert_to_int8()`, `find_fuse_groups()`
-- **`registry.py`** — `MODEL_REGISTRY`, `register_model()`
-- **`checkpoint.py`** — `save_checkpoint()`, `load_checkpoint()`
-- **`reporting.py`** — `build_comparison_table()`, `create_results_summary()`, result formatting
-
-### `models/` — Experimental Phases
-
-| Phase | File | Purpose |
-|-------|------|---------|
-| 1 — Reference | `baselines.py` | Pretrained models, baseline architectures |
-| 2 — Kernel Restriction | `alexnet_variants.py` | AlexNet variants with kernel constraints (3×3, 2×2, stacked, mixed, small-kernel) |
-| 3a — Compensation | `compensation.py` | Architectural compensations for small kernels (bottleneck, residual, SE, etc.) |
-| 3b — Efficient Hybrids | `tinyhybridnet.py` | TinyHybridNet, TinyMobileNetV2 (MobileNet-style efficient CNNs) |
-| 4 — Final Architecture | `final_architecture.py` | Combines Phase 3's best mechanisms into final hybrid models |
-| 8 — Efficient ViT / Hybrid Attention | `vit_variants.py` | vit_tiny, deit_tiny, swin_pico_{w2,w4,w8}, swin_pico_poolmixer, hybrid_bottleneck_swin (implemented, training submitted to PCAD) |
-
-Phases 6, 7, 9 (hardware profiling, detection/segmentation, bypass ablation) reuse Phase 1–4 model files rather than adding new ones. Full model inventory + per-phase file map: `CLAUDE.md`.
-
-### `configs/` — Hyperparameter Defaults
-
-YAML-based configuration loading via `configs/loader.py`. Full list in `CLAUDE.md`; the core ones:
-- `data.yaml` — Dataset, augmentation, normalization
-- `training.yaml` — Epochs, batch size, learning rate
-- `qat.yaml` — QAT-specific settings
-- `experiments/` — Per-run overrides (one YAML per experiment, `default.yaml` as the template)
-- `runtime/` — `local.yaml` / `pcad.yaml` — dataset root, conda env per runtime
-- `slurm/` — Partition/GPU/wall-time per cluster profile
-
----
-
-## QAT Workflow
-
-```
-1. FP32 Train     → Trainer.fit() → saves {arch}_best.pth
-2. Build QAT      → load_best_model() + fuse Conv-BN-ReLU + prepare_qat()
-3. QAT Train      → Trainer.fit(epoch_callback=make_qat_callback(...)) → saves qat_{arch}_best.pth
-4. Convert INT8   → convert_to_int8(qat_model) on CPU
-5. Evaluate       → Trainer.evaluate(topk=(1,5)) on INT8 model
-```
-
-**Key requirements:**
-- All ReLU: `inplace=False` (fake-quant hooks cannot observe in-place ops)
-- Skip-adds: `torch.nn.quantized.FloatFunctional()` (not bare `+`)
-- INT8 inference: CPU-only (fbgemm limitation)
-
----
-
-## Key Findings (Phases 1–3)
-
-**See `docs/plans/BEST_MODELS.md` for comprehensive ranking, Pareto analysis, and deployment recommendations.**
-
-### Phase 1 — Reference Baselines (FP32, ~80 epochs):
-
-| Model | Params | FP32 Top-1 | FP32 Top-5 |
-|-------|--------|-----------|-----------|
-| **MobileNetV2** | 2.48M | **57.99%** | 81.51% |
-| **ResNet18** | 11.28M | **53.91%** | 77.80% |
-| VGGStyle | 2.41M | 51.81% | 75.88% |
-| AlexNetTV | 57.82M | 32.89% | 58.22% |
-
-### Phase 2 — AlexNet Kernel Restriction (FP32 + QAT INT8, 57+20 epochs):
-
-| Model | Params | FP32 Top-1 | INT8 Top-1 | QAT Drop | INT8 Size |
-|-------|--------|-----------|-----------|----------|-----------|
-| **AlexNetSmallKernel** | 1.60M | 45.84% | 35.95% | –9.89pp ⚠️ | 1.56 MB |
-| **AlexNetStacked** | 60.48M | 44.56% | 42.79% | –1.77pp | 57.94 MB |
-| AlexNetMixed | 1.75M | 38.74% | 37.99% | –0.75pp | 1.71 MB |
-| AlexNet3x3GAP | 57.61M | 38.74% | 37.60% | –1.14pp | 2.23 MB |
-| AlexNet3x3FC | 57.61M | 35.79% | 36.19% | +0.40pp ✓ | 55.12 MB |
-| AlexNet2x2GAP | 1.05M | 30.02% | 30.89% | +0.87pp ✓ | 1.04 MB |
-
-### Phase 3 — Compensation Mechanisms (FP32 + QAT INT8, 41–95+20 epochs):
-
-| Model | Params | FP32 Top-1 | INT8 Top-1 | QAT Drop | Efficiency | Tier |
-|-------|--------|-----------|-----------|----------|------------|------|
-| **AlexNetBottleneck** | 0.39M | 44.62% | 44.54% | –0.08pp ✓✓ | 9.93 Acc/MB | **1** |
-| **AlexNetFire** | 0.52M | 43.98% | 44.30% | +0.33pp ✓✓ | 7.34 Acc/MB | **1** |
-| **AlexNetResidual** | 60.67M | 48.01% | 47.27% | –0.74pp | — | **2** |
-| AlexNetDepthwiseSep | 0.31M | 44.39% | 41.47% | –2.92pp ⚠️ | 12.15 Acc/MB | 3 |
-| AlexNetFactorized | 57.07M | 42.89% | 42.60% | –0.29pp | — | 3 |
-
-**Key insights:**
-- **Baselines dominate pure accuracy:** MobileNetV2 (57.99%), ResNet18 (53.91%) are hard to beat
-- **Tier 1 models (Bottleneck, Fire) are Pareto-optimal:** Tiny (4–6 MB), competitive accuracy (43–44%), quantization-stable
-- **Small kernels face QAT challenges:** AlexNetSmallKernel's –9.89pp drop suggests aggressive quantization sensitivity
-- **Compensation mechanisms work:** Bottleneck & Fire achieve high efficiency (7–10 Acc/MB) while maintaining accuracy
-- **Model efficiency summary:** Results in `results/results_aggregate/results_cross_phase.csv` and per-model details in `results/results_aggregate/model_details_cross_phase.csv` — regenerate both with `python -m scripts.build_cross_phase_results`
-- **Visualizations:** Cross-phase figures in `results/figures_generated/phase_1_2_3_baseline_and_kernels/` and `phase_5_cross_phase_analysis/`
-
-Phases 4–9 have since completed — see `CLAUDE.md`'s Model Inventory and `docs/plans/BEST_MODELS.md`.
-
----
-
-## Running Experiments
-
-**See `CLAUDE.md` for:**
-- Reproducibility patterns (seed, cudnn settings)
-- Trainer API examples
-- Model registry usage
-- Checkpoint & config workflows
-- INT8 inference requirements
-
-## PCAD Training Infrastructure
-
-The repo now includes a cluster-friendly runner that reuses the existing `ml/` training code and keeps the same checkpoint/resume flow on both local machines and PCAD.
-
-**Environment setup:**
-```bash
-conda env create -f environment.yml
-conda activate alexnet_rafael
-```
-
-**Local run:**
-```bash
-python -m scripts.train --experiment default --runtime local
-```
-
-**PCAD submission:**
-```bash
-python -m scripts.cluster submit --experiment default --runtime pcad --slurm single_gpu
-```
-
-**Monitor, cancel, resume:**
-```bash
-python -m scripts.cluster status <job_id>
-python -m scripts.cluster cancel <job_id>
-python -m scripts.cluster resume outputs/pcad/default/<model_name>
-```
-
-**Runtime layout:**
-- `outputs/<runtime>/<experiment>/<model>/checkpoints/` for `*_best.pth`, `*_resume.pth`, and INT8 artifacts
-- `outputs/<runtime>/<experiment>/<model>/logs/` for per-run logs
-- `outputs/<runtime>/<experiment>/<model>/tensorboard/` for TensorBoard event files
-- `outputs/<runtime>/<experiment>/<model>/results/` for per-run JSON summaries
-- `outputs/<runtime>/aggregates/` for the per-experiment comparison CSV written by `scripts/train.py`
-- `results/<experiment>/` for the curated cross-model roll-up (via `scripts/aggregate_results.py`)
-
-Detection/segmentation (Phase 7) uses a separate layout: `outputs/pcad/phase_7_detection_segmentation/<run>/` — see `docs/logs/PHASE7_QUICKSTART.md`.
-
-**PCAD-specific settings:**
-- Edit [configs/runtime/pcad.yaml](configs/runtime/pcad.yaml) for dataset root, conda env, and runtime toggles
-- Edit [configs/slurm/single_gpu.yaml](configs/slurm/single_gpu.yaml) for partition, GPU, CPU, memory, and wall-time settings
-- Set `PCAD_DATASET_ROOT` on the cluster when Tiny ImageNet is staged on shared storage; otherwise the runner falls back to KaggleHub
-
-The default experiment config lives in [configs/experiments/default.yaml](configs/experiments/default.yaml). Duplicate it to create a new reproducible run without changing training code.
+`scripts/cluster.py` submits `scripts/slurm/*.sbatch` and keeps the same checkpoint / resume flow as a local run. Edit `configs/runtime/pcad.yaml` (dataset root) and `configs/slurm/*.yaml` (partition, GPU, wall time). Per-run layout: `outputs/<runtime>/<experiment>/<model>/{checkpoints,logs,tensorboard,results}/`; per-experiment comparison CSVs in `outputs/<runtime>/aggregates/`. Operating notes (queues, nodes, pulling on PCAD): `docs/REFERENCE.md` "Running".

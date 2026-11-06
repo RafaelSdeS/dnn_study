@@ -37,7 +37,7 @@ Sem mudar arquivos agora; é a lista de checagens para não errar quando chegare
    no `TODO.md`. Commit só com pedido explícito.
 **Receita do pull no PCAD** (antes de qualquer commit do laptop ser puxado): mover para `~/dnn_study_prepull_untracked_<data>/` só os
 caminhos untracked que o pull sobrescreve; copiar o CSV modificado e `git checkout --` nele; `git pull --ff-only`; `cmp` cada arquivo
-movido contra o checked-out; só então apagar as cópias (CLAUDE.md, Layout).
+movido contra o checked-out; só então apagar as cópias (CLAUDE.md, Artifacts).
 
 ## Bloco B -- `exclude: tupi4` (decisão de 2026-11-06: **manter**; ver "Atualização 2026-11-06" no fim)
 Mudança: remover a linha em `configs/slurm/tupi_4090.yaml` e `configs/slurm/tupi_beagle.yaml` (nenhum teste fixa `exclude`: grep em tests/).
@@ -105,3 +105,6 @@ após as seeds escolherem o corpo). Nada além do plano é executado agora.
   (`scontrol update JobId=835352 MinMemoryNode=15360 Partition=tupi,beagle`; limite 07/11 09:20). 3x3 -- 835433 rodando (tupi1), 835435-835437 pendentes
   (primeiras linhas de `~/queue_phase14.txt`). Sincronizar tudo quando o 835352 terminar.
 - **Bloco D (etapa B):** continua esperando as seeds.
+- **2026-11-06 (later), Bloco A:** 5 of the 8 seed runs synced (seed 43 `k2x2residual` / `k2x2stacked` / `k3x3stacked`, seed 44 `k2x2residual` / `k3x3residual`), aggregate rows appended, `scripts.phase13.hybrids`
+  rerun, PHASE13_LOG / BEST_MODELS / TODO updated. Still out: `k2x2stacked` s44 (835352), `k3x3residual` s43 (835435), `k3x3stacked` s44 (835436) — repeat the same sync for them. The CLAUDE.md
+  rewrite of the same day moved the per-file text to `docs/REFERENCE.md`; the pull recipe is in CLAUDE.md "Artifacts".

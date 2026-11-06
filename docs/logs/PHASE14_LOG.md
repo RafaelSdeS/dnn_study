@@ -56,3 +56,7 @@ split. The user asked for everything on one recipe, so this phase reruns them on
   `wrn_28_2`, `googlenet`) on `tupi_4090` alternating with the 7 `alexnet_*_fpga` on `tupi_beagle` (partition `tupi,beagle`; beagle was idle while tupi was saturated by other users) --
   and the 3 `vgg16` canary arms last. The FP32 are the critical path: the 42 remaining arms (14 nets x 3) are queued by hand after each FP32 lands. Nothing of Phase 14 has finished
   beyond the smoke. `exclude: tupi4` stays (PHASE13_LOG "2026-11-06"): the 4090 nodes tupi3 / tupi5 / tupi6 had crashes too, so a Phase 14 run killed by a signal is rerun, not resumed.
+- 2026-11-06 (later): the 3 canary arms of `alexnet_k3x3_stride4_3pool3x3_map1_fcdrop_nobn` are done and synced (`test_qat_wino_top1`, `agreement_fp32_qat_wino_test` and `git_dirty: false`
+  present in each `qat_wino` summary): **F23 35.32 (agreement 0.613), F43 32.00 (0.521), F63 21.05 (0.306)**. This Phase 11 cell has FP32 31.52 but QAT 35.11 / INT8 35.08 (QAT adds +3.6 pp), so
+  read the arms against INT8 as well: +0.24 / −3.08 / −14.03 pp, the same order as M7's median (F23 ~0, F43 −5.1, F63 −18.9 vs FP32). One net, not yet a median. The 3 `vgg16...` arms still wait in the queue
+  (their dirs hold only the copied FP32 files, not synced); the 14 FP32 are running / queued (`resnet18_fpga` tupi3, `alexnet_stacked_fpga` tupi6, the rest pending on the 10-job QOS cap).

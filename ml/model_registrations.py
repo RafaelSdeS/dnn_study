@@ -3,7 +3,7 @@
 Training notebooks register models inline in their own cells and never import
 this module. This exists only for entry points that need MODEL_REGISTRY
 populated without running a notebook first. Values are copied from the
-notebook that owns each model (see CLAUDE.md's Model Inventory table) — keep
+notebook that owns each model (see docs/REFERENCE.md's Model Inventory table) — keep
 them in sync if a notebook's fuse_map or lr changes.
 """
 

@@ -278,3 +278,22 @@ pilot (Bloco C) is postponed until the Phase 13 seeds and Phase 14 are done, and
 
 Sources for the Intel part: Tom's Hardware, "Intel finds root cause of CPU crashing and instability errors, prepares new and final microcode update" (2024); WePC,
 "Intel confirms 0x12B as the final patch for 13th and 14th gen instability issues" (2024).
+
+## 2026-11-06 (later): five seed runs synced
+
+Synced from PCAD (only runs with a complete summary): seed 43 `k2x2residual` / `k2x2stacked` / `k3x3stacked`, seed 44 `k2x2residual` / `k3x3residual`, all stride 1.
+Still running: `k2x2stacked` seed 44 (835352, beagle), and the 3x3 counterparts `k3x3residual` seed 43 / `k3x3stacked` seed 44 (835435 / 835436, tupi1 / tupi2).
+`scripts.phase13.hybrids` rerun; test top-1 per cell, mean ± std over the seeds in (n):
+
+| cell (stride 1) | FP32 | INT8 | seeds |
+|---|---|---|---|
+| `k2x2residual` | 60.35 ± 0.42 | 60.34 ± 0.22 | 42, 43, 44 (3) |
+| `k2x2stacked` | 60.50 ± 0.21 | 60.68 ± 0.16 | 42, 43 (2) |
+| `k3x3residual` | 59.63 ± 0.66 | 59.76 ± 0.32 | 42, 44 (2) |
+| `k3x3stacked` | 58.69 ± 0.23 | 58.61 ± 0.48 | 42, 43 (2) |
+| VGG16 3x3 GAP + BN (Phase 11 reference) | 59.27 ± 0.16 | 59.45 ± 0.16 | 3 |
+
+Medians over every matched pair of the 24-cell grid (FP32 / INT8, pp): conv1 stride 2 → 1 **+3.03 / +3.40** (12 pairs); 5 convs → two per stage +2.12 / +2.21 (8); 3×3 → 2×2 body
++1.23 / +1.50 (12); residual skip +0.41 / +0.16 (8); conv1 → 11×11 −0.12 / −0.19 (12). Nothing moved the ranking of the factors. The best two-conv 2×2 nets (60.35-60.50 FP32)
+stay ahead of VGG16's 59.27 at about 2/3 of its MACs and 1/6 of its parameters. The seed spread (±0.2-0.7) is as wide as the skip's effect, so "skip = noise" stands; the 2×2 vs
+3×3 gap at stride 1 (60.35-60.50 vs 58.69-59.63) is still one seed short on the 3x3 side — wait for the three runs above before quoting it with its floor.

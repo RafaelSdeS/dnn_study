@@ -267,7 +267,7 @@ class BaseTrainer:
         # Restore the best checkpoint before returning. Without this, self.model keeps the
         # LAST epoch's weights, so a caller evaluating right after fit() (or building a
         # results summary from self.model) measures a different model than the one saved as
-        # _best.pth -- the same checkpoint the QAT stage then picks up. See CLAUDE.md's
+        # _best.pth -- the same checkpoint the QAT stage then picks up. See docs/REFERENCE.md's
         # 2026-08-29 Trainer.fit() bug note for the classification-side history of this.
         if best_path.exists():
             best_state = torch.load(best_path, map_location=str(self.device), weights_only=False)
