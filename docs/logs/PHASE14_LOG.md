@@ -60,3 +60,19 @@ split. The user asked for everything on one recipe, so this phase reruns them on
   present in each `qat_wino` summary): **F23 35.32 (agreement 0.613), F43 32.00 (0.521), F63 21.05 (0.306)**. This Phase 11 cell has FP32 31.52 but QAT 35.11 / INT8 35.08 (QAT adds +3.6 pp), so
   read the arms against INT8 as well: +0.24 / −3.08 / −14.03 pp, the same order as M7's median (F23 ~0, F43 −5.1, F63 −18.9 vs FP32). One net, not yet a median. The 3 `vgg16...` arms still wait in the queue
   (their dirs hold only the copied FP32 files, not synced); the 14 FP32 are running / queued (`resnet18_fpga` tupi3, `alexnet_stacked_fpga` tupi6, the rest pending on the 10-job QOS cap).
+- 2026-11-07: **8 of the 14 FP32 are done** (jobs COMPLETED; test top-1): `resnet18_fpga` 59.22, `repvgg_a0_fpga` 59.09, `vgg13_fpga` 58.37, `alexnet_stacked_fpga` 58.00, `vgg_style_fpga` 54.97,
+  `alexnet_bottleneck_fpga` 54.59, `alexnet_fire_fpga` 54.57, `alexnet_3x3_fc_fpga` **37.86**. The last is about 17-20 pp under the other AlexNet-class nets, but it is not a failed
+  training: 500 epochs, train acc 99.80 %, val 38.27 % (best 38.46 at epoch 408), val loss rising 3.51 -> 3.64, 57.6 M parameters, 96 % of them in the three Linear layers (37.8 M + 16.8 M + 0.8 M; layer stats) -- an FC-head net that overfits (train acc 99.8 % against val 38 %), not a
+  broken run; the old `budget_unico` run (AdamW recipe) gave 36.24. Its three arms stay in the queue. The other 6: `wrn_16_4` (835506, tupi3), `wrn_28_2` (835527, tupi1), `alexnet_fire_bypass` (835526, tupi5) and
+  `alexnet_final_bottleneck_residual` (835535, beagle) running; `googlenet` (835536) and `alexnet_final_fire_residual` (835537) pending.
+  **Second wave for the 8:** each net's `<m>_best.pth`, `<m>_fp32_{val,test}_logits.npz` and `<m>_summary.json` copied (`cp -n`) into the three arm dirs and compared with `cmp` (24 of 24 identical);
+  24 arm lines (`--slurm tupi_4090`, `WINOGRAD_FPGA_ROOT` exported on the line) appended to `~/queue_phase14.txt` (backup `.bak_20261107`), which now has 25 lines with the `vgg16` F63 arm at the head.
+  The `vgg16` F23 / F43 arms (835538 / 835539) are pending on priority. The feeder (PID 1912681, `QOS=normal`, MAX 8) is alive; the `normal` QOS is full with the FP32 jobs, so the arms start as they end.
+  Still by hand: the same copy and 3 queue lines for each of the 6 nets above when its FP32 lands. No arm beyond the 3 canaries has finished.
+- 2026-11-07 (later): the second wave of the 6 remaining nets is automated for this session: an idempotent pass (`ssh … 'bash -s' < phase14_second_wave.sh`, kept in the Claude scratchpad, not in the
+  repo) run by a self-paced loop every ~30 min. A net is seeded only when its `train-<m>` job left `squeue`, `sacct` says COMPLETED and its summary has `test_fp32_top1`; it then `cp -n`s the FP32
+  files into the 3 arm dirs (`cmp`-checked) and appends the 3 arm lines to `~/queue_phase14.txt` unless they are already in it / `.done` / `.failed`. A FAILED / TIMEOUT / CANCELLED FP32 job is
+  reported, never resubmitted. If the session closes the loop stops; the pass is idempotent, so the copy can be redone by hand.
+- 2026-11-07 (later): the 8 finished `phase_14_winograd_fp32` runs are synced to the laptop (no `*.pth`, no logs; 58 MB) and `runs_index.csv` has their 8 rows (the 54 archive rows merged back).
+  `scripts/phase14/winograd_numerics.py` (+ `tests/test_phase14_winograd.py`, 2 passed on a fake tree) writes `results/phase_14_winograd_numerics/{runs,medians}.csv`: per net and variant the arm's
+  test top-1 minus the FP32 top-1 recomputed from `<m>_fp32_test_logits.npz`, and the median per variant with its `n`. Not run on the real runs yet (only the 3 canary arms exist).

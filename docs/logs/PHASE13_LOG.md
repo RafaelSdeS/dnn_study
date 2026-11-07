@@ -297,3 +297,39 @@ Medians over every matched pair of the 24-cell grid (FP32 / INT8, pp): conv1 str
 +1.23 / +1.50 (12); residual skip +0.41 / +0.16 (8); conv1 → 11×11 −0.12 / −0.19 (12). Nothing moved the ranking of the factors. The best two-conv 2×2 nets (60.35-60.50 FP32)
 stay ahead of VGG16's 59.27 at about 2/3 of its MACs and 1/6 of its parameters. The seed spread (±0.2-0.7) is as wide as the skip's effect, so "skip = noise" stands; the 2×2 vs
 3×3 gap at stride 1 (60.35-60.50 vs 58.69-59.63) is still one seed short on the 3x3 side — wait for the three runs above before quoting it with its floor.
+
+## 2026-11-07: all eight seed runs are in
+
+The last three synced from PCAD (summary complete): seed 43 `k3x3residual`, seed 44 `k2x2stacked` (835352, beagle, 21 h 27 min, finished 06:47) and seed 44 `k3x3stacked`. Every cell of the
+{2×2, 3×3} × {stacked, residual} stride-1 block now has seeds 42, 43, 44. `scripts.phase13.hybrids` rerun; `runs_index.csv` rebuilt with the 54 archive rows merged back from git (the
+sparse checkout hides them); `build_cross_phase_results` unchanged. Nothing committed.
+
+Test top-1, mean ± std over the 3 seeds (n = 3 in every row):
+
+| cell (stride 1) | FP32 | INT8 |
+|---|---|---|
+| `k2x2stacked` | 60.47 ± 0.16 | 60.63 ± 0.14 |
+| `k2x2residual` | 60.35 ± 0.42 | 60.34 ± 0.22 |
+| `k3x3residual` | 59.39 ± 0.63 | 59.50 ± 0.49 |
+| `k3x3stacked` | 58.70 ± 0.16 | 58.61 ± 0.34 |
+| VGG16 3x3 GAP + BN (Phase 11 reference) | 59.27 ± 0.16 | 59.45 ± 0.16 |
+
+Per-seed contrasts (seeds 42 / 43 / 44, FP32 pp; INT8 in brackets):
+
+- **3×3 → 2×2 body, stacked:** +1.82 / +1.80 / +1.68 (+2.52 / +1.61 / +1.92). Same sign and size in all three seeds.
+- **3×3 → 2×2 body, residual:** +1.59 / +1.48 / **−0.18** (+0.93 / +1.48 / +0.11). The 3×3 residual net at seed 44 is 60.10 against 59.16 and 58.90 at seeds 42 / 43, the only 3×3 two-conv run
+  above 59.2; it alone closes the gap. Mean +0.96 (INT8 +0.84).
+- **skip, 3×3 body:** +0.63 / +0.05 / +1.37 (+1.26 / +0.05 / +1.36). Positive in all three seeds but 0.05 to 1.37, mean +0.68: a sign, not a size.
+- **skip, 2×2 body:** +0.40 / −0.27 / −0.49 (−0.33 / −0.08 / −0.45), mean −0.12. The sign flips: no effect.
+
+Medians over the 24-cell grid (the seed-42 grid; `contrasts.csv` stays seed 42, the other seeds are in `contrasts_by_seed.csv`) did not move: stride 2 → 1 **+3.03 / +3.40**, 5 convs → two per
+stage +2.12 / +2.21, 3×3 → 2×2 +1.23 / +1.50, skip +0.41 / +0.16, conv1 → 11×11 −0.12 / −0.19. The ranking of the factors is the same.
+
+What this settles and what it does not:
+
+- 2×2 beats 3×3 with the stacked body in 3 of 3 seeds (+1.7 to +1.8 FP32). With the residual body it holds in 2 of 3, and the outlier is a single lucky 3×3 run (60.10), so quote it as
+  "+1 to +2 pp, not robust per body" rather than as a floor.
+- The two-conv 2×2 nets stay ahead of VGG16: their lowest run (59.92) is above VGG16's highest (59.37, range 59.09-59.37), at about 2/3 of its MACs and 1/6 of its parameters. The two-conv 3×3 nets
+  do not clearly: `k3x3stacked` is below VGG16 (58.70 vs 59.27) and `k3x3residual` ties it (59.39).
+- "skip = noise" stands for the 2×2 body. For the 3×3 body the skip is positive in 3 of 3 seeds, yet its spread (0.05-1.37) is as wide as its mean, so three seeds cannot size it.
+- This unblocks the `\pendente` marks of the article that waited for the Phase 13 seeds (not edited yet).
