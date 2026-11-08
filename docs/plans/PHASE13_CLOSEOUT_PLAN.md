@@ -65,7 +65,7 @@ Objetivo: latência comparável entre as 152 células sem corromper FP32/QAT. Pi
 5. Nada disso é submetido antes de o usuário aprovar este plano **e** dizer "submeta"; o usuário já ordenou que isso venha depois
    das seeds -- manter, a menos que ele libere o piloto antes.
 
-## Bloco D -- Etapa B (Bottleneck/Fire sobre o melhor corpo): só plano de código + testes (nada escrito nesta rodada)
+## Bloco D -- Etapa B (Bottleneck/Fire sobre o melhor corpo): **feito em 2026-11-07** como `phase_13_bottleneck_fire` (8 células, 7 runs; PHASE13_LOG "Stage B")
 Depende das seeds para escolher o corpo (candidatos: `k2x2stacked` e `k2x2residual`, stride 1). Mudanças previstas:
 - `models/compensation.py`: `_AlexBottleneck(in_ch, out_ch, stride, reduction)` (linha ~20) e `_FireModule(in_ch, squeeze_ch, expand_ch)`
   (~382) ganham `kernel_size: int = 3` **com default que mantém o comportamento**; o 3×3 interno usa `SymmetricPad2d`

@@ -25,7 +25,7 @@ Scope: classification on **Tiny ImageNet-200** (64×64, 200 classes), FP32 → Q
 | 9 | `phase_9_bypass_ablation` (+`_large_scale`, `_pruning`, `_compression`) | SqueezeNet-style bypass, pruning, compression |
 | 11 | `phase_11_kernel_size_comparison` — experiments `phase_11_*` | **the main study**: 152 runs on ONE recipe (done 2026-10-30) |
 | 12 | `phase_12_robustness` | Phase 11's conclusions under another lr, fine-tuning, CIFAR-100 (39 runs, done) |
-| 13 | `phase_13_hybrids` | do two convs per stage / skip / 11×11 conv1 / conv1 stride 1 add up? 18 of 18 + seeds 43/44, all done (2026-11-07) |
+| 13 | `phase_13_hybrids` | do two convs per stage / skip / 11×11 conv1 / conv1 stride 1 add up? 18 of 18 + seeds 43/44, all done (2026-11-07); Stage B `phase_13_bottleneck_fire` (Bottleneck / Fire units, 7 runs) prepared |
 | 14 | `phase_14_winograd_numerics` | packed Winograd-FPGA `qat_wino` numerics (F23/F43/F63) on Phase 11's recipe; 14/14 FP32 done 2026-11-07, 3 of 48 arms done, the rest queued |
 
 Phases 13 and 14 are **extra studies kept apart from Phase 11**: nothing under Phase 11 (yamls, figures, tests, log) reads their runs. A new experiment gets its own slug.

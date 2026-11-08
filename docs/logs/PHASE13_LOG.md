@@ -333,3 +333,31 @@ What this settles and what it does not:
   do not clearly: `k3x3stacked` is below VGG16 (58.70 vs 59.27) and `k3x3residual` ties it (59.39).
 - "skip = noise" stands for the 2×2 body. For the 3×3 body the skip is positive in 3 of 3 seeds, yet its spread (0.05-1.37) is as wide as its mean, so three seeds cannot size it.
 - This unblocks the `\pendente` marks of the article that waited for the Phase 13 seeds (not edited yet).
+
+## 2026-11-07: Stage B -- Bottleneck and Fire units on the best bodies (`phase_13_bottleneck_fire`)
+
+User: "Faça o stage B da phase 13, mas coloque-os no final da fila"; on the design questions, all cells, every placement, and a local smoke
+before submitting (once the laptop is free). Plan: `docs/plans/PHASE13_CLOSEOUT_PLAN.md` Bloco D.
+
+Question: do the Bottleneck / Fire units cut the cost of the stride-1 bodies without losing accuracy? Body = the hybrids' stride-1 GAP + BN net,
+no skip (noise on the 2×2 body, above), every conv replaced by a unit whose one spatial conv is k×k: unit (Bottleneck 1×1 → k×k → 1×1, mid =
+out/4 ≥ 32 / Fire 1×1 squeeze to out/4 → 1×1 ‖ k×k expands of out/2) × units per stage (one, beside the 5-conv cell / two, beside `k<k>stacked`)
+× kernel (3×3 / 2×2) = 8 cells, seed 42. `k3x3fire` (one per stage) **is** `AlexNetFire` layer for layer and, from the same seed, weight for weight
+(`tests/test_registry.py`), so it is read from `phase_11_families/alexnet_fire` (seed 42, 54.57 FP32 / 54.44 INT8): 7 new runs.
+
+| cell (stride 1, GAP + BN) | params | MACs (direct) | reference body (params, MACs) |
+|---|---|---|---|
+| `k2x2bottleneckstacked` / `k2x2firestacked` | 0.53 M / 0.60 M | 219 M / 211 M | `k2x2stacked` 2.33 M, 803 M (60.47 FP32, 3 seeds) |
+| `k2x2bottleneck` / `k2x2fire` | 0.28 M / 0.32 M | 101 M / 99 M | `k2x2` 1.05 M, 298 M |
+| `k3x3bottleneckstacked` / `k3x3firestacked` | 0.74 M / 1.00 M | 329 M / 368 M | `k3x3stacked` 5.18 M, 1803 M (58.70, 3 seeds) |
+| `k3x3bottleneck` / `k3x3fire` (= AlexNetFire, read) | 0.39 M / 0.52 M | 156 M / 178 M | `k3x3` 2.30 M, 669 M |
+
+Code: `_AlexBottleneck` / `_FireModule` take `kernel_size` (default 3; 2 = `_conv_bn`'s SymmetricPad2d rule; Fire keeps the attribute name
+`expand3` so checkpoint keys stay put); `AlexNetStacked` takes `unit=` ("conv" / "bottleneck" / "fire") and `per_stage=` (2 / 1). Defaults
+unchanged: a layout digest (state_dict keys + shapes + fuse map) of all 785 registered nets is identical before and after; 8 cells added.
+Tests: `test_config` + `test_registry` 36 passed, the `test_quantization` slice of the 7 new cells 14 passed (QAT → INT8 = the literature
+definition, layer by layer). Analysis: not written yet -- it reads the 7 runs + `alexnet_fire` + the four plain stride-1 bodies, when they land.
+Smoke (laptop RTX 4060 Laptop, 2026-11-07 22:44, `scripts.train --smoke`, output discarded): `k2x2bottleneckstacked` and `k2x2firestacked`
+(the new code: both units at 2×2) FP32 → QAT → INT8 exit 0, 10 and 9 min; one FP32 epoch 50 / 44 s, one QAT epoch 196 / 166 s, GPU peak 5.1 / 4.2 GB,
+MemAvailable never under 3.3 GB; the INT8 kernel check (exact int32) passed on both. The one `must run observer before calling calculate_qparams`
+warning also sits in the `.err` of finished runs (`k2x2stacked` s1 835242, `alexnet_fire` 832311): not new.

@@ -347,7 +347,7 @@ Status: `results/phase_11_geometry_analysis/design_status.csv`; findings: `docs/
 - ✅ All 18 cells at seed 42 (best `k2x2residual` stride 1, 60.75 FP32 / `k2x2stacked` stride 1, 60.79 INT8). nyx's loan (2026-10-31..11-02) finished 4 of them; `ssh nyx` still times out.
 - ✅ Seeds 43 / 44, 2×2 side, synced 2026-11-06: `k2x2residual` s43 + s44, `k2x2stacked` s43; 3×3 side: `k3x3stacked` s43, `k3x3residual` s44. Tables and figure 01 regenerated.
 - ✅ The last three seed runs (`k2x2stacked` s44, `k3x3residual` s43, `k3x3stacked` s44) synced 2026-11-07, tables / figure 01 regenerated, PHASE13_LOG "all eight seed runs are in".
-- [ ] Stage B (Bottleneck / Fire on the best body, `docs/plans/PHASE13_CLOSEOUT_PLAN.md` Bloco D): no longer waiting on the seeds.
+- [ ] Stage B (`phase_13_bottleneck_fire`, PHASE13_LOG "Stage B"): Bottleneck / Fire units x one / two per stage x 3x3 / 2x2 at stride 1, 8 cells, 7 new runs (`k3x3fire` = `alexnet_fire`, read). Code + tests + local smoke OK (2026-11-07); 7 lines at the END of `~/queue_phase14.txt`; analysis when they land.
 - The deck (`presentation/slides.md`) has no Phase 13; the Narrativa / `proximos` slide are not in this repo — update those where they live.
 
 ## Phase 14 — Winograd numerics on the one recipe (`docs/logs/PHASE14_LOG.md`)
@@ -361,7 +361,7 @@ Status: `results/phase_11_geometry_analysis/design_status.csv`; findings: `docs/
 
 1. [ ] `exclude: tupi4` in `configs/slurm/tupi_4090.yaml` / `tupi_beagle.yaml`: **keep it (decision 2026-11-06).** Over every user's jobs of >= 30 min since 2026-10-01, tupi4 lost 10 of 126 to a signal vs 9 of 903 elsewhere, and the i9 nodes (tupi3-6) 19 of 678 vs 0 of 351 on the Xeons (PHASE13_LOG "2026-11-06"). Drop it only after the GPPD admin checks the node (dmesg/MCE, BIOS microcode, memtest) or several long real runs finish there. Open: ask the admin about tupi4 (and tupi3 / tupi5); a short stress job on tupi4 with tupi5/6 as control, if wanted (a submission: needs the user's go).
 2. [ ] Re-evaluate the 152 Phase 11 cells on one machine type so latency compares across cells (docs/REFERENCE.md "Running": tupi3-6). Resubmitting a finished run only re-evaluates it. **Postponed (user, 2026-11-06)** until the more important runs (Phase 13 seeds, Phase 14) are done; the 2-cell pilot (one beagle-trained, one nyx-trained cell) is eval-only and fits QOS `short` (2 h, priority 1000). tupi3-6 are the nodes with crashes: a re-evaluation killed by a signal is rerun, never resumed.
-3. [ ] Report (`report/ic_report.tex`): an Eixo 8 for Phases 11-13 from BEST_MODELS' synthesis, figures referenced straight from `results/figures_generated/`, and the 4 archived Phase 11 citations replaced (see Phase 2 above).
+3. ~~Report (`report/ic_report.tex`): an Eixo 8 for Phases 11-13~~ -- **dropped (user, 2026-11-07): `ic_report.tex` is not changed with the Phase 11-14 data**; those results go to the article (`report/artigo_kernel.tex`, branch `docs/article-phases-11-13`) only.
 
 ## Phase 10 — Extended Architecture Search (Future)
 
