@@ -76,3 +76,25 @@ split. The user asked for everything on one recipe, so this phase reruns them on
 - 2026-11-07 (later): the 8 finished `phase_14_winograd_fp32` runs are synced to the laptop (no `*.pth`, no logs; 58 MB) and `runs_index.csv` has their 8 rows (the 54 archive rows merged back).
   `scripts/phase14/winograd_numerics.py` (+ `tests/test_phase14_winograd.py`, 2 passed on a fake tree) writes `results/phase_14_winograd_numerics/{runs,medians}.csv`: per net and variant the arm's
   test top-1 minus the FP32 top-1 recomputed from `<m>_fp32_test_logits.npz`, and the median per variant with its `n`. Not run on the real runs yet (only the 3 canary arms exist).
+- 2026-11-07 (evening): the arms wait for a free 4090, not for our own queue: tupi had 5 nodes allocated to other users (1 down), `beagle` was busy with the 16 h `alexnet_final_bottleneck_residual_fpga` FP32,
+  and the other PCAD GPUs do not fit (`grace` = 2 aarch64 nodes with L40S, the x86 `.venv` does not run there; `shared` = K20m, sm_35, below what torch 2.5.1+cu121 supports). A first arm job, vgg16 F23
+  (835538), had a Slurm start estimate of 2026-11-08 14:05. An arm takes about 28 min on a 4090 (canary), so the user OK'd moving runs: the 6 pending arm jobs (835538 835539 835553 835558 835564 835570)
+  went from QOS `normal` to QOS `short` with `scontrol update ... QOS=short TimeLimit=02:00:00` (priority component 3000 -> 30000, start reason `Priority` -> `Resources` for the first one), partition
+  `tupi` unchanged, `requeue` and the pre-timeout stop kept so an arm that overruns 2 h resumes from its epoch checkpoint. The 33 queue lines now call `~/submit_arm.sh <experiment> <model>` (outside the repo;
+  backup `queue_phase14.txt.bak_20261107b`): same `scripts.cluster submit --slurm tupi_4090` as before, then the same `scontrol update`, best effort (QOS `short` caps submits at 25 per user; a job that does not
+  fit stays in `normal` and the loop's pass retries). No repo file changed for this.
+- 2026-11-07 (evening, later): the second-wave pass no longer depends on the laptop. It runs on Hestia (no GPU, up 12 days) in `tmux` session `phase14`: `~/phase14_loop.sh` calls the pass (`~/phase14_second_wave.sh`,
+  piped over ssh, nothing installed on PCAD's login node) every 30 min, logs to `~/phase14_loop.log` on Hestia, and stops by itself on `ALLDONE`. Hestia reaches PCAD with a new dedicated key
+  `~/.ssh/id_pcad_phase14` (ed25519, no passphrase, host alias `pcad-phase14`), authorized with a full shell on the PCAD account at the user's choice (backup `~/.ssh/authorized_keys.bak_20261107` on PCAD;
+  revoke by deleting the `hestia-phase14-loop` line there). The old `~/.ssh/id_pcad_backup` (rrsync, read-only) is untouched. The laptop loop was stopped so two writers never touch the queue. Pass fix found by
+  the dry run: arm jobs are named `train-<net>` like the FP32 job, so a net already seeded now counts as done before squeue / sacct are consulted (else `ALLDONE` would wait for every arm to leave the queue).
+  First pass from Hestia: 4 nets already queued, `alexnet_final_bottleneck_residual` and `alexnet_final_fire_residual` waiting for their FP32.
+- 2026-11-07 (night): **14 of 14 FP32 done** (all 500 of 500 epochs, best epoch 408-497, `quant_protocol` 2026-10-07). The last 6, test top-1: `googlenet_fpga` 61.85, `wrn_28_2_fpga` 60.32,
+  `wrn_16_4_fpga` 58.79, `alexnet_fire_bypass_fpga` 55.19, `alexnet_final_fire_residual_fpga` 53.69, `alexnet_final_bottleneck_residual_fpga` 53.11 (835535, beagle, 13 h 48 min). Synced (6 files per
+  run: no `*.pth`, no logs); `runs_index.csv` +6 rows with the 54 archive rows merged back from git; `build_cross_phase_results` unchanged (it reads `results/phase_*` only). The Hestia loop
+  stopped itself on `ALLDONE` (~21:11): every net's arms are seeded and queued. `scripts.phase14.winograd_numerics` run for the first time on the 3 canary arms:
+  `results/phase_14_winograd_numerics/{runs,medians}.csv`, n = 1 per variant, F23 +3.79 / F43 +0.47 / F63 −10.48 pp against the FP32 recomputed from the logits (31.53).
+  Arms at 21:38: 3 of 48 done, 2 running (`resnet18_fpga` F43 / F63), 29 pending (21 QOS `short`, 8 `normal`), 14 lines still in `~/queue_phase14.txt`.
+  **The 28 min per arm was the AlexNet canary's, not every net's:** `resnet18_fpga`'s arm runs ~209 s per epoch, ~2.9 h for 50, over QOS `short`'s 2 h. Its F23 arm (835558) took the
+  pre-timeout stop at epoch 30 of 50 (21:30) and was requeued (`Restarts=1`; it resumes from `qat_wino_resnet18_fpga_resume.pth`), as set up above. A clean stop, not a signal death, so resuming
+  is within the rule. Expect the arms of the heavier nets to pass through the queue twice; left as is.

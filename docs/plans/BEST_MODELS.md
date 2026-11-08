@@ -123,14 +123,14 @@ figures 02, 11, 14 and 16.
 
 ### What is not established yet
 
-- **Runs still out (2026-11-06).** Phases 11 and 12: none. Phase 13 (do two convs per stage, a residual skip, an 11×11
+- **Runs still out (2026-11-07).** Phases 11, 12 and 13: none. Phase 13 (do two convs per stage, a residual skip, an 11×11
   conv1 and conv1 stride 1 add up?, `docs/logs/PHASE13_LOG.md`): 18 of 18 at seed 42 (the last, `k11-2residual` stride 1: 60.48 FP32 / 60.85 INT8, 954 M MACs, PCAD job 835178).
   Stride 1 is the largest factor (+3.0 pp median, 12 of 12 pairs, at 4× the MACs); two convs per stage next (+2.1 pp, 8 of 8);
   3×3 → 2×2 wins on all 8 two-conv pairs (+0.5 to +1.8 pp, 51-55% fewer MACs) and loses on the 5-conv body (−1.1 / −1.3); a residual skip
   adds +0.4 pp median but 2 of 8 pairs are negative, all inside the noise; the 11×11 conv1 adds nothing once the body has two convs per stage
   (median −0.1). The gains add up only partly (each big step keeps 37-82% of its gain once the other is in). Best: all-2×2 residual at stride 1,
   60.75 FP32 / 60.46 INT8 at 862 M MACs and 2.5 M params, and all-2×2 stacked at stride 1, 60.35 / 60.79 at 803 M, against VGG16 3×3 GAP + BN
-  59.35 (14.8 M, 1255 M) -- those are seed 42. With seeds 43 / 44 (5 of 8 synced 2026-11-06, PHASE13_LOG "five seed runs synced"), stride 1, FP32 / INT8 mean over the seeds run: all-2×2 residual 60.35 / 60.34 (3 seeds), all-2×2 stacked 60.50 / 60.68 (2), against the 3×3 twins' 59.63 / 59.76 (residual, 2) and 58.69 / 58.61 (stacked, 2); the factor order is unchanged (stride +3.0, two convs per stage +2.1, 3×3 → 2×2 +1.2, skip +0.4, 11×11 −0.1 pp, medians over matched pairs). Three seed runs are still out (`k2x2stacked` s44, `k3x3residual` s43, `k3x3stacked` s44): quote the 2×2 vs 3×3 gap at stride 1 only with them.
+  59.35 (14.8 M, 1255 M) -- those are seed 42. With seeds 43 / 44 (all 8 in 2026-11-07, PHASE13_LOG "all eight seed runs are in"), stride 1, FP32 / INT8 mean over 3 seeds: all-2×2 stacked 60.47 / 60.63, all-2×2 residual 60.35 / 60.34, against the 3×3 twins' 59.39 / 59.50 (residual) and 58.70 / 58.61 (stacked), VGG16 59.27 / 59.45; 3×3 → 2×2 wins in 3 of 3 seeds with the stacked body (+1.7 to +1.8 FP32) and in 2 of 3 with the residual one (one 3×3 run at 60.10), so quote it as +1 to +2 pp; the factor order is unchanged (stride +3.0, two convs per stage +2.1, 3×3 → 2×2 +1.2, skip +0.4, 11×11 −0.1 pp, medians over matched pairs). Phase 14 (item 9 on the one recipe, `docs/logs/PHASE14_LOG.md`): 14 of 14 FP32 done, 3 of 48 `qat_wino` arms; item 9 keeps the old protocol's numbers until the arms land.
 - **Seeds.** Most contrasts are seed 42 against a pooled floor of ±0.7-0.8 pp FP32; differences below ~1.5 pp are not resolved, and
   the 11-5-3-3-3 → 3×3 point is one of them. ResNet-18's floor rests on 3 seeds of 2 cells (±1.0 pp FP32); its INT8 band is wide (3 of the 6 runs early best).
 - **Scope.** Two low-resolution datasets (Tiny ImageNet at 64 px, CIFAR-100 at 32 px; the 224 runs are enlarged 64 px images, no

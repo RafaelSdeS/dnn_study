@@ -342,18 +342,19 @@ Status: `results/phase_11_geometry_analysis/design_status.csv`; findings: `docs/
 - ✅ VGG16's fine-tune at lr 1e-4 (job 834496, the last Phase 12 run) synced and figure 02 rerun (2026-10-31): 62.87 FP32, under lr 1e-3's 67.27 like every other net.
 - ✅ Pretrained MobileNetV2 trips `MIN_QAT_INT8_AGREEMENT` (0.90) in all 3 runs and, fine-tuned, loses 1.2-1.5 pp FP32 -> INT8, present from QAT epoch 1 and not recovered by the 10-epoch QAT at 1/100 of the lr. Decided 2026-10-30: recorded only; guard and recipe unchanged (PHASE11_LOG "Progress 2026-10-30").
 
-## Phase 13 — Hybrids (18 of 18 runs at seed 42, 2026-11-04; seeds 43 / 44: 5 of 8 synced; `docs/logs/PHASE13_LOG.md`)
+## Phase 13 — Hybrids (18 of 18 runs at seed 42, 2026-11-04; seeds 43 / 44: 8 of 8 synced 2026-11-07; `docs/logs/PHASE13_LOG.md`)
 
 - ✅ All 18 cells at seed 42 (best `k2x2residual` stride 1, 60.75 FP32 / `k2x2stacked` stride 1, 60.79 INT8). nyx's loan (2026-10-31..11-02) finished 4 of them; `ssh nyx` still times out.
 - ✅ Seeds 43 / 44, 2×2 side, synced 2026-11-06: `k2x2residual` s43 + s44, `k2x2stacked` s43; 3×3 side: `k3x3stacked` s43, `k3x3residual` s44. Tables and figure 01 regenerated.
-- [ ] Three seed runs still on PCAD: `k2x2stacked` s44 (835352, beagle, wall 11-07 09:20), `k3x3residual` s43 (835435, tupi1), `k3x3stacked` s44 (835436, tupi2). When they end: sync (see CLAUDE.md "Artifacts"), `python -m scripts.phase13.hybrids`, update PHASE13_LOG / BEST_MODELS. Stage B (Bottleneck / Fire on the best body, `docs/plans/PHASE13_CLOSEOUT_PLAN.md` Bloco D) waits for these.
+- ✅ The last three seed runs (`k2x2stacked` s44, `k3x3residual` s43, `k3x3stacked` s44) synced 2026-11-07, tables / figure 01 regenerated, PHASE13_LOG "all eight seed runs are in".
+- [ ] Stage B (Bottleneck / Fire on the best body, `docs/plans/PHASE13_CLOSEOUT_PLAN.md` Bloco D): no longer waiting on the seeds.
 - The deck (`presentation/slides.md`) has no Phase 13; the Narrativa / `proximos` slide are not in this repo — update those where they live.
 
 ## Phase 14 — Winograd numerics on the one recipe (`docs/logs/PHASE14_LOG.md`)
 
 - ✅ Canary: the 3 arms of `alexnet_k3x3_stride4...` (F23 / F43 / F63) done and synced 2026-11-06: 35.32 / 32.00 / 21.05 test top-1 (cell's FP32 31.52, INT8 35.08).
-- [ ] 14 FP32 (`phase_14_winograd_fp32`, 500 ep, no early stop): 2 running (`resnet18_fpga`, `alexnet_stacked_fpga`), the rest queued in `~/queue_phase14.txt` on PCAD behind the 10-job QOS cap (heavy nets on `tupi_4090`, the 7 `alexnet_*_fpga` on `tupi_beagle`).
-- [ ] 3 `vgg16...` canary arms (last in the queue file) and 42 arms (14 nets × 3), queued by hand when each FP32 lands (copy its checkpoint + logits + summary into the 3 arm dirs first).
+- ✅ 14 FP32 (`phase_14_winograd_fp32`, 500 ep, no early stop): all done and synced 2026-11-07 (37.86-61.85 test top-1).
+- [ ] 45 arms (3 `vgg16...` canaries + 14 nets × 3): all seeded; 2 running, 29 pending, 14 in `~/queue_phase14.txt` (2026-11-07 21:38). Sync each finished arm (its `qat_wino` summary complete), then `python -m scripts.phase14.winograd_numerics`.
 - [ ] When all land: `scripts/phase14` analysis, the article's `\pendente` in "2x2 ou 3x3?", archive `budget_unico` / `wino_f*_pack`.
 
 ## After Phase 13 (in this order; user, 2026-10-30)
