@@ -1,0 +1,4 @@
+net,variant,fp32,arm,d,agreement
+alexnet_k3x3_stride4_3pool3x3_map1_fcdrop_nobn,f23,31.53,35.32,3.79,0.613
+alexnet_k3x3_stride4_3pool3x3_map1_fcdrop_nobn,f43,31.53,32.0,0.47,0.5213
+alexnet_k3x3_stride4_3pool3x3_map1_fcdrop_nobn,f63,31.53,21.05,-10.48,0.3062
