@@ -748,12 +748,13 @@ Os resultados apontam para algumas escolhas:
 \end{itemize}
 
 \subsection{2\by2 ou 3\by3?}
+\label{sec:2x2ou3x3}
 
 A escolha depende do hardware. Em acurácia, com dois por estágio, o 2\by2 fica à frente e faz cerca de metade dos MACs diretos, ou cerca de 1,8 vez menos com Winograd (Seção~\ref{sec:hardware}). Esse kernel, porém, precisa de um acelerador preparado para ele.
 
 Em um estudo paralelo do grupo, treinamos 14 redes simulando a aritmética de aceleradores F($m$,3) em FPGA. Essa acurácia vem da simulação, não do hardware. O kernel 2\by2 fica fora dessas transformações. O tamanho da transformação define o custo em acurácia: em relação ao FP32, F(2,3) fica praticamente igual ($+$0,05 p.p., mediana), F(4,3) perde 5,1 p.p. e F(6,3) perde 18,9 p.p.
 Assim, um acelerador com F(2,3) e redes 3\by3 é hoje a opção sem custo de acurácia medido.
-\pendente{Esses números vêm da receita anterior (AdamW, FP32 de até 100 épocas, 15 épocas de QAT medidas na validação). A Fase 14 refaz as 16 redes com a receita única e mede no teste; substituir quando terminar.}
+\pendente{Esses números vêm da receita anterior (AdamW, FP32 de até 100 épocas, 15 épocas de QAT medidas na validação). A Fase 14 refaz as 16 redes com a receita única e mede no teste; substituir quando terminar. Em 2026-11-07, as 14 redes em FP32 terminaram (37,9 a 61,9\% no teste), mas só 3 dos 48 QATs com a aritmética do acelerador, todos de uma rede (a AlexNet sem adaptação com kernels 3\by3, FC + Dropout e sem BN, do estudo principal): F(2,3) $+$3,8, F(4,3) $+$0,5 e F(6,3) $-$10,5 p.p. em relação ao FP32. Nessa rede, o QAT sozinho já soma 3,6 p.p. (INT8 35,08\% contra 31,52\% em FP32); contra a INT8, os números ficam em $+$0,2, $-$3,1 e $-$14,0 p.p., na mesma ordem da mediana acima. Com uma rede só, ainda não dá para calcular a mediana.}
 
 \subsection{O que muda em relação ao trabalho anterior}
 
@@ -785,9 +786,8 @@ Para quem projeta redes para aceleradores Winograd, a mensagem é simples: não 
 
 \section{Trabalhos Futuros}
 
-O passo seguinte é concluir as seeds 43 e 44 das melhores redes. Depois, queremos:
+O passo seguinte é refazer com a receita única, e medir no teste, a simulação dos aceleradores F($m$,3) da Seção~\ref{sec:2x2ou3x3}; os treinos estão em andamento. Depois, queremos:
 \begin{itemize}
-\item concluir as seeds 43 e 44 das redes 3\by3 com dois por estágio e stride 1, já submetidas, para confirmar a comparação com o 2\by2;
 \item fazer o controle de capacidade com classificador FC, para explicar o custo do 2\by2 na AlexNet;
 \item reavaliar todas as redes no mesmo tipo de máquina, para comparar latência;
 \item medir a vazão em um acelerador real;
