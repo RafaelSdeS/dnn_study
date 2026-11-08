@@ -98,3 +98,23 @@ split. The user asked for everything on one recipe, so this phase reruns them on
   **The 28 min per arm was the AlexNet canary's, not every net's:** `resnet18_fpga`'s arm runs ~209 s per epoch, ~2.9 h for 50, over QOS `short`'s 2 h. Its F23 arm (835558) took the
   pre-timeout stop at epoch 30 of 50 (21:30) and was requeued (`Restarts=1`; it resumes from `qat_wino_resnet18_fpga_resume.pth`), as set up above. A clean stop, not a signal death, so resuming
   is within the rule. Expect the arms of the heavier nets to pass through the queue twice; left as is.
+- 2026-11-08 (morning): **26 of 48 arms done**, all 50 of 50 epochs (the heavy nets' arms after one requeue + resume each). The queue had stalled since 2026-11-07 16:08: the `scontrol update` in
+  `~/submit_arm.sh` silently left 8 arms (835594-835630: `vgg_style` F63, `alexnet_3x3_fc` x3, `wrn_16_4` x3, `alexnet_fire_bypass` F23) in QOS `normal`, pending on `Priority` (tupi full, tupi4 down),
+  which filled the feeder's `MAX=8` and blocked the 14 remaining arm lines and the 7 Stage B lines behind them. The same `scontrol update ... QOS=short TimeLimit=02:00:00` by hand (user OK'd) moved all 8;
+  the feeder resumes on its next pass. The 26 finished arm dirs synced (no `*.pth`, no logs; 234 files), the 3 arm aggregate CSVs taken from PCAD (the laptop copies differed only in float formatting),
+  `winograd_numerics` rerun, `runs_index.csv` +46 rows with the 54 archive rows merged back, `build_cross_phase_results` unchanged. Medians, arm − FP32 on the test set:
+  **F23 −0.16 pp (n = 9, −0.38..+3.79), F43 −4.63 (n = 9, −8.21..+0.47), F63 −50.82 (n = 8, −58.79..−10.48)**. F63 puts the deep nets at chance: `resnet18_fpga` 0.56, `vgg13_fpga` 0.48,
+  `vgg16_k3x3...` 0.43 (agreement with FP32 ≈ 0.005); the AlexNet-class nets keep 11-24 %.
+  **The F63 collapse is the arm's numerics on this recipe's nets, not a pipeline bug.** `scripts/phase14/f63_collapse.py` (-> `results/phase_14_winograd_numerics/f63_collapse.json`;
+  `resnet18_fpga` on the CPU, bridge f44da9a copied from PCAD, the arm yamls' packing, observers calibrated on 400 train images with BN frozen as the arm's first epoch does, no `qat_wino` training)
+  against the same net's old `budget_unico` AdamW FP32, whose F63 arm still reached 37.5 % (val, 15 epochs):
+  (1) Saturation is negligible in every arm, F63 included (`sat_frac` ≤ 0.005 in the summaries' calibration dump).
+  (2) Both bases are at chance in F63 **before** any `qat_wino` epoch (first 1000 test images: new 0.3 %, old 0.1 %; F43 new 5.9 %, old 37.9 %; F23 53.5 / 51.7 vs FP32 56.5 / 53.7).
+  (3) Each F63 conv alone, its observer set from the FP32 net's own input, is about as noisy on both bases: cosine with the FP32 conv 0.46-0.96 new, 0.75-0.96 old (F43 0.56-0.99 / 0.90-0.99;
+  the new base's worst is `layer4.1.conv2`, whose input has crest factor absmax / rms 65 vs 13).
+  (4) What differs is the error compounding into the observers: calibrated on the Winograd net's own activations, the F63 `act_absmax` sits 14-51x above the clean signal from `layer1.1.conv2` on
+  in the new base, 1.0-3.7x in the old (F43: up to 2.6x vs ≤ 1.2x). So in the new base only 2-57 % of the nonzero inputs keep a nonzero INT8 code (old 91-99 %), and of the transformed tiles U, which
+  the packing shifts down by the analytic worst case `su` (|x| = 127, `u_w` = 9), under 2 % survive (old 26-79 %): 13 of the 19 convs pass almost no signal, and the arm stays at chance
+  (train loss ≈ ln 200 from epoch 1 to 50). V (weights) survives in both (≥ 0.91). Why the error compounds so much faster on this recipe's nets is not isolated; their higher activation crest factor
+  in several layers fits, untested. The bridge notes recalibrated scales (`hw_params`) as the one measured lever for packed F43 / F63.
+  For the article: on deep nets F63 reads as a collapse, not a −18.9 pp median; F23 ≈ lossless and F43 ≈ −5 pp hold.

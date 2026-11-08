@@ -37,3 +37,27 @@ def test_arm_minus_fp32_and_medians(tmp_path):
 def test_no_arm_yet(tmp_path, capsys):
     wn.main(tmp_path / "runs", tmp_path / "out")
     assert "no finished" in capsys.readouterr().out and not (tmp_path / "out").exists()
+
+
+
+def test_f63_kept_fractions():
+    """scripts/phase14/f63_collapse.kept_fractions on one packed F(6,3) conv: an input filling the observer's INT8 range
+    keeps its codes and most of U, a 6x6 map (resnet18's layer4) gets the forward's tile padding, and a signal far below
+    the observer's absmax (the 2026-11-08 diagnosis: observers calibrated on the error-compounded activations) loses
+    every code, so nothing reaches U."""
+    import pytest
+    import torch
+
+    from ml.winograd_bridge import bridge_root, import_bridge_module
+    if not (bridge_root() / "qat_wino.py").exists():
+        pytest.skip("Winograd-FPGA bridge not found (WINOGRAD_FPGA_ROOT)")
+    from scripts.phase14.f63_collapse import kept_fractions
+
+    torch.manual_seed(0)
+    conv = import_bridge_module("qat_wino").make_wino_conv("f63", pack=True, u_w=9, v_w=8)(4, 4, bias=False).eval()
+    conv.act_absmax.fill_(1.0)
+    x = torch.rand(2, 4, 12, 12) * 2 - 1
+    xk, uk, vk = kept_fractions(conv, x)
+    assert xk > 0.99 and uk > 0.5 and vk > 0.9, (xk, uk, vk)
+    assert kept_fractions(conv, x[..., :6, :6])[1] > 0.5
+    assert kept_fractions(conv, x * 0.002)[:2] == (0.0, 0.0)  # |x| <= 1/500 of absmax: every code rounds to 0
