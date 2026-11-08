@@ -411,6 +411,15 @@ for _k, _stem, _body, _s in product((3, 2), (None, 11), ("", "stacked", "residua
         _f = _ctor().features
     _register_cell(_ctor, find_fuse_groups(_f), 1e-3, family="alexnet", kernels=_kn, stride=_s, pool_kernel=2,
                    pool_count=2, map_side=_map_side(_f), head="gap", dropout=False, bn=True, pretrained=False)
+# Phase 13 Stage B (phase_13_bottleneck_fire.yaml, docs/logs/PHASE13_LOG.md): the stride-1 GAP + BN body with every conv a
+# Bottleneck or a Fire unit whose one spatial conv is k x k (3x3 / 2x2), one unit per stage (k<k>bottleneck / k<k>fire, beside
+# the 5-conv k<k>x<k> cell) or two (k<k>bottleneckstacked / k<k>firestacked, beside k<k>stacked). k3x3fire IS AlexNetFire.
+for _k, _unit, _body in product((3, 2), ("bottleneck", "fire"), ("", "stacked")):
+    _ctor = partial(AlexNetStacked, head="gap", kernel_size=_k, stem_stride=1, unit=_unit, per_stage=2 if _body else 1)
+    with torch.device("meta"):
+        _f = _ctor().features
+    _register_cell(_ctor, find_fuse_groups(_f), 1e-3, family="alexnet", kernels=f"k{_k}x{_k}{_unit}{_body}", stride=1,
+                   pool_kernel=2, pool_count=2, map_side=_map_side(_f), head="gap", dropout=False, bn=True, pretrained=False)
 # models/compensation.py — exists since the Phase 2 QAT-drop investigation, never
 # trained (Winograd-FPGA plano_avaliacao_redes_winograd.md Fase 1). No `features`
 # Sequential (named conv/bn/relu attrs instead), so find_fuse_groups like the

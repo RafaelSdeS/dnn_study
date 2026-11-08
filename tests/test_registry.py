@@ -167,6 +167,11 @@ def test_every_cell_name_says_what_the_net_is():
                 == [k for k, _, _ in RESNET_STEMS[stem]] + list(blocks) * 8, name
         elif f["kernels"] in kernels:
             assert tuple(c.kernel_size[0] for c in convs) == kernels[f["kernels"]], name
+        elif f["kernels"][4:].startswith(("bottleneck", "fire")):  # Stage B: one k x k conv per unit, 1 or 2 units per stage
+            unit, body = f["kernels"][4:].removesuffix("stacked"), int(f["kernels"][1])
+            per_stage = 2 if f["kernels"].endswith("stacked") else 1
+            assert [c.kernel_size[0] for c in convs] == [body] * 5 * per_stage, name
+            assert sum(type(x).__name__ == {"bottleneck": "_AlexBottleneck", "fire": "_FireModule"}[unit] for x in m.features) == 5 * per_stage, name
         elif f["kernels"].endswith(("stacked", "residual")):  # two convs per stage, conv1 11x11 in the k11-* cells; residual =
             big = f["kernels"].startswith("k11-")  # a FloatFunctional skip over each pair (phase_13_hybrids)
             body = int(f["kernels"][4 if big else 1])
@@ -210,6 +215,16 @@ def test_named_reference_cells_are_the_reference_nets():
     with torch.device("meta"):
         mine, ref = MODEL_REGISTRY["alexnet_k3x3residual_stride2_2pool2x2_map8_gap_bn"]["ctor"](), AlexNetResidual()
     assert _layout(mine.features[:-1]) == _layout(ref.features[:-1])
+    # Stage B's 3x3 Fire cell, one unit per stage, IS AlexNetFire (phase_11_families): same layers, keys and initial weights,
+    # so phase_13_bottleneck_fire reads that run instead of retraining it
+    from models import AlexNetFire
+
+    torch.manual_seed(0)
+    mine = MODEL_REGISTRY["alexnet_k3x3fire_stride1_2pool2x2_map16_gap_bn"]["ctor"]()
+    torch.manual_seed(0)
+    ref = AlexNetFire()
+    assert _layout(mine) == _layout(ref) and list(mine.state_dict()) == list(ref.state_dict())
+    assert all(torch.equal(a, b) for a, b in zip(mine.state_dict().values(), ref.state_dict().values(), strict=True))
 
 
 def test_factorial_cells_survive_the_qat_to_int8_path():
