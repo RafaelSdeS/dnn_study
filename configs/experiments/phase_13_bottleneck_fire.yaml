@@ -1,0 +1,24 @@
+# Phase 13 Stage B (2026-11-07, docs/logs/PHASE13_LOG.md "Stage B"; plan: docs/plans/PHASE13_CLOSEOUT_PLAN.md Bloco D): do the
+# Bottleneck and Fire units cut the cost of Phase 13's best bodies without losing accuracy?
+# Body = the hybrids' stride-1 GAP + BN net (conv1 stride 1, two 2x2 max-pools, channels 64-192-384-256-256), no skip (the skip
+# was noise on the 2x2 body), with every conv replaced by a unit whose one spatial conv is k x k (2x2 behind C2sp):
+#   unit      Bottleneck (1x1 -> k x k -> 1x1, mid = out/4, at least 32; Phase 3's _AlexBottleneck) /
+#             Fire (1x1 squeeze to out/4 -> 1x1 | k x k expands of out/2; Iandola et al. 2016, Phase 3's _FireModule)
+#   per stage one unit (beside the 5-conv k<k>x<k> stride-1 cell) / two (beside k<k>stacked stride 1, the best body)
+#   kernel    3x3 / 2x2
+# = 8 cells; k3x3fire (one per stage) IS AlexNetFire layer for layer and weight for weight (tests/test_registry.py), so it is
+# read from phase_11_families (alexnet_fire, seed 42: 54.57 FP32 / 54.44 INT8), never retrained: the 7 below are new. MACs at
+# 64 px (direct method): 99-368M against 298-1803M for the plain bodies. Seed 42 only; replicates only where a contrast lands
+# inside the noise band, as in Phase 13. Queued at the END of PCAD's queue (user, 2026-11-07), 2x2 first. Same protocol as
+# every Phase 11 run (_protocols/no_patience.yaml), enforced by tests/test_config.py; stride-1 cells on a 4090:
+#   python -m scripts.cluster submit --experiment phase_13_bottleneck_fire --runtime pcad --slurm tupi_4090 --model <m>
+extends: _protocols/no_patience
+name: phase_13_bottleneck_fire
+models:
+  - alexnet_k2x2bottleneckstacked_stride1_2pool2x2_map16_gap_bn
+  - alexnet_k2x2firestacked_stride1_2pool2x2_map16_gap_bn
+  - alexnet_k2x2bottleneck_stride1_2pool2x2_map16_gap_bn
+  - alexnet_k2x2fire_stride1_2pool2x2_map16_gap_bn
+  - alexnet_k3x3bottleneckstacked_stride1_2pool2x2_map16_gap_bn
+  - alexnet_k3x3firestacked_stride1_2pool2x2_map16_gap_bn
+  - alexnet_k3x3bottleneck_stride1_2pool2x2_map16_gap_bn

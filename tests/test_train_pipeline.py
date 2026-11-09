@@ -14,7 +14,7 @@ def _tiny_model():
     return nn.Sequential(nn.Conv2d(3, 4, 3, padding=1), nn.AdaptiveAvgPool2d(1), nn.Flatten(), nn.Linear(4, 200))
 
 
-def _run(tmp_path, monkeypatch, stages, ctor=_tiny_model, **runtime):
+def _run(tmp_path, monkeypatch, stages, ctor=_tiny_model, experiment=None, **runtime):
     g = torch.Generator().manual_seed(0)
     loader = DataLoader(TensorDataset(torch.randn(8, 3, 8, 8, generator=g), torch.randint(0, 200, (8,), generator=g)),
                         batch_size=4)
@@ -27,10 +27,38 @@ def _run(tmp_path, monkeypatch, stages, ctor=_tiny_model, **runtime):
     rows = train.run_experiment(
         {"name": "exp", "models": ["tiny"], "stages": stages,
          "training": {"epochs": 3, "use_amp": False, "early_stopping_patience": None},
-         "qat": {"epochs": 1}},
+         "qat": {"epochs": 1}, **(experiment or {})},
         {"root": str(tmp_path), "device": "cpu", "tensorboard": False, **runtime},
     )
     return rows, tmp_path / "exp" / "tiny"
+
+
+def test_qat_wino_stage_runs_the_qat_recipe_and_reports_the_test_set(tmp_path, monkeypatch):
+    """Phase 14 runs the accelerator-numerics stage on the recipe's QAT -- cosine down to its own eta_min (Wu et al. 2020
+    App. A.2) -- and measures it on the held-out test set like every other stage. The Winograd-FPGA conversion itself is
+    the sibling repo's (stubbed here: the FP32 checkpoint stands in for the converted net)."""
+    import json
+
+    cfgs = {}
+
+    class Recording(train.Trainer):
+        def __init__(self, model, train_loader, val_loader, cfg, device, save_dir, run_name, *args, **kwargs):
+            cfgs[run_name] = cfg
+            super().__init__(model, train_loader, val_loader, cfg, device, save_dir, run_name, *args, **kwargs)
+
+    monkeypatch.setattr(train, "Trainer", Recording)
+    monkeypatch.setattr(train, "load_qat_wino_model", lambda name, spec, ckpt_dir, device, cfg:
+                        train.load_best_model(name, spec["ctor"], ckpt_dir, device))
+    monkeypatch.setattr(train, "dump_wino_calibration", lambda model: {})
+    rows, run_root = _run(tmp_path, monkeypatch, ["fp32", "qat_wino"],
+                          experiment={"qat_wino": {"epochs": 1, "lr": 1e-4, "eta_min": 1e-6}})
+    wino_cfg = cfgs["qat_wino_tiny"]
+    assert (wino_cfg.epochs, wino_cfg.lr, wino_cfg.eta_min, wino_cfg.use_amp) == (1, 1e-4, 1e-6, False)
+    assert (run_root / "results" / "tiny_qat_wino_test_logits.npz").exists()
+    assert rows[0]["test_qat_wino_top1"] is not None
+    wino = json.loads((run_root / "results" / "tiny_qat_wino_summary.json").read_text())
+    assert wino["test_eval"]["top1"] == rows[0]["test_qat_wino_top1"]
+    assert wino["agreement_fp32_qat_wino_test"] is not None
 
 
 def test_fp32_stage_writes_summary(tmp_path, monkeypatch):

@@ -218,3 +218,146 @@ fails (12 of 12), two per stage never fails, 2x2 beats 3x3 on **all 8 two-conv p
 is still ~0 on the two-conv bodies. The only new skip pair, +0.62, is the largest of the 8 and still at the floor. Seeds 43 / 44 of the two best nets:
 835242 / 835243 running (tupi6, tupi1), 835244 / 835245 pending.
 
+
+## 2026-11-05: the 3x3 side of the two-conv contrast gets seeds too
+
+"2x2 beats 3x3 on all 8 two-conv pairs" is a line of the article's abstract, and the replicates above only cover the 2x2
+nets. `phase_13_hybrids_seed43/_seed44.yaml` gain `alexnet_k3x3stacked_stride1_...` and `alexnet_k3x3residual_stride1_...`
+(4 runs, ~20 GPU-h at seed 42's times), so the two stride-1 pairs compare at 3 seeds. The stride-2 pairs would mean
+seed files for Phase 11's `phase_11_stacked` cells, a Phase 11 design change -- left out. Seed state today: 835242
+(k2x2stacked s43) done; 835243 / 835244 hit the 24 h wall and were resubmitted (835347, 835352); 835245 running.
+
+
+## 2026-11-06: where the seeds are, and what the crashes say about tupi4
+
+**Seeds** (PCAD; nothing synced to the laptop yet). Stride 1, GAP + BN, test top-1 FP32 / INT8; seed 42 for reference: `k2x2stacked` 60.35 / 60.79, `k2x2residual` 60.75 / 60.46.
+
+| run | job | state |
+|---|---|---|
+| `k2x2stacked` s43 | 835242 | done, 60.65 / 60.56 |
+| `k2x2residual` s43 | 835347 | done, 60.38 / 60.48 (fresh run; 835243 froze, see below) |
+| `k2x2residual` s44 | 835245 | done, 59.92 / 60.09 |
+| `k2x2stacked` s44 | 835352 | **running on beagle** since 2026-11-06 09:20:27 (wall 11-07 09:20) |
+| `k3x3stacked` s43 / s44 | 835433 / 835436 | running (tupi1, in QAT) / pending |
+| `k3x3residual` s43 / s44 | 835435 / 835437 | pending |
+
+The three finished 2x2 runs had `git_dirty` false, the current quant protocol, best FP32 epoch 456-492 of 500 (no early best) and `agreement_qat_int8` 0.976-0.984. The
+residual net's FP32 spans 0.83 pp across its three seeds. `k2x2stacked` seed 44 took three tries: 835244 froze mid-epoch with the PCAD freeze of 2026-11-04 ~10:14 (as
+835243 did on tupi1) and was killed at the wall; a fresh 835348 died on tupi3 at FP32 epoch 41/500 with "Illegal instruction" (exit 4:0); 835352 excluded tupi1-4 and sat pending
+for 21 h because only tupi5/6 were left, until it was also allowed on beagle (idle), with MinMemoryNode=15360. A beagle run is a different GPU (GTX 1080 Ti): the accuracy
+protocol is the same (exact INT8, TF32 off), the latency is recorded with its host; if it reaches the wall it requeues and resumes, which is not bit-reproducible. The
+interrupted attempts are in `outputs/pcad/archive_interrupted_seeds/` on PCAD, with a `SUPERSEDED.md`.
+
+**Signals by node.** `exclude: tupi4` dates from 2026-10-24 (3 of its 10 jobs crashed). `sacct -a`, jobs of >= 30 min since 2026-10-01, every user, FAILED by exit code
+(11 = SIGSEGV, 6 = SIGABRT, 4 = SIGILL -- read as the signal; verified only for 835348, "Illegal instruction"):
+
+| node | CPU | long jobs | killed by a signal |
+|---|---|---|---|
+| tupi1 | Xeon | 163 | 0 |
+| tupi2 | Xeon | 188 | 0 |
+| tupi3 | i9 | 117 | 3 (SIGSEGV) |
+| **tupi4** | i9 | 126 | **10** (9 SIGSEGV, 1 SIGABRT) |
+| tupi5 | i9 | 215 | 5 (1 SIGSEGV, 4 SIGILL) |
+| tupi6 | i9 | 220 | 1 (SIGILL) |
+
+tupi4: 10 of 126 against 9 of 903 elsewhere (Fisher one-sided p = 2e-5; SIGSEGV alone 9/126 vs 4/903, two-sided p = 2e-6). The i9 nodes together 19 of 678 against 0 of 351 on the
+Xeons (one-sided p = 3e-4). Job 835348 (17 min, so under the 30 min cut) is a fourth tupi3 case. Our three tupi4 crashes: 832921 (`TypeError: list_iterator doesn't define
+__round__` inside `PIL.Image.point`, after 1 h 45, impossible from Pillow's code), 832753 (SIGSEGV right after "QAT training complete", 5 h 49) and 832951 (SIGSEGV 38 s after a
+resume, after the FP32 summary). After 2026-10-24 the node only ran 18 short Winograd-FPGA jobs (clean), so it has no long-job evidence since the exclude.
+
+*Caveats.* The counts include other users' code and only the exit code, not their error text; tupi1/2 carry a different job mix; the signals are small numbers. *Cause:* not
+verified. The pattern (random SIGSEGV / SIGILL / a Python TypeError that cannot happen, under load, on the i9 desktop parts, worst on one node) fits Raptor Lake Vmin-shift
+degradation -- Intel's 0x12B microcode stops further damage but does not repair a chip that already degraded (Intel scopes it to Raptor Lake-S desktop parts such as the
+i9-14900KF; the sources do not mention segfaults, only crashes and instability) -- but bad RAM would look the same. Only someone with the node can tell
+(`dmesg` is restricted for us): dmesg/MCE, BIOS and microcode version, a memtest.
+
+**Decision (2026-11-06): keep.** `exclude: tupi4` stays in `tupi_4090.yaml` / `tupi_beagle.yaml`. The 1-epoch smoke on tupi4 that the close-out plan asked for is dropped
+as a criterion: it cannot catch a crash that came at epoch 242 or after 5 h. tupi3 is not excluded: its 2.6% and tupi5's 2.3% cannot be told apart from each other with these
+numbers. Rule for the i9 nodes: a long run that dies by a signal is rerun from scratch, not resumed. Open: ask the GPPD admin about tupi4 (and tupi3 / tupi5). The re-evaluation
+pilot (Bloco C) is postponed until the Phase 13 seeds and Phase 14 are done, and then fits QOS `short` (2 h, priority 1000).
+
+Sources for the Intel part: Tom's Hardware, "Intel finds root cause of CPU crashing and instability errors, prepares new and final microcode update" (2024); WePC,
+"Intel confirms 0x12B as the final patch for 13th and 14th gen instability issues" (2024).
+
+## 2026-11-06 (later): five seed runs synced
+
+Synced from PCAD (only runs with a complete summary): seed 43 `k2x2residual` / `k2x2stacked` / `k3x3stacked`, seed 44 `k2x2residual` / `k3x3residual`, all stride 1.
+Still running: `k2x2stacked` seed 44 (835352, beagle), and the 3x3 counterparts `k3x3residual` seed 43 / `k3x3stacked` seed 44 (835435 / 835436, tupi1 / tupi2).
+`scripts.phase13.hybrids` rerun; test top-1 per cell, mean ± std over the seeds in (n):
+
+| cell (stride 1) | FP32 | INT8 | seeds |
+|---|---|---|---|
+| `k2x2residual` | 60.35 ± 0.42 | 60.34 ± 0.22 | 42, 43, 44 (3) |
+| `k2x2stacked` | 60.50 ± 0.21 | 60.68 ± 0.16 | 42, 43 (2) |
+| `k3x3residual` | 59.63 ± 0.66 | 59.76 ± 0.32 | 42, 44 (2) |
+| `k3x3stacked` | 58.69 ± 0.23 | 58.61 ± 0.48 | 42, 43 (2) |
+| VGG16 3x3 GAP + BN (Phase 11 reference) | 59.27 ± 0.16 | 59.45 ± 0.16 | 3 |
+
+Medians over every matched pair of the 24-cell grid (FP32 / INT8, pp): conv1 stride 2 → 1 **+3.03 / +3.40** (12 pairs); 5 convs → two per stage +2.12 / +2.21 (8); 3×3 → 2×2 body
++1.23 / +1.50 (12); residual skip +0.41 / +0.16 (8); conv1 → 11×11 −0.12 / −0.19 (12). Nothing moved the ranking of the factors. The best two-conv 2×2 nets (60.35-60.50 FP32)
+stay ahead of VGG16's 59.27 at about 2/3 of its MACs and 1/6 of its parameters. The seed spread (±0.2-0.7) is as wide as the skip's effect, so "skip = noise" stands; the 2×2 vs
+3×3 gap at stride 1 (60.35-60.50 vs 58.69-59.63) is still one seed short on the 3x3 side — wait for the three runs above before quoting it with its floor.
+
+## 2026-11-07: all eight seed runs are in
+
+The last three synced from PCAD (summary complete): seed 43 `k3x3residual`, seed 44 `k2x2stacked` (835352, beagle, 21 h 27 min, finished 06:47) and seed 44 `k3x3stacked`. Every cell of the
+{2×2, 3×3} × {stacked, residual} stride-1 block now has seeds 42, 43, 44. `scripts.phase13.hybrids` rerun; `runs_index.csv` rebuilt with the 54 archive rows merged back from git (the
+sparse checkout hides them); `build_cross_phase_results` unchanged. Nothing committed.
+
+Test top-1, mean ± std over the 3 seeds (n = 3 in every row):
+
+| cell (stride 1) | FP32 | INT8 |
+|---|---|---|
+| `k2x2stacked` | 60.47 ± 0.16 | 60.63 ± 0.14 |
+| `k2x2residual` | 60.35 ± 0.42 | 60.34 ± 0.22 |
+| `k3x3residual` | 59.39 ± 0.63 | 59.50 ± 0.49 |
+| `k3x3stacked` | 58.70 ± 0.16 | 58.61 ± 0.34 |
+| VGG16 3x3 GAP + BN (Phase 11 reference) | 59.27 ± 0.16 | 59.45 ± 0.16 |
+
+Per-seed contrasts (seeds 42 / 43 / 44, FP32 pp; INT8 in brackets):
+
+- **3×3 → 2×2 body, stacked:** +1.82 / +1.80 / +1.68 (+2.52 / +1.61 / +1.92). Same sign and size in all three seeds.
+- **3×3 → 2×2 body, residual:** +1.59 / +1.48 / **−0.18** (+0.93 / +1.48 / +0.11). The 3×3 residual net at seed 44 is 60.10 against 59.16 and 58.90 at seeds 42 / 43, the only 3×3 two-conv run
+  above 59.2; it alone closes the gap. Mean +0.96 (INT8 +0.84).
+- **skip, 3×3 body:** +0.63 / +0.05 / +1.37 (+1.26 / +0.05 / +1.36). Positive in all three seeds but 0.05 to 1.37, mean +0.68: a sign, not a size.
+- **skip, 2×2 body:** +0.40 / −0.27 / −0.49 (−0.33 / −0.08 / −0.45), mean −0.12. The sign flips: no effect.
+
+Medians over the 24-cell grid (the seed-42 grid; `contrasts.csv` stays seed 42, the other seeds are in `contrasts_by_seed.csv`) did not move: stride 2 → 1 **+3.03 / +3.40**, 5 convs → two per
+stage +2.12 / +2.21, 3×3 → 2×2 +1.23 / +1.50, skip +0.41 / +0.16, conv1 → 11×11 −0.12 / −0.19. The ranking of the factors is the same.
+
+What this settles and what it does not:
+
+- 2×2 beats 3×3 with the stacked body in 3 of 3 seeds (+1.7 to +1.8 FP32). With the residual body it holds in 2 of 3, and the outlier is a single lucky 3×3 run (60.10), so quote it as
+  "+1 to +2 pp, not robust per body" rather than as a floor.
+- The two-conv 2×2 nets stay ahead of VGG16: their lowest run (59.92) is above VGG16's highest (59.37, range 59.09-59.37), at about 2/3 of its MACs and 1/6 of its parameters. The two-conv 3×3 nets
+  do not clearly: `k3x3stacked` is below VGG16 (58.70 vs 59.27) and `k3x3residual` ties it (59.39).
+- "skip = noise" stands for the 2×2 body. For the 3×3 body the skip is positive in 3 of 3 seeds, yet its spread (0.05-1.37) is as wide as its mean, so three seeds cannot size it.
+- This unblocks the `\pendente` marks of the article that waited for the Phase 13 seeds (not edited yet).
+
+## 2026-11-07: Stage B -- Bottleneck and Fire units on the best bodies (`phase_13_bottleneck_fire`)
+
+User: "Faça o stage B da phase 13, mas coloque-os no final da fila"; on the design questions, all cells, every placement, and a local smoke
+before submitting (once the laptop is free). Plan: `docs/plans/PHASE13_CLOSEOUT_PLAN.md` Bloco D.
+
+Question: do the Bottleneck / Fire units cut the cost of the stride-1 bodies without losing accuracy? Body = the hybrids' stride-1 GAP + BN net,
+no skip (noise on the 2×2 body, above), every conv replaced by a unit whose one spatial conv is k×k: unit (Bottleneck 1×1 → k×k → 1×1, mid =
+out/4 ≥ 32 / Fire 1×1 squeeze to out/4 → 1×1 ‖ k×k expands of out/2) × units per stage (one, beside the 5-conv cell / two, beside `k<k>stacked`)
+× kernel (3×3 / 2×2) = 8 cells, seed 42. `k3x3fire` (one per stage) **is** `AlexNetFire` layer for layer and, from the same seed, weight for weight
+(`tests/test_registry.py`), so it is read from `phase_11_families/alexnet_fire` (seed 42, 54.57 FP32 / 54.44 INT8): 7 new runs.
+
+| cell (stride 1, GAP + BN) | params | MACs (direct) | reference body (params, MACs) |
+|---|---|---|---|
+| `k2x2bottleneckstacked` / `k2x2firestacked` | 0.53 M / 0.60 M | 219 M / 211 M | `k2x2stacked` 2.33 M, 803 M (60.47 FP32, 3 seeds) |
+| `k2x2bottleneck` / `k2x2fire` | 0.28 M / 0.32 M | 101 M / 99 M | `k2x2` 1.05 M, 298 M |
+| `k3x3bottleneckstacked` / `k3x3firestacked` | 0.74 M / 1.00 M | 329 M / 368 M | `k3x3stacked` 5.18 M, 1803 M (58.70, 3 seeds) |
+| `k3x3bottleneck` / `k3x3fire` (= AlexNetFire, read) | 0.39 M / 0.52 M | 156 M / 178 M | `k3x3` 2.30 M, 669 M |
+
+Code: `_AlexBottleneck` / `_FireModule` take `kernel_size` (default 3; 2 = `_conv_bn`'s SymmetricPad2d rule; Fire keeps the attribute name
+`expand3` so checkpoint keys stay put); `AlexNetStacked` takes `unit=` ("conv" / "bottleneck" / "fire") and `per_stage=` (2 / 1). Defaults
+unchanged: a layout digest (state_dict keys + shapes + fuse map) of all 785 registered nets is identical before and after; 8 cells added.
+Tests: `test_config` + `test_registry` 36 passed, the `test_quantization` slice of the 7 new cells 14 passed (QAT → INT8 = the literature
+definition, layer by layer). Analysis: not written yet -- it reads the 7 runs + `alexnet_fire` + the four plain stride-1 bodies, when they land.
+Smoke (laptop RTX 4060 Laptop, 2026-11-07 22:44, `scripts.train --smoke`, output discarded): `k2x2bottleneckstacked` and `k2x2firestacked`
+(the new code: both units at 2×2) FP32 → QAT → INT8 exit 0, 10 and 9 min; one FP32 epoch 50 / 44 s, one QAT epoch 196 / 166 s, GPU peak 5.1 / 4.2 GB,
+MemAvailable never under 3.3 GB; the INT8 kernel check (exact int32) passed on both. The one `must run observer before calling calculate_qparams`
+warning also sits in the `.err` of finished runs (`k2x2stacked` s1 835242, `alexnet_fire` 832311): not new.

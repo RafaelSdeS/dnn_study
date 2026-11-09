@@ -64,7 +64,7 @@ def custom_model(name: str, convert: bool = True):
         model = getattr(import_bridge_module("models_custom_wino"), name)(num_classes)
         if convert:
             import_bridge_module("models_torchvision_wino").convert_stride2_and_pools(model)
-        return model
+        return _he_init(model)
     return build
 
 
@@ -72,8 +72,19 @@ def torchvision_model(name: str):
     """Registry ctor for models_torchvision_wino.<name>_wino -- those builders already
     apply the stem/stride/pool conversions themselves."""
     def build(num_classes: int = 200):
-        return getattr(import_bridge_module("models_torchvision_wino"), f"{name}_wino")(num_classes)
+        return _he_init(getattr(import_bridge_module("models_torchvision_wino"), f"{name}_wino")(num_classes))
     return build
+
+
+def _he_init(model):
+    """The study's one from-scratch init (models/baselines.py:he_init, He et al. 2015) on a net the sibling repo built:
+    since 2026-11-05 (Phase 14, the one recipe) every *_fpga net starts from it, like every Phase 11 net. Last, after
+    convert_stride2_and_pools, whose fresh convs would otherwise keep PyTorch's default. Loading a checkpoint
+    overwrites it, so the sibling's Fase 2.5 loads the same weights as before."""
+    from models.baselines import he_init
+
+    he_init(model)
+    return model
 
 
 def bridge_provenance() -> dict[str, Any]:

@@ -18,16 +18,16 @@ def _float_functional():
 # ─── AlexNetBottleneck ────────────────────────────────────────────────────────
 
 class _AlexBottleneck(nn.Module):
-    """1×1 squeeze → 3×3 → 1×1 expand bottleneck block, no residual."""
+    """1×1 squeeze → k×k → 1×1 expand bottleneck block, no residual. kernel_size=2 (phase_13_bottleneck_fire): the 2×2
+    behind SymmetricPad2d at stride 1 (`_conv_bn`); the default 3 builds the same Sequential as before."""
 
-    def __init__(self, in_ch: int, out_ch: int, stride: int = 1, reduction: int = 4):
+    def __init__(self, in_ch: int, out_ch: int, stride: int = 1, reduction: int = 4, kernel_size: int = 3):
         super().__init__()
         mid_ch = max(out_ch // reduction, 32)
         self.block = nn.Sequential(
             nn.Conv2d(in_ch, mid_ch, 1, bias=False),
             nn.BatchNorm2d(mid_ch), nn.ReLU(inplace=False),
-            nn.Conv2d(mid_ch, mid_ch, 3, stride=stride, padding=1, bias=False),
-            nn.BatchNorm2d(mid_ch), nn.ReLU(inplace=False),
+            *_conv_bn(mid_ch, mid_ch, kernel_size, stride), nn.ReLU(inplace=False),
             nn.Conv2d(mid_ch, out_ch, 1, bias=False),
             nn.BatchNorm2d(out_ch), nn.ReLU(inplace=False),
         )
@@ -380,9 +380,11 @@ class AlexNetResidual(nn.Module):
 # ─── AlexNetFire ──────────────────────────────────────────────────────────────
 
 class _FireModule(nn.Module):
-    """SqueezeNet Fire module: 1×1 squeeze → parallel 1×1 + 3×3 expand, concatenated."""
+    """SqueezeNet Fire module: 1×1 squeeze → parallel 1×1 + k×k expand, concatenated. kernel_size=2
+    (phase_13_bottleneck_fire): the spatial expand is 2×2 behind SymmetricPad2d (`_conv_bn`); it keeps the attribute name
+    `expand3` so the trained checkpoints' keys stay put, and the default 3 builds the same modules as before."""
 
-    def __init__(self, in_ch: int, squeeze_ch: int, expand_ch: int):
+    def __init__(self, in_ch: int, squeeze_ch: int, expand_ch: int, kernel_size: int = 3):
         super().__init__()
         self.squeeze = nn.Sequential(
             nn.Conv2d(in_ch, squeeze_ch, 1, bias=False),
@@ -392,10 +394,7 @@ class _FireModule(nn.Module):
             nn.Conv2d(squeeze_ch, expand_ch, 1, bias=False),
             nn.BatchNorm2d(expand_ch), nn.ReLU(inplace=False),
         )
-        self.expand3 = nn.Sequential(
-            nn.Conv2d(squeeze_ch, expand_ch, 3, padding=1, bias=False),
-            nn.BatchNorm2d(expand_ch), nn.ReLU(inplace=False),
-        )
+        self.expand3 = nn.Sequential(*_conv_bn(squeeze_ch, expand_ch, kernel_size), nn.ReLU(inplace=False))
         # expand1/expand3 are independently observed under QAT, so a bare torch.cat
         # post-convert concatenates int8 tensors with mismatched scale/zero-point
         # (ATen silently requantizes into the first branch's qparams, adding noise).

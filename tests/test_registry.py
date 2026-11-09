@@ -167,6 +167,11 @@ def test_every_cell_name_says_what_the_net_is():
                 == [k for k, _, _ in RESNET_STEMS[stem]] + list(blocks) * 8, name
         elif f["kernels"] in kernels:
             assert tuple(c.kernel_size[0] for c in convs) == kernels[f["kernels"]], name
+        elif f["kernels"][4:].startswith(("bottleneck", "fire")):  # Stage B: one k x k conv per unit, 1 or 2 units per stage
+            unit, body = f["kernels"][4:].removesuffix("stacked"), int(f["kernels"][1])
+            per_stage = 2 if f["kernels"].endswith("stacked") else 1
+            assert [c.kernel_size[0] for c in convs] == [body] * 5 * per_stage, name
+            assert sum(type(x).__name__ == {"bottleneck": "_AlexBottleneck", "fire": "_FireModule"}[unit] for x in m.features) == 5 * per_stage, name
         elif f["kernels"].endswith(("stacked", "residual")):  # two convs per stage, conv1 11x11 in the k11-* cells; residual =
             big = f["kernels"].startswith("k11-")  # a FloatFunctional skip over each pair (phase_13_hybrids)
             body = int(f["kernels"][4 if big else 1])
@@ -210,6 +215,16 @@ def test_named_reference_cells_are_the_reference_nets():
     with torch.device("meta"):
         mine, ref = MODEL_REGISTRY["alexnet_k3x3residual_stride2_2pool2x2_map8_gap_bn"]["ctor"](), AlexNetResidual()
     assert _layout(mine.features[:-1]) == _layout(ref.features[:-1])
+    # Stage B's 3x3 Fire cell, one unit per stage, IS AlexNetFire (phase_11_families): same layers, keys and initial weights,
+    # so phase_13_bottleneck_fire reads that run instead of retraining it
+    from models import AlexNetFire
+
+    torch.manual_seed(0)
+    mine = MODEL_REGISTRY["alexnet_k3x3fire_stride1_2pool2x2_map16_gap_bn"]["ctor"]()
+    torch.manual_seed(0)
+    ref = AlexNetFire()
+    assert _layout(mine) == _layout(ref) and list(mine.state_dict()) == list(ref.state_dict())
+    assert all(torch.equal(a, b) for a, b in zip(mine.state_dict().values(), ref.state_dict().values(), strict=True))
 
 
 def test_factorial_cells_survive_the_qat_to_int8_path():
@@ -371,3 +386,26 @@ def test_controls_and_cifar_cells_are_what_their_names_say():
     assert len(cifar) == 7, cifar  # 4 AlexNet kernel sets + VGG16 3x3 / 2x2 / alternating
     for name in cifar:
         assert MODEL_REGISTRY[name]["ctor"]().eval()(torch.randn(1, 3, 32, 32)).shape == (1, 100), name
+
+
+def test_fpga_nets_start_from_the_studys_he_init():
+    """Phase 14 trains the *_fpga nets on the one recipe, He init included (models/baselines.py:he_init, 2026-11-05):
+    conv weights ~ N(0, 2 / fan_out), Linear weights ~ N(0, 0.01). Skipped without the sibling Winograd-FPGA repo."""
+    import pytest
+    import torch.nn as nn
+
+    from ml.winograd_bridge import bridge_root
+
+    if not (bridge_root() / "models_custom_wino.py").exists():
+        pytest.skip("Winograd-FPGA bridge not available")
+    torch.manual_seed(0)
+    for name in ("alexnet_fire_fpga", "resnet18_fpga"):  # one models_custom_wino net, one torchvision-built one
+        model = MODEL_REGISTRY[name]["ctor"]()
+        convs = [m for m in model.modules() if isinstance(m, nn.Conv2d) and m.weight.numel() >= 4096]
+        linears = [m for m in model.modules() if isinstance(m, nn.Linear)]
+        assert convs and linears, name
+        for c in convs:
+            fan_out = c.weight.shape[0] * c.weight[0, 0].numel()
+            assert abs(c.weight.std().item() / (2 / fan_out) ** 0.5 - 1) < 0.1, (name, c)
+        for lin in linears:
+            assert abs(lin.weight.std().item() / 0.01 - 1) < 0.1, (name, lin)

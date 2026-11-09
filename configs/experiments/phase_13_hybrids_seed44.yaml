@@ -3,9 +3,13 @@
 # -0.33 INT8 at seed 42, sign flipping across the grid) and are the nets compared with VGG16 (59.35, 3 seeds 59.09-59.37).
 # Same protocol as every Phase 11 run (_protocols/no_patience.yaml), enforced by tests/test_config.py: only the seed differs
 # (it also moves the 90/10 split). Stride-1 cells run on a 4090: `--slurm tupi_4090`.
+# 2026-11-05: + their two 3x3 counterparts (article on Phases 11-13: with two convs per stage the 2x2 body beat the 3x3
+# one in 8 of 8 pairs, all at seed 42) -- these two pairs then compare at 3 seeds.
 extends: _protocols/no_patience
 seed: 44
 name: phase_13_hybrids_seed44
 models:
   - alexnet_k2x2stacked_stride1_2pool2x2_map16_gap_bn
   - alexnet_k2x2residual_stride1_2pool2x2_map16_gap_bn
+  - alexnet_k3x3stacked_stride1_2pool2x2_map16_gap_bn
+  - alexnet_k3x3residual_stride1_2pool2x2_map16_gap_bn

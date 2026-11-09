@@ -5,7 +5,7 @@ import torch.ao.quantization as tq
 from torchvision.models import alexnet
 
 from models.baselines import SymmetricPad2d, he_init
-from models.compensation import _ResBlock
+from models.compensation import _AlexBottleneck, _FireModule, _ResBlock
 
 
 def _conv_relu(in_c: int, out_c: int, k: int, batch_norm: bool, stride: int = 1, padding: int = 0) -> list:
@@ -362,19 +362,30 @@ class AlexNetStacked(nn.Module):
     phase_13_hybrids (docs/logs/PHASE13_LOG.md): stem_kernel = conv1's kernel (11: AlexNet's 11x11, 'same'
     padding 5), stem_stride = conv1's stride (1 keeps the 64x64 map: a 16x16 last map), residual = each stage's pair as
     a residual block (models.compensation._ResBlock: He et al. 2016, two convs + identity / 1x1 projection shortcut).
+    phase_13_bottleneck_fire (Stage B): unit = what replaces each conv -- "bottleneck" (1x1 -> k x k -> 1x1, mid = out/4,
+    at least 32: models.compensation._AlexBottleneck) or "fire" (1x1 squeeze to out/4 -> 1x1 | k x k expands of out/2:
+    _FireModule, AlexNetFire's widths) -- and per_stage = units per stage (2, or 1 = one per stage like the 5-conv body).
     The defaults build the same flat Sequential as before (same indices: the trained stacked cells load unchanged).
     """
 
     def __init__(self, num_classes: int = 200, head: str = "fc", batch_norm: bool = True, kernel_size: int = 3,
-                 dropout: float = 0.0, stem_kernel: int | None = None, stem_stride: int = 2, residual: bool = False):
+                 dropout: float = 0.0, stem_kernel: int | None = None, stem_stride: int = 2, residual: bool = False,
+                 unit: str = "conv", per_stage: int = 2):
         super().__init__()
         self.quant = tq.QuantStub()
         self.dequant = tq.DeQuantStub()
         assert kernel_size in (2, 3), kernel_size
         assert batch_norm or not residual, "the residual blocks always have BN"
+        assert unit in ("conv", "bottleneck", "fire") and per_stage in (1, 2), (unit, per_stage)
+        assert unit == "conv" or (batch_norm and not residual), "the units always have BN and no skip"
         stem_kernel = stem_kernel or kernel_size
 
         def conv(in_c, out_c, stride=1, k=kernel_size):
+            if unit == "bottleneck":
+                return [_AlexBottleneck(in_c, out_c, stride, kernel_size=k)]
+            if unit == "fire":
+                assert stride == 1, "a Fire module has no stride"
+                return [_FireModule(in_c, out_c // 4, out_c // 2, kernel_size=k)]
             if k % 2:
                 return _conv_relu(in_c, out_c, k, batch_norm, stride=stride, padding=k // 2)
             return ([] if stride > 1 else [SymmetricPad2d()]) + _conv_relu(in_c, out_c, 2, batch_norm, stride=stride)
@@ -388,7 +399,8 @@ class AlexNetStacked(nn.Module):
                 layers.append(_ResBlock(cin, cout, s, kernel_size=kernel_size, first_kernel=k))
             else:
                 layers += conv(cin, cout, s, k)
-                layers += conv(cout, cout)
+                if per_stage == 2:
+                    layers += conv(cout, cout)
             if i < 2:
                 layers.append(nn.MaxPool2d(2))
         pool, classifier = _pool_and_classifier(head, 256, 6, num_classes, dropout=dropout)
