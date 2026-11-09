@@ -118,3 +118,10 @@ split. The user asked for everything on one recipe, so this phase reruns them on
   (train loss ≈ ln 200 from epoch 1 to 50). V (weights) survives in both (≥ 0.91). Why the error compounds so much faster on this recipe's nets is not isolated; their higher activation crest factor
   in several layers fits, untested. The bridge notes recalibrated scales (`hw_params`) as the one measured lever for packed F43 / F63.
   For the article: on deep nets F63 reads as a collapse, not a −18.9 pp median; F23 ≈ lossless and F43 ≈ −5 pp hold.
+- 2026-11-09: **48 of 48 arms done** (16 nets × F23 / F43 / F63, all 50 of 50 epochs; the last job, a `wrn_28_2_fpga` arm, ended 2026-11-09 01:16; every job of the last 2 days is COMPLETED, exit 0, in `sacct`).
+  The 22 new arm dirs synced (no `*.pth`, no logs; the three arm trees are 229 MB each), the 3 arm aggregate CSVs taken from PCAD (17 lines each), `winograd_numerics` rerun, `runs_index.csv` +22 rows
+  (no key lost), `build_cross_phase_results` unchanged, `tests/test_phase14_winograd.py` 3 passed. Medians, arm − FP32 on the test set, n = 16 each:
+  **F23 −0.16 pp (−0.69..+3.79; 5 nets above zero), F43 −6.30 (−8.57..+0.47), F63 −40.09 (−59.84..−10.48)**. Against the 26-arm medians (−0.16 / −4.63 / −50.82) F43 got worse and F63 better
+  because the added nets are slower to collapse for F63 (4 AlexNet-class nets and `googlenet` at 12-49 %; `vgg_style` and the two WRNs are at chance) but sit at −6 to −9 pp in F43. F63 arm top-1: six nets under 1 % (`vgg_style` 0.41, `vgg16...` 0.43, `vgg13` 0.48, `wrn_28_2` 0.49, `wrn_16_4` 0.51, `resnet18` 0.56; agreement with FP32 ≈ 0.005),
+  `repvgg_a0` 4.21, AlexNet-class 11.21-27.81, `googlenet` 48.51 (best, agreement 0.54). The collapse measured on `resnet18` (2026-11-08) therefore holds for the plain-conv deep nets as a class; `googlenet` and the AlexNets survive.
+  The article's `\pendente` in "2x2 ou 3x3?" carries the 48-arm numbers, its text still the budget_unico ones. Phase 13 Stage B (7 jobs, 835668-835674, `phase_13_bottleneck_fire`) is pending on `tupi` (`Priority`); nothing else of ours runs on PCAD.

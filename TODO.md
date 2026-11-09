@@ -354,8 +354,8 @@ Status: `results/phase_11_geometry_analysis/design_status.csv`; findings: `docs/
 
 - ✅ Canary: the 3 arms of `alexnet_k3x3_stride4...` (F23 / F43 / F63) done and synced 2026-11-06: 35.32 / 32.00 / 21.05 test top-1 (cell's FP32 31.52, INT8 35.08).
 - ✅ 14 FP32 (`phase_14_winograd_fp32`, 500 ep, no early stop): all done and synced 2026-11-07 (37.86-61.85 test top-1).
-- [ ] 45 arms (3 `vgg16...` canaries + 14 nets × 3): all seeded; 2 running, 29 pending, 14 in `~/queue_phase14.txt` (2026-11-07 21:38). Sync each finished arm (its `qat_wino` summary complete), then `python -m scripts.phase14.winograd_numerics`.
-- [ ] When all land: `scripts/phase14` analysis, the article's `\pendente` in "2x2 ou 3x3?", archive `budget_unico` / `wino_f*_pack`.
+- ✅ 48 of 48 arms (16 nets × F23 / F43 / F63) done on PCAD by 2026-11-09 01:16 and synced; `winograd_numerics` run: median arm − FP32 on the test set F23 −0.16 (n = 16, −0.69..+3.79), F43 −6.30 (−8.57..+0.47), F63 −40.09 (−59.84..−10.48) pp. F63: 6 deep nets at 0.4-0.6 %, repvgg 4.2 %, AlexNet-class 11-28 %, googlenet 48.5 %.
+- [ ] Left: rewrite the article's "2x2 ou 3x3?" paragraph on these numbers (its `\pendente` already carries them), archive `budget_unico` / `wino_f*_pack`; `f63_collapse.json` is still the 2026-11-08 run (resnet18 only).
 
 ## After Phase 13 (in this order; user, 2026-10-30)
 
