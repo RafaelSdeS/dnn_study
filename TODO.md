@@ -355,7 +355,8 @@ Status: `results/phase_11_geometry_analysis/design_status.csv`; findings: `docs/
 - ✅ Canary: the 3 arms of `alexnet_k3x3_stride4...` (F23 / F43 / F63) done and synced 2026-11-06: 35.32 / 32.00 / 21.05 test top-1 (cell's FP32 31.52, INT8 35.08).
 - ✅ 14 FP32 (`phase_14_winograd_fp32`, 500 ep, no early stop): all done and synced 2026-11-07 (37.86-61.85 test top-1).
 - ✅ 48 of 48 arms (16 nets × F23 / F43 / F63) done on PCAD by 2026-11-09 01:16 and synced; `winograd_numerics` run: median arm − FP32 on the test set F23 −0.16 (n = 16, −0.69..+3.79), F43 −6.30 (−8.57..+0.47), F63 −40.09 (−59.84..−10.48) pp. F63: 6 deep nets at 0.4-0.6 %, repvgg 4.2 %, AlexNet-class 11-28 %, googlenet 48.5 %.
-- [ ] Left: rewrite the article's "2x2 ou 3x3?" paragraph on these numbers (its `\pendente` already carries them), archive `budget_unico` / `wino_f*_pack`; `f63_collapse.json` is still the 2026-11-08 run (resnet18 only).
+- ✅ 2026-11-09: the article's "2x2 ou 3x3?" paragraph rewritten on the 48-arm numbers (no `\pendente` left), future work and limitations updated, PDF rebuilt; `budget_unico` / `wino_f*_pack` archived (`outputs/{pcad,local}/archive_winograd_old_recipe/`).
+- [ ] On PCAD: `mv` the gitignored checkpoints of `budget_unico` and `wino_f{23,43,63}_pack` to `outputs/pcad/archive_winograd_old_recipe/` after the branch reaches main and PCAD pulls (the pull moves only tracked files); `f63_collapse.json` is still the 2026-11-08 resnet18-only run (the diagnosis for another net needs the bridge, 2 checkpoints and the dataset on one machine).
 
 ## After Phase 13 (in this order; user, 2026-10-30)
 

@@ -39,7 +39,7 @@ a checkpoint on either side, compare by md5, not size — same-model checkpoints
 What the laptop does hold (checked 2026-10-27): copies of the training logs of the `phase_1[12]_*` runs and the archives
 (figures 18 / 19 / 29 and `convergence.csv` read them -- regenerating without them silently drops rows, fetch them first), the 4
 VGG16 FC + Dropout seed INT8 artifacts and the lr 1e-3 VGG16 fine-tune's (104.5 MB, 2026-10-30) over GitHub's limit, 3 `.pth` in `archive_legacy_phases/` (also on PCAD), and the gitignored files of
-`outputs/local/wino_f{23,43,63}_pack/` + `outputs/local/_pcad_fp32/` (the 2026-09-18 local M7 runs: 32 files, 26 of them checkpoints), copied to
+`outputs/local/archive_winograd_old_recipe/{wino_f{23,43,63}_pack,_pcad_fp32}/` (archived 2026-11-09, Phase 14 replaced them) (the 2026-09-18 local M7 runs: 32 files, 26 of them checkpoints), copied to
 PCAD's `~/dnn_study` on 2026-10-30 (md5 identical) -- until then the laptop was their only copy.
 
 **One slug per phase**, `phase_N_description`, used identically in `notebooks/`, `results/`,

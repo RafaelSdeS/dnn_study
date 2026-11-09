@@ -41,7 +41,7 @@ from scripts.phase14.winograd_numerics import VARIANTS
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_NET = "resnet18_fpga"
 DEFAULT_NEW = ROOT / "outputs/pcad/phase_14_winograd_fp32" / DEFAULT_NET / "checkpoints"
-DEFAULT_OLD = ROOT / "outputs/pcad/budget_unico" / DEFAULT_NET / "checkpoints"
+DEFAULT_OLD = ROOT / "outputs/pcad/archive_winograd_old_recipe/budget_unico" / DEFAULT_NET / "checkpoints"
 DEFAULT_OUT = ROOT / "results/phase_14_winograd_numerics/f63_collapse.json"
 DEFAULT_CALIB = 400  # train images through the observers; the arm's first epoch sees them the same way (first batch sets, then EMA)
 DEFAULT_TEST = 1000

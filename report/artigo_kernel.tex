@@ -1,8 +1,8 @@
 % RASCUNHO. Resultados das fases 11 a 13, no formato de ic_report.tex.
 % Compilar a partir de report/:  latexmk -pdf -outdir=<pasta fora do repo> artigo_kernel.tex
 % As figuras vêm direto de results/figures_generated/; os títulos embutidos são cortados com trim e a informação vai para a legenda.
-% \pendente{...} marca, em vermelho, o que depende de treinos em andamento: a fase 14 (Winograd-FPGA na receita única,
-% docs/logs/PHASE14_LOG.md). As seeds 43 e 44 da fase 13 entraram em 2026-11-07 (docs/logs/PHASE13_LOG.md).
+% \pendente{...} marca, em vermelho, o que depende de treinos em andamento (hoje sem uso). A fase 14 (Winograd-FPGA na receita
+% única, docs/logs/PHASE14_LOG.md) terminou em 2026-11-09; as seeds 43 e 44 da fase 13 entraram em 2026-11-07 (docs/logs/PHASE13_LOG.md).
 \documentclass[conference]{IEEEtran}
 \IEEEoverridecommandlockouts
 \renewcommand{\figurename}{Figura}
@@ -752,9 +752,11 @@ Os resultados apontam para algumas escolhas:
 
 A escolha depende do hardware. Em acurácia, com dois por estágio, o 2\by2 fica à frente e faz cerca de metade dos MACs diretos, ou cerca de 1,8 vez menos com Winograd (Seção~\ref{sec:hardware}). Esse kernel, porém, precisa de um acelerador preparado para ele.
 
-Em um estudo paralelo do grupo, treinamos 14 redes simulando a aritmética de aceleradores F($m$,3) em FPGA. Essa acurácia vem da simulação, não do hardware. O kernel 2\by2 fica fora dessas transformações. O tamanho da transformação define o custo em acurácia: em relação ao FP32, F(2,3) fica praticamente igual ($+$0,05 p.p., mediana), F(4,3) perde 5,1 p.p. e F(6,3) perde 18,9 p.p.
-Assim, um acelerador com F(2,3) e redes 3\by3 é hoje a opção sem custo de acurácia medido.
-\pendente{Esses números vêm da receita anterior (AdamW, FP32 de até 100 épocas, 15 épocas de QAT medidas na validação). A Fase 14 refaz as 16 redes com a receita única e mede no teste; substituir quando terminar. Em 2026-11-09, as 14 redes em FP32 (37,9 a 61,9\% no teste) e os 48 QATs com a aritmética do acelerador (16 redes em cada variante) terminaram. Medianas em relação ao FP32, com mínimo e máximo: F(2,3) $-$0,2 ($-$0,7 a $+$3,8), F(4,3) $-$6,3 ($-$8,6 a $+$0,5) e F(6,3) $-$40,1 ($-$59,8 a $-$10,5) p.p. F(2,3) confirma a ordem acima, e F(4,3) é um pouco pior (6,3 contra 5,1 p.p.). F(6,3) não: seis redes profundas (VGG-style, VGG-13, VGG-16, WRN-16-4, WRN-28-2 e ResNet-18) caem ao acaso (0,4 a 0,6\%) e o RepVGG fica em 4,2\%. As AlexNet ficam entre 11 e 28\%, e o GoogLeNet em 48,5\%. Na receita anterior, a mesma ResNet-18 chegava a 37,5\%. Não é falha do treino. Cada camada F(6,3), sozinha, erra quase o mesmo nas duas receitas. O que muda é o acúmulo: os observadores da quantização se calibram nas ativações da própria rede simulada, que já carregam o erro das camadas anteriores. Na receita única, eles ficam de 14 a 51 vezes acima do sinal limpo (de 1 a 3,7 vezes na anterior), a maior parte dos códigos INT8 da entrada vira zero, e em 13 das 19 convoluções da ResNet-18 quase nada passa. Sem sinal, o QAT não tem de onde partir.}
+Em um estudo paralelo do grupo (Fase 14), treinamos 16 redes simulando a aritmética de aceleradores F($m$,3) em FPGA, com a mesma receita única. Essa acurácia vem da simulação, não do hardware, e o kernel 2\by2 fica fora dessas transformações. O tamanho da transformação define o custo em acurácia. Em relação ao FP32, no conjunto de teste, a mediana das 16 redes é de $-$0,2 p.p. em F(2,3) (de $-$0,7 a $+$3,8), $-$6,3 p.p. em F(4,3) (de $-$8,6 a $+$0,5) e $-$40,1 p.p. em F(6,3) (de $-$59,8 a $-$10,5). Uma seed por rede.
+
+O F(6,3) não é só uma perda maior: seis redes profundas (VGG-style, VGG-13, VGG-16, WRN-16-4, WRN-28-2 e ResNet-18) caem ao acaso, com 0,4 a 0,6\% de acerto, e o RepVGG fica em 4,2\%. As AlexNet ficam entre 11 e 28\% e o GoogLeNet em 48,5\%. Um estudo anterior do grupo, com outra receita (AdamW, FP32 de até 100 épocas, 15 épocas de QAT medidas na validação), tinha achado $+$0,05, $-$5,1 e $-$18,9 p.p., e a mesma ResNet-18 chegava a 37,5\% em F(6,3). A diferença não é falha de treino. Medimos a ResNet-18: cada camada F(6,3), sozinha, erra quase o mesmo nas duas receitas. O que muda é o acúmulo do erro. Os observadores da quantização se calibram nas ativações da própria rede simulada, que já carregam o erro das camadas anteriores. Na receita única, eles ficam de 14 a 51 vezes acima do sinal limpo (de 1 a 3,7 vezes na anterior), a maior parte dos códigos INT8 da entrada vira zero, e em 13 das 19 convoluções quase nada passa. Sem sinal, o QAT não tem de onde partir. Não medimos por que o erro cresce mais rápido nesta receita, e só a ResNet-18 foi examinada assim.
+
+Assim, um acelerador com F(2,3) e redes 3\by3 é a opção sem custo de acurácia medido. Com F(4,3), a perda é de cerca de 6 p.p. (no pior caso, 8,6), e com F(6,3) o resultado depende da rede e, nas profundas, é inutilizável sem recalibrar as escalas.
 
 \subsection{O que muda em relação ao trabalho anterior}
 
@@ -771,6 +773,7 @@ As demais fases do projeto entram só como contexto, porque usaram protocolos di
 \item \textbf{Controles limitados.} O controle de capacidade e os testes de taxa e de CIFAR-100 usam GAP e BN. O custo do 2\by2 com FC na AlexNet não foi explicado nem repetido.
 \item \textbf{MobileNetV2 pré-treinada.} Os três treinos ficaram abaixo da nossa guarda de conversão, e a causa não foi investigada.
 \item \textbf{Baixa resolução.} Os dados têm 64 px e 32 px, e as imagens de 224 px são apenas ampliações.
+\item \textbf{Simulação do acelerador.} Os resultados F($m$,3) têm uma seed por rede e vêm da simulação. A causa do colapso em F(6,3) foi examinada só na ResNet-18, e as escalas recalibradas, que poderiam evitá-lo, não foram testadas.
 \item \textbf{Hardware não medido.} A parcela de MACs e a estimativa com Winograd usam só a geometria das camadas. Não medimos a vazão em um acelerador real.
 \item \textbf{Latência não comparada.} Os treinos rodaram em máquinas diferentes. Essa diferença faz parte da variação entre execuções e também afeta a seed 42 do estudo de combinações: as duas melhores redes foram treinadas em GPUs diferentes.
 \end{itemize}
@@ -786,7 +789,7 @@ Para quem projeta redes para aceleradores Winograd, a mensagem é simples: não 
 
 \section{Trabalhos Futuros}
 
-O passo seguinte é refazer com a receita única, e medir no teste, a simulação dos aceleradores F($m$,3) da Seção~\ref{sec:2x2ou3x3}; os treinos estão em andamento. Depois, queremos:
+Queremos:
 \begin{itemize}
 \item fazer o controle de capacidade com classificador FC, para explicar o custo do 2\by2 na AlexNet;
 \item reavaliar todas as redes no mesmo tipo de máquina, para comparar latência;
