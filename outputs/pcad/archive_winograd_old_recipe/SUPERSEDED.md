@@ -13,5 +13,5 @@ run** (Phase 11's one recipe, 500 ep FP32, QAT 50 ep, accuracy on the official t
   into these directories.
 - `scripts/phase14/f63_collapse.py` still reads this directory's `budget_unico/<net>/checkpoints/<net>_best.pth` as the
   old FP32 base (PCAD only; the laptop keeps no checkpoints).
-- Checkpoints and logs (gitignored) exist only on PCAD, at the same path under `~/dnn_study`: **PCAD still has them at the
-  pre-archive path** (`outputs/pcad/budget_unico`, `outputs/pcad/wino_f*_pack`) until moved there with `mv`.
+- Checkpoints and logs (gitignored) exist only on PCAD, at the same path under `~/dnn_study`: moved there on PCAD 2026-11-10
+  (`budget_unico`'s 75 checkpoints; `wino_f*_pack` had none).

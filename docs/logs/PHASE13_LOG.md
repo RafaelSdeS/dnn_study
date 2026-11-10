@@ -356,7 +356,7 @@ Code: `_AlexBottleneck` / `_FireModule` take `kernel_size` (default 3; 2 = `_con
 `expand3` so checkpoint keys stay put); `AlexNetStacked` takes `unit=` ("conv" / "bottleneck" / "fire") and `per_stage=` (2 / 1). Defaults
 unchanged: a layout digest (state_dict keys + shapes + fuse map) of all 785 registered nets is identical before and after; 8 cells added.
 Tests: `test_config` + `test_registry` 36 passed, the `test_quantization` slice of the 7 new cells 14 passed (QAT → INT8 = the literature
-definition, layer by layer). Analysis: not written yet -- it reads the 7 runs + `alexnet_fire` + the four plain stride-1 bodies, when they land.
+definition, layer by layer). Analysis: `scripts/phase13/bottleneck_fire.py` (2026-11-10; `tests/test_phase13_bottleneck_fire.py`, fake run tree) reads the 7 runs + `alexnet_fire` + the four plain stride-1 bodies -> `results/phase_13_bottleneck_fire/{all_runs,contrasts}.csv`, `01_bottleneck_fire.png`; not run on real data yet (waits for the first run, job 835668).
 Smoke (laptop RTX 4060 Laptop, 2026-11-07 22:44, `scripts.train --smoke`, output discarded): `k2x2bottleneckstacked` and `k2x2firestacked`
 (the new code: both units at 2×2) FP32 → QAT → INT8 exit 0, 10 and 9 min; one FP32 epoch 50 / 44 s, one QAT epoch 196 / 166 s, GPU peak 5.1 / 4.2 GB,
 MemAvailable never under 3.3 GB; the INT8 kernel check (exact int32) passed on both. The one `must run observer before calling calculate_qparams`

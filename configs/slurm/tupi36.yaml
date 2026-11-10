@@ -1,0 +1,15 @@
+# PCAD SLURM config: tupi3-6 only (the i9 nodes), QOS short, for the re-evaluation pilot of Phase 11 cells
+# (docs/plans/PHASE13_CLOSEOUT_PLAN.md "Bloco C"): FP32/QAT resume as no-ops, only the evaluations and latencies rerun, so every
+# cell's latency comes from one machine type. tupi1/2 (Xeon) and tupi4 (signal deaths, 2026-11-06) are excluded.
+# A job killed by a signal on these nodes is rerun from scratch, never resumed.
+partition: tupi
+exclude: tupi1,tupi2,tupi4
+qos: short  # 4 h wall, priority 10000, 25 submitted / 10 running; an eval-only job takes minutes
+gres: gpu:1
+nodes: 1
+cpus_per_task: 8  # = tupi_4090: OMP_NUM_THREADS, so CPU/INT8 latency, follows it
+mem: 32G
+time: "02:00:00"
+requeue: true
+signal: "B:USR1@900"
+open_mode: append
