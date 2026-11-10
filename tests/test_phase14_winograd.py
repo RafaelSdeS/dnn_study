@@ -25,7 +25,8 @@ def test_arm_minus_fp32_and_medians(tmp_path):
         _arm(runs, v, "net_a", a, 0.9, fp32_correct=6)  # FP32 60.0
         if b is not None:
             _arm(runs, v, "net_b", b, 0.8, fp32_correct=7)  # FP32 70.0
-    wn.main(runs, out)
+    wn.main(runs, out, tmp_path / "figs")
+    assert (tmp_path / "figs" / "01_winograd_numerics.png").exists()
     r = pd.read_csv(out / "runs.csv").set_index(["net", "variant"])
     assert r.loc[("net_a", "f43"), "fp32"] == 60.0 and r.loc[("net_a", "f43"), "d"] == -5.0
     assert r.loc[("net_b", "f23"), "d"] == -11.0

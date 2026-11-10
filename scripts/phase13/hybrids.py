@@ -6,9 +6,11 @@ add up? A factorial on the 64px GAP + BN AlexNet: body (5 convs / two per stage 
 
     01_hybrids.png   one panel per conv1 stride; per conv1 the three bodies, 3x3 and 2x2 side by side, FP32 / INT8, seed 42;
                      a cell's other seeds (43 / 44) as small FP32 dots beside it
+    02_caminho.png   the article's path in one figure: from the unadapted AlexNet to the best hybrid, one factor per step
+                     (PATH), FP32 / INT8 averaged over every seed a cell has, MACs under each step
     contrasts.csv    every matched pair of the 24 cells (one factor changed, B - A), seed 42
     contrasts_by_seed.csv  the same pairs at every seed where both cells ran (a `seed` column; 42 = contrasts.csv)
-    all_runs.csv     every run of the 24 cells (the Phase 11 references with their replicates) and VGG16's reference
+    all_runs.csv     every run of the 24 cells (the Phase 11 references with their replicates), VGG16's reference and the PATH cells
 
 Phase 11's conventions: test top-1, INT8 hollow, early-best ring.
 
@@ -20,7 +22,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from matplotlib.lines import Line2D
 
-from ml.plotting import NEUTRAL, TEXT_SECONDARY, apply_report_style
+from ml.plotting import BLUE, NEUTRAL, TEXT_SECONDARY, apply_report_style
 from scripts.phase11.analyze_geometry import ROOT, RUNS, band_for, early_handle, early_ring, load, noise_bands, savefig
 from scripts.phase11.design_figures import KCOLOR, LIVE_NOTE, frame, legend_kernels
 
@@ -28,6 +30,14 @@ FIGS = ROOT / "results/figures_generated/phase_13_hybrids"
 TABLES = ROOT / "results/phase_13_hybrids"
 BODIES = [("", "5 convs"), ("stacked", "2 por estágio"), ("residual", "2 por estágio\n+ atalho residual")]
 VGG_REF = "vgg16_k3x3_stride1_5pool2x2_map2_gap_bn"  # the reference line: VGG16 3x3 + BN + GAP, Phase 11
+# (cell, what changed to reach it): each step changes one factor of the one before
+PATH = [("alexnet_k11-5-3_stride4_3pool3x3_map1_fcdrop_nobn", "AlexNet original\nsem adaptar"),
+        ("alexnet_k11-5-3_stride2_2pool2x2_map8_fcdrop_nobn", "layout\n64 px"),
+        ("alexnet_k11-5-3_stride2_2pool2x2_map8_fcdrop_bn", "+ BN"),
+        ("alexnet_k11-5-3_stride2_2pool2x2_map8_gap_bn", "FC → GAP"),
+        ("alexnet_k2x2_stride2_2pool2x2_map8_gap_bn", "kernels\n→ 2×2"),
+        ("alexnet_k2x2stacked_stride2_2pool2x2_map8_gap_bn", "dois por\nestágio"),
+        ("alexnet_k2x2stacked_stride1_2pool2x2_map16_gap_bn", "stride da\nconv1 → 1")]
 
 
 def cell(k, big, body, s):
@@ -43,9 +53,10 @@ CHANGES = [("corpo: 5 convs → 2 por estágio", 2, "", "stacked"), ("corpo: 2 p
 
 
 def runs():
-    """Every run of the 24 cells -- the phase_13_hybrids runs and the Phase 11 references -- and VGG16's reference."""
+    """Every run of the 24 cells -- the phase_13_hybrids runs and the Phase 11 references -- VGG16's reference and the PATH
+    cells."""
     df = pd.concat([load(*RUNS), load(*RUNS, prefix="phase_13_")], ignore_index=True)
-    return df[df.key.isin([*GRID.values(), VGG_REF])] if len(df) else df
+    return df[df.key.isin([*GRID.values(), VGG_REF, *(k for k, _ in PATH)])] if len(df) else df
 
 
 def contrasts(s42):
@@ -115,7 +126,7 @@ def fig_hybrids(s42, bands, figs, reps=None):
         Line2D([], [], marker="D", mfc="white", mec=TEXT_SECONDARY, ls="", ms=8, label="INT8"),
         Line2D([], [], color=NEUTRAL, ls="--", label="VGG16 3×3 (GAP + BN)")]
     if extra:
-        handles.append(Line2D([], [], marker="o", color=TEXT_SECONDARY, alpha=0.5, ls="", ms=4, label="outras seeds (FP32)"))
+        handles.append(Line2D([], [], marker="o", color=TEXT_SECONDARY, alpha=0.5, ls="", ms=4, label="seeds 43 e 44 (FP32)"))
     fig.legend(handles=handles + ([early_handle("ring")] if ringed else []), loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=7, fontsize=9)
     band = band_for(bands, "alexnet", True)["fp32"]
     fig.suptitle("Híbridos: profundidade, atalho residual, conv1 11×11 e stride 1 somam? (AlexNet, 2 max-pools 2×2, GAP + BN)\n"
@@ -124,6 +135,46 @@ def fig_hybrids(s42, bands, figs, reps=None):
                  + (f"\nainda na fila: {queued} de 24 células" if queued else ""), fontsize=11)
     fig.tight_layout()
     savefig(fig, "01_hybrids.png", figs)
+
+
+def fig_path(df, figs):
+    """PATH as a staircase: each cell's FP32 (filled) and INT8 (hollow), the mean over its seeds, the step's gain above it,
+    MACs under it; VGG16 3x3 GAP + BN dashed. A missing cell ends the path there."""
+    m = df.groupby("key").agg(fp32=("fp32", "mean"), int8=("int8", "mean"), n=("seed", "nunique"), macs=("macs_eff_m", "first"),
+                              early=("early_best", "any"))
+    steps = [(k, label) for k, label in PATH if k in m.index]
+    if len(steps) < 2:
+        return
+    fig, ax = plt.subplots(figsize=(10, 4.6))
+    xs = range(len(steps))
+    fp32 = [m.loc[k, "fp32"] for k, _ in steps]
+    ax.step(xs, fp32, where="mid", color=BLUE, lw=1.2, alpha=0.5, zorder=2)
+    ax.scatter(xs, fp32, s=70, color=BLUE, zorder=3)
+    ax.scatter(xs, [m.loc[k, "int8"] for k, _ in steps], s=60, marker="D", facecolors="white", edgecolors=BLUE, lw=1.6, zorder=3)
+    for x, (k, _) in enumerate(steps):
+        r = m.loc[k]
+        if r.early:
+            early_ring(ax, x, r.int8)
+        ax.text(x, max(r.fp32, r.int8) + 0.9, f"{r.fp32:.1f}%" + ("" if x == 0 else f"\n({r.fp32 - fp32[x - 1]:+.1f})"),
+                ha="center", va="bottom", fontsize=9)
+    if VGG_REF in m.index:
+        ax.axhline(m.loc[VGG_REF, "fp32"], color=NEUTRAL, ls="--", lw=1, zorder=1)
+        ax.text(0, m.loc[VGG_REF, "fp32"] + 0.3, f"VGG16 3×3 (GAP + BN): {m.loc[VGG_REF, 'fp32']:.1f}%", fontsize=9, color=TEXT_SECONDARY,
+                va="bottom")
+    ax.set_xticks(list(xs))
+    ax.set_xticklabels([f"{label}\n{m.loc[k, 'macs']:.0f}M MACs" + ("" if m.loc[k, "n"] > 1 else "\n(1 seed)") for k, label in steps],
+                       fontsize=9)
+    ax.set_ylabel("Top-1 no teste (%)")
+    ax.set_ylim(min(fp32) - 4, max(fp32) + 5)
+    handles = [Line2D([], [], marker="o", color=BLUE, ls="", ms=8, label="FP32"),
+               Line2D([], [], marker="D", mfc="white", mec=BLUE, ls="", ms=8, label="INT8")]
+    if m.loc[[k for k, _ in steps], "early"].any():
+        handles.append(early_handle("ring"))
+    ax.legend(handles=handles, loc="lower right", fontsize=9)
+    ax.set_title("Da AlexNet original à melhor rede, um fator por vez (média das seeds; entre parênteses, o ganho do passo em p.p.)",
+                 fontsize=10)
+    fig.tight_layout()
+    savefig(fig, "02_caminho.png", figs)
 
 
 def main():
@@ -139,6 +190,7 @@ def main():
     c.to_csv(TABLES / "contrasts.csv", index=False)
     contrasts_by_seed(df).to_csv(TABLES / "contrasts_by_seed.csv", index=False)
     fig_hybrids(s42, noise_bands(frame()), FIGS, df[df.seed != 42])
+    fig_path(df, FIGS)
     if len(c):
         print(c.groupby("factor", sort=False)[["d_fp32", "d_int8"]].agg(["median", "count"]).round(2).to_string())
     n = df.groupby("key").seed.nunique()

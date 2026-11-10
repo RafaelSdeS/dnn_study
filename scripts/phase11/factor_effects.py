@@ -88,7 +88,7 @@ K3_GAP_BN = "alexnet_k3x3_stride2_2pool2x2_map8_gap_bn"
 FAMILY_CONTRASTS = [  # (factor, label, A, B, note): what the cell grid can't express. † = a second variable changes too
     (COMP, "64px · 3×3 + BN + GAP → Bottleneck", K3_GAP_BN, "alexnet_bottleneck", ""),
     (COMP, "64px · 3×3 + BN + GAP → Fire†", K3_GAP_BN, "alexnet_fire", "o Fire usa conv1 stride 1 (mapas 16×16)"),
-    (PRE, "MobileNetV2 (torchvision)", "mobilenetv2_scratch", "mobilenetv2", ""),
+    (PRE, "MobileNetV2 (pré-treinada)", "mobilenetv2_scratch", "mobilenetv2", ""),
 ]
 
 
@@ -366,7 +366,7 @@ def fig_matched_pairs(pairs, summary, n_cells):
         handles.append(Line2D([], [], marker="o", color=EARLY_GRAY, ls="", ms=5, label="cinza = " + EARLY_LABEL))
     fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0), ncol=2, fontsize=9)
     fig.suptitle("Efeito de trocar um fator de cada vez (A → B, todo o resto igual)\n"
-                 f"cada ponto = um par de redes, valor = B − A · seed 42 · {n_cells} redes treinadas até agora\n"
+                 f"cada ponto = um par de redes, valor = B − A · seed 42\n"
                  f"só os contrastes com ≥ {MIN_PAIRS} pares; os de 1–2 pares estão nas figuras 10, 27 e 28", fontsize=11)
     fig.tight_layout(rect=(0, 0, 1, 0.93))
     savefig(fig, "11_factorial_matched_pairs.png")

@@ -35,7 +35,7 @@ VGG = dict(family="vgg16")
 SEEDS_NOTE = "em cada painel só o kernel muda; treino do zero, barras = seed 42 (pontos = cada seed, onde replicada)"
 FIGURES = {  # file: (title, [(panel title, factor filter)], baseline key, baseline label, panels per row[, kernels in bar order])
     "01_kernel_original_layout.png": (
-        "Kernel no AlexNet de layout original (o do torchvision: conv1 stride 4 + 3 max-pools 3×3/2 → mapa final 1×1 em 64×64)\n"
+        "Kernel no AlexNet de layout original (o da AlexNet original: conv1 stride 4 + 3 max-pools 3×3/2 → mapa final 1×1 em 64×64)\n"
         "em cada painel só o kernel muda; treino do zero, sem BN, seed 42",
         [("FC + Dropout 0,5 (o classificador do AlexNet original)", {**ORIGINAL, "head": "fc", "dropout": True}),
          ("GAP (média global + 1 linear)", {**ORIGINAL, "head": "gap"})],

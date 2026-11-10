@@ -24,7 +24,9 @@ def test_phase_13_figure_and_contrasts(tmp_path, monkeypatch):
     # body 5 -> 2 per stage and stacked -> residual: 2 kernels x 2 conv1 x 2 strides; conv1, kernel, stride: 12 each
     assert c.groupby("factor").size().to_dict() == {f: n for f, _, _, _ in hybrids.CHANGES
                                                     for n in [8 if f.startswith("corpo") else 12]}
-    assert set(pd.read_csv(tmp_path / "tables" / "all_runs.csv").key) == set(hybrids.GRID.values()) | {hybrids.VGG_REF}
+    assert (tmp_path / "figs" / "02_caminho.png").exists()
+    path = {k for k, _ in hybrids.PATH}
+    assert set(pd.read_csv(tmp_path / "tables" / "all_runs.csv").key) == set(hybrids.GRID.values()) | {hybrids.VGG_REF} | path
     # the seed-43 replicates (k2x2 two-conv body at stride 1, +/- skip) give the skip contrast at seed 43, next to seed 42's
     by_seed = pd.read_csv(tmp_path / "tables" / "contrasts_by_seed.csv")
     skip = by_seed[(by_seed.A == hybrids.GRID[(2, False, "stacked", 1)]) & (by_seed.B == hybrids.GRID[(2, False, "residual", 1)])]

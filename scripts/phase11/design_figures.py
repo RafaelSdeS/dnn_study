@@ -43,7 +43,7 @@ from scripts.phase11.analyze_geometry import (ARCHIVE, BASE_KEY, BASE_LABEL, EAR
 PREVIEW = ROOT / "results/archive_adamw_recipe/figures_generated/phase_11_preview"
 PREVIEW_NOTE = ("PRÉVIA — runs antigas: receita AdamW, split de validação, INT8 antes das correções de 30/09–03/10; "
                 "† = só aproximadamente a célula nova")
-LIVE_NOTE = "seed 42 · top-1 no conjunto de teste (val oficial do Tiny ImageNet)"
+LIVE_NOTE = "seed 42 · top-1 no conjunto de teste (validação oficial do Tiny ImageNet)"
 
 K4 = ["k11-5-3", "k3x3", "k2x2", "kalt3-2"]
 KLABEL = {"k11-5-3": "11-5-3-3-3", "k3x3": "3×3", "k2x2": "2×2", "kalt3-2": "alternado 3-2", "k3x3stacked": "3×3, dois por estágio",
@@ -153,6 +153,13 @@ def color(r):
 
 
 GEO_LABEL = {(2, 2, 2): "64px", (4, 3, 3): "layout original"}
+# a family net's name in the figures, as the article's tables write it; a key missing here prints without its alexnet_ prefix
+FAMILY_NAME = {"alexnet_bottleneck": "Bottleneck", "alexnet_depthwisesep": "DepthwiseSep", "alexnet_fire": "Fire",
+               "alexnet_fire_bypass": "FireBypass", "alexnet_final_bottleneck_fire": "Bottleneck + Fire",
+               "alexnet_final_bottleneck_residual": "FinalBottleneckResidual", "alexnet_final_depthwise_fire": "Depthwise + Fire",
+               "alexnet_final_fire_residual": "Fire + residual", "alexnet_small_kernel_with_bn": "SmallKernel + BN",
+               "mobilenetv2": "MobileNetV2 (pré-treinada)", "mobilenetv2_scratch": "MobileNetV2 (do zero)",
+               "tinymobilenetv2": "TinyMobileNetV2", "tinyhybridnet": "TinyHybridNet", "vgg_style": "VGG-Style"}
 
 
 def cell_label(f, skip=()):
@@ -160,7 +167,7 @@ def cell_label(f, skip=()):
     factors in skip -- with skip = the factor a matched pair varies, what its two cells share. A family net: its name."""
     g = f.get if hasattr(f, "get") else (lambda k, d=None: getattr(f, k, d))
     if g("family") == "família":
-        return g("key").removeprefix("alexnet_")
+        return FAMILY_NAME.get(g("key"), g("key").removeprefix("alexnet_"))
     s, pk, pn = (int(g(k)) for k in ("stride", "pool_kernel", "pool_count"))
     tag = FAMILY_TAG.get(g("family"), "")
     geo = ("" if tag else f"{pn} pools {pk}×{pk}" if "stride" in skip else f"conv1 stride {s}" if "pooling" in skip
@@ -240,7 +247,7 @@ def fig_pareto(df, figs, note, panels, name, question, high_x=False,
     fig, axes = plt.subplots(1, len(panels), figsize=(10 if len(panels) == 1 else 16, 7), sharey=True, squeeze=False)
     for ax, (acc, x, xlabel), front in zip(axes[0], panels, fronts):
         for r in d.itertuples():
-            ax.scatter(getattr(r, x), getattr(r, acc), marker=FMARK[r.family], s=75, color=color(r), zorder=3,
+            ax.scatter(getattr(r, x), getattr(r, acc), marker=FMARK[r.family], s=95, color=color(r), zorder=3,
                        **(dict(edgecolors="k", lw=1.3) if r.pretrained else dict(edgecolors="white", lw=0.5)))
             if r.early_best and acc == "int8":  # the mark is about the INT8 number
                 early_ring(ax, getattr(r, x), r.int8)
@@ -248,7 +255,7 @@ def fig_pareto(df, figs, note, panels, name, question, high_x=False,
         for r in front.itertuples():
             n = num[r.Index]  # odd left, even right: neighbours on the front don't print over each other
             ax.annotate(str(n), (getattr(r, x), getattr(r, acc)), xytext=(-5, 4) if n % 2 else (5, 4),
-                        ha="right" if n % 2 else "left", textcoords="offset points", fontsize=8, weight="bold", zorder=5)
+                        ha="right" if n % 2 else "left", textcoords="offset points", fontsize=10, weight="bold", zorder=5)
         b = baseline(df)
         if b is not None:
             base_ring(ax, b[x], b[acc])
@@ -267,9 +274,9 @@ def fig_pareto(df, figs, note, panels, name, question, high_x=False,
                          + (" (no INT8, sem as de anel)" if d.early_best.any() and any(acc == "int8" for acc, *_ in panels) else "")),
                   BASE_HANDLE]
                + ([early_handle("ring")] if d.early_best.any() else []))
-    fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=3, fontsize=9)
+    fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=3, fontsize=10.5)
     fig.legend(handles=[Line2D([], [], ls="", label=f"{n}  {short(d.loc[i])}") for i, n in num.items()], loc="center left",
-               bbox_to_anchor=(1.0, 0.5), fontsize=8.5, handlelength=0, title="redes na fronteira (número no gráfico)", title_fontsize=9)
+               bbox_to_anchor=(1.0, 0.5), fontsize=10, handlelength=0, title="redes na fronteira (número no gráfico)", title_fontsize=10.5)
     fig.suptitle(f"{question}\n{note} · {EFF_NOTE}", fontsize=11)
     fig.tight_layout()
     savefig(fig, name, figs)
@@ -595,9 +602,9 @@ def fig_curves(df, figs, note, panels=None, kernels=K4, name="18_training_curves
     fig.legend(handles=legend_kernels(shown)
                + ([Patch(color="k", label=f"{BASE_LABEL}: a referência, a mesma em todos os painéis (só a validação)")]
                   if cb is not None else [])
-               + [Line2D([], [], color=TEXT_SECONDARY, lw=1.6, label="validação (split 90/10)"),
+               + [Line2D([], [], color=TEXT_SECONDARY, lw=1.6, label="validação (10% do treino separados)"),
                   # Trainer's train_acc: the running mean over the epoch, in train mode, on the augmented batches
-                  Line2D([], [], color=TEXT_SECONDARY, lw=0.8, ls="--", label="treino: média da época, com augmentation"
+                  Line2D([], [], color=TEXT_SECONDARY, lw=0.8, ls="--", label="treino: média da época, com aumento de dados"
                          + (" (e Dropout ligado na classificador FC)" if any((runs["head"] == "fc").any() for _, runs in panels) else "")),
                   Line2D([], [], marker="D", color=TEXT_SECONDARY, ls="", ms=7, label="época escolhida: a melhor na validação, de onde o QAT parte")],
                loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=4 if ncols > 1 else 2, fontsize=9)
@@ -815,7 +822,7 @@ def main(argv=None):
     fig_quant(df, figs, note)
     fig_flips(df, figs, note)
     fig_latency(df, figs, note if archive else "seed 42 · latência por imagem, batch 1")
-    curves_note = note if archive else "seed 42 · curvas no split de validação (10% do train), não no conjunto de teste"
+    curves_note = note if archive else "seed 42 · curvas nos 10% do treino separados para validação, não no conjunto de teste"
     fig_curves(df, figs, curves_note)
     if not archive:  # the ResNet block has no superseded runs
         fig_resnet_curves(df, figs, curves_note)
@@ -823,7 +830,7 @@ def main(argv=None):
     if not archive:
         every = frame(everything=True)
         fig_kblocks(every, figs, note, bands)
-        fig_controls(every, figs, "cada ponto = uma seed (42/43/44) · top-1 no conjunto de teste (val oficial do Tiny ImageNet)")
+        fig_controls(every, figs, "cada ponto = uma seed (42/43/44) · top-1 no conjunto de teste (validação oficial do Tiny ImageNet)")
         fig_pareto(every.assign(wino_pct=[winograd_share(r) for r in every.itertuples()]), figs, note,
                    [("int8", "wino_pct", "MACs em convs que um acelerador Winograd executa (% dos MACs: stride 1, kernel 2×2 ou 3×3)")],
                    "30_winograd_eligible.png", "Acurácia × quanto da rede cabe num acelerador Winograd: à direita, mais cálculo no "

@@ -39,17 +39,17 @@ RUNS = (ROOT / "outputs/pcad", ROOT / "outputs/local")  # every runtime a run ca
 ARCHIVE = RUNS[0] / "archive_adamw_recipe"  # the superseded AdamW-recipe runs, same phase_11_*/<model>/results layout
 
 BASE_KEY = "alexnet_k11-5-3_stride4_3pool3x3_map1_fcdrop_nobn"  # torchvision's AlexNet, unadapted (1x1 map at 64 px), from scratch
-BASE_LABEL = "AlexNet torchvision sem adaptar (mapa 1×1)"
+BASE_LABEL = "AlexNet original sem adaptar (mapa 1×1)"
 # The same net at the 6x6 map it was designed for (Tiny ImageNet enlarged to 224, phase_11_input224): the AlexNet reference
 # at a healthy map, drawn beside BASE_KEY wherever that one is a line -- BASE_KEY's 35.5% is the 1x1 map's, not AlexNet's
 # (docs/logs/PHASE11_LOG.md "Progress 2026-10-19").
 HEALTHY_KEY = "alexnet_k11-5-3_stride4_3pool3x3_map6_fcdrop_nobn_in224"
-HEALTHY_LABEL = "AlexNet torchvision com entrada\nampliada a 224 px (mapa 6×6)"
+HEALTHY_LABEL = "AlexNet original com entrada\nampliada a 224 px (mapa 6×6)"
 # the other families' own reference nets, for their rows of the factor figures (figure 03 draws VGG_BASE too)
 VGG_BASE = ("vgg16_k3x3_stride1_5pool2x2_map2_fcdrop_bn", "VGG16 original (3×3)")
 RESNET_BASE = ("resnet18_k7-3_stride2_1pool3x3_map2_gap_bn", "ResNet-18 original (do zero)")
 # {term a label uses: its definition} -- a figure states only the ones its labels use
-LAYOUTS = {"layout original": "layout original = o do AlexNet torchvision: conv1 stride 4 + 3 max-pools 3×3/2 → mapa final 1×1 em 64×64",
+LAYOUTS = {"layout original": "layout original = o da AlexNet original: conv1 stride 4 + 3 max-pools 3×3/2 → mapa final 1×1 em 64×64",
            "64px": "64px = layout adaptado a 64×64: conv1 stride 2 + 2 max-pools 2×2 → mapa final 8×8"}
 
 # A run whose best FP32 epoch falls before EARLY_FRAC of its budget was picked while the cosine LR was still high: QAT
@@ -284,7 +284,7 @@ def fig_convert(df):
         ax.axvspan(-0.5, 0.5, color="#e6e6e6", zorder=0)  # the baseline's bar, to compare the others against
     ax.margins(y=0.1)  # headroom for the BN labels above the tallest bar
     ax.set_xticks(range(len(d)))
-    ax.set_xticklabels(["AlexNet sem adaptar\n(baseline)" if r.key == BASE_KEY else cell_label(r, skip=("bn",)) for r in d.itertuples()],
+    ax.set_xticklabels(["AlexNet sem adaptar\n(referência)" if r.key == BASE_KEY else cell_label(r, skip=("bn",)) for r in d.itertuples()],
                        rotation=40, ha="right", fontsize=9)
     ax.set_ylabel("INT8 − FP32 (p.p.; negativo = perde no INT8)")
     ax.set_title("De onde vem a diferença INT8 − FP32: do treino QAT ou da conversão para INT8 real? (seed 42)\n"

@@ -67,25 +67,25 @@ df = pd.concat([df, _fire_residual_row], ignore_index=True)
 # exploratory compensation attempts not detailed individually in the report text, so they
 # share one color.
 models_fig1 = [
-    "mobilenetv2", "vgg_style", "resnet18_tv", "alexnet_tv", "alexnet_tv_scratch",
+    "mobilenetv2", "vgg_style", "resnet18_tv", "alexnet_tv",
     "alexnet_3x3_fc", "alexnet_2x2_fc",
-    "alexnet_mixed", "alexnet_small_kernel", "alexnet_residual",
+    "alexnet_bottleneck", "alexnet_fire", "alexnet_mixed", "alexnet_small_kernel", "alexnet_residual",
     "alexnet_final_fire_residual",
 ]
 # Labels use the names the report text uses, plus how each baseline was trained -- "(irrestrita)"
 # only repeated the legend, and left readers looking for the unmodified AlexNet.
 labels_fig1 = [
     "MobileNetV2 (pré-treinada)", "VGG-Style (do zero)", "ResNet18 (pré-treinada)",
-    "AlexNet original (pré-treinada)", "AlexNet original (do zero)",
+    "AlexNet original (pré-treinada)",
     "AlexNet3x3-FC", "AlexNet2x2-FC",
-    "AlexNetMixed (3×3 e 2×2)", "AlexNetSmallKernel", "AlexNetResidual",
+    "AlexNetBottleneck", "AlexNetFire", "AlexNetMixed (3×3 e 2×2)", "AlexNetSmallKernel", "AlexNetResidual",
     "Fire + Residual (híbrida final)",
 ]
 group_fig1 = [
     "Baselines irrestritos", "Baselines irrestritos", "Baselines irrestritos", "Baselines irrestritos",
-    "Baselines irrestritos",
     "Restrição ingênua", "Restrição ingênua",
     "Tentativas de compensação", "Tentativas de compensação", "Tentativas de compensação",
+    "Tentativas de compensação", "Tentativas de compensação",
     "Arquitetura híbrida final",
 ]
 colors_fig1 = [GROUP_COLORS[g] for g in group_fig1]
@@ -113,13 +113,8 @@ rows = df[df["base_model"].isin(models_fig1)
           & ~((df["base_model"] == "alexnet_tv") & (df["phase"] != "Phase 1 — Baselines"))]
 model_to_acc = dict(zip(rows["base_model"], rows["top1_%_FP32"]))
 model_to_size = dict(zip(rows["base_model"], rows["size_MB_FP32"]))
-# The unmodified AlexNet trained from scratch is not in the cross-phase CSV: its only run is the
-# supplementary Phase 11 one (500 epochs, same AdamW recipe as this report), archived when Phase 11
-# moved to a new recipe. The report text already cites this run (27.51%).
-_scratch = json.load(open(
-    "results/archive_adamw_recipe/phase_11_kernel_size_comparison/alexnet_tv_scratch_summary.json"))
-model_to_acc["alexnet_tv_scratch"] = _scratch["fp32_top1"]
-model_to_size["alexnet_tv_scratch"] = _scratch["fp32_size_mb"]
+# ponytail: no Phase 11 run here -- the report covers Phases 1-10 only (user, 2026-11-10); the unmodified
+# AlexNet from scratch lives in report/artigo_kernel.tex.
 accuracies = [model_to_acc[m] for m in models_fig1]
 sizes = [model_to_size[m] for m in models_fig1]
 
@@ -349,7 +344,7 @@ PANELS = [
     ("int8", 1, "INT8 na CPU, lote 1"),
 ]
 
-fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+fig, axes = plt.subplots(1, 3, figsize=(11.5, 4.4))  # narrower = larger print scale at \linewidth
 
 for ax, (prec, batch, subtitle) in zip(axes, PANELS):
     subset = kernel_df[(kernel_df["precision"] == prec) & (kernel_df["batch_size"] == batch)]
@@ -554,7 +549,7 @@ _panels = [
 # \linewidth regardless of figsize, so making this "bigger" means taller, not wider: more
 # absolute vertical room for the crowded 33-point scatter and its labels, at the same
 # print-scale factor (unaffected by height, only by width) as before.
-fig, axes = plt.subplots(1, 2, figsize=(15, 8.5))
+fig, axes = plt.subplots(1, 2, figsize=(12.5, 8))  # narrower = larger print scale at \linewidth
 _size_labels = []  # labelled after tight_layout, which moves the axes
 for ax, (size_col, acc_col, precision, metric) in zip(axes.flat, _panels):
     df_size = df_all_classification[
@@ -601,7 +596,7 @@ fig.suptitle("Acurácia vs. tamanho do modelo, com fronteiras de Pareto (todos o
 # need, which is exactly the dead blank band between the panels and the legend.
 plt.tight_layout(rect=[0, 0.05, 1, 0.95])
 for ax, xs, ys, names, all_xy in _size_labels:
-    _label_points(ax, xs, ys, names, fontsize=9.5, fontweight="bold", avoid_xy=all_xy)
+    _label_points(ax, xs, ys, names, fontsize=10.5, fontweight="bold", avoid_xy=all_xy)
 plt.savefig(OUTPUT_DIR / "accuracy_vs_size_all_models.png")
 print("✓ accuracy_vs_size_all_models.png")
 plt.close()
@@ -715,79 +710,48 @@ for _model in _p7_models:
 p7_df = pd.DataFrame(_p7_rows)
 p7_df["mAP"] *= 100  # percent, as in the report's tables and text
 
-fig, ax = plt.subplots(figsize=(7.5, 5))
-for _model in _p7_models:
-    sub = p7_df[p7_df.model == _model].set_index("stage")
-    pts = [(sub.loc[s, "size_mb"], sub.loc[s, "mAP"]) for s in ("fp32", "qat", "int8") if s in sub.index]
-    xs, ys = zip(*pts)
-    ax.plot(xs, ys, color="0.8", linewidth=1, zorder=1)
+# Segmentation: the 9 DeepLabV3 runs (same backbones and stages), mIoU and true size from the phase's own table.
+_seg = pd.read_csv("results/phase_7_detection_segmentation/phase7_seg_comparison.csv")
+p7_seg = pd.DataFrame({"model": _seg.model, "stage": _seg.stage, "mAP": _seg.best_val_mIoU * 100,
+                       "size_mb": _seg.true_size_mb, "is_true": True})
 
+# One figure, two panels (detection | segmentation), so Eixo 6 shows both tasks the text discusses.
+fig, axes = plt.subplots(1, 2, figsize=(11, 4.6))
 any_estimated = False
-for _, row in p7_df.iterrows():
-    any_estimated = any_estimated or not row["is_true"]
-    ax.scatter(row["size_mb"], row["mAP"], s=100, marker=_p7_markers[row["stage"]],
-              facecolor=_p7_colors[row["model"]] if row["is_true"] else "none",
-              edgecolor=_p7_colors[row["model"]], linewidth=0.7 if row["is_true"] else 1.6, zorder=3)
+for ax, d, ylabel, title in ((axes[0], p7_df, "mAP de detecção (%)", "Detecção (SSD, VOC 2007+2012)"),
+                             (axes[1], p7_seg, "mIoU de segmentação (%)", "Segmentação (DeepLabV3, VOC 2012)")):
+    for _model in _p7_models:
+        sub = d[d.model == _model].set_index("stage")
+        pts = [(sub.loc[s, "size_mb"], sub.loc[s, "mAP"]) for s in ("fp32", "qat", "int8") if s in sub.index]
+        ax.plot(*zip(*pts), color="0.8", linewidth=1, zorder=1)
+    for _, row in d.iterrows():
+        any_estimated = any_estimated or not row["is_true"]
+        ax.scatter(row["size_mb"], row["mAP"], s=100, marker=_p7_markers[row["stage"]],
+                   facecolor=_p7_colors[row["model"]] if row["is_true"] else "none",
+                   edgecolor=_p7_colors[row["model"]], linewidth=0.7 if row["is_true"] else 1.6, zorder=3)
+    ax.set_xscale("log")
+    ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:g}"))
+    ax.xaxis.set_minor_formatter(FuncFormatter(lambda v, _: f"{v:g}"))
+    ax.set_xlabel("Tamanho real do modelo (MB, escala log)")
+    ax.set_ylabel(ylabel)
+    ax.set_title(title, fontsize=12)
 
-ax.set_xscale("log")
-ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:g}"))
-ax.xaxis.set_minor_formatter(FuncFormatter(lambda v, _: f"{v:g}"))
-ax.set_xlabel("Tamanho real do modelo (MB, escala log)")
-ax.set_ylabel("mAP de detecção (%)")
-_title = "mAP vs. tamanho do modelo (FP32, QAT e INT8"
-_title += "; vazado = tamanho não corrigido/estimado)" if any_estimated else ")"
-ax.set_title(_title)
-
-stage_legend = [
-    Line2D([0], [0], marker="o", color="w", markerfacecolor="0.4", markeredgecolor="black", markersize=9, label="FP32"),
-    Line2D([0], [0], marker="s", color="w", markerfacecolor="0.4", markeredgecolor="black", markersize=9, label="QAT"),
-    Line2D([0], [0], marker="^", color="w", markerfacecolor="0.4", markeredgecolor="black", markersize=9, label="INT8"),
-]
+handles = [Line2D([0], [0], marker=m, color="w", markerfacecolor="0.4", markeredgecolor="black", markersize=9, label=st.upper())
+           for st, m in _p7_markers.items()]
 if any_estimated:
-    stage_legend.append(Line2D([0], [0], marker="o", color="w", markerfacecolor="none",
-                               markeredgecolor="0.4", markersize=9, label="tamanho não corrigido/estimado"))
-model_legend = [Line2D([0], [0], marker="o", color="w", markerfacecolor=c, markersize=9, label=_p7_names[m])
-               for m, c in _p7_colors.items()]
-# This figure prints in a single IEEEtran column (~3.5in) like Figures 1 and 8, but at 7.5in wide
-# it's shrunk to fit that column more than either of those (~0.65x for Fig.1's 5.4in, ~0.58x for
-# Fig.8's 6in, ~0.47x here) -- so LEGEND_FONTSIZE alone still prints visibly smaller. Scaled up by
-# roughly that same ratio (7.5/5.4) to come out the same size on the page as Figure 1's legend.
-_FIG7_LEGEND_FONTSIZE = round(LEGEND_FONTSIZE * 7.5 / 5.4)
-leg1 = ax.legend(handles=stage_legend, loc="upper left", fontsize=_FIG7_LEGEND_FONTSIZE, frameon=False)
-# Below the axes, not "lower right" -- at this legend size that corner sat on top of the
-# alexnet_fire QAT/INT8 points (the two lowest-mAP, ~0.06-0.065, near x=3.5-6.6 MB).
-ax.legend(handles=model_legend, loc="upper center", bbox_to_anchor=(0.5, -0.13), ncol=3,
-          fontsize=_FIG7_LEGEND_FONTSIZE, frameon=False)
-ax.add_artist(leg1)
-
+    handles.append(Line2D([0], [0], marker="o", color="w", markerfacecolor="none", markeredgecolor="0.4", markersize=9,
+                          label="vazado = tamanho estimado"))
+handles += [Line2D([0], [0], marker="o", color="w", markerfacecolor=c, markersize=9, label=_p7_names[m])
+            for m, c in _p7_colors.items()]
+fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0.02), ncol=len(handles), frameon=False,
+           fontsize=LEGEND_FONTSIZE)
 fig.tight_layout()
-plt.savefig(OUTPUT_DIR / "phase7_accuracy_vs_size.png")
-print("✓ phase7_accuracy_vs_size.png")
+plt.savefig(OUTPUT_DIR / "phase7_det_seg.png", bbox_inches="tight")
+print("✓ phase7_det_seg.png")
 plt.close()
 
-
-# ====== Figure: Eixo 7 window-size sweep (H1) ======
-# Reproduced from notebooks/phase_8_efficient_vit/phase8_results_analysis.ipynb, cell 10, from the
-# same phase8_comparison.csv (_p8, loaded above) -- same reason as the Phase 6 figures above: the
-# notebook's version carries English labels and an "H1 —" hypothesis-numbering title, and rerunning
-# the whole notebook (which live-profiles the GPU for H5) to retitle one chart isn't worth it.
-WINDOW_SIZES = {"swin_pico_w2": 2, "swin_pico_w4": 4, "swin_pico_w8": 8}
-h1_df = _p8.set_index("model").loc[list(WINDOW_SIZES), ["fp32_top1", "int8_top1"]]
-h1_df["window_size"] = [WINDOW_SIZES[m] for m in h1_df.index]
-
-fig, ax = plt.subplots(figsize=(6, 4.5))
-ax.plot(h1_df["window_size"], h1_df["fp32_top1"], "o-", label="FP32", color=BLUE, linewidth=2)
-ax.plot(h1_df["window_size"], h1_df["int8_top1"], "s--", label="INT8", color=RED, linewidth=2)
-ax.set_xticks(h1_df["window_size"])
-ax.set_xlabel("Tamanho da janela de atenção", fontsize=11, color=TEXT_PRIMARY)
-ax.set_ylabel("Acurácia top-1 (%)", fontsize=11, color=TEXT_PRIMARY)
-ax.set_title("Acurácia vs. tamanho da janela de atenção local", fontsize=12, color=TEXT_PRIMARY)
-ax.legend(frameon=False, fontsize=LEGEND_FONTSIZE)
-
-fig.tight_layout()
-plt.savefig(OUTPUT_DIR / "phase8_h1_window_size_sweep.png")
-print("✓ phase8_h1_window_size_sweep.png")
-plt.close()
+# ponytail: the window-size sweep (phase8_h1_window_size_sweep.png) is gone -- three points the report's
+# attention table already lists.
 
 
 # ====== Figure: conv-stem before/after ======
