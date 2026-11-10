@@ -1,4 +1,4 @@
-% RASCUNHO. Resultados das fases 11 a 13, no formato de ic_report.tex.
+% RASCUNHO. Resultados das fases 11 a 14, no formato de ic_report.tex.
 % Compilar a partir de report/:  latexmk -pdf -outdir=<pasta fora do repo> artigo_kernel.tex
 % As figuras vêm direto de results/figures_generated/; os títulos embutidos são cortados com trim e a informação vai para a legenda.
 % \pendente{...} marca, em vermelho, o que depende de treinos em andamento (hoje sem uso). A fase 14 (Winograd-FPGA na receita
@@ -56,13 +56,15 @@ mateus.grellert@inf.ufrgs.br}
 \begin{abstract}
 O algoritmo de Winograd faz convoluções com menos multiplicações, mas só compensa com kernels pequenos, como 2\by2 e 3\by3.
 Redes clássicas, como a AlexNet, usam kernels bem maiores. Este artigo mede quanto custa trocar esses kernels e como recuperar a
-acurácia perdida. Fizemos 217 treinos com uma única receita, no Tiny ImageNet e no CIFAR-100, mudando um fator de cada vez, e avaliamos
+acurácia perdida. Fizemos 279 treinos com uma única receita, no Tiny ImageNet e no CIFAR-100, mudando um fator de cada vez, e avaliamos
 cada rede em FP32 e em INT8. O custo depende da rede e do classificador. Com classificador GAP e BatchNorm, passar de 3\by3 para 2\by2
 custa de 1,0 a 2,4 pontos percentuais (p.p.) na AlexNet, na VGG16 e na ResNet-18. Na AlexNet com GAP, essa perda some quando as duas
 redes têm a mesma capacidade, e a rede inteira em 2\by2 fica só 0,5 p.p. abaixo dos kernels originais, com 69\% menos multiplicações.
 Com classificador totalmente conectado, a mesma AlexNet perde 6,5 p.p. O stride da primeira camada pesa mais que o kernel (mediana de
 $+$9,7 p.p.), e duas convoluções pequenas por estágio recuperam a perda. A quantização para INT8 quase não muda a acurácia. Uma AlexNet
 só com kernels 2\by2 chega a 60,63\% em INT8, contra 59,45\% da VGG16 (médias de 3 seeds), com um sexto dos parâmetros.
+Simulando a aritmética de um acelerador Winograd em FPGA em 16 redes, o F(2,3) custa 0,2 p.p. (mediana), o F(4,3) custa 6,3 p.p.,
+e o F(6,3) derruba seis das redes profundas para perto do acaso.
 \end{abstract}
 
 \section{Introdução}
@@ -81,7 +83,8 @@ Em um relatório anterior \cite{souza2026relatorio}, comparamos variantes da Ale
 números diferentes de épocas. Isso atrapalha a leitura dos resultados, porque o treino pode pesar mais que a própria arquitetura
 \cite{bello2021revisiting,wightman2021resnet} e uma comparação justa precisa controlar o que muda \cite{radosavovic2019network}. Neste
 artigo, refazemos o estudo com uma única receita de treino e mudamos uma coisa de cada vez. A Seção~\ref{sec:fundamentos} explica os
-conceitos usados, e a Seção~\ref{sec:metodo} descreve o método e o motivo de cada escolha. Os resultados respondem a oito perguntas:
+conceitos usados, e a Seção~\ref{sec:metodo} descreve o método e o motivo de cada escolha. A Figura~\ref{fig:caminho} resume o caminho
+da AlexNet original até a melhor rede, e os resultados respondem a nove perguntas:
 \begin{enumerate}
 \item De onde vem a baixa acurácia da AlexNet em imagens pequenas? (Seção~\ref{sec:geometria})
 \item Quanto custa restringir o kernel? (Seção~\ref{sec:custo})
@@ -91,15 +94,27 @@ conceitos usados, e a Seção~\ref{sec:metodo} descreve o método e o motivo de 
 \item Quanto da rede cabe em um acelerador Winograd? (Seção~\ref{sec:hardware})
 \item Os resultados valem em outras condições? (Seção~\ref{sec:robustez})
 \item Os ganhos se somam? (Seção~\ref{sec:combinacoes})
+\item Quanto a aritmética do acelerador Winograd custa em acurácia? (Seção~\ref{sec:numerica})
 \end{enumerate}
+
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=0.86\textwidth,trim=0 0 0 19,clip]{phase_13_hybrids/02_caminho.png}
+\caption{Da AlexNet original à melhor rede, mudando um fator por vez (AlexNet com 5 convoluções, top-1 no teste; média das seeds quando há
+mais de uma). Em cima de cada passo, a acurácia FP32 e, entre parênteses, quanto ele ganhou. Embaixo, os MACs. Os maiores passos são o layout,
+o BN, as duas convoluções por estágio e o stride 1; trocar todos os kernels por 2\by2 custa 0,5 p.p. e corta 69\% dos MACs. A linha tracejada é a
+VGG16 3\by3 com GAP e BN.}
+\label{fig:caminho}
+\end{figure*}
 
 Nossas principais conclusões são:
 \begin{itemize}
 \item O custo do kernel depende da rede e do classificador. Com GAP e BatchNorm, passar de 3\by3 para 2\by2 custa de 1,0 a 2,4 p.p. nas três famílias testadas. Com FC e Dropout, esse custo sobe na AlexNet e some na VGG16.
 \item Na AlexNet com GAP e BatchNorm, o 2\by2 perde para o 3\by3 por ter menos capacidade, não por causa do kernel: com os mesmos MACs e parâmetros, os dois empatam.
 \item O stride da conv1 ($+$9,7 p.p.) e o BatchNorm ($+$5,2 p.p.) pesam mais que trocar os kernels originais por 3\by3 ($-$1,5 p.p.) ou 3\by3 por 2\by2 ($-$2,5 p.p.).
-\item Duas convoluções pequenas por estágio recuperam a perda. Com esse corpo, o 2\by2 fica acima do 3\by3 nos 8 pares testados, com cerca de metade dos MACs. É um indício forte, mas de uma seed só.
+\item Duas convoluções pequenas por estágio recuperam a perda. Com esse corpo, o 2\by2 fica acima do 3\by3 nos 8 pares da seed 42, com cerca de metade dos MACs. Com as seeds 43 e 44, a vantagem se repete nas três seeds sem atalho e em duas de três com atalho.
 \item A quantização INT8 quase não muda a acurácia, seja qual for o kernel. Os grandes ``ganhos'' em INT8 vêm de treino extra.
+\item No acelerador Winograd, o tamanho do bloco de saída pesa mais que o kernel: F(2,3) quase não custa, F(4,3) custa cerca de 6 p.p., e F(6,3) leva seis redes profundas ao acaso.
 \item Boa parte dos ganhos atribuídos antes a blocos de compensação vinha das diferenças de treino.
 \end{itemize}
 
@@ -174,7 +189,7 @@ cada diferença tenha uma única causa possível.
 \subsection{Dados}
 
 \textbf{Tiny ImageNet} \cite{le2015tiny} é o conjunto principal: imagens 64\by64 de 200 classes, com 100 mil imagens de treino e 10 mil de validação oficial.
-Escolhemos esse conjunto pela velocidade, já que 217 treinos longos no ImageNet completo seriam inviáveis. Além disso, conclusões sobre hiperparâmetros
+Escolhemos esse conjunto pela velocidade, já que 279 treinos longos no ImageNet completo seriam inviáveis. Além disso, conclusões sobre hiperparâmetros
 obtidas em versões reduzidas do ImageNet costumam valer para o conjunto completo \cite{chrabaszcz2017downsampled}.
 
 \textbf{Treino, validação e teste.} Usamos 90\% do conjunto de treino para treinar e 10\% para escolher a melhor época \cite{he2016deep}. Os resultados
@@ -267,7 +282,7 @@ mesmo que a 2\by2. Os MACs ficam dentro de 2\%, e os parâmetros também coincid
 
 \subsection{Desenho dos experimentos}
 
-Os experimentos formam três estudos (fases 11, 12 e 13 do projeto), resumidos na Tabela~\ref{tab:blocos}.
+Os experimentos formam quatro estudos (fases 11 a 14 do projeto), resumidos na Tabela~\ref{tab:blocos}.
 
 O \textbf{estudo principal} mede cada fator isolado. Uma grade completa teria 424 treinos e cerca de 3 mil horas de GPU. Em vez disso, escolhemos os pares que respondem às perguntas e repetimos com
 outras seeds onde o efeito era pequeno.
@@ -278,8 +293,14 @@ pré-treinadas (100 épocas, taxas 10$^{-3}$ e 10$^{-4}$, e QAT de 10 épocas co
 O \textbf{estudo de combinações} pergunta se as técnicas que funcionaram se somam. Uma rede híbrida escolhida a dedo daria um número e não explicaria nada. Por isso, ele é uma grade completa:
 kernel do corpo (2 opções), conv1 (2), corpo (3) e stride da conv1 (2) dão 24 redes, com a seed 42. São 18 treinos novos, e 6 redes vêm do estudo principal.
 
+O \textbf{estudo da aritmética Winograd} mede quanto a conta do acelerador custa em acurácia. Usamos o simulador do acelerador Winograd em FPGA
+do grupo, que reproduz a aritmética de ponto fixo de F(2,3), F(4,3) e F(6,3) dentro do QAT. São 16 redes com kernels 3\by3: 14 treinadas em FP32
+com a mesma receita e 2 vindas do estudo principal. Cada rede FP32 passa depois por três QATs, um por tamanho de bloco, com as mesmas 50 épocas e
+a mesma taxa do QAT comum. Assim, os três braços de uma rede partem dos mesmos pesos e só diferem na aritmética. Comparamos cada braço com o FP32
+da própria rede, no conjunto de teste, com uma seed.
+
 \begin{table}[!t]
-\caption{Treinos por estudo (total: 217). Entre parênteses, os treinos extras com as seeds 43 e 44}
+\caption{Treinos por estudo (total: 279). Entre parênteses, os treinos extras com as seeds 43 e 44}
 \label{tab:blocos}
 \centering
 \footnotesize
@@ -308,6 +329,10 @@ CIFAR-100 (3 seeds) & 21 \\
 \midrule
 \multicolumn{2}{@{}l}{\textit{Estudo de combinações (18 novos + 6 do principal)}} \\
 Kernel, conv1, corpo e stride da conv1 & 18 (+8) \\
+\midrule
+\multicolumn{2}{@{}l}{\textit{Aritmética Winograd (62)}} \\
+Redes FP32 novas & 14 \\
+QAT com F(2,3), F(4,3) e F(6,3), 16 redes & 48 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -391,31 +416,17 @@ uma rede GAP bit a bit. Redes FC não têm essa garantia, porque uma operação 
 \textbf{Vem mais da geometria da rede que do kernel.} Para ver isso, mantivemos os kernels originais, o classificador FC + Dropout e a ausência de BN, e mudamos só o layout. A AlexNet sem adaptação fica em 35,47\%, com um mapa final de 1\by1. Com o layout de 64 px, chega a
 44,00\%. Com a imagem ampliada para 224 px, chega a 49,54\%, mesmo sem nenhuma informação nova na imagem. São de 8,5 a 14 p.p. que não têm relação com o tamanho do kernel.
 
-A Figura~\ref{fig:stride} isola o stride. Reduzi-lo de 4 para 2 ganha de 6,4 a 13,0 p.p. nos oito pares, com mediana de $+$9,7 p.p., mas triplica o custo ($+$202\% de MACs). Por isso, daqui em diante, os dois lados de cada comparação de kernel usam sempre o mesmo layout.
+A Figura~\ref{fig:stride}, no Apêndice, isola o stride. Reduzi-lo de 4 para 2 ganha de 6,4 a 13,0 p.p. nos oito pares, com mediana de $+$9,7 p.p., mas triplica o custo ($+$202\% de MACs). Por isso, daqui em diante, os dois lados de cada comparação de kernel usam sempre o mesmo layout.
 
-\begin{figure*}[!t]
-\centering
-\includegraphics[width=\textwidth,trim=0 0 0 40.8,clip]{phase_11_kernel_size_comparison/05_conv1_stride.png}
-\caption{O stride da conv1 pesa mais que o kernel. Em cada grupo, duas redes iguais exceto pelo stride: 4 (azul) ou 2 (vermelho). O stride 2 ganha nos oito pares. Barras: FP32 no teste, seed 42 (média das seeds onde houver). Sob cada grupo: B $-$ A em FP32 e em INT8. Linhas horizontais: a AlexNet sem adaptação e com a imagem ampliada para 224 px.}
-\label{fig:stride}
-\end{figure*}
 
 
 \subsection{Quanto custa restringir o kernel?}
 \label{sec:custo}
 
-\textbf{Depende da rede e do classificador.} Comparamos pares de redes iguais exceto pelos kernels. A Figura~\ref{fig:pares} e a Tabela~\ref{tab:fatores_efeito} mostram a mediana de todos os pares, ao lado dos outros fatores.
+\textbf{Depende da rede e do classificador.} Comparamos pares de redes iguais exceto pelos kernels. A Tabela~\ref{tab:fatores_efeito} mostra a mediana de todos os pares, ao lado dos outros fatores (cada par está na Figura~\ref{fig:pares}, no Apêndice).
 
 Trocar 11-5-3-3-3 por 3\by3 custa 1,5 p.p. (IC de $-$3,3 a $+$0,7, que inclui o zero) e reduz os MACs em 25\%. Trocar 3\by3 por 2\by2 custa 2,5 p.p. (IC de $-$3,7 a $-$1,1) e reduz os MACs em 54\%. O alternado 3-2 empata com o 3\by3 na mediana e usa 24\% menos MACs.
 Cada um desses passos pesa menos que o stride, o BN, o Dropout ou o pré-treino, que mudam a acurácia em 4 a 10 p.p. Já a troca completa de 11-5-3-3-3 por 2\by2 custa 4,7 p.p. e perde em todos os 9 pares, um efeito da mesma ordem desses fatores.
-
-\begin{figure*}[!t]
-\centering
-\includegraphics[width=0.86\textwidth,trim=0 0 0 91.2,clip]{phase_11_kernel_size_comparison/11_factorial_matched_pairs.png}
-\caption{Efeito de trocar um fator de cada vez, em FP32 e em INT8 (seed 42, comparações com 3 ou mais pares). Cada ponto é um par de redes, e
-o losango é a mediana. As quatro primeiras linhas são de kernel. Pontos vazados estão dentro da variação entre seeds, e os cinzas têm INT8 inflado pelo QAT.}
-\label{fig:pares}
-\end{figure*}
 
 \begin{table*}[!t]
 \caption{Efeito de cada fator: mediana de B $-$ A entre pares de redes iguais no resto (seed 42)}
@@ -734,6 +745,37 @@ de 1,0 a 1,4 p.p. acima dela, com cerca de um sexto dos parâmetros e dois terç
 
 \FloatBarrier
 
+\subsection{Quanto a aritmética do acelerador Winograd custa em acurácia?}
+\label{sec:numerica}
+
+\textbf{Depende do tamanho do bloco de saída} (Figura~\ref{fig:numerica}). Os MACs das seções anteriores supõem uma conta exata. Um acelerador
+Winograd em FPGA faz a conta em ponto fixo, e o erro cresce com o bloco \cite{barabasz2020error}. Nas 16 redes simuladas, a mediana da diferença
+para o FP32, no conjunto de teste, é de $-$0,2 p.p. em F(2,3) (de $-$0,7 a $+$3,8), $-$6,3 p.p. em F(4,3) (de $-$8,6 a $+$0,5) e $-$40,1 p.p. em F(6,3)
+(de $-$59,8 a $-$10,5). Os valores mais altos de F(2,3) e F(4,3) são da AlexNet 3\by3 de layout original, cuja melhor época FP32 veio cedo: ali o QAT
+também é treino extra (Seção~\ref{sec:int8}).
+
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=0.86\textwidth]{phase_14_winograd_numerics/01_winograd_numerics.png}
+\caption{Quanto a aritmética simulada do acelerador Winograd muda a acurácia de cada rede: simulação $-$ FP32 no conjunto de teste (uma seed por
+rede), um painel por tamanho de bloco. A linha tracejada é a mediana das 16 redes; cada painel tem sua escala. O anel marca a rede cuja melhor
+época FP32 veio cedo.}
+\label{fig:numerica}
+\end{figure*}
+
+\textbf{O F(6,3) não é só uma perda maior.} Seis redes profundas (VGG-Style, VGG-13, VGG16, WRN-16-4, WRN-28-2 e ResNet-18) caem ao acaso, com 0,4 a
+0,6\% de acerto, e a RepVGG-A0 fica em 4,2\%. As AlexNets ficam entre 11 e 28\%, e a GoogLeNet, em 48,5\%. Um estudo anterior do grupo, com outra
+receita (AdamW, FP32 de até 100 épocas, 15 épocas de QAT medidas na validação), tinha achado $+$0,05, $-$5,1 e $-$18,9 p.p., e a mesma ResNet-18
+chegava a 37,5\% em F(6,3).
+
+\textbf{A diferença não é falha de treino.} Medimos a ResNet-18: cada camada F(6,3), sozinha, erra quase o mesmo nas duas receitas. O que muda é o
+acúmulo do erro. Os observadores da quantização se calibram nas ativações da própria rede simulada, que já carregam o erro das camadas anteriores.
+Na receita única, eles ficam de 14 a 51 vezes acima do sinal limpo (de 1 a 3,7 vezes na anterior), a maior parte dos códigos INT8 da entrada vira
+zero, e em 13 das 19 convoluções quase nada passa. Sem sinal, o QAT não tem de onde partir. Não medimos por que o erro cresce mais rápido nesta
+receita, e só a ResNet-18 foi examinada assim.
+
+\FloatBarrier
+
 \section{Discussão}
 
 \subsection{Como desenhar uma rede para Winograd}
@@ -752,11 +794,8 @@ Os resultados apontam para algumas escolhas:
 
 A escolha depende do hardware. Em acurácia, com dois por estágio, o 2\by2 fica à frente e faz cerca de metade dos MACs diretos, ou cerca de 1,8 vez menos com Winograd (Seção~\ref{sec:hardware}). Esse kernel, porém, precisa de um acelerador preparado para ele.
 
-Em um estudo paralelo do grupo (Fase 14), treinamos 16 redes simulando a aritmética de aceleradores F($m$,3) em FPGA, com a mesma receita única. Essa acurácia vem da simulação, não do hardware, e o kernel 2\by2 fica fora dessas transformações. O tamanho da transformação define o custo em acurácia. Em relação ao FP32, no conjunto de teste, a mediana das 16 redes é de $-$0,2 p.p. em F(2,3) (de $-$0,7 a $+$3,8), $-$6,3 p.p. em F(4,3) (de $-$8,6 a $+$0,5) e $-$40,1 p.p. em F(6,3) (de $-$59,8 a $-$10,5). Uma seed por rede.
-
-O F(6,3) não é só uma perda maior: seis redes profundas (VGG-style, VGG-13, VGG-16, WRN-16-4, WRN-28-2 e ResNet-18) caem ao acaso, com 0,4 a 0,6\% de acerto, e o RepVGG fica em 4,2\%. As AlexNet ficam entre 11 e 28\% e o GoogLeNet em 48,5\%. Um estudo anterior do grupo, com outra receita (AdamW, FP32 de até 100 épocas, 15 épocas de QAT medidas na validação), tinha achado $+$0,05, $-$5,1 e $-$18,9 p.p., e a mesma ResNet-18 chegava a 37,5\% em F(6,3). A diferença não é falha de treino. Medimos a ResNet-18: cada camada F(6,3), sozinha, erra quase o mesmo nas duas receitas. O que muda é o acúmulo do erro. Os observadores da quantização se calibram nas ativações da própria rede simulada, que já carregam o erro das camadas anteriores. Na receita única, eles ficam de 14 a 51 vezes acima do sinal limpo (de 1 a 3,7 vezes na anterior), a maior parte dos códigos INT8 da entrada vira zero, e em 13 das 19 convoluções quase nada passa. Sem sinal, o QAT não tem de onde partir. Não medimos por que o erro cresce mais rápido nesta receita, e só a ResNet-18 foi examinada assim.
-
-Assim, um acelerador com F(2,3) e redes 3\by3 é a opção sem custo de acurácia medido. Com F(4,3), a perda é de cerca de 6 p.p. (no pior caso, 8,6), e com F(6,3) o resultado depende da rede e, nas profundas, é inutilizável sem recalibrar as escalas.
+A aritmética do acelerador também pesa (Seção~\ref{sec:numerica}). Os resultados de F($m$,3) vêm da simulação, não do hardware, e o kernel 2\by2
+fica fora dessas transformações, então não há medida equivalente para F($m$,2). Assim, um acelerador com F(2,3) e redes 3\by3 é a opção sem custo de acurácia medido. Com F(4,3), a perda é de cerca de 6 p.p. (no pior caso, 8,6), e com F(6,3) o resultado depende da rede e, nas profundas, é inutilizável sem recalibrar as escalas.
 
 \subsection{O que muda em relação ao trabalho anterior}
 
@@ -768,7 +807,7 @@ As demais fases do projeto entram só como contexto, porque usaram protocolos di
 \subsection{Limitações}
 
 \begin{itemize}
-\item \textbf{Poucas seeds.} A maioria das comparações usa uma seed. As melhores redes foram escolhidas entre 24, o que favorece a seed em que se destacaram.
+\item \textbf{Poucas seeds.} A maioria das comparações usa uma seed. As duas melhores redes, escolhidas entre 24, foram repetidas com as seeds 43 e 44 e continuam acima da VGG16; as outras 22 combinações têm só a seed 42.
 \item \textbf{Receita única.} Ela não é a melhor para cada rede, e uma receita pode mudar a ordem entre arquiteturas \cite{bello2021revisiting,wightman2021resnet}. A taxa 0,02 melhorou as três redes testadas.
 \item \textbf{Controles limitados.} O controle de capacidade e os testes de taxa e de CIFAR-100 usam GAP e BN. O custo do 2\by2 com FC na AlexNet não foi explicado nem repetido.
 \item \textbf{MobileNetV2 pré-treinada.} Os três treinos ficaram abaixo da nossa guarda de conversão, e a causa não foi investigada.
@@ -783,7 +822,7 @@ As demais fases do projeto entram só como contexto, porque usaram protocolos di
 Restringir o kernel custa pouco quando o resto da rede está bem escolhido. Com GAP e BN, trocar os kernels originais da AlexNet por 3\by3 não custa nada, e a rede inteira em 2\by2 perde só 0,5 p.p. Nessa configuração, o custo do 2\by2 em relação ao 3\by3 vem da capacidade: com os mesmos MACs e parâmetros, os dois empatam. Com FC, porém, o custo na AlexNet chega a 6,5 p.p., e na VGG16 o padrão se inverte. Por isso, o custo do kernel
 deve ser lido junto com o classificador e a família da rede.
 
-A geometria e o BN costumam pesar mais que o kernel, e a quantização INT8 quase não pesa. Duas convoluções pequenas por estágio recuperam a perda e, nos pares testados, o 2\by2 fica à frente do 3\by3 com cerca de metade dos MACs, resultado ainda de uma seed. Com GAP e BN, essas conclusões se repetem com outras taxas de aprendizado e no CIFAR-100.
+A geometria e o BN costumam pesar mais que o kernel, e a quantização INT8 quase não pesa. Duas convoluções pequenas por estágio recuperam a perda e, nos pares testados, o 2\by2 fica à frente do 3\by3 com cerca de metade dos MACs. Com três seeds, essa vantagem de 1 a 2 p.p. se confirma sem atalho, mas não com atalho. No acelerador, o tamanho do bloco de saída pesa mais que o kernel: F(2,3) quase não custa acurácia, e F(6,3) inutiliza a maioria das redes profundas. Com GAP e BN, essas conclusões se repetem com outras taxas de aprendizado e no CIFAR-100.
 
 Para quem projeta redes para aceleradores Winograd, a mensagem é simples: não é preciso manter kernels grandes no corpo da rede para ter boa acurácia, desde que a geometria e o classificador sejam escolhidos para isso.
 
@@ -794,7 +833,7 @@ Queremos:
 \item fazer o controle de capacidade com classificador FC, para explicar o custo do 2\by2 na AlexNet;
 \item reavaliar todas as redes no mesmo tipo de máquina, para comparar latência;
 \item medir a vazão em um acelerador real;
-\item testar blocos Bottleneck e Fire sobre o melhor corpo, para ver se reduzem o custo sem perder acurácia;
+\item terminar o teste de blocos Bottleneck e Fire sobre o melhor corpo, em andamento, para ver se reduzem o custo sem perder acurácia;
 \item investigar a MobileNetV2 pré-treinada em INT8;
 \item repetir as comparações principais em imagens de resolução maior.
 \end{itemize}
@@ -910,7 +949,22 @@ F. N. Iandola, S. Han, M. W. Moskewicz, K. Ashraf, W. J. Dally, and K. Keutzer, 
 \subsection{Figuras de apoio}
 \label{sec:apendice}
 
-As figuras a seguir trazem o detalhe por trás do texto: as imagens trocadas entre FP32 e INT8, a transferência para o CIFAR-100, a VGG16 com um kernel por bloco, as curvas de treino, que mostram que as redes param de melhorar antes do fim das épocas, e as barras de cada fator da Tabela~\ref{tab:fatores_efeito}.
+As figuras a seguir trazem o detalhe por trás do texto: cada par de redes da Tabela~\ref{tab:fatores_efeito}, o efeito do stride da conv1, as imagens trocadas entre FP32 e INT8, a transferência para o CIFAR-100, a VGG16 com um kernel por bloco, as curvas de treino, que mostram que as redes param de melhorar antes do fim das épocas, e as barras de cada fator da Tabela~\ref{tab:fatores_efeito}.
+
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=0.86\textwidth,trim=0 0 0 91.2,clip]{phase_11_kernel_size_comparison/11_factorial_matched_pairs.png}
+\caption{Efeito de trocar um fator de cada vez, em FP32 e em INT8 (seed 42, comparações com 3 ou mais pares). Cada ponto é um par de redes, e
+o losango é a mediana. As quatro primeiras linhas são de kernel. Pontos vazados estão dentro da variação entre seeds, e os cinzas têm INT8 inflado pelo QAT.}
+\label{fig:pares}
+\end{figure*}
+
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=\textwidth,trim=0 0 0 40.8,clip]{phase_11_kernel_size_comparison/05_conv1_stride.png}
+\caption{O stride da conv1 pesa mais que o kernel. Em cada grupo, duas redes iguais exceto pelo stride: 4 (azul) ou 2 (vermelho). O stride 2 ganha nos oito pares. Barras: FP32 no teste, seed 42 (média das seeds onde houver). Sob cada grupo: B $-$ A em FP32 e em INT8. Linhas horizontais: a AlexNet sem adaptação e com a imagem ampliada para 224 px.}
+\label{fig:stride}
+\end{figure*}
 
 \begin{figure*}[!t]
 \centering

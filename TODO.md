@@ -153,8 +153,8 @@ Results in `results/phase_2_kernel_restriction/` (57 epochs, full QAT + INT8).
 Closed by the Phase 11 redesign (2026-10-03/04, `docs/logs/PHASE11_LOG.md` "One recipe", "Minimal design"): the old
 `phase_11_geometry_controls` / `_geometry_factorial` / `_geometry_seeds_*` runs are archived (`outputs/pcad/archive_adamw_recipe/`),
 and the one-recipe design has what they were for -- the large-kernel control at the adapted geometry (`alexnet_k11-5-3_stride2_...`)
-and Bottleneck / Fire next to their parents under one recipe (`phase_11_families`). Still open: the report (`report/ic_report.tex`)
-quotes the archived numbers -- rewrite it once Phase 11 closes (user, 2026-10-27: not before).
+and Bottleneck / Fire next to their parents under one recipe (`phase_11_families`). ✅ 2026-11-10: `report/ic_report.tex` no longer
+quotes the archived Phase 11 numbers (it covers Phases 1-10 only and cites the article for the controlled comparison; user, 2026-11-10).
 
 M7 extension (2026-09-25, `docs/logs/PHASE11_LOG.md` "M7 extension"): ✅ reproducible from `main` since 2026-10-19 (the qat_wino-only
 fix is f87b6a7, the 14-model `wino_f{23,43,63}_pack.yaml` lists d5084d9). Still open: the `budget_unico` `≠HW` tables with the F43

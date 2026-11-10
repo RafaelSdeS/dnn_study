@@ -141,16 +141,16 @@ ImageNet-1K e são apenas ajustados (\textit{fine-tuned}) para as 200 classes do
 \textit{Quantization-Aware Training} (QAT), inicializado a partir do melhor checkpoint FP32, com
 fusão Conv-BN-ReLU e \textit{fake quantization} nos módulos suportados \cite{jacob2018quantization}
 — as arquiteturas com atalho residual usam um operador de soma dedicado à quantização no lugar da
-soma direta, requisito do PyTorch para que o \textit{add} também seja quantizado corretamente; (iii) conversão para INT8 (\textit{backend} fbgemm, inferência em CPU). Reportamos acurácia top-1
+soma direta, requisito do PyTorch para que o \textit{add} também seja quantizado corretamente; (iii) conversão para INT8 (\textit{backend} fbgemm, inferência em CPU, com ativações limitadas a 7 bits pela opção \textit{reduce\_range} do fbgemm, que evita a saturação da soma em CPUs sem instruções VNNI). Reportamos acurácia top-1
 tanto para o modelo FP32 quanto para o modelo INT8 final, e a diferença INT8 $-$ FP32
 ($\Delta$QAT, negativa quando a quantização custa acurácia) como medida de robustez à quantização.
 
 O projeto foi executado em fases numeradas, e algumas legendas citam a fase de origem de cada
 modelo: Fases 1--4 (referências, restrição de kernel, compensação e arquiteturas híbridas, base dos
 Eixos 1, 2 e 5), Fase 6 (perfilamento de hardware, Eixo 3), Fase 7 (detecção e segmentação, Eixo 6),
-Fase 8 (atenção local, Eixo 7) e Fase 9 (atalho residual, Eixo 4). A Fase 11, citada em alguns
-pontos, é um experimento suplementar: retreina variantes da AlexNet por 500 épocas, sem
-\textit{early stopping}, para separar o efeito do kernel do efeito da geometria da rede.
+Fase 8 (atenção local, Eixo 7) e Fase 9 (atalho residual, Eixo 4). Este relatório cobre só as
+Fases 1--10. Um estudo seguinte refaz a comparação de kernels com uma única receita de treino,
+mudando um fator de cada vez \cite{souza2026artigo}.
 
 \subsection{Arquiteturas comparadas}
 \label{sec:arquiteturas}
@@ -167,8 +167,7 @@ modificação na arquitetura além da camada de saída para 200 classes, com ker
 classes; é a referência interna do experimento. Diferentemente de todas as demais variantes
 abaixo — treinadas do zero — essa baseline parte de pesos pré-treinados; comparações diretas de
 acurácia com ela confundem o efeito da restrição de kernel com o efeito do pré-treino (ver
-Seção~\ref{sec:discussao}). A Figura~\ref{fig:kernel_cost} mostra também a mesma arquitetura
-treinada do zero, no experimento suplementar da Fase 11.
+Seção~\ref{sec:discussao}).
 \item \textbf{AlexNet3x3-FC} — mesmos canais da AlexNet irrestrita, todos os kernels
 convolucionais restritos a 3$\times$3, treinada do zero, mantendo a \textit{head} totalmente
 conectada original. Difere da baseline não só no kernel, mas também em pré-treino, geometria de
@@ -203,11 +202,7 @@ As variantes treinadas do zero usam por isso uma geometria adaptada: \textit{ste
 \textit{stride} 2 e dois \textit{max-pool} 2$\times$2 (64$\to$32$\to$16$\to$8), sem o terceiro
 \textit{pool} e sem \textit{dropout}. \texttt{AlexNetFire}, \texttt{AlexNetFireBypass} e
 \texttt{AlexNetSmallKernel} omitem o \textit{stride} do \textit{stem} e chegam a mapas de
-16$\times$16 antes do GAP, o que contribui para seus MACs mais altos. A diferença importa: num
-experimento suplementar (Fase 11; 500 épocas sem \textit{early stopping}, inicialização He,
-\textit{head} GAP, sem BN, mesmos canais, semente única), a geometria adaptada
-(\texttt{AlexNetMixed}, kernels 3-2-3-2-3) atinge 45,28\% de acurácia FP32, contra 27,90\% com a
-geometria original (kernels 2-3-2-3-2), $\approx$17 p.p. a menos. Duas consequências:
+16$\times$16 antes do GAP, o que contribui para seus MACs mais altos. Duas consequências:
 (i) a baseline irrestrita e as variantes restritas diferem em geometria, \textit{dropout},
 pré-treino e duração de treino, e não apenas no tamanho do kernel; (ii) os valores absolutos deste
 estudo são de 64$\times$64 e não se extrapolam para AlexNets de 224$\times$224 — o objeto de
@@ -304,15 +299,13 @@ rodam na CPU do mesmo notebook, porque o PyTorch só executa modelos INT8 em CPU
 \includegraphics[width=\linewidth]{figures/kernel_restriction_cost.png}
 \caption{Acurácia FP32 (top-1) por arquitetura, com o tamanho dos pesos entre parênteses. Em
 azul, as referências de kernel irrestrito: MobileNetV2 e ResNet18 pré-treinadas, VGG-Style
-treinada do zero e a AlexNet original (\texttt{AlexNetTV}, sem modificação além da camada de saída)
-em duas versões, pré-treinada no ImageNet-1K e treinada do zero. Em vermelho, a restrição ingênua
-(todos os kernels trocados por 3$\times$3 ou 2$\times$2, sem outra compensação); em verde,
-tentativas exploratórias de compensação (\texttt{AlexNetMixed} e \texttt{AlexNetResidual} não são
-detalhadas individualmente neste relatório; \texttt{AlexNetSmallKernel} volta no Eixo 5); em roxo,
-a arquitetura híbrida final. A AlexNet do zero vem do experimento suplementar da Fase 11 (500
-épocas sem \textit{early stopping}, mesma receita AdamW); as demais barras seguem o protocolo da
-Seção~\ref{sec:dados}, com \textit{early stopping}. Com a receita única adotada depois, no estudo das
-Fases 11--13 (SGD, medida no conjunto de teste), a mesma AlexNet treinada do zero chega a 35,5\%.}
+treinada do zero e a AlexNet original (\texttt{AlexNetTV}, sem modificação além da camada de saída,
+pré-treinada no ImageNet-1K). Em vermelho, a restrição ingênua (todos os kernels trocados por
+3$\times$3 ou 2$\times$2, sem outra compensação); em verde, as tentativas de compensação, entre elas
+o \textit{bottleneck} e o \textit{Fire} da Tabela~\ref{tab:kernel_restriction_cost}
+(\texttt{AlexNetMixed} e \texttt{AlexNetResidual} não são detalhadas individualmente neste
+relatório; \texttt{AlexNetSmallKernel} volta no Eixo 5); em roxo, a arquitetura híbrida final. Todas
+as barras seguem o protocolo da Seção~\ref{sec:dados}, com \textit{early stopping}.}
 \label{fig:kernel_cost}
 \end{figure}
 
@@ -320,12 +313,12 @@ A Figura~\ref{fig:kernel_cost} resume este eixo. Os três \textit{baselines} ext
 problema fora do escopo compatível com Winograd ($\leq$3$\times$3) deste estudo: MobileNetV2
 pré-treinada atinge a maior acurácia do gráfico, 58,0\% em FP32 (9,69 MB); ResNet18 pré-treinada,
 53,9\% (43,07 MB, o maior dos três); e VGG-Style, treinada do zero, 51,8\% (9,21 MB). A AlexNet
-original fica bem abaixo deles nas duas versões: 32,9\% pré-treinada e 27,5\% treinada do zero,
-mesmo com 500 épocas. A 64$\times$64, sua geometria reduz o mapa espacial a 1$\times$1 antes do
-classificador (Seção~\ref{sec:arquiteturas}), o que pesa mais que o tamanho do kernel. Do lado da
-restrição ingênua, \texttt{AlexNet3x3-FC} (35,79\%, discutida abaixo) e \texttt{AlexNet2x2-FC}
-(30,53\%) superam a AlexNet original treinada do zero, mas usam a geometria adaptada; com kernel
-2$\times$2 e sem compensação estrutural, a rede fica abaixo da AlexNet pré-treinada.
+original, mesmo pré-treinada, fica bem abaixo deles (32,9\%). A 64$\times$64, sua geometria reduz o
+mapa espacial a 1$\times$1 antes do classificador (Seção~\ref{sec:arquiteturas}). Do lado da
+restrição ingênua, \texttt{AlexNet3x3-FC} (35,79\%, discutida abaixo) supera a AlexNet pré-treinada,
+mas usa a geometria adaptada; com kernel 2$\times$2 e sem compensação estrutural
+(\texttt{AlexNet2x2-FC}, 30,53\%), a rede fica abaixo dela. As barras verdes de
+\texttt{AlexNetBottleneck} e \texttt{AlexNetFire} mostram a compensação discutida a seguir.
 
 A Tabela~\ref{tab:kernel_restriction_cost} resume o custo de restringir kernels a 3$\times$3
 e a efetividade de dois mecanismos de compensação: blocos \textit{bottleneck} e módulos
@@ -366,13 +359,9 @@ mapa a 1$\times$1 antes do classificador; Seção~\ref{sec:arquiteturas}), em \t
 baseline o usa) e em duração de treino (79 vs.\ 37 épocas). O que os dados sustentam é mais fraco:
 uma AlexNet de kernels 3$\times$3, treinada do zero com geometria adaptada, iguala ou supera a
 baseline pré-treinada em 64$\times$64. O estudo não contém a variante que isolaria o kernel — a
-mesma geometria adaptada com kernels 11$\times$11/5$\times$5/3$\times$3. O único controle de kernel a
-geometria constante (Fase 11: AlexNetTV do zero, geometria original, 500 épocas, semente única) deu
-$-$1,0 p.p. ao restringir a 3$\times$3 e $-$2,5 p.p. a 2$\times$2 (27,51\%$\to$26,50\%$\to$25,03\%;
-o primeiro valor é a barra ``AlexNet original (do zero)'' da Figura~\ref{fig:kernel_cost}),
-com ressalvas: o modelo de kernels originais usou outra inicialização, e com \textit{stride} 4 o
-\textit{stem} 3$\times$3 (2$\times$2) lê apenas 56\% (25\%) dos pixels de entrada, contra 100\% do
-11$\times$11. Uma explicação plausível, entre outras, para a diferença residual é o
+mesma geometria adaptada com kernels 11$\times$11/5$\times$5/3$\times$3; essa comparação, com uma
+receita única e um fator de cada vez, fica para o estudo seguinte \cite{souza2026artigo}. Uma
+explicação plausível, entre outras, para a diferença residual é o
 \textit{overfitting} da \textit{head} FC de 57M parâmetros da baseline num dataset 64$\times$64;
 isso também não foi testado.
 
@@ -876,7 +865,7 @@ variantes com \textit{backbone} pré-treinado em Tiny ImageNet-200 seguem padrã
 praticamente não mudam para \texttt{AlexNetBottleneck} (ligeiramente pior nos três estágios), mas
 recuperam parte da queda de QAT/INT8 para \texttt{AlexNetFire} e \texttt{AlexNetTV};
 Tabela~\ref{tab:phase7_training}). A Tabela~\ref{tab:phase_7_segmentation} resume
-segmentação.
+segmentação, e a Figura~\ref{fig:phase7_accuracy_vs_size} mostra as duas tarefas lado a lado.
 
 \begin{table}[!t]
 \caption{Eixo 6 — Detecção (SSD, VOC, backbone do zero). O mAP é a média sobre IoU 0,5--0,95 e o
@@ -932,15 +921,15 @@ Tabela~\ref{tab:phase_7_detection}: tamanho é o do modelo real implantado
 \end{tabular}
 \end{table}
 
-\begin{figure}[!t]
+\begin{figure*}[!t]
 \centering
-\includegraphics[width=\linewidth]{figures/phase7_accuracy_vs_size.png}
-\caption{Detecção: mAP vs. tamanho real do modelo (tamanho medido, que exclui os pesos do
-classificador pré-treinado nunca usados no \textit{forward pass} de detecção) nos estágios FP32,
-QAT e INT8 dos três \textit{backbones}; uma linha cinza liga os estágios de cada
-\textit{backbone}.}
+\includegraphics[width=0.85\textwidth]{figures/phase7_det_seg.png}
+\caption{Detecção (mAP, à esquerda) e segmentação (mIoU, à direita) vs. tamanho real do modelo
+(tamanho medido, que exclui os pesos do classificador pré-treinado nunca usados no \textit{forward
+pass} de detecção ou segmentação) nos estágios FP32, QAT e INT8 dos três \textit{backbones}; uma
+linha cinza liga os estágios de cada \textit{backbone}.}
 \label{fig:phase7_accuracy_vs_size}
-\end{figure}
+\end{figure*}
 
 A compensação de kernel pequeno transfere apenas parcialmente, e o mecanismo importa.
 \texttt{AlexNetBottleneck} lidera detecção (mAP 20,98\%) e mantém sobre o \textit{backbone} de
@@ -1173,15 +1162,8 @@ swin\_pico\_convstem$^\dagger$ & 0,36 & 59,3 & 1,42 & 0,72 & 41,87 & 45,66 & $+$
 Winograd $F(2\times2,3\times3)$) --- ver discussão ao final desta seção.}
 \end{table*}
 
-\begin{figure}[!t]
-\centering
-\includegraphics[width=\linewidth]{figures/phase8_h1_window_size_sweep.png}
-\caption{Acurácia top-1 (FP32 e INT8) vs. tamanho de janela de atenção local
-$\in\{2,4,8\}$ — análogo, em atenção, da curva de restrição de kernel do Eixo 1.}
-\label{fig:phase8_h1}
-\end{figure}
-
-O tamanho de janela reproduz a curva de restrição de kernel (Figura~\ref{fig:phase8_h1}).
+O tamanho de janela reproduz a curva de restrição de kernel (três primeiras linhas da
+Tabela~\ref{tab:phase8_models}).
 A acurácia top-1 cresce
 monotonicamente com a janela tanto em FP32 (32,95\%$\to$33,53\%$\to$36,75\% para janelas 2/4/8)
 quanto em INT8 (33,25\%$\to$33,89\%$\to$36,99\%): restringir o campo receptivo por camada custa
@@ -1331,8 +1313,7 @@ Em resumo, os sete eixos mostram:
 
 \begin{enumerate}
 \item \emph{Custo da restrição de kernel (Eixo 1)}: nas comparações disponíveis, restringir kernels
-a 3$\times$3 custou pouco ou nada (o único controle a geometria constante perdeu 1,0 p.p.), mas
-nenhuma delas isola o kernel de outras mudanças (geometria, pré-treino, duração do treino). A troca
+a 3$\times$3 custou pouco ou nada, mas nenhuma delas isola o kernel de outras mudanças (geometria, pré-treino, duração do treino). A troca
 de \textit{head} para GAP foi a mudança de efeito isolado mais claro ($+$4,5 p.p.).
 
 \item \emph{Mecanismos de compensação (Eixo 1)}: \textit{bottleneck} e \textit{Fire} recuperam mais
@@ -1401,11 +1382,10 @@ pré-treinada, usa a geometria original ou tem \textit{dropout}, e o estudo não
 kernels grandes na geometria adaptada; o efeito puro do kernel permanece confundido
 (Seção~\ref{sec:arquiteturas}). Da mesma forma, \texttt{AlexNetBottleneck} e \texttt{AlexNetFire}
 usam \textit{BatchNorm} em todas as convoluções e lr $10^{-3}$, enquanto \texttt{AlexNet3x3-GAP}
-não usa BN e treinou com lr $3\times10^{-4}$; no experimento suplementar da Fase 11 (protocolo
-distinto), BN sozinho valeu $+$2,8 a $+$4,6 p.p., da ordem dos $+$4,3 p.p. atribuídos ao
-\textit{bottleneck}, de modo que o ganho da compensação estrutural não está separado do efeito de BN
-e de lr (a vantagem em parâmetros e MACs independe disso). Controles com o mesmo lr, com BN e no
-protocolo de 500 épocas da Fase 11 não constam deste relatório. Além disso, os
+não usa BN e treinou com lr $3\times10^{-4}$, de modo que o ganho da compensação estrutural não está
+separado do efeito de BN e de lr (a vantagem em parâmetros e MACs independe disso). Controles com o
+mesmo lr e com BN não constam deste relatório; o estudo seguinte \cite{souza2026artigo} faz essa
+separação com uma única receita de treino. Além disso, os
 valores absolutos são de 64$\times$64 e não se
 extrapolam para 224$\times$224. (ii) O modelo \texttt{AlexNetTV} foi treinado de forma
 independente em dois momentos do projeto (79 e 67 épocas), com resultados diferentes,
@@ -1425,8 +1405,7 @@ significativas.
 
 Nas comparações deste estudo, restringir os kernels de uma CNN a 3$\times$3, para torná-la
 compatível com aceleradores Winograd, custou pouco ou nada em acurácia (Eixo 1), contra a
-expectativa inicial do projeto: o único controle a geometria constante perdeu 1,0 p.p. Nenhuma
-dessas comparações, porém, isola o kernel de outras mudanças — a 64$\times$64, a AlexNet original
+expectativa inicial do projeto. Nenhuma dessas comparações, porém, isola o kernel de outras mudanças — a 64$\times$64, a AlexNet original
 perde acurácia principalmente pela geometria, e as variantes restritas diferem dela também em
 pré-treino e duração do treino. O que de fato
 eleva a acurácia acima da baseline pré-treinada é a combinação com um \textit{head} GAP e
@@ -1638,6 +1617,10 @@ usages,'' in \textit{Proc. British Machine Vision Conference (BMVC)}, 2018.
 \bibitem{liau2018firessd}
 H. Liau, N. Yamini, and Y. Wong, ``Fire SSD: Wide fire modules based single shot detector on edge
 device,'' \textit{arXiv preprint arXiv:1806.05363}, 2018.
+
+\bibitem{souza2026artigo}
+R. S. de Souza and M. G. da Silva, ``Kernels pequenos em CNNs para aceleração Winograd: quanto custam e
+como recuperar a acurácia,'' artigo em preparação, Instituto de Informática, UFRGS, 2026.
 
 \end{thebibliography}
 
