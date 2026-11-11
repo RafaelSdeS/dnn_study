@@ -48,7 +48,7 @@
     "persistent_workers": false
   },
   "data": {
-    "dataset_path": "/home/rafael/.cache/kagglehub/datasets/akash2sharma/tiny-imagenet/versions/1/tiny-imagenet-200/train",
+    "dataset_path": "/home/users/rsdsouza/.cache/kagglehub/datasets/akash2sharma/tiny-imagenet/versions/1/tiny-imagenet-200/train",
     "img_size": 64,
     "num_classes": 200,
     "batch_size": 128,
@@ -102,25 +102,47 @@
     "int8"
   ],
   "provenance": {
-    "git_hash": "512b834a3e697a50ea0e44a4919eb023b4e205f9",
+    "git_hash": "367c47613478da7fae07525eb15540c4140d67f0",
     "git_dirty": false,
     "git_dirty_files": [],
-    "hostname": "Nyx",
-    "timestamp_utc": "2026-10-26T02:29:32.482832+00:00",
+    "hostname": "tupi6",
+    "timestamp_utc": "2026-11-10T14:29:37.445356+00:00",
     "torch_version": "2.5.1+cu121",
     "torchvision_version": "0.20.1+cu121",
     "cuda_version": "12.1",
-    "cudnn_version": 92000,
-    "gpu_name": "NVIDIA GeForce RTX 4060 Ti",
-    "python_version": "3.12.3",
-    "cpu_count": 16,
-    "cpu_model": "AMD Ryzen 7 9700X 8-Core Processor",
-    "slurm_job_id": null,
+    "cudnn_version": 90100,
+    "gpu_name": "NVIDIA GeForce RTX 4090",
+    "python_version": "3.11.2",
+    "cpu_count": 32,
+    "cpu_model": "Intel(R) Core(TM) i9-14900KF",
+    "slurm_job_id": "835990",
     "dataset": {
-      "root": "/home/rafael/.cache/kagglehub/datasets/akash2sharma/tiny-imagenet/versions/1/tiny-imagenet-200",
+      "root": "/home/users/rsdsouza/.cache/kagglehub/datasets/akash2sharma/tiny-imagenet/versions/1/tiny-imagenet-200",
       "sha256": "932bfab8d48cad33429a81435b1fe98336629b5adca6e6cff0eb54b8c24c3bda",
       "n_files": 110201
     }
   },
-  "provenance_history": []
+  "provenance_history": [
+    {
+      "git_hash": "512b834a3e697a50ea0e44a4919eb023b4e205f9",
+      "git_dirty": false,
+      "git_dirty_files": [],
+      "hostname": "Nyx",
+      "timestamp_utc": "2026-10-26T02:29:32.482832+00:00",
+      "torch_version": "2.5.1+cu121",
+      "torchvision_version": "0.20.1+cu121",
+      "cuda_version": "12.1",
+      "cudnn_version": 92000,
+      "gpu_name": "NVIDIA GeForce RTX 4060 Ti",
+      "python_version": "3.12.3",
+      "cpu_count": 16,
+      "cpu_model": "AMD Ryzen 7 9700X 8-Core Processor",
+      "slurm_job_id": null,
+      "dataset": {
+        "root": "/home/rafael/.cache/kagglehub/datasets/akash2sharma/tiny-imagenet/versions/1/tiny-imagenet-200",
+        "sha256": "932bfab8d48cad33429a81435b1fe98336629b5adca6e6cff0eb54b8c24c3bda",
+        "n_files": 110201
+      }
+    }
+  ]
 }

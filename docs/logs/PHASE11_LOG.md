@@ -2391,3 +2391,14 @@ pools seeds of the same QAT start only (`groupby(["key", "early_best"])`; no-BN 
 early ones set it): AlexNet no-BN 0.85, BN 0.73, VGG16 0.75, ResNet-18 0.35 (two cells). INT8 hollow pairs: 21 of 115. The
 FP32 floors are unchanged; only figure 11 and `factor_effects.csv` / `factorial_pairs.csv` read the INT8 one
 (`design_figures`, Phase 13's `hybrids` read FP32). Test: `test_int8_noise_band_leaves_early_best_out`.
+
+## Re-evaluation pilot, 2 cells (2026-11-10; recorded 2026-11-11)
+
+TODO "After Phase 13" item 2's pilot ran on 2026-11-10 (submitted 11:25, not logged then): two finished cells resubmitted on `tupi`
+(QOS `short`, `exclude: tupi1,tupi2,tupi4`), both on tupi6 (RTX 4090 / i9-14900KF): `phase_11_kernel_controls_seed43` `k3x3 ... w67`
+(835989, trained on beagle, 833271) in 3 min 31 s and `phase_11_kernel_controls` `k2x2 ... w150` (835990, trained on nyx) in 4 min 04 s.
+Both only re-evaluated (FP32 / QAT resumed as no-ops, `provenance_history` keeps the training provenance), so the foreign run dirs
+pass `refuse_foreign_run_dir` and fit QOS `short` with room to spare. Accuracy holds: test INT8 top-1 identical on both (qnnpack);
+QAT, evaluated on the GPU, moves by 0.01 pp on `w67` (test 53.04 -> 53.05, `agreement_qat_int8` 0.9904 -> 0.9906) and not at all on
+`w150`. Only the latencies change. Both run dirs synced (summaries md5-identical to PCAD's), `runs_index` rebuilt; PCAD's appended
+`kernel_controls(_seed43)` aggregate rows left as they are. Figure 17 is not regenerated: it waits for the full 152-cell re-evaluation.

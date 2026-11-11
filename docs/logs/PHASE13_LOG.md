@@ -361,3 +361,28 @@ Smoke (laptop RTX 4060 Laptop, 2026-11-07 22:44, `scripts.train --smoke`, output
 (the new code: both units at 2×2) FP32 → QAT → INT8 exit 0, 10 and 9 min; one FP32 epoch 50 / 44 s, one QAT epoch 196 / 166 s, GPU peak 5.1 / 4.2 GB,
 MemAvailable never under 3.3 GB; the INT8 kernel check (exact int32) passed on both. The one `must run observer before calling calculate_qparams`
 warning also sits in the `.err` of finished runs (`k2x2stacked` s1 835242, `alexnet_fire` 832311): not new.
+
+## 2026-11-11: Stage B, 3 of 7 runs in
+
+Synced from PCAD (run dirs only, no `*.pth` / logs; summaries md5-identical to PCAD's): `k2x2bottleneckstacked` (835668, tupi3, 4 h 42),
+`k2x2bottleneck` (835670, tupi3, 4 h 11), `k2x2firestacked` (835669, beagle, 17 h 18). All 500 + 50 epochs, FP32 best epoch 472-488
+(none early), `agreement_qat_int8` 0.977-0.983. `k2x2fire` runs on beagle (epoch 170 of 500 at 08:40); the three 3x3 cells are pending.
+The aggregate CSV waits for the last run. `bottleneck_fire` rerun; matched pairs, test top-1 FP32 / INT8, B - A:
+
+| swap | kernel, units per stage | FP32 | INT8 | params | MACs |
+|---|---|---|---|---|---|
+| conv -> Bottleneck | 2x2, one | 56.38 -> 53.77 (-2.61) | 56.22 -> 53.89 (-2.33) | -73 % | -66 % |
+| conv -> Bottleneck | 2x2, two | 60.35 -> 58.57 (-1.78) | 60.79 -> 58.85 (-1.94) | -77 % | -73 % |
+| conv -> Fire | 3x3, one (`alexnet_fire`) | 57.66 -> 54.57 (-3.09) | 57.56 -> 54.44 (-3.12) | -78 % | -73 % |
+| conv -> Fire | 2x2, two | 60.35 -> 60.11 (-0.24) | 60.79 -> 59.80 (-0.99) | -74 % | -74 % |
+| Bottleneck -> Fire | 2x2, two | 58.57 -> 60.11 (+1.54) | 58.85 -> 59.80 (+0.95) | +13 % | -4 % |
+
+So far (seed 42 only; seed noise +-0.7 pp FP32): every unit costs accuracy against its plain body except `k2x2firestacked`, which keeps
+FP32 within the noise at a quarter of the parameters and MACs.
+
+**Seeds 43 / 44 of `k2x2firestacked` queued (2026-11-11).** Its contrast with `k2x2stacked` (-0.24 FP32 / -0.99 INT8) is the one
+inside the seed noise, and the one a "Fire at 2x2 keeps the accuracy at a quarter of the cost" claim would rest on; `k2x2stacked`
+has seeds 42-44, so the pair compares at 3 seeds. `phase_13_bottleneck_fire_seed43/44.yaml` (32b7403; same protocol, test_config),
+submitted with `--slurm tupi_beagle` at the end of the queue (user): 836100 (s43), 836101 (s44), priority 503 behind the three
+pending 3x3 cells (2625). If `k3x3firestacked` also lands inside the noise against `k3x3stacked` (3 seeds), its seeds join these yamls.
+When they land: sync, and `bottleneck_fire` gains a `contrasts_by_seed.csv` (as `hybrids.contrasts_by_seed`).

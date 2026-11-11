@@ -102,25 +102,47 @@
     "int8"
   ],
   "provenance": {
-    "git_hash": "2e3a03965e354c3e72187ce2bddc5c178ab495f5",
+    "git_hash": "367c47613478da7fae07525eb15540c4140d67f0",
     "git_dirty": false,
     "git_dirty_files": [],
-    "hostname": "beagle",
-    "timestamp_utc": "2026-10-28T04:01:38.290767+00:00",
+    "hostname": "tupi6",
+    "timestamp_utc": "2026-11-10T14:26:50.344647+00:00",
     "torch_version": "2.5.1+cu121",
     "torchvision_version": "0.20.1+cu121",
     "cuda_version": "12.1",
     "cudnn_version": 90100,
-    "gpu_name": "NVIDIA GeForce GTX 1080 Ti",
+    "gpu_name": "NVIDIA GeForce RTX 4090",
     "python_version": "3.11.2",
     "cpu_count": 32,
-    "cpu_model": "Intel(R) Xeon(R) CPU E5-2650 0 @ 2.00GHz",
-    "slurm_job_id": "833271",
+    "cpu_model": "Intel(R) Core(TM) i9-14900KF",
+    "slurm_job_id": "835989",
     "dataset": {
       "root": "/home/users/rsdsouza/.cache/kagglehub/datasets/akash2sharma/tiny-imagenet/versions/1/tiny-imagenet-200",
       "sha256": "932bfab8d48cad33429a81435b1fe98336629b5adca6e6cff0eb54b8c24c3bda",
       "n_files": 110201
     }
   },
-  "provenance_history": []
+  "provenance_history": [
+    {
+      "git_hash": "2e3a03965e354c3e72187ce2bddc5c178ab495f5",
+      "git_dirty": false,
+      "git_dirty_files": [],
+      "hostname": "beagle",
+      "timestamp_utc": "2026-10-28T04:01:38.290767+00:00",
+      "torch_version": "2.5.1+cu121",
+      "torchvision_version": "0.20.1+cu121",
+      "cuda_version": "12.1",
+      "cudnn_version": 90100,
+      "gpu_name": "NVIDIA GeForce GTX 1080 Ti",
+      "python_version": "3.11.2",
+      "cpu_count": 32,
+      "cpu_model": "Intel(R) Xeon(R) CPU E5-2650 0 @ 2.00GHz",
+      "slurm_job_id": "833271",
+      "dataset": {
+        "root": "/home/users/rsdsouza/.cache/kagglehub/datasets/akash2sharma/tiny-imagenet/versions/1/tiny-imagenet-200",
+        "sha256": "932bfab8d48cad33429a81435b1fe98336629b5adca6e6cff0eb54b8c24c3bda",
+        "n_files": 110201
+      }
+    }
+  ]
 }
