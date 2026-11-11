@@ -516,35 +516,34 @@ def fig_latency(df, figs, note):
     gpu = next(iter(d.gpu.dropna()), "?")
     b = baseline(df)
     b = b if b is not None and b.machine == ref else None
-    fig, axes = plt.subplots(1, 3, figsize=(17, 5.8))
+    # drawn near its printed size, \textwidth (2026-11-11: it was 17 in wide, ~0.42 of it in print)
+    fig, axes = plt.subplots(1, 3, figsize=(8.9, 4.6), layout="constrained")
     axes[2].sharey(axes[1])  # FP32 and INT8 on the same CPU, one scale
-    for ax, m, title in [(axes[0], "lat_gpu", f"FP32 na GPU ({gpu}), batch 1"), (axes[1], "lat_cpu", "FP32 na CPU, batch 1"),
-                         # 2026-10-26: INT8 batch 1 is slower than FP32 batch 1 here, while the same INT8 nets take < 1 ms
-                         # per image batched -- unexplained yet, so said on the panel
-                         (axes[2], "lat_int8", "INT8 na CPU, batch 1\n(mais lento que o FP32 neste batch: a investigar; "
-                                               "em lote, < 1 ms por imagem)")]:
+    # 2026-10-26: INT8 batch 1 is slower than FP32 batch 1 here, while the same INT8 nets take < 1 ms per image batched --
+    # unexplained yet; the article's caption says so (the panel title said it before)
+    for ax, m, title in [(axes[0], "lat_gpu", f"FP32 na GPU ({gpu.removeprefix('NVIDIA GeForce ')})"), (axes[1], "lat_cpu", "FP32 na CPU"),
+                         (axes[2], "lat_int8", "INT8 na CPU")]:
         for r in d.dropna(subset=[m]).itertuples():
-            ax.scatter(r.macs_eff_m, getattr(r, m), marker=FMARK[r.family], s=55, zorder=3, color=color(r), edgecolors="white", lw=0.5)
+            ax.scatter(r.macs_eff_m, getattr(r, m), marker=FMARK[r.family], s=30, zorder=3, color=color(r), edgecolors="white", lw=0.4)
         plain_log(ax, "x", "y")
         if b is not None and pd.notna(b[m]):
             base_ring(ax, b.macs_eff_m, b[m])
-        ax.set_xlabel("MACs por imagem (milhões, log)")
-        ax.set_title(title, fontsize=10)
+        ax.set_title(title + ", batch 1", fontsize=9)
     for ax, m in zip(axes, ["lat_gpu", "lat_cpu", "lat_int8"]):  # after every point: the shared CPU scale must not grow to fit the line
         if b is not None and pd.notna(b[m]):
             ax.autoscale(False)
             x = np.array(ax.get_xlim())
             ax.plot(x, b[m] * x / b.macs_eff_m, ls="--", color=TEXT_PRIMARY, lw=1.2, zorder=2)
     axes[0].set_ylabel("Latência por imagem (ms, log)")
+    axes[1].set_xlabel("MACs por imagem (milhões, escala log)")
     handles = (legend_kernels(d.kernels) + family_handles(d)
-               + ([BASE_HANDLE, Line2D([], [], ls="--", color=TEXT_PRIMARY, lw=1.2,
-                                       label="tempo se crescesse junto com os MACs, a partir do AlexNet sem adaptar")] if b is not None else []))
-    fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=4, fontsize=9)
+               + ([BASE_HANDLE, Line2D([], [], ls="--", color=TEXT_PRIMARY, lw=1.2, label="ms por MAC da AlexNet sem adaptar")]
+                  if b is not None else []))
+    fig.legend(handles=handles, loc="outside lower center", ncol=3, fontsize=9)
     fig.suptitle("A latência acompanha os MACs? Cada ponto é uma rede; acima da linha tracejada = mais lenta por MAC que o AlexNet "
                  "original, abaixo = mais rápida\n" + note + f" · {len(d)} redes medidas em {ref}"
                  + (f"\n{len(out)} redes medidas em outras máquinas ficam de fora: latência só se compara na mesma máquina"
                     if len(out) else ""), fontsize=11)
-    fig.tight_layout()
     savefig(fig, "17_latency_vs_macs.png", figs)
 
 

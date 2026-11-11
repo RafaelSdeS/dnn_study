@@ -72,9 +72,10 @@ def contrasts(s42):
     return pd.DataFrame(rows)
 
 
-def contrasts_by_seed(df):
-    """`contrasts` at each seed: a pair appears for a seed only if both of its cells ran at that seed."""
-    parts = [contrasts(g).assign(seed=s) for s, g in df.groupby("seed")]
+def contrasts_by_seed(df, pairs=contrasts):
+    """`pairs` (this module's `contrasts`, or Stage B's) at each seed: a pair appears for a seed only if both of its cells
+    ran at that seed."""
+    parts = [pairs(g).assign(seed=s) for s, g in df.groupby("seed")]
     return pd.concat([p for p in parts if "factor" in p], ignore_index=True)
 
 

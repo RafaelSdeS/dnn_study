@@ -9,6 +9,7 @@ for layer); the 7 others are phase_13_bottleneck_fire. Phase 11's figures and ta
                              (FP32 filled, INT8 hollow, early-best ring), a line through each kernel's FP32 across the units
     contrasts.csv            every matched pair (one unit swapped, same kernel and units per stage): B - A in FP32 / INT8,
                              params and MACs change in %
+    contrasts_by_seed.csv    the same pairs at every seed where both cells ran (a `seed` column; 42 = contrasts.csv)
     all_runs.csv             every run of the cells found
 
 Phase 11's conventions: test top-1, INT8 hollow, early-best ring.
@@ -22,7 +23,7 @@ from matplotlib.lines import Line2D
 from ml.plotting import NEUTRAL, TEXT_SECONDARY, apply_report_style
 from scripts.phase11.analyze_geometry import ROOT, RUNS, band_for, early_handle, early_ring, load, noise_bands, savefig
 from scripts.phase11.design_figures import KCOLOR, LIVE_NOTE, frame, legend_kernels
-from scripts.phase13.hybrids import GRID
+from scripts.phase13.hybrids import GRID, contrasts_by_seed
 
 FIGS = ROOT / "results/figures_generated/phase_13_bottleneck_fire"
 TABLES = ROOT / "results/phase_13_bottleneck_fire"
@@ -121,6 +122,7 @@ def main():
     s42 = df[df.seed == 42]
     c = contrasts(s42)
     c.to_csv(TABLES / "contrasts.csv", index=False)
+    contrasts_by_seed(df, contrasts).to_csv(TABLES / "contrasts_by_seed.csv", index=False)
     fig_bottleneck_fire(s42, noise_bands(frame()), FIGS)
     if len(c):
         print(c.groupby("factor", sort=False)[["d_fp32", "d_int8", "params_change_pct", "macs_change_pct"]].agg(["median", "count"]).round(2).to_string())
