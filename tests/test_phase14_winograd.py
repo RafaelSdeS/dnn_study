@@ -62,3 +62,10 @@ def test_f63_kept_fractions():
     assert xk > 0.99 and uk > 0.5 and vk > 0.9, (xk, uk, vk)
     assert kept_fractions(conv, x[..., :6, :6])[1] > 0.5
     assert kept_fractions(conv, x * 0.002)[:2] == (0.0, 0.0)  # |x| <= 1/500 of absmax: every code rounds to 0
+    # a synthesized netlist's fixed scales (--hw-params): `su` 1-3 bits under the analytic worst case keeps more of U, and
+    # `sv` is the netlist's, not the one computed from V (a huge sv_hw leaves nothing of V)
+    hw = import_bridge_module("qat_wino").make_wino_conv("f63", pack=True, u_w=9, v_w=8, hw_params="f63c")(4, 4, bias=False).eval()
+    hw.act_absmax.fill_(1.0)
+    assert kept_fractions(hw, x)[1] >= uk
+    hw.sv_hw.fill_(30.0)
+    assert kept_fractions(hw, x)[2] == 0.0

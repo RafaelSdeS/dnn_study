@@ -1,0 +1,8 @@
+# Replicate of phase_11_kernel_controls_fc.yaml (the width pair with FC + Dropout + BN), seed 44: the control is only as
+# good as the spread it is read against. Same protocol as every Phase 11 run (_protocols/no_patience.yaml), only the seed differs.
+extends: _protocols/no_patience
+seed: 44
+name: phase_11_kernel_controls_fc_seed44
+models:
+  - alexnet_k2x2_stride2_2pool2x2_map8_fcdrop_bn_w150
+  - alexnet_k3x3_stride2_2pool2x2_map8_fcdrop_bn_w67

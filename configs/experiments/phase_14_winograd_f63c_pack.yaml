@@ -1,0 +1,29 @@
+# Phase 14 (2026-11-11, docs/logs/PHASE14_LOG.md): phase_14_winograd_f63_pack with the synthesized netlist's CALIBRATED scales
+# (hw_params: f63c = the bridge's gate_flags/params_f63c.txt: `su` 7-9 instead of the analytic worst case 9-11, `sv` and
+# `align_base` fixed by the netlist), on the net the F(6,3) collapse was diagnosed on. The article's limitation: "as escalas
+# recalibradas, que poderiam evitar o colapso em F(6,3), não foram testadas". scripts/phase14/f63_collapse.py --hw-params
+# f63=f63c measures the same scales at epoch 0; this arm says where the recipe's QAT takes them. Kept out of the 48-arm
+# medians (winograd_numerics reads only phase_14_winograd_f{23,43,63}_pack) and cited on its own.
+# Everything else is phase_14_winograd_f63_pack's, tests/test_config.py checks it. Before submitting, copy the FP32 run in,
+# as that yaml's header shows -- on PCAD, from ~/dnn_study:
+#   m=resnet18_fpga; src=outputs/pcad/phase_14_winograd_fp32/$m; dst=outputs/pcad/phase_14_winograd_f63c_pack/$m
+#   mkdir -p $dst/checkpoints $dst/results && cp -n $src/checkpoints/${m}_best.pth $dst/checkpoints/ \
+#     && cp -n $src/results/${m}_fp32_{val,test}_logits.npz $src/results/${m}_summary.json $dst/results/
+# Submit with WINOGRAD_FPGA_ROOT=~/winograd_bridge_m7/avaliacao_redes (bridge f44da9a).
+extends: _protocols/no_patience
+name: phase_14_winograd_f63c_pack
+stages:
+  - qat_wino
+qat_wino:
+  epochs: 50
+  lr: 1.0e-4
+  eta_min: 1.0e-6
+  weight_decay: 5.0e-4
+  variant: f63
+  pack: true
+  u_w: 9
+  v_w: 8
+  k_dsp: 2
+  hw_params: f63c
+models:
+  - resnet18_fpga

@@ -1,0 +1,15 @@
+# Phase 11 capacity control with the FC head (2026-11-11, docs/logs/PHASE11_LOG.md; the article's open question): with FC +
+# Dropout + BN the 2x2 net loses 5.1 pp to the 3x3 net (seed 42), and phase_11_kernel_controls.yaml only tested capacity
+# with GAP. The same width pair, FC + Dropout 0.5 + BN, at the 64px layout (stride 2, two 2x2 pools, 8x8 map):
+#  - the 2x2 net at width 1.5: its convs 166.9M MACs against the 3x3 net's 167.3M;
+#  - the 3x3 net at width 2/3: its convs 75.0M against the 2x2 net's 74.5M.
+# Only the convs' cost matches: FC1 takes channels x 6 x 6, so the head scales with the width -- in total 241.1M MACs /
+# 76.5M params against 222.6M / 57.6M, and 117.9M / 43.8M against 129.9M / 56.4M (built nets, ml.reporting.compute_flops).
+# No replicated FC weights at an 8x8 map: the effective cost is the built cost. Replicates: _fc_seed43 / _fc_seed44.
+# Same protocol as every Phase 11 run (_protocols/no_patience.yaml), enforced by tests/test_config.py:
+#   python -m scripts.cluster submit --experiment phase_11_kernel_controls_fc --runtime pcad --slurm tupi_4090 --model <m>
+extends: _protocols/no_patience
+name: phase_11_kernel_controls_fc
+models:
+  - alexnet_k2x2_stride2_2pool2x2_map8_fcdrop_bn_w150
+  - alexnet_k3x3_stride2_2pool2x2_map8_fcdrop_bn_w67

@@ -272,9 +272,11 @@ for kn in ("k11-5-3", "k3x3", "k2x2", "kalt3-2"):
                        _FX_FUSE[kn, False], 3e-4, input_size=224, family="alexnet", kernels=kn, stride=4, pool_kernel=3,
                        pool_count=3, map_side=side, head="fc", dropout=True, bn=False, pretrained=pt)
 # Phase 11 controls (phase_11_kernel_controls.yaml), at the 64px layout (stride 2, two 2x2 pools, 8x8 map), with BN: the
-# 2x2 net at width 1.5 / the 3x3 net at width 2/3 (MACs of the 3x3 / 2x2 net at width 1) and the uniform 5x5 net
+# 2x2 net at width 1.5 / the 3x3 net at width 2/3 (MACs of the 3x3 / 2x2 net at width 1) and the uniform 5x5 net; the
+# width pair again with FC + Dropout (phase_11_kernel_controls_fc.yaml: only the convs' MACs match, the FC head scales too)
 _CTRL_GEO = dict(stem_stride=2, pool_kernel=2, pool_count=2)
-for kn, w, head in (("k2x2", 1.5, "gap"), ("k3x3", 2 / 3, "gap"), ("k5x5", 1.0, "gap"), ("k5x5", 1.0, "fc")):
+for kn, w, head in (("k2x2", 1.5, "gap"), ("k3x3", 2 / 3, "gap"), ("k5x5", 1.0, "gap"), ("k5x5", 1.0, "fc"),
+                    ("k2x2", 1.5, "fc"), ("k3x3", 2 / 3, "fc")):
     ks = {**FX_KERNELS, **CONTROL_KERNELS}[kn]
     with torch.device("meta"):
         side = _map_side(AlexNetAdapted(head="gap", kernels=ks, width=w, **_CTRL_GEO).features)

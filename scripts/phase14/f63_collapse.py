@@ -14,11 +14,15 @@ images with BN frozen, as the arm's first epoch does, then measure:
       v_kept        fraction of the transformed filter V = G g Gt that survives the packing shift `sv`
       x_crest       absmax / rms of x;  w_crest: the same for the conv weights
 
+--hw-params f63=f63c builds that variant with a synthesized netlist's fixed scales instead (`su`, `sv`, `align_base` from the
+bridge's gate_flags/params_<name>.txt: the calibrated ones the article's limitation names) and measures only the variants
+named; still epoch 0, so it says whether the signal now crosses the net, not where QAT would take it.
+
 -> results/phase_14_winograd_numerics/f63_collapse.json. Checkpoints are gitignored and the laptop keeps none: rsync the two
 `<net>_best.pth` from PCAD to the same relpaths first (CLAUDE.md "Artifacts"), or pass --new / --old. Export
 WINOGRAD_FPGA_ROOT = the bridge the arms ran (f44da9a, PCAD ~/winograd_bridge_m7/avaliacao_redes). CPU only, a few minutes.
 
-    python -m scripts.phase14.f63_collapse
+    python -m scripts.phase14.f63_collapse [--net vgg13_fpga --new <dir> --old <dir>] [--hw-params f63=f63c --out <json>]
 """
 import argparse
 import json
@@ -59,7 +63,8 @@ def kept_fractions(layer, x):
     what stays nonzero."""
     q = import_bridge_module("qat_wino")
     V = layer._v_pre(q.fake_quant(layer.weight, layer._w_scale()))
-    sv = torch.clamp(torch.ceil(torch.log2(torch.clamp(V.abs().amax(dim=(0, 1)), min=1.0))) + 1 - layer.v_w, min=0.0)
+    sv = layer.sv_hw if getattr(layer, "sv_hw", None) is not None else \
+        torch.clamp(torch.ceil(torch.log2(torch.clamp(V.abs().amax(dim=(0, 1)), min=1.0))) + 1 - layer.v_w, min=0.0)
     xq = q.fake_quant(x, layer._act_scale(x))
     x_kept = ((xq != 0) & (x != 0)).sum().item() / max((x != 0).sum().item(), 1)
     xq = F.pad(xq, (1, 1, 1, 1))
@@ -78,14 +83,15 @@ def top1(model, loader):
         return 100 * sum((model(x).argmax(1) == y).sum().item() for x, y in loader) / len(loader.dataset)
 
 
-def measure(label, net, ckpt_dir, calib, test):
+def measure(label, net, ckpt_dir, calib, test, hw=None):
+    """hw: {variant: hw_params}; when given, only those variants, built with the netlist's scales (`su` is the layer's)."""
     spec, dev = MODEL_REGISTRY[net], torch.device("cpu")
     fp32 = load_best_model(net, spec["ctor"], ckpt_dir, dev)
     out = {"fp32_top1": top1(fp32, test)}
     xb = next(iter(test))[0]
-    for v in VARIANTS:
+    for v in hw or VARIANTS:
         arm = load_profile(f"phase_14_winograd_{v}_pack", "experiments")["qat_wino"]
-        cfg = SimpleNamespace(**{k: arm[k] for k in ("variant", "pack", "u_w", "v_w", "k_dsp")}, hw_params=None)
+        cfg = SimpleNamespace(**{k: arm[k] for k in ("variant", "pack", "u_w", "v_w", "k_dsp")}, hw_params=(hw or {}).get(v))
         m = load_qat_wino_model(net, spec, ckpt_dir, dev, cfg)
         m.train()
         for b in m.modules():
@@ -123,19 +129,19 @@ def measure(label, net, ckpt_dir, calib, test):
 
 
 def main(net=DEFAULT_NET, new=DEFAULT_NEW, old=DEFAULT_OLD, out=DEFAULT_OUT, n_calib=DEFAULT_CALIB, n_test=DEFAULT_TEST,
-         bs=DEFAULT_BS, seed=DEFAULT_SEED):
+         bs=DEFAULT_BS, seed=DEFAULT_SEED, hw=None):
     train_dir = ensure_dataset_path(load_profile("local", "runtime"))
     tf = _val_transform(64)
     train = ImageFolder(train_dir, transform=tf)
     pick = torch.randperm(len(train), generator=torch.Generator().manual_seed(seed))[:n_calib].tolist()
     calib = DataLoader(Subset(train, pick), batch_size=bs)
     test = DataLoader(Subset(_TinyImageNetVal(train_dir.parent / "val", train.class_to_idx, tf), range(n_test)), batch_size=bs)
-    res = {"net": net, "n_calib": n_calib, "n_test": n_test, "seed": seed, "bridge": bridge_provenance(),
-           "new": measure("new", net, Path(new), calib, test), "old": measure("old", net, Path(old), calib, test)}
+    res = {"net": net, "n_calib": n_calib, "n_test": n_test, "seed": seed, "bridge": bridge_provenance(), "hw_params": hw,
+           "new": measure("new", net, Path(new), calib, test, hw), "old": measure("old", net, Path(old), calib, test, hw)}
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     Path(out).write_text(json.dumps(res, indent=1))
     cols = ("cos_clean", "absmax_ratio", "x_kept", "u_kept", "x_crest")
-    for v in VARIANTS:
+    for v in hw or VARIANTS:
         print(f"\n{v} {'layer':22s}" + "".join(f"| {c + ' new/old':>21s} " for c in cols))
         for a, b in zip(res["new"][v]["layers"], res["old"][v]["layers"]):
             print(f"   {a['name']:22s}" + "".join(f"| {a[c]:10.2f} {b[c]:10.2f} " for c in cols))
@@ -148,5 +154,6 @@ if __name__ == "__main__":
     p.add_argument("--old", type=Path, default=DEFAULT_OLD, help="dir with budget_unico's <net>_best.pth")
     p.add_argument("--out", type=Path, default=DEFAULT_OUT)
     p.add_argument("--n-test", type=int, default=DEFAULT_TEST)
+    p.add_argument("--hw-params", nargs="+", metavar="VARIANT=NAME", help="e.g. f63=f63c: only these variants, netlist scales")
     a = p.parse_args()
-    main(a.net, a.new, a.old, a.out, n_test=a.n_test)
+    main(a.net, a.new, a.old, a.out, n_test=a.n_test, hw=dict(x.split("=") for x in a.hw_params) if a.hw_params else None)

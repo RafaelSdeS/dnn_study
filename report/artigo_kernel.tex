@@ -750,8 +750,11 @@ chegava a 37,5\% em F(6,3).
 convolução FP32 de 0,46 a 0,96 na nova e de 0,75 a 0,96 na anterior). O que muda é o acúmulo do erro. Os observadores da quantização se calibram nas ativações da própria rede simulada, que já carregam o erro das camadas anteriores.
 Na receita única, a partir da sétima convolução (13 de 19), eles ficam de 14 a 51 vezes acima do sinal limpo (de 1 a 3,7 vezes na anterior, em
 todas). Nessas convoluções, só 2\% a 57\% das entradas diferentes de zero mantêm um código INT8 diferente de zero, e menos de 2\% dos blocos
-transformados passam: quase nada chega ao fim da rede. Sem sinal, o QAT não tem de onde partir. Não medimos por que o erro cresce mais rápido nesta
-receita, e só a ResNet-18 foi examinada assim.
+transformados passam: quase nada chega ao fim da rede. A VGG-13 colapsa do mesmo jeito: a partir da sexta convolução (5 de 10), os observadores
+ficam de 12 a 34 vezes acima do sinal, e só 0,1\% a 2,4\% dos blocos passam. A GoogLeNet, com a mesma receita, não acumula o erro: os observadores
+ficam no máximo 4,3 vezes acima do sinal, e pelo menos 29\% dos blocos passam em todas as convoluções. No início do QAT, as três estão no acaso em
+F(6,3), mas só a GoogLeNet chega a 48,5\%. O que decide, portanto, é se o sinal atravessa a rede: sem sinal, o QAT não tem de onde partir. Não
+medimos por que o erro se acumula em umas redes e não em outras.
 
 \FloatBarrier
 
@@ -791,7 +794,7 @@ As demais fases do projeto entram só como contexto, porque usaram protocolos di
 \item \textbf{Controles limitados.} O controle de capacidade e os testes de taxa e de CIFAR-100 usam GAP e BN. O custo do 2\by2 com FC na AlexNet não foi explicado nem repetido.
 \item \textbf{MobileNetV2 pré-treinada.} Os três treinos ficaram abaixo da nossa guarda de conversão, e a causa não foi investigada.
 \item \textbf{Baixa resolução.} Os dados têm 64 px e 32 px, e as imagens de 224 px são apenas ampliações.
-\item \textbf{Simulação do acelerador.} Os resultados F($m$,3) têm uma seed por rede e vêm da simulação. A causa do colapso em F(6,3) foi examinada só na ResNet-18, e as escalas recalibradas, que poderiam evitá-lo, não foram testadas.
+\item \textbf{Simulação do acelerador.} Os resultados F($m$,3) têm uma seed por rede e vêm da simulação. As escalas recalibradas, que poderiam evitar o colapso em F(6,3), não foram testadas.
 \item \textbf{Hardware não medido.} A parcela de MACs e a estimativa com Winograd usam só a geometria das camadas. Não medimos a vazão em um acelerador real.
 \item \textbf{Latência não comparada.} Os treinos rodaram em máquinas diferentes. Essa diferença faz parte da variação entre execuções e também afeta a seed 42 do estudo de combinações: as duas melhores redes foram treinadas em GPUs diferentes.
 \end{itemize}
