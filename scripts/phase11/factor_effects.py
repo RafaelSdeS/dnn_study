@@ -34,8 +34,9 @@ from matplotlib.patches import Patch
 from configs.loader import load_config
 from ml.plotting import BLUE, GRID, NEUTRAL, RED, TEXT_PRIMARY, apply_report_style
 from ml.reporting import holm, mcnemar_p, wilson_ci
-from scripts.phase11.analyze_geometry import (BASE_KEY, BASE_LABEL, EARLY_GRAY, EARLY_LABEL, LAYOUTS, REGIME_LABEL, RESNET_BASE, TABLES,
-                                              VGG_BASE, band_for, noise_bands, pair_band, reference_lines, savefig)
+from scripts.phase11.analyze_geometry import (BASE_KEY, BASE_LABEL, EARLY_LABEL, LAYOUTS, REGIME_LABEL, RESNET_BASE, TABLES,
+                                              VGG_BASE, band_for, early_handle, early_ring, noise_bands, pair_band,
+                                              reference_handles, reference_lines, savefig)
 from scripts.phase11.design_figures import K4, KCOLOR, KLABEL, cell_label, frame
 
 COMP = "Compensação (profundidade e blocos)"
@@ -234,10 +235,11 @@ def fig_factor(t, df, factor):
         return
     rows = family_rows(g)
     width = max(len(chunk) for chunk, _ in rows)
-    fig, axes = plt.subplots(len(rows), 1, figsize=(max(10.0, 2.0 * width + 1.5), 4.4 * len(rows) + 1.2), squeeze=False,
+    # ~1 in a group: figure 05 prints at \textwidth in the article, drawn near that size
+    fig, axes = plt.subplots(len(rows), 1, figsize=(max(6.0, 1.0 * width + 0.9), 3.4 * len(rows) + 1.2), squeeze=False,
                              sharey=True, layout="constrained")
     w = 0.36
-    value = dict(ha="center", va="bottom", fontsize=8, zorder=6, bbox=dict(facecolor="white", edgecolor="none", pad=0.3))
+    value = dict(ha="center", va="bottom", fontsize=9, zorder=6, bbox=dict(facecolor="white", edgecolor="none", pad=0.3))
     star = lambda r: "*" * bool(r.early_A or r.early_B)  # noqa: E731
     for ax, (chunk, base) in zip(axes[:, 0], rows):
         for i, r in enumerate(chunk.itertuples()):
@@ -246,13 +248,13 @@ def fig_factor(t, df, factor):
                 ax.bar(i + (j - 0.5) * w, fp32, w, color=c, edgecolor="white")
                 ax.text(i + (j - 0.5) * w, fp32 + 0.4, f"{fp32:.1f}", **value)
         ax.set_xticks(range(len(chunk)))
-        ax.set_xticklabels([wrap_dots(r.contrast, 22) + f"\nFP32 {r.d_fp32:+.1f}"
-                            + (f" · INT8 {r.d_int8:+.1f}{star(r)}" if pd.notna(r.d_int8) else "")
-                            + (f"\nmédia de {r.n_seeds} seeds" if r.n_seeds > 1 else "") for r in chunk.itertuples()], fontsize=8.5)
+        ax.set_xticklabels([wrap_dots(r.contrast, 12) + f"\nFP32 {r.d_fp32:+.1f}"
+                            + (f"\nINT8 {r.d_int8:+.1f}{star(r)}" if pd.notna(r.d_int8) else "")
+                            + (f"\n{r.n_seeds} seeds" if r.n_seeds > 1 else "") for r in chunk.itertuples()], fontsize=9)
         ax.set_xlim(-0.6, width - 0.4)  # same bar width in every row
         ax.set_ylabel("Top-1 FP32 (%)")
         ax.margins(y=0.08)
-        reference_lines(ax, df, *base)
+        reference_lines(ax, df, *base, text=None)  # named in the legend: text beside the axes cost width
     notes = {}
     for r in g.itertuples():
         if r.note:
@@ -266,8 +268,9 @@ def fig_factor(t, df, factor):
     m = re.fullmatch(r"(.+) \((.+) → (.+)\)", factor)
     a, b = (f"{m[1]}: {m[2]}", f"{m[1]}: {m[3]}") if m else ("antes", "depois")
     star_note = [Line2D([], [], ls="", label="* no INT8 = " + EARLY_LABEL)] if (g.early_A | g.early_B).any() else []
-    fig.legend(handles=[Patch(color=A_COLOR, label=f"A = {a}"), Patch(color=B_COLOR, label=f"B = {b}")] + star_note,
-               loc="outside lower center", ncol=3, fontsize=9, handlelength=1.5)
+    refs = {h.get_label(): h for _, base in rows for h in reference_handles(df, *base)}
+    fig.legend(handles=[Patch(color=A_COLOR, label=f"A = {a}"), Patch(color=B_COLOR, label=f"B = {b}")] + star_note + list(refs.values()),
+               loc="outside lower center", ncol=2, fontsize=9, handlelength=1.5)
     savefig(fig, FACTOR_FIG[factor])
 
 
@@ -309,7 +312,8 @@ def bootstrap_median_ci(v, n_boot=10_000):
 
 def summarize_pairs(pairs):
     """Per contrast: n pairs, median/IQR of each Δ with a bootstrap 95% CI of the median, and in how many pairs b beat a
-    (the 'in k of n configurations' line)."""
+    (the 'in k of n configurations' line). int8_clean_*: the INT8 median without the pairs that hold an early-best cell,
+    whose INT8 is QAT's extra training (the article's factor table, 2026-11-11 review)."""
     rows = []
     for (f, label), g in pairs.groupby(["factor", "contrast"], sort=False):
         row = dict(factor=f, contrast=label, n_pairs=len(g), macs_pct=g.macs_pct.median(), params_pct=g.params_pct.median())
@@ -318,6 +322,8 @@ def summarize_pairs(pairs):
             lo, hi = bootstrap_median_ci(v)
             row.update({f"{m}_n": len(v), f"{m}_median": v.median(), f"{m}_q25": v.quantile(0.25), f"{m}_q75": v.quantile(0.75),
                         f"{m}_ci_lo": lo, f"{m}_ci_hi": hi, f"{m}_n_positive": int((v > 0).sum())})
+        clean = g.loc[~g.early.astype(bool), "int8"].dropna()
+        row.update(int8_clean_n=len(clean), int8_clean_median=clean.median())
         rows.append(row)
     return pd.DataFrame(rows)
 
@@ -328,13 +334,13 @@ MIN_PAIRS = 3  # figure 11 summarizes a contrast over >= 3 pairs; with 1-2 the m
 def fig_matched_pairs(pairs, summary, n_cells):
     """FP32 and INT8 only: the INT8 - FP32 change of each net is figures 12/16's. Each pair is judged by its own two cells'
     seed band (band_<m>: hollow = inside it), so no grey spans -- three regimes' spans overlapped into an unreadable
-    background. An INT8 pair with an early-best cell is grey (QAT's extra training, not quantization). Only the contrasts
+    background. An INT8 pair with an early-best cell is ringed (QAT's extra training, not quantization). Only the contrasts
     with MIN_PAIRS pairs, kernels above a thin line, the other factors below (2026-10-24: 17 rows, 23 once the ResNet block
     lands); the 1-2 pair ones have bar figures of their own (10, 27, 28) and every one stays in factorial_pair_summary.csv."""
     summary = summary[summary.n_pairs >= MIN_PAIRS]
     summary = pd.concat([summary[summary.factor == "kernels"], summary[summary.factor != "kernels"]])
     n_other = int((summary.factor != "kernels").sum())
-    fig, axes = plt.subplots(1, 2, figsize=(12.5, 0.55 * len(summary) + 2.5), sharey=True)
+    fig, axes = plt.subplots(1, 2, figsize=(7.7, 0.3 * len(summary) + 2.0), sharey=True, layout="constrained")  # 0.86 \textwidth
     y = {c: i for i, c in enumerate(summary.contrast[::-1])}
     for ax, m in zip(axes, ["fp32", "int8"]):
         ax.axvline(0, color="k", lw=0.8)
@@ -346,29 +352,29 @@ def fig_matched_pairs(pairs, summary, n_cells):
                 continue
             yy = y[s.contrast] + np.random.default_rng(0).uniform(-0.18, 0.18, len(v))
             inside = (v.abs() < pairs.loc[v.index, f"band_{m}"]).to_numpy() if f"band_{m}" in pairs else np.zeros(len(v), bool)
-            c = np.where(pairs.loc[v.index, "early"].to_numpy() & (m == "int8"), EARLY_GRAY, BLUE)
-            ax.scatter(v[~inside], yy[~inside], s=16, color=list(c[~inside]))
-            ax.scatter(v[inside], yy[inside], s=12, facecolors="none", edgecolors=list(c[inside]), lw=0.9)
+            early = pairs.loc[v.index, "early"].to_numpy() & (m == "int8")
+            ax.scatter(v[~inside], yy[~inside], s=16, color=BLUE)
+            ax.scatter(v[inside], yy[inside], s=12, facecolors="none", edgecolors=BLUE, lw=0.9)
+            early_ring(ax, v[early], yy[early], s=60)  # the one early-best mark of every scatter figure
             ax.scatter(v.median(), y[s.contrast], marker="D", s=50, zorder=3, color=RED)
             ax.hlines(y[s.contrast], *bootstrap_median_ci(v), color=RED, lw=2, zorder=2)
-        ax.set_title(f"Top-1 {m.upper()}: B − A (p.p.)", fontsize=10)
+        ax.set_title(f"Top-1 {m.upper()}: B − A (p.p.)", fontsize=9)
         ax.set_xlabel("← A melhor   ·   B melhor →", fontsize=9)
     axes[0].text(0, 1.0, "fator trocado: A → B", transform=axes[0].transAxes, ha="right", va="bottom", fontsize=9, weight="bold")
     n = dict(zip(summary.contrast, summary.n_pairs))
     axes[0].set_yticks(list(y.values()))
     axes[0].set_yticklabels([f"{c} ({n[c]} {'par' if n[c] == 1 else 'pares'})" for c in y], fontsize=9)
-    handles = [Line2D([], [], marker="o", color=BLUE, ls="", ms=5, label="um par de redes iguais em tudo menos no fator (B − A)"),
+    handles = [Line2D([], [], marker="o", color=BLUE, ls="", ms=5, label="um par de redes iguais exceto no fator"),
                Line2D([], [], marker="D", color=RED, ls="-", ms=7, label="mediana dos pares (barra = IC 95%)")]
     if pairs.filter(like="band_").notna().any().any():
         handles.append(Line2D([], [], marker="o", ls="", ms=5, mfc="none", mec=BLUE,
-                              label="vazado = diferença menor que o ruído entre seeds das duas redes"))
+                              label="vazado = dentro do ruído entre seeds"))
     if pairs.early.any():
-        handles.append(Line2D([], [], marker="o", color=EARLY_GRAY, ls="", ms=5, label="cinza = " + EARLY_LABEL))
-    fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0), ncol=2, fontsize=9)
+        handles.append(early_handle("ring"))
+    fig.legend(handles=handles, loc="outside lower center", ncol=2, fontsize=9)
     fig.suptitle("Efeito de trocar um fator de cada vez (A → B, todo o resto igual)\n"
                  f"cada ponto = um par de redes, valor = B − A · seed 42\n"
                  f"só os contrastes com ≥ {MIN_PAIRS} pares; os de 1–2 pares estão nas figuras 10, 27 e 28", fontsize=11)
-    fig.tight_layout(rect=(0, 0, 1, 0.93))
     savefig(fig, "11_factorial_matched_pairs.png")
 
 

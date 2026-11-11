@@ -2402,3 +2402,23 @@ pass `refuse_foreign_run_dir` and fit QOS `short` with room to spare. Accuracy h
 QAT, evaluated on the GPU, moves by 0.01 pp on `w67` (test 53.04 -> 53.05, `agreement_qat_int8` 0.9904 -> 0.9906) and not at all on
 `w150`. Only the latencies change. Both run dirs synced (summaries md5-identical to PCAD's), `runs_index` rebuilt; PCAD's appended
 `kernel_controls(_seed43)` aggregate rows left as they are. Figure 17 is not regenerated: it waits for the full 152-cell re-evaluation.
+
+## Article review and figures at their printed size (2026-11-11)
+
+A review of `report/artigo_kernel.tex` (three agents on the numbers and the figures, plus a read of the text) found no wrong table
+number: the errors were claims stronger than the data (VGG16 "se inverte" for a tie, "essas conclusões se repetem" for a kernel-only
+robustness test, "as melhores redes usam kernels 2x2" when `k11-2residual` s1 is second in FP32 and first in INT8, "o custo sobe de 130
+a 150%" for +169% GAP / +97-127% FC, the GPU count before the re-evaluation pilot), a dozen imprecisions, and figures printed at
+0.29-0.62 of their drawn size (2-5 pt text). Fixed (user's plan, same day):
+- Text: the claims above; the factor table's INT8 column is now the median without the pairs holding an early-best cell
+  (`factor_effects.summarize_pairs`: `int8_clean_median` / `int8_clean_n` in `factorial_pair_summary.csv`; max-pools +2.6 -> -1.3,
+  one pair left); FP32 GPU counted by the GPU that trained it (`provenance_history`): 4090 91, 1080 Ti 35, 4060 Ti 26; F(6,3)
+  mechanism at its measured strength (from the 7th conv, 13 of 19); five appendix figures cut (04 head, 09 BN, 23 input 224,
+  29 ResNet curves, 07/08 Dropout / pretraining: user), 18 / 19 now cited in "Treinos marcados".
+- Figures: each article figure drawn near its printed size (figsize ~ printed width / 0.8, `layout="constrained"`, text >= 9 pt);
+  `tests/test_phase11_figures.py::test_article_figures_print_at_a_readable_scale` fails one printed below 0.75 of its drawn size.
+  `analyze_geometry.savefig` now also writes a true minus sign and "64 px" (`pt_br`) and wraps a long suptitle (it widened the PNG
+  under `bbox_inches="tight"`); reference lines are named in the legend (`reference_handles`) instead of beside the axes; early best
+  is a ring in every scatter figure (no grey dots: grey = inside the seed noise only); the unadapted AlexNet is a square. Colours
+  unchanged (user: the vivid palette stays). Figure 17 (latency) was left as it was: it waits for the full re-evaluation. Article
+  trims re-cut (`tests/test_artigo_trim.py` 19 passed); the PDF went from 21 to 20 pages.

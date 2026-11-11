@@ -102,11 +102,12 @@ def test_figure_numbers_get_a_decimal_comma(tmp_path):
 
     fig, ax = plt.subplots()
     ax.plot([0, 0.5], [0, 2.5])
-    ax.set_title("35.5% FP32 · p99.9 · Hooker et al. 2019")
-    tab = ax.table([["1.44"]])
+    ax.set_title("35.5% FP32 · p99.9 · Hooker et al. 2019 · (-0.5) -2 k11-5-3 3-2-3 · 64px")
+    tab = ax.table([["1.44"], ["FP32 -0.6"]])
     savefig(fig, "x.png", tmp_path)
-    assert ax.get_title() == "35,5% FP32 · p99,9 · Hooker et al. 2019"
+    assert ax.get_title() == "35,5% FP32 · p99,9 · Hooker et al. 2019 · (−0,5) −2 k11-5-3 3-2-3 · 64 px"  # a sign gets −, a joiner stays
     assert tab[0, 0].get_text().get_text() == "1,44"
+    assert tab[1, 0].get_text().get_text() == "FP32 −0,6"
     ticks = ax.xaxis.get_major_formatter().format_ticks(ax.get_xticks())
     assert "0,5" in ticks and not any("." in t for t in ticks), ticks
 
@@ -167,6 +168,22 @@ def test_every_phase_12_figure_renders(tmp_path, monkeypatch):
     assert {p.name for p in (tmp_path / "figs").glob("*.png")} == {"01_lr_sensitivity.png", "02_finetune_pretrained.png", "03_cifar100.png",
                                                                   "04_kernel_effect_everywhere.png", "05_dataset_transfer.png"}
     assert (tmp_path / "tables" / "all_runs.csv").exists()
+
+
+def test_article_figures_print_at_a_readable_scale():
+    """report/artigo_kernel.tex shrinks each PNG to its \\includegraphics width; below 0.75 of the drawn size, matplotlib's
+    10 pt text prints under ~7.5 pt (2026-11-11 review: 0.29-0.62, 2-5 pt). Draw each figure near its printed size."""
+    import re
+    import struct
+
+    root = Path(__file__).resolve().parents[1]
+    tex = (root / "report/artigo_kernel.tex").read_text()
+    textwidth_in = 516 / 72.27  # IEEEtran conference's \textwidth, 516 pt
+    for frac, path in re.findall(r"\\includegraphics\[width=([\d.]*)\\textwidth[^]]*\]\{([^}]+)\}", tex):
+        png = root / "results/figures_generated" / path
+        width_px = struct.unpack(">I", png.read_bytes()[16:20])[0]  # PNG IHDR
+        scale = float(frac or 1) * textwidth_in / (width_px / 150)
+        assert scale >= 0.75, f"{path}: printed at {scale:.2f} of its size"
 
 
 def test_int8_noise_band_leaves_early_best_out():

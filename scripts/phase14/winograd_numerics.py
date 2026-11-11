@@ -30,10 +30,10 @@ TITLES = {"f23": "F(2,3)", "f43": "F(4,3)", "f63": "F(6,3)"}
 # Plain names for the figure; a net missing here keeps its key
 NAMES = {
     "alexnet_k3x3_stride4_3pool3x3_map1_fcdrop_nobn": "AlexNet 3×3, layout original",
-    "alexnet_3x3_fc_fpga": "AlexNet 3×3 FC", "alexnet_stacked_fpga": "AlexNet 3×3 em pares",
+    "alexnet_3x3_fc_fpga": "AlexNet 3×3 FC", "alexnet_stacked_fpga": "AlexNet 3×3, 2 por estágio",
     "alexnet_bottleneck_fpga": "AlexNet Bottleneck", "alexnet_fire_fpga": "AlexNet Fire",
-    "alexnet_fire_bypass_fpga": "AlexNet Fire + atalho", "alexnet_final_fire_residual_fpga": "AlexNet Fire + residual",
-    "alexnet_final_bottleneck_residual_fpga": "AlexNet Bottleneck + residual", "vgg_style_fpga": "VGG-Style",
+    "alexnet_fire_bypass_fpga": "AlexNet FireBypass", "alexnet_final_fire_residual_fpga": "AlexNet FinalFireResidual",
+    "alexnet_final_bottleneck_residual_fpga": "AlexNet FinalBottleneckResidual", "vgg_style_fpga": "VGG-Style",
     "vgg13_fpga": "VGG-13", "vgg16_k3x3_stride1_5pool2x2_map2_fcdrop_bn": "VGG16", "resnet18_fpga": "ResNet-18",
     "repvgg_a0_fpga": "RepVGG-A0", "wrn_16_4_fpga": "WRN-16-4", "wrn_28_2_fpga": "WRN-28-2", "googlenet_fpga": "GoogLeNet"}
 
@@ -85,7 +85,8 @@ def fig_numerics(df, figs):
     order += sorted(set(df.net) - set(order))
     y = {n: i for i, n in enumerate(order)}
     variants = [v for v in VARIANTS if (df.variant == v).any()]
-    fig, axes = plt.subplots(1, len(variants), figsize=(4 * len(variants), 0.32 * len(order) + 1.6), sharey=True, squeeze=False)
+    # printed at 0.86 \textwidth in the article: drawn near that size (2026-11-11 review)
+    fig, axes = plt.subplots(1, len(variants), figsize=(7.7, 0.24 * len(order) + 1.4), sharey=True, squeeze=False, layout="constrained")
     for ax, v in zip(axes[0], variants):
         s = df[df.variant == v]
         ax.axvline(0, color=TEXT_SECONDARY, lw=0.8)
@@ -93,16 +94,15 @@ def fig_numerics(df, figs):
         ax.scatter(s.d, s.net.map(y), color=BLUE, s=30, zorder=5)
         for _, r in s[s.early].iterrows():
             early_ring(ax, r.d, y[r.net], s=120)
-        ax.set_title(f"{TITLES[v]} · mediana {s.d.median():+.1f} p.p.", fontsize=11)
-        ax.set_xlabel("simulação − FP32 (p.p.)")
+        ax.set_title(f"{TITLES[v]}\nmediana {s.d.median():+.1f} p.p.", fontsize=9)
+        ax.set_xlabel("simulação − FP32 (p.p.)", fontsize=9)
         ax.grid(axis="x", alpha=0.3)
-    axes[0][0].set_yticks(range(len(order)), [NAMES.get(n, n) for n in order])
+    axes[0][0].set_yticks(range(len(order)), [NAMES.get(n, n) for n in order], fontsize=9)
     axes[0][0].invert_yaxis()
     if df.early.any():
         ring = early_handle("ring")
         ring.set_label("simulação inflada pelo QAT (melhor época FP32 antes de 80% do treino)")
-        fig.legend(handles=[ring], loc="lower center", bbox_to_anchor=(0.5, -0.04), frameon=False)
-    fig.tight_layout()
+        fig.legend(handles=[ring], loc="outside lower center", frameon=False, fontsize=9)
     savefig(fig, "01_winograd_numerics.png", Path(figs))
 
 

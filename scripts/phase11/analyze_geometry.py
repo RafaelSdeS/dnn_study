@@ -18,6 +18,7 @@ import json
 import re
 from functools import lru_cache
 from pathlib import Path
+from textwrap import fill
 
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
@@ -57,7 +58,7 @@ LAYOUTS = {"layout original": "layout original = o da AlexNet original: conv1 st
 # effect (docs/logs/PHASE11_LOG.md "Early best FP32 epoch", 2026-10-13). The figures mark these runs; none is dropped.
 EARLY_FRAC = 0.8
 EARLY_GRAY = "#6b6b6b"
-EARLY_LABEL = "INT8 inflado pelo QAT (melhor época FP32 antes de 80% do treino)"
+EARLY_LABEL = "INT8 inflado pelo QAT\n(melhor época FP32 antes de 80% do treino)"  # two lines: legends of narrow figures
 
 
 def load(*roots: Path, prefix: str = "phase_11_") -> pd.DataFrame:
@@ -128,6 +129,13 @@ def replicated_weights(key: str) -> int:
 
 
 DECIMAL = re.compile(r"(?<=\d)\.(?=\d)")  # only digit.digit: 'et al.' and the like stay
+MINUS = re.compile(r"(?<![\w.,])-(?=\d)")  # a sign, not a joiner: '-0,5' -> '−0,5'; '11-5-3' and 'k11-2' stay
+PX = re.compile(r"(?<=\d)px\b")  # '64px' -> '64 px', as the article writes it (the code's keys keep '64px')
+
+
+def pt_br(text):
+    """A figure text as the article prints it: decimal comma, true minus sign, '64 px'."""
+    return PX.sub(" px", MINUS.sub("−", DECIMAL.sub(",", text)))
 
 
 class _Comma(mticker.Formatter):
@@ -150,11 +158,12 @@ class _Comma(mticker.Formatter):
 
 
 def comma_decimals(fig):
-    """Every number of a figure with a decimal comma, as report/ic_report.tex writes them (pt-BR): its texts (titles,
-    labels, legends, table cells) now, its ticks when they are drawn -- one pass here instead of a format per f-string."""
+    """Every number of a figure with a decimal comma, a true minus sign and '64 px', as the report and article write them (pt-BR):
+    its texts (titles, labels, legends, table cells) now, its ticks when they are drawn (matplotlib's own minus) -- one
+    pass here instead of a format per f-string."""
     texts = fig.findobj(Text) + [c.get_text() for t in fig.findobj(Table) for c in t.get_celld().values()]
     for t in texts:
-        t.set_text(DECIMAL.sub(",", t.get_text()))
+        t.set_text(pt_br(t.get_text()))
     for ax in fig.axes:
         for axis in (ax.xaxis, ax.yaxis):  # shared axes share one formatter: wrapped once
             if not isinstance(axis.get_major_formatter(), _Comma):
@@ -166,6 +175,8 @@ def comma_decimals(fig):
 def savefig(fig, name, figs=None):
     figs = figs or FIGS
     figs.mkdir(parents=True, exist_ok=True)
+    if getattr(fig, "_suptitle", None):  # ponytail: matplotlib keeps no public handle; a long title must not widen the PNG
+        fig._suptitle.set_wrap(True)     # past the drawn size (bbox_inches="tight" would, shrinking the printed figure)
     comma_decimals(fig)
     fig.savefig(figs / name, dpi=150, bbox_inches="tight")
     plt.close(fig)
@@ -229,12 +240,23 @@ def reference_lines(ax, df, key=BASE_KEY, label=BASE_LABEL, stage="fp32", text="
         ax.axhline(r[stage], color=TEXT_PRIMARY, ls=ls, lw=1.3, zorder=4)
         if text:
             out = text == "right"
-            ax.text(1.01 if out else 0.01, r[stage], f"{name}\n{r['fp32']:.1f}% FP32 · {r['int8']:.1f}% INT8",
-                    transform=ax.get_yaxis_transform(), ha="left", va="center" if out else "bottom", fontsize=8.5, clip_on=False,
+            ax.text(1.01 if out else 0.01, r[stage], f"{fill(name, 24)}\n{r['fp32']:.1f}% FP32 · {r['int8']:.1f}% INT8",
+                    transform=ax.get_yaxis_transform(), ha="left", va="center" if out else "bottom", fontsize=9, clip_on=False,
                     zorder=6, bbox=dict(facecolor="white", edgecolor="none", alpha=0.85, pad=0.5))
     # axhline only rescales when the line falls outside the current limits: one inside the top margin sat on the frame
     # (figures 05 / 06). The lines are in the data limits already, so the margin goes above them too
     ax.autoscale_view(scalex=False)
+
+
+def reference_handles(df, key=BASE_KEY, label=BASE_LABEL):
+    """Legend entries for reference_lines(..., text=None): its lines with the numbers its text would print beside the axes
+    -- in a legend they cost no width, which the article's printed figures do not have (2026-11-11 review)."""
+    r = df[(df.key == key) & (df.seed == 42)]
+    if r.empty or pd.isna(r.iloc[0]["fp32"]):
+        return []
+    lines = [(r.iloc[0], label, "--")] + ([(h, HEALTHY_LABEL, ":")] if key == BASE_KEY and (h := healthy_run()) else [])
+    return [Line2D([], [], color=TEXT_PRIMARY, ls=ls, lw=1.3, label=f"{fill(name, 34)}:\n{r['fp32']:.1f}% FP32 · {r['int8']:.1f}% INT8")
+            for r, name, ls in lines]
 
 
 def main_grid_table(df):

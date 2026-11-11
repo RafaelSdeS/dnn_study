@@ -26,7 +26,7 @@ from matplotlib.patches import Patch
 
 from ml.model_registrations import CELL_FACTORS
 from ml.plotting import AMBER, BLUE, GREEN, NEUTRAL, RED, TEXT_SECONDARY, apply_report_style
-from scripts.phase11.analyze_geometry import (EARLY_GRAY, EARLY_LABEL, ROOT, RUNS, early_handle, int8_bar, load, noise_band,
+from scripts.phase11.analyze_geometry import (ROOT, RUNS, early_handle, early_ring, int8_bar, load, noise_band,
                                               precision_handles, savefig)
 from scripts.phase11.design_figures import FMARK, KCOLOR, KLABEL, SEED_HANDLES, seed_dots
 
@@ -147,7 +147,7 @@ VK = "vgg16_{}_stride1_5pool2x2_map2_gap_bn".format
 RK = "resnet18_{}_stride2_1pool3x3_map2_gap_bn".format
 CAK = "alexnet_{}_stride2_2pool2x2_map4_gap_bn_in32".format  # the same nets on CIFAR-100
 CVK = "vgg16_{}_stride1_5pool2x2_map1_gap_bn_in32".format
-SMALL, ORIG, SAME = "3×3 → 2×2", "kernel original → 3×3 (AlexNet 11-5-3-3-3, ResNet-18 conv1 7×7)", "3×3 → 2×2 com os mesmos MACs"
+SMALL, ORIG, SAME = "3×3 → 2×2", "kernel original → 3×3\n(AlexNet 11-5-3-3-3, ResNet-18 7×7)", "3×3 → 2×2 com os mesmos MACs"
 
 
 def everywhere_rows(p11, p12):
@@ -157,15 +157,15 @@ def everywhere_rows(p11, p12):
     rows = []
     for a, b, group in [("k3x3", "k2x2", SMALL), ("k11-5-3", "k3x3", ORIG)]:
         for lr, get in [("0,01 (a receita)", tiny), ("0,005", at("lr_half")), ("0,02", at("lr_double"))]:
-            rows.append((group, f"AlexNet · Tiny ImageNet · lr {lr}", get(AK(a)), get(AK(b))))
+            rows.append((group, f"AlexNet · Tiny ImageNet · taxa {lr}", get(AK(a)), get(AK(b))))
         if group == SMALL:
             rows.append((group, "VGG16 · Tiny ImageNet", tiny(VK(a)), tiny(VK(b))))
         rows.append((group, "ResNet-18 · Tiny ImageNet", tiny(RK("k7-3" if a == "k11-5-3" else a)), tiny(RK(b))))
         rows.append((group, "AlexNet · CIFAR-100", at("cifar100")(CAK(a)), at("cifar100")(CAK(b))))
         if group == SMALL:
             rows.append((group, "VGG16 · CIFAR-100", at("cifar100")(CVK(a)), at("cifar100")(CVK(b))))
-    rows += [(SAME, "AlexNet · no custo do 3×3 (2×2 com canais ×1,5)", tiny(AK("k3x3")), tiny(AK("k2x2") + "_w150")),
-             (SAME, "AlexNet · no custo do 2×2 (3×3 com canais ×0,67)", tiny(AK("k3x3") + "_w67"), tiny(AK("k2x2")))]
+    rows += [(SAME, "AlexNet · MACs do 3×3 (2×2, canais ×1,5)", tiny(AK("k3x3")), tiny(AK("k2x2") + "_w150")),
+             (SAME, "AlexNet · MACs do 2×2 (3×3, canais ×0,67)", tiny(AK("k3x3") + "_w67"), tiny(AK("k2x2")))]
     return [r for r in rows if len(r[2]) and len(r[3])]
 
 
@@ -184,7 +184,7 @@ def fig_everywhere(p11, p12, figs):
         n = len(a[["seed"]].merge(b[["seed"]], on="seed"))
         y[(group, label)] = len(ticks)
         ticks.append((f"{label} ({n} {'seed' if n == 1 else 'seeds'})", False))
-    fig, axes = plt.subplots(1, 2, figsize=(14, 0.42 * len(ticks) + 2.2), sharey=True)
+    fig, axes = plt.subplots(1, 2, figsize=(8.9, 0.3 * len(ticks) + 1.8), sharey=True, layout="constrained")  # \textwidth
     for ax, m in zip(axes, ["fp32", "int8"]):
         ax.axvline(0, color="k", lw=0.8)
         for group, label, a, b in rows:
@@ -194,12 +194,13 @@ def fig_everywhere(p11, p12, figs):
             d = (p[f"{m}_b"] - p[f"{m}_a"]).to_numpy()
             band = noise_band(pd.concat([a, b]), {*a.key, *b.key})[m]
             inside = np.abs(d) < band if np.isfinite(band) else np.zeros(len(d), bool)
-            c = np.where((p.early_best_a | p.early_best_b).to_numpy() & (m == "int8"), EARLY_GRAY, BLUE)
+            early = (p.early_best_a | p.early_best_b).to_numpy() & (m == "int8")
             yy = np.full(len(d), -y[(group, label)]) + np.linspace(-0.12, 0.12, len(d)) * (len(d) > 1)
-            ax.scatter(d[~inside], yy[~inside], s=22, color=list(c[~inside]), zorder=3)
-            ax.scatter(d[inside], yy[inside], s=18, facecolors="none", edgecolors=list(c[inside]), lw=1, zorder=3)
+            ax.scatter(d[~inside], yy[~inside], s=22, color=BLUE, zorder=3)
+            ax.scatter(d[inside], yy[inside], s=18, facecolors="none", edgecolors=BLUE, lw=1, zorder=3)
+            early_ring(ax, d[early], yy[early], s=70)  # the one early-best mark of every scatter figure
             ax.scatter(d.mean(), -y[(group, label)], marker="D", s=55, color=RED, zorder=4)
-        ax.set_title(f"Top-1 {m.upper()}: B − A (p.p.)", fontsize=10)
+        ax.set_title(f"Top-1 {m.upper()}: B − A (p.p.)", fontsize=9)
         ax.set_xlabel("← A melhor   ·   B melhor →", fontsize=9)
     axes[0].set_yticks([-i for i in range(len(ticks))])
     axes[0].set_yticklabels([text for text, _ in ticks], fontsize=9)
@@ -209,13 +210,18 @@ def fig_everywhere(p11, p12, figs):
                Line2D([], [], marker="D", color=RED, ls="", ms=7, label="média das seeds"),
                Line2D([], [], marker="o", ls="", ms=5, mfc="none", mec=BLUE, label="vazado = dentro do ruído entre seeds das duas redes")]
     if any(a.early_best.any() or b.early_best.any() for *_, a, b in rows):
-        handles.append(Line2D([], [], marker="o", color=EARLY_GRAY, ls="", ms=5, label="cinza (INT8) = " + EARLY_LABEL))
-    fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=2, fontsize=9)
+        handles.append(early_handle("ring"))
+    fig.legend(handles=handles, loc="outside lower center", ncol=2, fontsize=9)
     fig.suptitle("O custo do kernel pequeno é o mesmo em todo lugar? Duas redes iguais exceto pelo kernel, em cada cenário\n"
-                 "datasets, lr e famílias diferentes; e o 3×3 → 2×2 com o custo de cálculo igualado · top-1 no conjunto de teste de cada dataset",
-                 fontsize=11, y=1.02)
-    fig.tight_layout()
+                 "datasets, taxas e famílias diferentes; e o 3×3 → 2×2 com o custo de cálculo igualado · top-1 no conjunto de teste de cada dataset",
+                 fontsize=11)
     savefig(fig, "04_kernel_effect_everywhere.png", figs)
+
+
+# where figure 05 writes a point's name (offset in points, alignment): right and above by default; these neighbours sit
+# close enough that a name there ran over the next point or error bar at the printed size
+NAME_AT = {("alexnet", "k3x3"): (-7, 6, "right"), ("alexnet", "kalt3-2"): (7, -12, "left"), ("alexnet", "k11-5-3"): (7, -12, "left"),
+            ("vgg16", "kalt3-2"): (-7, -12, "right")}
 
 
 def fig_transfer(p11, p12, figs):
@@ -229,7 +235,7 @@ def fig_transfer(p11, p12, figs):
     if c.empty:
         print("05: no CIFAR-100 run yet")
         return
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5.4))
+    fig, axes = plt.subplots(1, 2, figsize=(7.7, 3.8), layout="constrained")  # 0.86 \textwidth
     for ax, (title, family, kernels, tiny, cifar) in zip(axes, panels):
         pts = []
         for k in kernels:
@@ -238,16 +244,16 @@ def fig_transfer(p11, p12, figs):
                 pts.append((t.mean(), s.mean()))
                 ax.errorbar(t.mean(), s.mean(), xerr=t.std() if len(t) > 1 else None, yerr=s.std() if len(s) > 1 else None,
                             marker=FMARK[family], ms=9, color=KCOLOR[k], ecolor=KCOLOR[k], elinewidth=1, capsize=3, ls="")
-                ax.annotate(f"{KLABEL[k]} ({len(t)} / {len(s)})", (t.mean(), s.mean()), xytext=(7, 4), textcoords="offset points",
-                            fontsize=9, color=KCOLOR[k])
+                dx, dy, ha = NAME_AT.get((family, k), (7, 4, "left"))
+                ax.annotate(f"{KLABEL[k]} ({len(t)} / {len(s)})", (t.mean(), s.mean()), xytext=(dx, dy), textcoords="offset points",
+                            fontsize=9, color=KCOLOR[k], ha=ha)
         tau = kendalltau(*zip(*pts)).statistic if len(pts) > 2 else np.nan
-        ax.set_title(f"{title}\nτ de Kendall = {tau:+.2f} ({len(pts)} redes)" if np.isfinite(tau) else title, fontsize=10)
+        ax.set_title(f"{title}\nτ de Kendall = {tau:+.2f} ({len(pts)} redes)" if np.isfinite(tau) else title, fontsize=9)
         ax.set_xlabel("Top-1 FP32 no Tiny ImageNet (%)")
         ax.margins(x=0.35, y=0.25)  # room for the names right of the points
     axes[0].set_ylabel("Top-1 FP32 no CIFAR-100 (%)")
     fig.suptitle("A ordem dos kernels no Tiny ImageNet se repete no CIFAR-100? Média das seeds; barras = 1 desvio-padrão entre seeds\n"
-                 "τ = +1: mesma ordem nos dois datasets; entre parênteses, quantas seeds no Tiny ImageNet / no CIFAR-100", fontsize=11, y=1.04)
-    fig.tight_layout()
+                 "τ = +1: mesma ordem nos dois datasets; entre parênteses, quantas seeds no Tiny ImageNet / no CIFAR-100", fontsize=11)
     savefig(fig, "05_dataset_transfer.png", figs)
 
 

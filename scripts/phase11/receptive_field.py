@@ -12,6 +12,7 @@ cache (TEST_IMAGES); nothing is downloaded.
     python -m scripts.phase11.receptive_field
 """
 from pathlib import Path
+from textwrap import fill
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -69,8 +70,9 @@ def panels(df):
     """(label, key, colour, run or None) per panel: the baseline, then KERNELS' cells (None = not trained yet)."""
     runs = seed42(df).set_index("key")
     # the layout on every label: the baseline has 11-5-3-3-3 too, its wider field is its stride-4 + 3-pool geometry
-    rows = ([("AlexNet sem adaptar: 11-5-3-3-3\nlayout original (conv1 s4, 3 pools)", BASE_KEY, TEXT_PRIMARY)]
-            + [(f"{KLABEL[k]}\nlayout 64px (conv1 s2, 2 pools)", cell(k), KCOLOR[k]) for k in KERNELS])
+    # short: nine panels share 0.8 \textwidth in the article; the caption spells the layouts out
+    rows = ([("AlexNet sem adaptar\n(layout original)", BASE_KEY, TEXT_PRIMARY)]
+            + [(f"{fill(KLABEL[k], 13)}\n(layout 64 px)", cell(k), KCOLOR[k]) for k in KERNELS])
     return [(label, key, c, runs.loc[key] if key in runs.index else None) for label, key, c in rows]
 
 
@@ -87,7 +89,7 @@ def main():
         print(f"22: no checkpoint -- rsync -aR {PCAD}{p.relative_to(ROOT) if p.is_relative_to(ROOT) else p} .")
     x = images() if len(missing) < len(ckpt) else None
     cols = (len(ps) + 1) // 2
-    fig, axes = plt.subplots(2, cols, figsize=(2.6 * cols, 8.4), layout="constrained")
+    fig, axes = plt.subplots(2, cols, figsize=(1.45 * cols, 4.4), layout="constrained")  # printed at 0.8 \textwidth
     axes = axes.ravel()
     for ax in axes[len(ps):]:
         ax.axis("off")
@@ -99,7 +101,7 @@ def main():
             ax.text(0.5, 0.5, why, transform=ax.transAxes, ha="center", va="center", color=NEUTRAL, fontsize=10)
             # the same 64x64 box and title lines as a drawn panel (imshow shrinks its axes to the image): titles line up
             ax.set(xlim=(0, 64), ylim=(64, 0), aspect="equal")
-            ax.set_title(f"{label}\n\n", fontsize=10, color=c)
+            ax.set_title(f"{label}\n", fontsize=9, color=c)
             continue
         model = load_best_model(key, MODEL_REGISTRY[key]["ctor"], ckpt[key].parent, torch.device("cpu"))
         g = effective_rf(model, x)
@@ -108,14 +110,14 @@ def main():
         half = (np.cumsum(top) < 0.5).sum() + 1  # fewest pixels holding half the influence: outlined
         smooth = gaussian_filter(g, 1.5)  # ponytail: the outline only -- the raw map has an 8-px stride grid
         ax.contour(smooth, levels=[np.sort(smooth.ravel())[::-1][half - 1]], colors=TEXT_PRIMARY, linewidths=1.2)
-        ax.set_title(f"{label}\nmetade da influência em\n{100 * half / g.size:.1f}% da imagem", fontsize=10, color=c)
+        ax.set_title(f"{label}\nmetade em {100 * half / g.size:.1f}%", fontsize=9, color=c)
         print(f"22 {key}: half the influence in {half} px ({100 * half / g.size:.1f}%)")
     fig.colorbar(ScalarMappable(norm, LinearSegmentedColormap.from_list("rf", ["white", TEXT_PRIMARY])), ax=axes, shrink=0.7,
-                 label="influência do pixel (1 = o mais influente; cada painel na cor do seu kernel)")
-    fig.suptitle("Que região da imagem cada rede usa? Campo receptivo efetivo do neurônio central da última conv (Luo et al. 2016):\n"
-                 f"quanto cada pixel move esse neurônio, média de {N_IMAGES} imagens de teste 64×64; contorno = a menor região com "
-                 "metade da influência\n(o campo receptivo teórico cobre a imagem inteira em todas) · classificador GAP + BN, menos o AlexNet original "
-                 "(FC + Dropout, sem BN) · seed 42", fontsize=11)
+                 label="influência do pixel\n(1 = a maior)")
+    fig.suptitle("Que região da imagem cada rede usa? Campo receptivo efetivo (Luo et al. 2016)\n"
+                 f"quanto cada pixel move o neurônio central da última conv; média de {N_IMAGES} imagens de teste\n"
+                 "contorno = a menor região com metade da influência (o campo teórico cobre a imagem toda)\n"
+                 "GAP + BN, menos a AlexNet original (FC + Dropout, sem BN) · seed 42\n ", fontsize=10)  # blank line: room for the article's crop
     savefig(fig, "22_effective_receptive_field.png")
 
 

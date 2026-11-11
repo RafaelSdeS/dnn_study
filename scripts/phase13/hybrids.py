@@ -28,7 +28,7 @@ from scripts.phase11.design_figures import KCOLOR, LIVE_NOTE, frame, legend_kern
 
 FIGS = ROOT / "results/figures_generated/phase_13_hybrids"
 TABLES = ROOT / "results/phase_13_hybrids"
-BODIES = [("", "5 convs"), ("stacked", "2 por estágio"), ("residual", "2 por estágio\n+ atalho residual")]
+BODIES = [("", "corpo\nde 5"), ("stacked", "2 por\nestágio"), ("residual", "2 por\nestágio\n+ atalho")]  # short: \textwidth, 12 ticks
 VGG_REF = "vgg16_k3x3_stride1_5pool2x2_map2_gap_bn"  # the reference line: VGG16 3x3 + BN + GAP, Phase 11
 # (cell, what changed to reach it): each step changes one factor of the one before
 PATH = [("alexnet_k11-5-3_stride4_3pool3x3_map1_fcdrop_nobn", "AlexNet original\nsem adaptar"),
@@ -85,7 +85,7 @@ def fig_hybrids(s42, bands, figs, reps=None):
     v = s42.set_index("key")
     extra = {k: g.fp32.tolist() for k, g in reps.groupby("key")} if reps is not None and len(reps) else {}
     kernels = ((3, -0.14), (2, 0.14))
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6), sharey=True)
+    fig, axes = plt.subplots(1, 2, figsize=(8.9, 4.2), sharey=True, layout="constrained")  # printed at \textwidth
     queued, ringed = 0, False
     for ax, s in zip(axes, (2, 1)):
         ticks = []
@@ -106,19 +106,19 @@ def fig_hybrids(s42, bands, figs, reps=None):
                         early_ring(ax, x + dx, r.int8)
                         ringed = True
                     macs.append(f"{r.macs_eff_m:.0f}")
-                ticks.append((x, f"{blabel}\n" + (f"{' · '.join(macs)}M" if macs else "pendente")))
+                ticks.append((x, f"{blabel}\n" + ("\n".join(f"{m}M" for m in macs) if macs else "pendente")))
             for k, dx in kernels:  # each kernel's FP32 across the three bodies
                 pts = [(3.6 * gi + bi + dx, v.loc[GRID[(k, big, body, s)], "fp32"]) for bi, (body, _) in enumerate(BODIES)
                        if GRID[(k, big, body, s)] in v.index]
                 if len(pts) > 1:
                     ax.plot(*zip(*pts), color=KCOLOR[f"k{k}x{k}"], lw=1, alpha=0.6, zorder=2)
             ax.text(3.6 * gi + 1, 1.01, "conv1 11×11" if big else "conv1 = kernel do corpo", transform=ax.get_xaxis_transform(),
-                    ha="center", va="bottom", fontsize=9.5, weight="bold")
+                    ha="center", va="bottom", fontsize=9, weight="bold")
         if VGG_REF in v.index:
             ax.axhline(v.loc[VGG_REF, "fp32"], color=NEUTRAL, ls="--", lw=1, zorder=1)
         ax.set_xticks([t for t, _ in ticks])
-        ax.set_xticklabels([t for _, t in ticks], fontsize=8.5)
-        ax.set_title(f"conv1 stride {s} (mapa final {8 if s == 2 else 16}×{8 if s == 2 else 16})", fontsize=10, pad=22)
+        ax.set_xticklabels([t for _, t in ticks], fontsize=9)
+        ax.set_title(f"conv1 stride {s} (mapa final {8 if s == 2 else 16}×{8 if s == 2 else 16})", fontsize=9, pad=18)
         ax.margins(x=0.06, y=0.12)
     axes[0].set_ylabel("Top-1 (%)")
     handles = legend_kernels(["k3x3", "k2x2"]) + [
@@ -127,13 +127,12 @@ def fig_hybrids(s42, bands, figs, reps=None):
         Line2D([], [], color=NEUTRAL, ls="--", label="VGG16 3×3 (GAP + BN)")]
     if extra:
         handles.append(Line2D([], [], marker="o", color=TEXT_SECONDARY, alpha=0.5, ls="", ms=4, label="seeds 43 e 44 (FP32)"))
-    fig.legend(handles=handles + ([early_handle("ring")] if ringed else []), loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=7, fontsize=9)
+    fig.legend(handles=handles + ([early_handle("ring")] if ringed else []), loc="outside lower center", ncol=3, fontsize=9)
     band = band_for(bands, "alexnet", True)["fp32"]
     fig.suptitle("Híbridos: profundidade, atalho residual, conv1 11×11 e stride 1 somam? (AlexNet, 2 max-pools 2×2, GAP + BN)\n"
-                 "sob cada corpo: MACs por imagem do 3×3 · do 2×2\n" + LIVE_NOTE
+                 "sob cada corpo: MACs por imagem do 3×3 e, abaixo, do 2×2\n" + LIVE_NOTE
                  + (f" · ruído entre seeds (GAP + BN): ±{band:.1f} p.p. FP32" if pd.notna(band) else "")
                  + (f"\nainda na fila: {queued} de 24 células" if queued else ""), fontsize=11)
-    fig.tight_layout()
     savefig(fig, "01_hybrids.png", figs)
 
 
@@ -145,7 +144,7 @@ def fig_path(df, figs):
     steps = [(k, label) for k, label in PATH if k in m.index]
     if len(steps) < 2:
         return
-    fig, ax = plt.subplots(figsize=(10, 4.6))
+    fig, ax = plt.subplots(figsize=(7.7, 3.7), layout="constrained")  # printed at 0.86 \textwidth
     xs = range(len(steps))
     fp32 = [m.loc[k, "fp32"] for k, _ in steps]
     ax.step(xs, fp32, where="mid", color=BLUE, lw=1.2, alpha=0.5, zorder=2)
@@ -162,18 +161,18 @@ def fig_path(df, figs):
         ax.text(0, m.loc[VGG_REF, "fp32"] + 0.3, f"VGG16 3×3 (GAP + BN): {m.loc[VGG_REF, 'fp32']:.1f}%", fontsize=9, color=TEXT_SECONDARY,
                 va="bottom")
     ax.set_xticks(list(xs))
-    ax.set_xticklabels([f"{label}\n{m.loc[k, 'macs']:.0f}M MACs" + ("" if m.loc[k, "n"] > 1 else "\n(1 seed)") for k, label in steps],
+    ax.set_xticklabels([f"{label}\n{m.loc[k, 'macs']:.0f}M" + ("" if m.loc[k, "n"] > 1 else "\n(1 seed)") for k, label in steps],
                        fontsize=9)
     ax.set_ylabel("Top-1 no teste (%)")
+    ax.set_xlabel("passo · MACs por imagem (custo efetivo)", fontsize=9)
     ax.set_ylim(min(fp32) - 4, max(fp32) + 5)
     handles = [Line2D([], [], marker="o", color=BLUE, ls="", ms=8, label="FP32"),
                Line2D([], [], marker="D", mfc="white", mec=BLUE, ls="", ms=8, label="INT8")]
     if m.loc[[k for k, _ in steps], "early"].any():
         handles.append(early_handle("ring"))
     ax.legend(handles=handles, loc="lower right", fontsize=9)
-    ax.set_title("Da AlexNet original à melhor rede, um fator por vez (média das seeds; entre parênteses, o ganho do passo em p.p.)",
+    ax.set_title("Da AlexNet original à melhor rede, um fator por vez\n(média das seeds; entre parênteses, o ganho do passo em p.p.)",
                  fontsize=10)
-    fig.tight_layout()
     savefig(fig, "02_caminho.png", figs)
 
 
