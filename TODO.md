@@ -330,6 +330,12 @@ plan: `docs/plans/PHASE9_PLAN.md`.
 
 ## Phase 11 — Kernel size comparison (all 152 runs done, 2026-10-30)
 
+- [ ] FC capacity control (2026-11-11, the article's open question "Não investigamos por que o classificador FC favorece kernels maiores"):
+  `phase_11_kernel_controls_fc` (+ `_seed43` / `_seed44`), k2x2 fcdrop_bn w150 and k3x3 fcdrop_bn w67, 6 runs in `~/queue_followups.txt` on PCAD.
+  Only the convs' MACs match (the FC head scales with the width). When in: sync, `analyze_geometry` / `design_figures` / `factor_effects`, the
+  article's "O 2x2 perde pelo kernel ou pela capacidade?" + limitation + future work, recount 152 -> 158; if 2x2 w150 is within ~1 pp of 3x3,
+  propose seeds 43 / 44 of the two base FC cells.
+
 Status: `results/phase_11_geometry_analysis/design_status.csv`; findings: `docs/plans/BEST_MODELS.md` "Cross-phase synthesis",
 `docs/logs/PHASE11_LOG.md` "Progress ...".
 
@@ -348,6 +354,9 @@ Status: `results/phase_11_geometry_analysis/design_status.csv`; findings: `docs/
 - ✅ Seeds 43 / 44, 2×2 side, synced 2026-11-06: `k2x2residual` s43 + s44, `k2x2stacked` s43; 3×3 side: `k3x3stacked` s43, `k3x3residual` s44. Tables and figure 01 regenerated.
 - ✅ The last three seed runs (`k2x2stacked` s44, `k3x3residual` s43, `k3x3stacked` s44) synced 2026-11-07, tables / figure 01 regenerated, PHASE13_LOG "all eight seed runs are in".
 - [ ] Stage B (`phase_13_bottleneck_fire`, PHASE13_LOG "Stage B"): Bottleneck / Fire units x one / two per stage x 3x3 / 2x2 at stride 1, 8 cells, 7 new runs (`k3x3fire` = `alexnet_fire`, read). Code + tests + local smoke OK (2026-11-07); all 7 submitted (835668-835674). **3 of 7 synced 2026-11-11** (`k2x2bottleneck`, `k2x2bottleneckstacked`, `k2x2firestacked`; PHASE13_LOG "2026-11-11"), `bottleneck_fire` rerun. Left: `k2x2fire` (beagle, running), the three 3x3 cells (pending); then sync them + `outputs/pcad/aggregates/phase_13_bottleneck_fire_comparison.csv`. + seeds 43 / 44 of `k2x2firestacked` queued at the end (836100 / 836101, `phase_13_bottleneck_fire_seed43/44`); on landing add `contrasts_by_seed.csv` to `bottleneck_fire`.
+- [ ] Seeds 43 / 44 of `alexnet_k11-2residual_stride1_2pool2x2_map16_gap_bn` (2026-11-11, the third net tied with the two best at seed 42;
+  added to `phase_13_hybrids_seed43/44.yaml`), in `~/queue_followups.txt` (s43 = 836175). When in: sync, `scripts.phase13.hybrids`, the
+  article's "As melhores redes", the "Poucas seeds" limitation, `docs/plans/BEST_MODELS.md`.
 - The deck (`presentation/slides.md`) has no Phase 13; the Narrativa / `proximos` slide are not in this repo — update those where they live.
 
 ## Phase 14 — Winograd numerics on the one recipe (`docs/logs/PHASE14_LOG.md`)
