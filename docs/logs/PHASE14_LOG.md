@@ -138,3 +138,9 @@ split. The user asked for everything on one recipe, so this phase reruns them on
   `googlenet_fpga`, same recipe, does not (≤ 4.32x everywhere, `x_kept` ≥ 89 %, `u_kept` ≥ 29 %) and its arm recovers to 48.51 %. So the epoch-0 accuracy does not predict the arm; whether the signal
   crosses the net does. Article: the "A diferença não é falha de treino" paragraph now covers the three nets; the limitation keeps only "escalas recalibradas não testadas". Next (user's plan, same day):
   `f63_collapse --hw-params f63=f63c` (the calibrated netlist scales, `gate_flags/params_f63c.txt`) on the three nets, and one `qat_wino` arm of `resnet18_fpga` with `hw_params: f63c`.
+- 2026-11-11 (later): submitted on PCAD (4636092). `f63_collapse --hw-params f63=f63c` (F63 only, the netlist's calibrated scales; `sv` from
+  `sv_hw`, `su` from the netlist; tests/test_phase14_winograd.py covers it) on the three nets, CPU, QOS `short`: 836176 (`resnet18_fpga`),
+  836177 (`vgg13_fpga`), 836178 (`googlenet_fpga`) -> `~/f63_out/f63_collapse_<net>_f63c.json`. The QAT arm `phase_14_winograd_f63c_pack`
+  (`resnet18_fpga`, the f63 arm with `hw_params: f63c`, outside the 48-arm medians; FP32 copied in as its yaml says) is in
+  `~/queue_followups.txt` (`feed_queue.sh`, QOS normal, `--slurm tupi_4090`), fifth of nine. The epoch-0 run says whether the signal now
+  crosses the nets; the arm, whether resnet18 leaves chance.

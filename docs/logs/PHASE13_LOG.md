@@ -386,3 +386,12 @@ has seeds 42-44, so the pair compares at 3 seeds. `phase_13_bottleneck_fire_seed
 submitted with `--slurm tupi_beagle` at the end of the queue (user): 836100 (s43), 836101 (s44), priority 503 behind the three
 pending 3x3 cells (2625). If `k3x3firestacked` also lands inside the noise against `k3x3stacked` (3 seeds), its seeds join these yamls.
 When they land: sync, and `bottleneck_fire` gains a `contrasts_by_seed.csv` (as `hybrids.contrasts_by_seed`).
+
+**Seeds 43 / 44 of the conv1 11x11 + 2x2 body with the skip queued; Stage B `contrasts_by_seed.csv` in place (2026-11-11, later).**
+`alexnet_k11-2residual_stride1_2pool2x2_map16_gap_bn` (60.48 FP32 / 60.85 INT8 at seed 42, tied with the two best nets; the article's
+"Poucas seeds" limitation named it) added to `phase_13_hybrids_seed43/44.yaml` (4636092, as the 3x3 counterparts were on 2026-11-05) and
+submitted through `~/queue_followups.txt` on PCAD (`feed_queue.sh`, QOS normal, MAX 10; `--slurm tupi_4090`): 836175 (s43), 836179 (s44).
+`hybrids.py` reads them with no change; when in, its `contrasts_by_seed.csv` gains the "conv1: kernel do corpo -> 11x11" pair at s43 / s44.
+`bottleneck_fire` now writes `contrasts_by_seed.csv` through `hybrids.contrasts_by_seed` (which takes the pairs function; 96a3f84): seed 42
+only for now, = `contrasts.csv`; the `k2x2firestacked` seeds need just a rerun. tupi3-6 were drained for a BIOS update from 2026-11-10;
+tupi3 runs `k3x3bottleneckstacked` (835672) since 2026-11-11 ~14:50.

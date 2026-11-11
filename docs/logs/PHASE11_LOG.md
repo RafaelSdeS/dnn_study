@@ -2450,3 +2450,18 @@ count in parentheses). 13, 16, 20, 30 and the pairs figure now print at `\textwi
 also gets `fig_pareto`'s legend column. The article goes from 20 to 21 pages. Follow-up (user): figure 20 drawn taller
 (figsize height 3.4 -> 4.4, same trim); the legend's baseline square shrunk (`BASE_HANDLE` ms 13 -> 10) and, in `fig_pareto`'s
 tight column, listed apart from the early-best ring: stacked, the two overlapped.
+
+## FC capacity control queued; figure 17 at its printed size (2026-11-11, later)
+
+The article leaves open why the FC head penalizes 2x2 on AlexNet (FC + Dropout + BN: 3x3 50.75 vs 2x2 45.68, seed 42); the width control
+was only run with GAP. `ml/model_registrations.py`: the width pair again with `head="fc"` (Dropout 0.5, BN), `alexnet_k2x2_stride2_2pool2x2_
+map8_fcdrop_bn_w150` and `alexnet_k3x3_stride2_2pool2x2_map8_fcdrop_bn_w67`; `phase_11_kernel_controls_fc.yaml` (+ `_seed43` / `_seed44`),
+4636092. Only the convs' MACs match (166.9M vs 167.3M, 75.0M vs 74.5M): FC1 takes channels x 6 x 6, so in total 241.1M MACs / 76.5M params
+against the 3x3 net's 222.6M / 57.6M, and 117.9M / 43.8M against the 2x2 net's 129.9M / 56.4M (no replicated FC weights at an 8x8 map). The
+yamls carry the `phase_11_` prefix, so every Phase 11 reader picks the runs up (152 -> 158 runs; the 304-cell and DESIGN_PAIRS tests skip
+`width != 1`); the seed-43/44 cells join the "AlexNet com BN" noise pool -- check `tab:ruido` when they land. Submitted through
+`~/queue_followups.txt` on PCAD (`--slurm tupi_4090`): 836181 (2x2 w150) / 836182 (3x3 w67) at seed 42, the four seed runs queued behind.
+If 2x2 w150 lands within ~1 pp of 3x3, the two base FC cells need seeds 43 / 44 too (4 runs) for a 3-seed comparison.
+Figure 17 (latency x MACs) redrawn at its printed size (8.9 in, constrained layout, one legend under the panels; 0.79 at `\textwidth`,
+96a3f84) for the article's latency paragraph once the one-machine re-evaluation is in; that re-evaluation's feeder now also waits
+behind these runs (it starts only with no normal-QOS training job pending).
