@@ -167,7 +167,7 @@ Ela não inclui a economia de Winograd, que estimamos à parte na Seção~\ref{s
 
 Algumas comparações usam o \textit{custo efetivo}. Quando o mapa final é menor que 6\by6, o classificador FC recebe cópias repetidas dos mesmos
 valores, e os pesos que só multiplicam essas cópias não acrescentam nada à função da rede. A AlexNet sem adaptação em 64 px, por exemplo, tem 57,8M
-de parâmetros, mas só 21M fazem diferença. O custo efetivo desconta esses pesos. Ele é usado nas variações de custo da Tabela~\ref{tab:fatores_efeito}
+de parâmetros, mas só 21M fazem diferença. O custo efetivo desconta esses pesos. Ele é usado nas variações de custo da Figura~\ref{fig:pares}
 e nas Figuras~\ref{fig:caminho}, \ref{fig:pareto} e~\ref{fig:winograd}.
 
 \section{Metodologia}
@@ -394,12 +394,12 @@ ResNet-18 & $\pm$1,0 & $\pm$0,6 \\
 \end{tabular}
 \end{table}
 
-\textbf{Origem dos números.} O texto usa a média de 3 seeds sempre que ela existe. As Tabelas~\ref{tab:fatores_efeito}, \ref{tab:winograd} e~\ref{tab:combinacoes} usam a seed 42 em todas as redes, para comparar na mesma base. Por isso, a mesma rede pode aparecer
+\textbf{Origem dos números.} O texto usa a média de 3 seeds sempre que ela existe. A Figura~\ref{fig:pares} e as Tabelas~\ref{tab:winograd} e~\ref{tab:combinacoes} usam a seed 42 em todas as redes, para comparar na mesma base. Por isso, a mesma rede pode aparecer
 com dois valores próximos: a 3\by3 tem 53,81\% na média e 53,50\% na seed 42.
 
 \textbf{Treinos marcados.} Marcamos os treinos cuja melhor época FP32 veio antes de 80\% do total. Nesses treinos, o QAT parte de pesos obtidos com a taxa de aprendizado ainda alta, então a mudança para INT8 inclui treino extra. O limiar
 separa bem os grupos: no estudo principal, a melhor época vem até a 396 ou a partir da 427. As figuras marcam esses casos com um anel, hachura ou asterisco (``INT8 inflado pelo QAT''). Eles nunca são removidos dos gráficos, mas ficam fora das fronteiras
-de eficiência em INT8 e da coluna INT8 da Tabela~\ref{tab:fatores_efeito}. As Figuras~\ref{fig:curvas_fp32} e~\ref{fig:curvas_qat}, no Apêndice, mostram as curvas de treino e de QAT.
+de eficiência em INT8 e das medianas INT8 da Figura~\ref{fig:pares}. As Figuras~\ref{fig:curvas_fp32} e~\ref{fig:curvas_qat}, no Apêndice, mostram as curvas de treino e de QAT.
 
 \subsection{Reprodutibilidade}
 
@@ -424,40 +424,18 @@ A Figura~\ref{fig:stride}, no Apêndice, isola o stride. Reduzi-lo de 4 para 2 g
 \subsection{Quanto custa restringir o kernel?}
 \label{sec:custo}
 
-\textbf{Depende da rede e do classificador.} Comparamos pares de redes iguais exceto pelos kernels. A Tabela~\ref{tab:fatores_efeito} mostra a mediana de todos os pares, ao lado dos outros fatores (cada par está na Figura~\ref{fig:pares}, no Apêndice).
+\textbf{Depende da rede e do classificador.} Comparamos pares de redes iguais exceto pelos kernels. A Figura~\ref{fig:pares} mostra cada par e a mediana, ao lado dos outros fatores.
 
 Trocar 11-5-3-3-3 por 3\by3 custa 1,5 p.p. (IC de $-$3,3 a $+$0,7, que inclui o zero) e reduz os MACs em 25\%. Trocar 3\by3 por 2\by2 custa 2,5 p.p. (IC de $-$3,7 a $-$1,1) e reduz os MACs em 54\%. O alternado 3-2 empata com o 3\by3 na mediana e usa 24\% menos MACs.
 Cada um desses passos pesa menos que o stride, o BN, o Dropout ou o pré-treino, que mudam a acurácia em 4 a 10 p.p. Já a troca completa de 11-5-3-3-3 por 2\by2 custa 4,7 p.p. e perde em todos os 9 pares, um efeito da mesma ordem desses fatores.
 
-\begin{table*}[!t]
-\caption{Efeito de cada fator: mediana de B $-$ A entre pares de redes iguais no resto (seed 42)}
-\label{tab:fatores_efeito}
+\begin{figure*}[!t]
 \centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{@{}lccccccc@{}}
-\toprule
-\textbf{A $\rightarrow$ B} & \textbf{Pares} & \textbf{FP32 (p.p.)} & \textbf{IC 95\%} & \textbf{B acima de A} & \textbf{INT8 (p.p.)$^\ddagger$} & \textbf{MACs} & \textbf{Parâmetros} \\
-\midrule
-Kernel 11-5-3-3-3 $\rightarrow$ 3\by3 & 9 & $-$1,5 & [$-$3,3; $+$0,7] & 2 de 9 & $-$0,2 (5) & $-$25\% & $-$1\% \\
-Kernel 3\by3 $\rightarrow$ 2\by2 & 13 & $-$2,5 & [$-$3,7; $-$1,1] & 2 de 13 & $-$1,7 (9) & $-$54\% & $-$20\% \\
-Kernel 11-5-3-3-3 $\rightarrow$ 2\by2 & 9 & $-$4,7 & [$-$6,5; $-$0,7] & 0 de 9 & $-$2,8 (6) & $-$56\% & $-$5\% \\
-Kernel 3\by3 $\rightarrow$ alternado 3-2 & 12 & 0,0 & [$-$0,7; $+$0,5] & 6 de 12 & $+$0,1 (7) & $-$24\% & $-$6\% \\
-3\by3 $\rightarrow$ dois 3\by3 por estágio & 2 & $+$5,3 & $+$2,4 e $+$8,1$^\dagger$ & 2 de 2 & $+$5,4 & $+$148\% & $+$65\% \\
-2\by2 $\rightarrow$ dois 2\by2 por estágio & 2 & $+$8,0 & $+$4,9 e $+$11,2$^\dagger$ & 2 de 2 & $+$8,2 & $+$133\% & $+$62\% \\
-Conv1 3\by3 $\rightarrow$ 11\by11, corpo 3\by3 & 2 & $+$1,3 & $+$1,0 e $+$1,6$^\dagger$ & 2 de 2 & $+$1,4 & $+$12\% & 0\% \\
-Conv1 2\by2 $\rightarrow$ 11\by11, corpo 2\by2 & 2 & $+$3,7 & $+$3,3 e $+$4,1$^\dagger$ & 2 de 2 & $+$3,9 & $+$24\% & $+$1\% \\
-FC + Dropout $\rightarrow$ GAP & 19 & $+$2,1 & [$+$0,3; $+$5,4] & 15 de 19 & $+$0,7 (13) & $-$25\% & $-$96\% \\
-BN: não $\rightarrow$ sim & 8 & $+$5,2 & [$+$3,5; $+$7,6] & 8 de 8 & $+$3,8 (5) & 0\% & 0\% \\
-Stride da conv1: 4 $\rightarrow$ 2 & 8 & $+$9,7 & [$+$8,1; $+$12,4] & 8 de 8 & $+$10,2 (1) & $+$202\% & $+$50\% \\
-3 max-pools 3\by3 $\rightarrow$ 2 max-pools 2\by2 & 8 & $+$0,8 & [$-$1,3; $+$2,7] & 4 de 8 & $-$1,3 (1) & $+$57\% & $+$88\% \\
-Dropout: 0 $\rightarrow$ 0,5 (só FC) & 6 & $+$4,9 & [$+$0,2; $+$5,6] & 5 de 6 & $+$0,7 (3) & 0\% & 0\% \\
-Pré-treino ImageNet & 4 & $+$4,1 & [$+$1,4; $+$7,9] & 4 de 4 & $+$1,8 (2) & 0\% & 0\% \\
-\bottomrule
-\multicolumn{8}{@{}l}{\footnotesize $^\dagger$ Com dois pares não há IC: são os próprios valores, com GAP + BN e com FC + Dropout + BN, nessa ordem; MACs e parâmetros são a média dos dois.} \\
-\multicolumn{8}{@{}l}{\footnotesize $^\ddagger$ Sem os pares com treino marcado (INT8 inflado pelo QAT); entre parênteses, quantos pares sobram quando são menos que todos.}
-\end{tabular}
-\end{table*}
+\includegraphics[width=\textwidth,trim=0 0 0 49,clip]{phase_11_kernel_size_comparison/11_factorial_matched_pairs.png}
+\caption{Efeito de trocar um fator de cada vez (seed 42). Cada ponto é um par de redes iguais no resto, com o valor B $-$ A. O losango é a mediana dos pares, e a barra, seu IC 95\%. Com dois pares não há barra: eles são a rede com GAP + BN e a com FC + Dropout + BN. No INT8, a mediana e o IC
+deixam de fora os pares com anel (INT8 inflado pelo QAT). Pontos vazados estão dentro da variação entre seeds. As dez primeiras linhas são de kernel. À direita, o número de pares e a variação mediana de MACs (custo efetivo) e de parâmetros.}
+\label{fig:pares}
+\end{figure*}
 
 As medianas misturam situações diferentes. A Tabela~\ref{tab:grade} separa as duas colunas com BN da AlexNet, e a Figura~\ref{fig:grade} mostra as quatro.
 
@@ -563,7 +541,7 @@ conv1 maior, a parcela dos MACs que o acelerador pode executar cai de 98,4\% par
 \label{fig:conv1}
 \end{figure*}
 
-\textbf{Duas convoluções pequenas por estágio.} O ganho depende do classificador, e por isso as medianas da Tabela~\ref{tab:fatores_efeito} ($+$5,3 e $+$8,0 p.p.) precisam ser lidas com cuidado, já que cada uma resume dois pares. Com GAP e BN, a configuração que recomendamos, o ganho é de $+$2,37 p.p. no 3\by3 e $+$4,86 p.p. no 2\by2 (seed 42, como na Tabela~\ref{tab:fatores_efeito}). Com FC + Dropout + BN, é de
+\textbf{Duas convoluções pequenas por estágio.} O ganho depende do classificador, e por isso as medianas da Figura~\ref{fig:pares} ($+$5,3 e $+$8,0 p.p.) precisam ser lidas com cuidado, já que cada uma resume dois pares. Com GAP e BN, a configuração que recomendamos, o ganho é de $+$2,37 p.p. no 3\by3 e $+$4,86 p.p. no 2\by2 (seed 42, como na Figura~\ref{fig:pares}). Com FC + Dropout + BN, é de
 $+$8,15 e $+$11,21 p.p. Os MACs sobem 169\% com GAP e BN, e 127\% (3\by3) e 97\% (2\by2) com FC. Com GAP e BN, a rede 2\by2 com dois por estágio (57,25\%, 201M) fica até acima da 3\by3 equivalente (55,87\%, 451M), com uma seed cada.
 
 \textbf{Por que dois por estágio ajudam?} O campo receptivo efetivo dá uma pista (Figura~\ref{fig:erf}). A área com metade da influência vai de 17,8\% para 29,8\% da imagem no 2\by2, e de 23,5\% para 33,1\% no 3\by3. Já a conv1 11\by11 quase não amplia essa área (18,5\% contra 17,8\%), embora melhore a acurácia. Seu ganho, portanto, não parece
@@ -587,7 +565,7 @@ $-$0,44 a $+$0,77 p.p.
 
 \begin{figure*}[!t]
 \centering
-\includegraphics[width=0.8\textwidth,trim=0 0 0 49.4,clip]{phase_11_kernel_size_comparison/16_quantization_robustness.png}
+\includegraphics[width=\textwidth,trim=0 0 0 36,clip]{phase_11_kernel_size_comparison/16_quantization_robustness.png}
 \caption{Quanto cada rede muda do FP32 para o INT8, por tipo de kernel (seed 42, top-1 no teste). Valores negativos indicam perda em INT8. Sem a marca do anel, todas as redes ficam perto de zero, seja qual for o kernel. Os pontos altos, com anel, são treino extra do QAT. O quadrado marca a AlexNet sem adaptação. Grupos: original = 11-5-3-3-3 ou 7-3 (ResNet-18); conv1 grande = conv1 11\by11 ou 7\by7 com corpo pequeno; 2 por estágio inclui a conv1 profunda da ResNet-18; outras = redes de compensação e MobileNetV2.}
 \label{fig:int8}
 \end{figure*}
@@ -606,15 +584,15 @@ estágio. Na parte cara, pela VGG16. Isso vale para o estudo principal: as redes
 
 \begin{figure*}[!t]
 \centering
-\includegraphics[width=0.86\textwidth,trim=0 0 0 49.4,clip]{phase_11_kernel_size_comparison/13_pareto_accuracy_cost.png}
+\includegraphics[width=\textwidth,trim=0 0 0 49.4,clip]{phase_11_kernel_size_comparison/13_pareto_accuracy_cost.png}
 \caption{Acurácia INT8 e custo efetivo em MACs (estudo principal, seed 42). A linha tracejada liga as redes que nenhuma outra supera nos dois critérios ao mesmo tempo; as redes com anel ficam fora dela, porque seu INT8 está inflado pelo QAT. O quadrado marca a AlexNet sem adaptação.}
 \label{fig:pareto}
 \end{figure*}
 
 \begin{figure*}[!t]
 \centering
-\includegraphics[width=0.86\textwidth,trim=0 0 0 62.9,clip]{phase_11_kernel_size_comparison/30_winograd_eligible.png}
-\caption{Acurácia INT8 e parcela dos MACs em convoluções que um acelerador Winograd pode executar (stride 1, kernel 2\by2 ou 3\by3, sem grupos; seed 42, custo efetivo). Sem contar as redes com anel, as mais precisas, no canto superior direito, cabem quase inteiras. A conta usa só a geometria das camadas. Além das redes da Figura~\ref{fig:pareto}, entram as de imagem ampliada para 224 px e as VGG16 com um kernel por bloco (cinza).}
+\includegraphics[width=\textwidth,trim=0 0 0 62.9,clip]{phase_11_kernel_size_comparison/30_winograd_eligible.png}
+\caption{Acurácia INT8 e parcela dos MACs em convoluções que um acelerador Winograd pode executar (stride 1, kernel 2\by2 ou 3\by3, sem grupos; seed 42, custo efetivo). A linha tracejada liga as redes que nenhuma outra supera nos dois critérios (sem as de anel). Sem contar as redes com anel, as mais precisas, no canto superior direito, cabem quase inteiras. A conta usa só a geometria das camadas. Além das redes da Figura~\ref{fig:pareto}, entram as de imagem ampliada para 224 px e as VGG16 com um kernel por bloco (cinza).}
 \label{fig:winograd}
 \end{figure*}
 
@@ -667,7 +645,7 @@ DepthwiseSep & 46,53 & 46,66 & 0,31 & 20 & 0,0 \\
 \begin{figure*}[!t]
 \centering
 \includegraphics[width=\textwidth,trim=0 0 0 48.5,clip]{phase_12_robustness/04_kernel_effect_everywhere.png}
-\caption{O efeito do kernel em cada cenário: duas redes iguais exceto pelo kernel (top-1 no teste de cada conjunto de dados). O custo do 2\by2 aparece em todas as linhas do primeiro grupo e some no último, em que os MACs são iguais. O grupo do meio compara os kernels originais com 3\by3. Um ponto muito à direita no INT8 da ResNet-18, com anel, é um caso de INT8 inflado pelo QAT.}
+\caption{O efeito do kernel em cada cenário: duas redes iguais exceto pelo kernel (top-1 no teste de cada conjunto de dados: Tiny ImageNet, salvo onde diz CIFAR-100; entre parênteses, o número de seeds). O custo do 2\by2 aparece em todas as linhas do primeiro grupo e some no último, em que os MACs são iguais (o 2\by2 com 1,5 vez os canais, ou o 3\by3 com 0,67 vez). O grupo do meio compara os kernels originais (11-5-3-3-3 na AlexNet, 7\by7 na ResNet-18) com 3\by3. Um ponto muito à direita no INT8 da ResNet-18, com anel, é um caso de INT8 inflado pelo QAT.}
 \label{fig:cenarios}
 \end{figure*}
 
@@ -950,15 +928,7 @@ F. N. Iandola, S. Han, M. W. Moskewicz, K. Ashraf, W. J. Dally, and K. Keutzer, 
 \subsection{Figuras de apoio}
 \label{sec:apendice}
 
-As figuras a seguir trazem o detalhe por trás do texto: cada par de redes da Tabela~\ref{tab:fatores_efeito}, o efeito do stride da conv1, as imagens trocadas entre FP32 e INT8, a transferência para o CIFAR-100, a VGG16 com um kernel por bloco e as curvas de treino e de QAT, que mostram que as redes param de melhorar antes do fim das épocas.
-
-\begin{figure*}[!t]
-\centering
-\includegraphics[width=0.86\textwidth,trim=0 0 0 49,clip]{phase_11_kernel_size_comparison/11_factorial_matched_pairs.png}
-\caption{Efeito de trocar um fator de cada vez, em FP32 e em INT8 (seed 42, comparações com 3 ou mais pares). Cada ponto é um par de redes, e
-o losango é a mediana. As quatro primeiras linhas são de kernel. Pontos vazados estão dentro da variação entre seeds, e os com anel têm INT8 inflado pelo QAT.}
-\label{fig:pares}
-\end{figure*}
+As figuras a seguir trazem o detalhe por trás do texto: o efeito do stride da conv1, as imagens trocadas entre FP32 e INT8, a transferência para o CIFAR-100, a VGG16 com um kernel por bloco e as curvas de treino e de QAT, que mostram que as redes param de melhorar antes do fim das épocas.
 
 \begin{figure*}[!t]
 \centering
@@ -969,7 +939,7 @@ o losango é a mediana. As quatro primeiras linhas são de kernel. Pontos vazado
 
 \begin{figure*}[!t]
 \centering
-\includegraphics[width=0.86\textwidth,trim=0 0 0 62.9,clip]{phase_11_kernel_size_comparison/20_int8_prediction_flips.png}
+\includegraphics[width=\textwidth,trim=0 0 0 63.1,clip]{phase_11_kernel_size_comparison/20_int8_prediction_flips.png}
 \caption{Imagens de teste que mudam entre certo e errado do FP32 para o INT8 (seed 42). À direita, sobre a diagonal, o saldo é zero. Só as redes com anel ficam claramente acima dela. O quadrado marca a AlexNet sem adaptação; os grupos são os da Figura~\ref{fig:int8}.}
 \label{fig:flips}
 \end{figure*}

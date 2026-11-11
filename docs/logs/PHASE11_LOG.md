@@ -2429,3 +2429,24 @@ tupi3/5/6, 2 h; dry-run checked). QOS `short` outranks `normal`, so the feeder w
 on the login node polls every 10 min and starts `feed_queue.sh` (QOS=short, MAX=8) only once no normal-QOS `train-` job is
 pending. Before it, PCAD pulled 7770117: the 36 untracked Stage B files and the 20 pilot files it had modified moved aside, pulled,
 all 56 `cmp`-identical to the checkout, copies deleted.
+
+## Factor table becomes the matched-pairs figure; legends compacted (2026-11-11, later)
+
+User's request: the article's factor table (`tab:fatores_efeito`) replaced by the matched-pairs figure, and the figures whose legend
+took more room than the plot made readable. The figure (`11_factorial_matched_pairs.png`, `fig:pares`) moves from the Appendix to the
+table's place and carries everything the table had:
+- `MIN_PAIRS` 3 -> 2: the four 2-pair rows of the table (two per stage, conv1 11x11) plus two it left out (conv2 5x5 under conv1 11x11,
+  body 3x3 -> 2x2 under conv1 11x11); with 2 pairs no CI bar (all six are the GAP + BN and FC + Dropout + BN pairs).
+- INT8 median and CI without the pairs holding an early-best cell, as the table did (`int8_clean_median`). Before, the figure's INT8
+  diamond kept them and disagreed with the table (11-5-3-3-3 -> 2x2: -5.1 in the figure, -2.8 in the table).
+- Pairs, median MACs and parameter change in a column beside the INT8 panel. No number changes: the CSVs regenerate byte-identical.
+
+Legends: one row, or one column beside the plot, with short labels whose long form is in the caption (`EARLY_SHORT`, "AlexNet sem
+adaptar", "outras redes"); `EARLY_LABEL` itself is unchanged, so the figures not touched here keep it. Figure 16 has its legend inside
+the empty top band; 13 / 30 (`fig_pareto`) one column beside the axes with the numbered front names at its end (the separate key box is
+gone); 20 one row; Phase 12's 04 shorter row labels ("AlexNet, taxa 0,005 (1)", Tiny ImageNet unless a row says CIFAR-100, the seed
+count in parentheses). 13, 16, 20, 30 and the pairs figure now print at `\textwidth`; trims re-measured. Not in the article:
+15_kernel_by_geometry and 17_latency_vs_macs change only through the shared labels (`BASE_HANDLE`, `FLABEL`), 25_accuracy_vs_size
+also gets `fig_pareto`'s legend column. The article goes from 20 to 21 pages. Follow-up (user): figure 20 drawn taller
+(figsize height 3.4 -> 4.4, same trim); the legend's baseline square shrunk (`BASE_HANDLE` ms 13 -> 10) and, in `fig_pareto`'s
+tight column, listed apart from the early-best ring: stacked, the two overlapped.

@@ -58,7 +58,8 @@ LAYOUTS = {"layout original": "layout original = o da AlexNet original: conv1 st
 # effect (docs/logs/PHASE11_LOG.md "Early best FP32 epoch", 2026-10-13). The figures mark these runs; none is dropped.
 EARLY_FRAC = 0.8
 EARLY_GRAY = "#6b6b6b"
-EARLY_LABEL = "INT8 inflado pelo QAT\n(melhor época FP32 antes de 80% do treino)"  # two lines: legends of narrow figures
+EARLY_SHORT = "INT8 inflado pelo QAT"  # legends whose caption explains the mark (the article's figures 7-10, 13, 15)
+EARLY_LABEL = EARLY_SHORT + "\n(melhor época FP32 antes de 80% do treino)"  # two lines: legends of narrow figures
 
 
 def load(*roots: Path, prefix: str = "phase_11_") -> pd.DataFrame:
@@ -193,11 +194,11 @@ def early_ring(ax, x, y, s=170):
     ax.scatter(x, y, s=s, facecolors="none", edgecolors=EARLY_GRAY, lw=1.4, zorder=6)
 
 
-def early_handle(kind):
+def early_handle(kind, label=EARLY_LABEL):
     """Legend entry for the early-best mark: 'ring' (scatter figures) or 'hatch' (bar figures)."""
     if kind == "ring":
-        return Line2D([], [], marker="o", mfc="none", mec=EARLY_GRAY, mew=1.4, ms=12, ls="", label=EARLY_LABEL)
-    return Patch(facecolor="white", hatch="///", edgecolor=EARLY_GRAY, label=EARLY_LABEL)
+        return Line2D([], [], marker="o", mfc="none", mec=EARLY_GRAY, mew=1.4, ms=12, ls="", label=label)
+    return Patch(facecolor="white", hatch="///", edgecolor=EARLY_GRAY, label=label)
 
 
 def int8_bar(ax, x, value, width, color, early=False):

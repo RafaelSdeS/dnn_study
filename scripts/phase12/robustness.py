@@ -26,7 +26,7 @@ from matplotlib.patches import Patch
 
 from ml.model_registrations import CELL_FACTORS
 from ml.plotting import AMBER, BLUE, GREEN, NEUTRAL, RED, TEXT_SECONDARY, apply_report_style
-from scripts.phase11.analyze_geometry import (ROOT, RUNS, early_handle, early_ring, int8_bar, load, noise_band,
+from scripts.phase11.analyze_geometry import (EARLY_SHORT, ROOT, RUNS, early_handle, early_ring, int8_bar, load, noise_band,
                                               precision_handles, savefig)
 from scripts.phase11.design_figures import FMARK, KCOLOR, KLABEL, SEED_HANDLES, seed_dots
 
@@ -147,7 +147,8 @@ VK = "vgg16_{}_stride1_5pool2x2_map2_gap_bn".format
 RK = "resnet18_{}_stride2_1pool3x3_map2_gap_bn".format
 CAK = "alexnet_{}_stride2_2pool2x2_map4_gap_bn_in32".format  # the same nets on CIFAR-100
 CVK = "vgg16_{}_stride1_5pool2x2_map1_gap_bn_in32".format
-SMALL, ORIG, SAME = "3×3 → 2×2", "kernel original → 3×3\n(AlexNet 11-5-3-3-3, ResNet-18 7×7)", "3×3 → 2×2 com os mesmos MACs"
+# short labels (2026-11-11: they took half the printed width): Tiny ImageNet unless a row says CIFAR-100, as the caption does
+SMALL, ORIG, SAME = "3×3 → 2×2", "original → 3×3", "3×3 → 2×2, mesmos MACs"
 
 
 def everywhere_rows(p11, p12):
@@ -156,16 +157,16 @@ def everywhere_rows(p11, p12):
     at = lambda exp: lambda k: p12[p12.exp.str.startswith(exp) & (p12.key == k)]  # noqa: E731
     rows = []
     for a, b, group in [("k3x3", "k2x2", SMALL), ("k11-5-3", "k3x3", ORIG)]:
-        for lr, get in [("0,01 (a receita)", tiny), ("0,005", at("lr_half")), ("0,02", at("lr_double"))]:
-            rows.append((group, f"AlexNet · Tiny ImageNet · taxa {lr}", get(AK(a)), get(AK(b))))
+        for lr, get in [("0,01", tiny), ("0,005", at("lr_half")), ("0,02", at("lr_double"))]:
+            rows.append((group, f"AlexNet, taxa {lr}", get(AK(a)), get(AK(b))))
         if group == SMALL:
-            rows.append((group, "VGG16 · Tiny ImageNet", tiny(VK(a)), tiny(VK(b))))
-        rows.append((group, "ResNet-18 · Tiny ImageNet", tiny(RK("k7-3" if a == "k11-5-3" else a)), tiny(RK(b))))
-        rows.append((group, "AlexNet · CIFAR-100", at("cifar100")(CAK(a)), at("cifar100")(CAK(b))))
+            rows.append((group, "VGG16", tiny(VK(a)), tiny(VK(b))))
+        rows.append((group, "ResNet-18", tiny(RK("k7-3" if a == "k11-5-3" else a)), tiny(RK(b))))
+        rows.append((group, "AlexNet, CIFAR-100", at("cifar100")(CAK(a)), at("cifar100")(CAK(b))))
         if group == SMALL:
-            rows.append((group, "VGG16 · CIFAR-100", at("cifar100")(CVK(a)), at("cifar100")(CVK(b))))
-    rows += [(SAME, "AlexNet · MACs do 3×3 (2×2, canais ×1,5)", tiny(AK("k3x3")), tiny(AK("k2x2") + "_w150")),
-             (SAME, "AlexNet · MACs do 2×2 (3×3, canais ×0,67)", tiny(AK("k3x3") + "_w67"), tiny(AK("k2x2")))]
+            rows.append((group, "VGG16, CIFAR-100", at("cifar100")(CVK(a)), at("cifar100")(CVK(b))))
+    rows += [(SAME, "2×2, canais ×1,5", tiny(AK("k3x3")), tiny(AK("k2x2") + "_w150")),
+             (SAME, "3×3, canais ×0,67", tiny(AK("k3x3") + "_w67"), tiny(AK("k2x2")))]
     return [r for r in rows if len(r[2]) and len(r[3])]
 
 
@@ -183,7 +184,7 @@ def fig_everywhere(p11, p12, figs):
             ticks.append((group, True))
         n = len(a[["seed"]].merge(b[["seed"]], on="seed"))
         y[(group, label)] = len(ticks)
-        ticks.append((f"{label} ({n} {'seed' if n == 1 else 'seeds'})", False))
+        ticks.append((f"{label} ({n})", False))  # (n) = seeds, said in the caption
     fig, axes = plt.subplots(1, 2, figsize=(8.9, 0.3 * len(ticks) + 1.8), sharey=True, layout="constrained")  # \textwidth
     for ax, m in zip(axes, ["fp32", "int8"]):
         ax.axvline(0, color="k", lw=0.8)
@@ -206,12 +207,12 @@ def fig_everywhere(p11, p12, figs):
     axes[0].set_yticklabels([text for text, _ in ticks], fontsize=9)
     for t, (_, bold) in zip(axes[0].get_yticklabels(), ticks):
         t.set_weight("bold" if bold else "normal")
-    handles = [Line2D([], [], marker="o", color=BLUE, ls="", ms=5, label="uma seed: B − A com a mesma seed nos dois lados"),
+    handles = [Line2D([], [], marker="o", color=BLUE, ls="", ms=5, label="uma seed"),
                Line2D([], [], marker="D", color=RED, ls="", ms=7, label="média das seeds"),
-               Line2D([], [], marker="o", ls="", ms=5, mfc="none", mec=BLUE, label="vazado = dentro do ruído entre seeds das duas redes")]
+               Line2D([], [], marker="o", ls="", ms=5, mfc="none", mec=BLUE, label="dentro do ruído entre seeds")]
     if any(a.early_best.any() or b.early_best.any() for *_, a, b in rows):
-        handles.append(early_handle("ring"))
-    fig.legend(handles=handles, loc="outside lower center", ncol=2, fontsize=9)
+        handles.append(early_handle("ring", EARLY_SHORT))
+    fig.legend(handles=handles, loc="outside lower center", ncol=len(handles), fontsize=9)
     fig.suptitle("O custo do kernel pequeno é o mesmo em todo lugar? Duas redes iguais exceto pelo kernel, em cada cenário\n"
                  "datasets, taxas e famílias diferentes; e o 3×3 → 2×2 com o custo de cálculo igualado · top-1 no conjunto de teste de cada dataset",
                  fontsize=11)

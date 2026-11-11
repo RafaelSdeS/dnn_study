@@ -34,7 +34,7 @@ from matplotlib.patches import Patch
 from configs.loader import load_config
 from ml.plotting import BLUE, GRID, NEUTRAL, RED, TEXT_PRIMARY, apply_report_style
 from ml.reporting import holm, mcnemar_p, wilson_ci
-from scripts.phase11.analyze_geometry import (BASE_KEY, BASE_LABEL, EARLY_LABEL, LAYOUTS, REGIME_LABEL, RESNET_BASE, TABLES,
+from scripts.phase11.analyze_geometry import (BASE_KEY, BASE_LABEL, EARLY_LABEL, EARLY_SHORT, LAYOUTS, REGIME_LABEL, RESNET_BASE, TABLES,
                                               VGG_BASE, band_for, early_handle, early_ring, noise_bands, pair_band,
                                               reference_handles, reference_lines, savefig)
 from scripts.phase11.design_figures import K4, KCOLOR, KLABEL, cell_label, frame
@@ -328,19 +328,20 @@ def summarize_pairs(pairs):
     return pd.DataFrame(rows)
 
 
-MIN_PAIRS = 3  # figure 11 summarizes a contrast over >= 3 pairs; with 1-2 the median and its CI are the pairs themselves
+MIN_PAIRS = 2  # the article's factor figure (2026-11-11: it replaced the factor table); with 2 pairs no CI, the dots are the pairs
 
 
 def fig_matched_pairs(pairs, summary, n_cells):
     """FP32 and INT8 only: the INT8 - FP32 change of each net is figures 12/16's. Each pair is judged by its own two cells'
     seed band (band_<m>: hollow = inside it), so no grey spans -- three regimes' spans overlapped into an unreadable
-    background. An INT8 pair with an early-best cell is ringed (QAT's extra training, not quantization). Only the contrasts
-    with MIN_PAIRS pairs, kernels above a thin line, the other factors below (2026-10-24: 17 rows, 23 once the ResNet block
-    lands); the 1-2 pair ones have bar figures of their own (10, 27, 28) and every one stays in factorial_pair_summary.csv."""
+    background. An INT8 pair with an early-best cell is ringed and left out of the INT8 median and CI (QAT's extra training,
+    not quantization: summarize_pairs' int8_clean_*). Only the contrasts with MIN_PAIRS pairs, kernels above a thin line,
+    the other factors below; beside the INT8 panel, the pairs and the median MACs / parameter change -- the columns of the
+    article's old factor table. Every contrast stays in factorial_pair_summary.csv."""
     summary = summary[summary.n_pairs >= MIN_PAIRS]
     summary = pd.concat([summary[summary.factor == "kernels"], summary[summary.factor != "kernels"]])
     n_other = int((summary.factor != "kernels").sum())
-    fig, axes = plt.subplots(1, 2, figsize=(7.7, 0.3 * len(summary) + 2.0), sharey=True, layout="constrained")  # 0.86 \textwidth
+    fig, axes = plt.subplots(1, 2, figsize=(8.9, 0.26 * len(summary) + 1.4), sharey=True, layout="constrained")  # \textwidth
     y = {c: i for i, c in enumerate(summary.contrast[::-1])}
     for ax, m in zip(axes, ["fp32", "int8"]):
         ax.axvline(0, color="k", lw=0.8)
@@ -356,25 +357,31 @@ def fig_matched_pairs(pairs, summary, n_cells):
             ax.scatter(v[~inside], yy[~inside], s=16, color=BLUE)
             ax.scatter(v[inside], yy[inside], s=12, facecolors="none", edgecolors=BLUE, lw=0.9)
             early_ring(ax, v[early], yy[early], s=60)  # the one early-best mark of every scatter figure
-            ax.scatter(v.median(), y[s.contrast], marker="D", s=50, zorder=3, color=RED)
-            ax.hlines(y[s.contrast], *bootstrap_median_ci(v), color=RED, lw=2, zorder=2)
+            clean = v[~early]
+            ax.scatter(clean.median(), y[s.contrast], marker="D", s=50, zorder=3, color=RED)
+            if len(clean) > 2:  # with 2 the bootstrap CI is the two pairs themselves, already drawn
+                ax.hlines(y[s.contrast], *bootstrap_median_ci(clean), color=RED, lw=2, zorder=2)
         ax.set_title(f"Top-1 {m.upper()}: B − A (p.p.)", fontsize=9)
         ax.set_xlabel("← A melhor   ·   B melhor →", fontsize=9)
     axes[0].text(0, 1.0, "fator trocado: A → B", transform=axes[0].transAxes, ha="right", va="bottom", fontsize=9, weight="bold")
-    n = dict(zip(summary.contrast, summary.n_pairs))
     axes[0].set_yticks(list(y.values()))
-    axes[0].set_yticklabels([f"{c} ({n[c]} {'par' if n[c] == 1 else 'pares'})" for c in y], fontsize=9)
-    handles = [Line2D([], [], marker="o", color=BLUE, ls="", ms=5, label="um par de redes iguais exceto no fator"),
-               Line2D([], [], marker="D", color=RED, ls="-", ms=7, label="mediana dos pares (barra = IC 95%)")]
+    axes[0].set_yticklabels(list(y), fontsize=9)
+    pct = lambda x: f"{x:+.0f}%" if round(x) else "0%"  # noqa: E731
+    for x, head, col in [(1.13, "pares", lambda s: str(s.n_pairs)), (1.38, "MACs", lambda s: pct(s.macs_pct)),
+                         (1.64, "parâm.", lambda s: pct(s.params_pct))]:  # right-aligned columns in axes fractions
+        axes[1].text(x, 1.0, head, transform=axes[1].transAxes, ha="right", va="bottom", fontsize=9, weight="bold")
+        for s in summary.itertuples():
+            axes[1].text(x, y[s.contrast], col(s), transform=axes[1].get_yaxis_transform(), ha="right", va="center", fontsize=9)
+    handles = [Line2D([], [], marker="o", color=BLUE, ls="", ms=5, label="um par de redes"),
+               Line2D([], [], marker="D", color=RED, ls="-", ms=7, label="mediana (barra: IC 95%)")]
     if pairs.filter(like="band_").notna().any().any():
-        handles.append(Line2D([], [], marker="o", ls="", ms=5, mfc="none", mec=BLUE,
-                              label="vazado = dentro do ruído entre seeds"))
+        handles.append(Line2D([], [], marker="o", ls="", ms=5, mfc="none", mec=BLUE, label="dentro do ruído entre seeds"))
     if pairs.early.any():
-        handles.append(early_handle("ring"))
-    fig.legend(handles=handles, loc="outside lower center", ncol=2, fontsize=9)
+        handles.append(early_handle("ring", EARLY_SHORT))
+    fig.legend(handles=handles, loc="outside lower center", ncol=len(handles), fontsize=9)
     fig.suptitle("Efeito de trocar um fator de cada vez (A → B, todo o resto igual)\n"
                  f"cada ponto = um par de redes, valor = B − A · seed 42\n"
-                 f"só os contrastes com ≥ {MIN_PAIRS} pares; os de 1–2 pares estão nas figuras 10, 27 e 28", fontsize=11)
+                 f"contrastes com ≥ {MIN_PAIRS} pares (com 2, sem IC) · INT8: mediana sem os pares com anel", fontsize=11)
     savefig(fig, "11_factorial_matched_pairs.png")
 
 

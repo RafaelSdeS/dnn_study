@@ -36,9 +36,9 @@ from matplotlib.patches import Patch
 
 from configs.loader import load_config
 from ml.plotting import AMBER, BLUE, GREEN, GRID, NEUTRAL, PURPLE, RED, TEXT_PRIMARY, TEXT_SECONDARY, apply_report_style, shade
-from scripts.phase11.analyze_geometry import (ARCHIVE, BASE_KEY, BASE_LABEL, EARLY_LABEL, FIGS, LOG_EPOCH, REFERENCE_REGIME, ROOT,
-                                              REGIME_LABEL, RUNS, band_for, early_handle, early_ring, healthy_run, load, noise_band,
-                                              noise_bands, reference_lines, savefig)
+from scripts.phase11.analyze_geometry import (ARCHIVE, BASE_KEY, BASE_LABEL, EARLY_LABEL, EARLY_SHORT, FIGS, LOG_EPOCH,
+                                              REFERENCE_REGIME, ROOT, REGIME_LABEL, RUNS, band_for, early_handle, early_ring,
+                                              healthy_run, load, noise_band, noise_bands, reference_lines, savefig)
 
 PREVIEW = ROOT / "results/archive_adamw_recipe/figures_generated/phase_11_preview"
 PREVIEW_NOTE = ("PRÉVIA — runs antigas: receita AdamW, split de validação, INT8 antes das correções de 30/09–03/10; "
@@ -221,11 +221,12 @@ def base_ring(ax, x, y):
     ax.scatter(x, y, s=320, marker="s", facecolors="none", edgecolors="k", lw=1.5, zorder=4)
 
 
-BASE_HANDLE = Line2D([], [], marker="s", mfc="none", mec="k", mew=1.5, ls="", ms=13, label=BASE_LABEL)
+BASE_HANDLE = Line2D([], [], marker="s", mfc="none", mec="k", mew=1.5, ls="", ms=10,  # ms 13 ran into the ring below it
+                     label="AlexNet sem adaptar")  # the captions say which one
 
 
 FMARK = {"alexnet": "o", "vgg16": "s", "resnet18": "D", "família": "X"}  # figures 13/17/25: the marker is the family
-FLABEL = {"alexnet": "AlexNet", "vgg16": "VGG16", "resnet18": "ResNet-18", "família": "rede de compensação / outra família"}
+FLABEL = {"alexnet": "AlexNet", "vgg16": "VGG16", "resnet18": "ResNet-18", "família": "outras redes"}
 EFF_NOTE = "custo efetivo: sem os pesos do classificador FC que só multiplicam as cópias repetidas pelo AdaptiveAvgPool"
 
 
@@ -233,13 +234,12 @@ def family_handles(d):
     return [Line2D([], [], marker=m, color=TEXT_SECONDARY, ls="", ms=8, label=FLABEL[f]) for f, m in FMARK.items() if f in set(d.family)]
 
 
-def fig_pareto(df, figs, note, panels, name, question, high_x=False,
-               front_label="fronteira: nenhuma rede é mais barata e melhor"):
+def fig_pareto(df, figs, note, panels, name, question, high_x=False):
     """Top-1 against one cost per panel, panels = [(accuracy column, cost column, x label)] (figure 13: INT8 x MACs, 25:
     FP32 x FP32 size and INT8 x INT8 size): colour = kernel, marker = family. The fronts' nets are numbered (one numbering
-    for all panels) and named in a key beside the plot (names on the points overlapped). An INT8 front leaves out the
-    early-best runs (2026-10-26: QAT's extra training, not quantization, put the pretrained MobileNetV2 on it; they stay
-    drawn, ringed). high_x: x is a benefit, not a cost (figure 30's Winograd share): more is better, linear axis."""
+    for all panels) and named at the end of the legend column beside the plot (names on the points overlapped). An INT8
+    front leaves out the early-best runs (2026-10-26: QAT's extra training, not quantization, put the pretrained
+    MobileNetV2 on it; they stay drawn, ringed). high_x: x is a benefit, not a cost (figure 30's Winograd share): more is better, linear axis."""
     d = seed42(df).dropna(subset=["int8"])
     sign = -1 if high_x else 1
     fronts = []
@@ -247,8 +247,8 @@ def fig_pareto(df, figs, note, panels, name, question, high_x=False,
         e = d[~d.early_best] if acc == "int8" else d
         fronts.append(e[pareto_front(sign * e[x], e[acc])].sort_values(x))
     num = {i: n + 1 for n, i in enumerate(d.loc[pd.concat(fronts).index.unique()].sort_values("int8").index)}
-    # one panel: the article prints it at 0.86 \textwidth with the key beside it -- drawn near that size
-    fig, axes = plt.subplots(1, len(panels), figsize=(7.6, 5.8) if len(panels) == 1 else (16, 7), sharey=True, squeeze=False,
+    # one panel: the article prints it at \textwidth with the legend beside it -- drawn near that size
+    fig, axes = plt.subplots(1, len(panels), figsize=(8.9, 5.8) if len(panels) == 1 else (16, 7), sharey=True, squeeze=False,
                              layout="constrained")
     for ax, (acc, x, xlabel), front in zip(axes[0], panels, fronts):
         for r in d.itertuples():
@@ -272,18 +272,17 @@ def fig_pareto(df, figs, note, panels, name, question, high_x=False,
     axes[0, 0].set_ylabel("Top-1 (%)" if len(panels) > 1 else f"Top-1 {panels[0][0].upper()} (%)")
     handles = (legend_kernels(d.kernels)
                + ([Patch(color=NEUTRAL, label="blocos mistos 3×3 / 2×2 (VGG16)")] if d.kernels.fillna("").str.startswith("kblocks").any() else [])
-               + family_handles(d)
-               + ([Line2D([], [], marker="o", color=TEXT_SECONDARY, mec="k", mew=1.3, ls="", ms=8, label="contorno preto = pré-treino ImageNet")]
+               + family_handles(d) + [BASE_HANDLE]  # the square apart from the ring: in this tight column they overlapped
+               + ([Line2D([], [], marker="o", color=TEXT_SECONDARY, mec="k", mew=1.3, ls="", ms=8, label="pré-treino ImageNet")]
                   if d.pretrained.any() else [])
-               + [Line2D([], [], color=TEXT_PRIMARY, ls="--", label=front_label
-                         + ("\n(no INT8, sem as de anel)" if d.early_best.any() and any(acc == "int8" for acc, *_ in panels) else "")),
-                  BASE_HANDLE]
-               + ([early_handle("ring")] if d.early_best.any() else []))
-    fig.legend(handles=handles, loc="outside lower center", ncol=2, fontsize=9)
-    # beside the last panel, from its top: constrained layout makes room for it, and it stays clear of the bottom legend
-    axes[0, -1].legend(handles=[Line2D([], [], ls="", label=f"{n}  {short(d.loc[i])}") for i, n in num.items()], loc="upper left",
-                       bbox_to_anchor=(1.02, 1.0), fontsize=9, handlelength=0, title="redes na fronteira\n(número no gráfico)",
-                       title_fontsize=9)
+               + [Line2D([], [], color=TEXT_PRIMARY, ls="--", label="fronteira"
+                         + (" (sem as de anel)" if d.early_best.any() and any(acc == "int8" for acc, *_ in panels) else ""))]
+               + ([early_handle("ring", EARLY_SHORT)] if d.early_best.any() else [])
+               + [Line2D([], [], ls="", label=t) for t in ["redes na fronteira:"] + [f"{n}  {short(d.loc[i])}" for i, n in num.items()]])
+    # one column beside the last panel, from its top (the title above is cropped in the article), the numbered front names
+    # last (2026-11-11: a legend under the plot took half the figure); constrained layout makes room for it
+    axes[0, -1].legend(handles=handles, loc="upper left", bbox_to_anchor=(1.02, 1.0), fontsize=9,
+                       labelspacing=0.3)  # 0.5: figure 13's 29 rows outgrew the axes and squeezed them
     fig.suptitle(f"{question}\n{note} · {EFF_NOTE}", fontsize=11)
     savefig(fig, name, figs)
 
@@ -435,7 +434,7 @@ def run_point(ax, x, y, r, c):
 
 def run_handles(d):
     """The legend of run_point's encoding, for the runs in d: the families' markers and the two rings (the colour is the x group)."""
-    return family_handles(d) + ([BASE_HANDLE] if (d.key == BASE_KEY).any() else []) + ([early_handle("ring")] if d.early_best.any() else [])
+    return family_handles(d) + ([BASE_HANDLE] if (d.key == BASE_KEY).any() else []) + ([early_handle("ring", EARLY_SHORT)] if d.early_best.any() else [])
 
 
 def fig_quant(df, figs, note):
@@ -443,7 +442,7 @@ def fig_quant(df, figs, note):
     d["dq"] = d.int8 - d.fp32
     d["ratio"] = [worst_input_ratio(r) for r in d.itertuples()]
     groups = kernel_groups(d)
-    fig, ax = plt.subplots(figsize=(7.1, 4.0), layout="constrained")  # printed at 0.8 \textwidth
+    fig, ax = plt.subplots(figsize=(8.9, 4.0), layout="constrained")  # printed at \textwidth
     rng = np.random.default_rng(0)
     for i, (_, c, g) in enumerate(groups):
         for r in g.itertuples():
@@ -456,7 +455,7 @@ def fig_quant(df, figs, note):
     print(f"16: Spearman rho(worst layer-input max / p99.9, INT8 - FP32) = {rho:+.2f}, n = {len(q)} (early-best runs left out)")
     ax.axhline(0, color="k", lw=0.8)
     ax.set_ylabel("INT8 − FP32 (p.p.)\nnegativo = perde no INT8")
-    fig.legend(handles=run_handles(d), loc="outside lower center", ncol=3, fontsize=9)
+    ax.legend(handles=run_handles(d), loc="upper center", ncol=3, fontsize=9)  # the top band over the middle groups is empty
     fig.suptitle("Robustez à quantização: quanto cada rede perde do FP32 ao INT8 real, por tipo de kernel\n"
                  "cada ponto = uma rede · " + note, fontsize=11)
     savefig(fig, "16_quantization_robustness.png", figs)
@@ -477,13 +476,14 @@ def fig_flips(df, figs, note):
     d[["r2w", "w2r"]] = [flips(r) for r in d.itertuples()] if len(d) else np.empty((0, 2))
     d = d.dropna(subset=["r2w"])
     groups = kernel_groups(d)
-    fig, axes = plt.subplots(1, 2, figsize=(7.7, 3.4), gridspec_kw={"width_ratios": [1.7, 1]}, layout="constrained")  # 0.86 \textwidth
+    fig, axes = plt.subplots(1, 2, figsize=(8.9, 4.4), gridspec_kw={"width_ratios": [1.7, 1]}, layout="constrained")  # \textwidth
     rng = np.random.default_rng(0)
     for i, (_, c, g) in enumerate(groups):
         for r in g.itertuples():
             run_point(axes[0], i + rng.uniform(-0.25, 0.25), r.r2w + r.w2r, r, c)
             run_point(axes[1], r.r2w, r.w2r, r, c)
     group_ticks(axes[0], groups)
+    axes[0].margins(y=0.1)  # the ringed top points stay inside the frame
     axes[0].set_ylabel("% das imagens de teste", fontsize=9)
     axes[0].set_title("Imagens trocadas (certo ↔ errado), por kernel", fontsize=9)
     if len(d):
@@ -496,7 +496,8 @@ def fig_flips(df, figs, note):
     axes[1].set_xlabel("certo → errado (%)", fontsize=9)
     axes[1].set_ylabel("errado → certo (%)", fontsize=9)
     axes[1].set_title("As duas direções, FP32 → INT8\n(acima da diagonal, o INT8 ganha)", fontsize=9)
-    fig.legend(handles=run_handles(d), loc="outside lower center", ncol=3, fontsize=9)
+    h = run_handles(d)
+    fig.legend(handles=h, loc="outside lower center", ncol=len(h), fontsize=9)
     fig.suptitle("A mesma acurácia não quer dizer as mesmas respostas: quantas imagens de teste mudam de certo para errado (e vice-versa)\n"
                  "do FP32 para o INT8 real (Hooker et al. 2019)\n" + note, fontsize=11)
     savefig(fig, "20_int8_prediction_flips.png", figs)
@@ -836,8 +837,7 @@ def main(argv=None):
         fig_pareto(every.assign(wino_pct=[winograd_share(r) for r in every.itertuples()]), figs, note,
                    [("int8", "wino_pct", "% dos MACs em convoluções que o Winograd executa\n(stride 1, kernel 2×2 ou 3×3)")],
                    "30_winograd_eligible.png", "Acurácia × quanto da rede cabe num acelerador Winograd: à direita, mais cálculo no "
-                   "Winograd; as redes na fronteira são as que valem a pena", high_x=True,
-                   front_label="fronteira: nenhuma rede tem mais MACs\nno Winograd e é melhor")
+                   "Winograd; as redes na fronteira são as que valem a pena", high_x=True)
 
 
 if __name__ == "__main__":
