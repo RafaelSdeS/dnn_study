@@ -2422,3 +2422,10 @@ a 150%" for +169% GAP / +97-127% FC, the GPU count before the re-evaluation pilo
   is a ring in every scatter figure (no grey dots: grey = inside the seed noise only); the unadapted AlexNet is a square. Colours
   unchanged (user: the vivid palette stays). Figure 17 (latency) was left as it was: it waits for the full re-evaluation. Article
   trims re-cut (`tests/test_artigo_trim.py` 19 passed); the PDF went from 21 to 20 pages.
+
+**Full re-evaluation queued (2026-11-11).** The 150 Phase 11 runs the pilot left (every `phase_11_*.yaml` model but its two cells)
+in `~/queue_phase11_reeval.txt` on PCAD, one `scripts.cluster submit ... --slurm tupi36 --model <m>` line each (QOS `short`,
+tupi3/5/6, 2 h; dry-run checked). QOS `short` outranks `normal`, so the feeder waits behind Stage B (user: "na fila"): a loop
+on the login node polls every 10 min and starts `feed_queue.sh` (QOS=short, MAX=8) only once no normal-QOS `train-` job is
+pending. Before it, PCAD pulled 7770117: the 36 untracked Stage B files and the 20 pilot files it had modified moved aside, pulled,
+all 56 `cmp`-identical to the checkout, copies deleted.
