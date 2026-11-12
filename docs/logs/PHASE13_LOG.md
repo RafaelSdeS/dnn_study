@@ -419,7 +419,9 @@ So far (seed 42 only): one unit per stage loses 2.6-3.6 pp in every cell; two pe
 that beats its plain body: 60.20 against `k3x3stacked`'s 58.53 / 58.85 / 58.73 (seeds 42-44, mean 58.70), +1.50 over the mean and
 +1.35 over the best seed, at a fifth of the params and MACs. With Fire, two per stage at 3x3 and at 2x2 land together (60.20 vs 60.11),
 where the plain bodies are ~1.8 pp apart (`k2x2stacked` mean 60.47). The 2026-11-11 rule queued seeds for `k3x3firestacked` only if it
-landed inside the noise; it landed outside, so none are queued (a 3-seed check of the +1.5 pp would take 2 runs).
+landed inside the noise; it landed outside. The user asked for the 3-seed check anyway (2026-11-12, 2 runs): `k3x3firestacked` joins
+`phase_13_bottleneck_fire_seed43/44.yaml` and goes at the end of `~/queue_followups.txt` on PCAD (`--slurm tupi_beagle`, as its
+`k2x2firestacked` seeds); `bottleneck_fire`'s `contrasts_by_seed.csv` picks both up with no change.
 
 Phase 13 jobs on PCAD at ~09:00: 835674 (`k3x3bottleneck`, beagle) and 836100 (`k2x2firestacked` s43, tupi1, FP32 epoch 31) running;
 836101 (s44) waits for a node; 836175 / 836179 (`k11-2residual` s43 / s44) pending (priority). tupi1-6 are back from the BIOS drain.
