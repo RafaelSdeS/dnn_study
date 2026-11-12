@@ -395,3 +395,31 @@ submitted through `~/queue_followups.txt` on PCAD (`feed_queue.sh`, QOS normal, 
 `bottleneck_fire` now writes `contrasts_by_seed.csv` through `hybrids.contrasts_by_seed` (which takes the pairs function; 96a3f84): seed 42
 only for now, = `contrasts.csv`; the `k2x2firestacked` seeds need just a rerun. tupi3-6 were drained for a BIOS update from 2026-11-10;
 tupi3 runs `k3x3bottleneckstacked` (835672) since 2026-11-11 ~14:50.
+
+## 2026-11-12: Stage B, 6 of 7 runs in
+
+Synced from PCAD (run dirs only, no `*.pth` / logs; summaries md5-identical to PCAD's): `k2x2fire` (835671, beagle, 15 h 34),
+`k3x3bottleneckstacked` (835672, tupi3, 4 h 35), `k3x3firestacked` (835673, tupi3, 4 h 33). All 500 + 50 epochs, FP32 best epoch 480-494
+(none early), `agreement_qat_int8` 0.974-0.985. `k3x3bottleneck` (835674, beagle) was at FP32 epoch 494 of 500 at 08:55, QAT next; the
+aggregate CSV still waits for it. `bottleneck_fire` rerun; `runs_index.csv` gains the 3 rows (the 54 archive rows kept). New matched pairs,
+test top-1 FP32 / INT8, B - A, seed 42:
+
+| swap | kernel, units per stage | FP32 | INT8 | params | MACs |
+|---|---|---|---|---|---|
+| conv -> Bottleneck | 3x3, two | 58.53 -> 58.93 (+0.40) | 58.27 -> 58.34 (+0.07) | -86 % | -82 % |
+| conv -> Fire | 3x3, two | 58.53 -> 60.20 (+1.67) | 58.27 -> 59.88 (+1.61) | -81 % | -80 % |
+| conv -> Fire | 2x2, one | 56.38 -> 52.82 (-3.56) | 56.22 -> 52.77 (-3.45) | -70 % | -67 % |
+| Bottleneck -> Fire | 3x3, two | 58.93 -> 60.20 (+1.27) | 58.34 -> 59.88 (+1.54) | +35 % | +12 % |
+| Bottleneck -> Fire | 2x2, one | 53.77 -> 52.82 (-0.95) | 53.89 -> 52.77 (-1.12) | +13 % | -2 % |
+
+Medians over the pairs so far, FP32 / INT8: conv -> Bottleneck -1.78 / -1.94 (3 pairs), conv -> Fire -1.66 / -2.06 (4),
+Bottleneck -> Fire +1.27 / +0.95 (3).
+
+So far (seed 42 only): one unit per stage loses 2.6-3.6 pp in every cell; two per stage keep or gain. `k3x3firestacked` is the one unit
+that beats its plain body: 60.20 against `k3x3stacked`'s 58.53 / 58.85 / 58.73 (seeds 42-44, mean 58.70), +1.50 over the mean and
++1.35 over the best seed, at a fifth of the params and MACs. With Fire, two per stage at 3x3 and at 2x2 land together (60.20 vs 60.11),
+where the plain bodies are ~1.8 pp apart (`k2x2stacked` mean 60.47). The 2026-11-11 rule queued seeds for `k3x3firestacked` only if it
+landed inside the noise; it landed outside, so none are queued (a 3-seed check of the +1.5 pp would take 2 runs).
+
+Phase 13 jobs on PCAD at ~09:00: 835674 (`k3x3bottleneck`, beagle) and 836100 (`k2x2firestacked` s43, tupi1, FP32 epoch 31) running;
+836101 (s44) waits for a node; 836175 / 836179 (`k11-2residual` s43 / s44) pending (priority). tupi1-6 are back from the BIOS drain.
