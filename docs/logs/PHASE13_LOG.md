@@ -460,3 +460,15 @@ The FP32 gap is inside the ±0.7 seed noise, the INT8 one a little wider; s44 se
 Jobs at 08:25: 836101 (`k2x2firestacked` s44, beagle) at FP32 epoch 497 of 500, QAT next (ends in the afternoon). `k3x3firestacked`
 s43 / s44 are not submitted yet: the last 2 lines of `~/queue_followups.txt`, waiting for a slot (QOS normal at 10 of 10 = 836101 +
 9 pending on tupi by Priority, none of ours running there). `phase_13_bottleneck_fire_seed43_comparison.csv` waits for `k3x3firestacked` s43.
+
+**Stage B in the article (2026-11-13, later; plan approved by the user, no submission date).** `report/artigo_kernel.tex`: new
+subsection "Blocos Bottleneck e Fire barateiam o melhor corpo?" (`sec:unidades`, after `sec:combinacoes`) with `tab:unidades` (the 12
+cells, seed 42: FP32, INT8, params, MACs, Winograd %), three paragraphs (one block per stage loses 1.68-3.56 pp; two per stage Fire
+ties the 2x2 body and beats the 3x3 one, the 3x3 claim under `\pendente` until its seeds 43 / 44 land; Fire keeps 59.7 / 76.9 % of its
+MACs on the accelerator, Bottleneck 40-64 %), the design in "Desenho dos experimentos", a `tab:blocos` row (7 (+1); total 279 -> 287 in
+the abstract, "Dados" and the caption), a 10th question in the introduction, one sentence in `sec:hardware`, the Fire nuance in the
+design bullets, the "Poucas seeds" limitation, and the Bottleneck/Fire item dropped from "Trabalhos Futuros". The Winograd % comes from
+a new `winograd_pct` column of `results/phase_13_bottleneck_fire/all_runs.csv` (`bottleneck_fire` now applies
+`design_figures.winograd_share`, the rule of the article's `tab:winograd`; test asserts the column). The 12 table rows were checked
+against the CSV by script. PDF rebuilt: 21 pages, as before; one new 5 pt overfull vbox on a float page, nothing visible.
+When the seeds land: the 2x2 Fire pair at 3 seeds, the 3x3 one replaces its `\pendente`, `tab:blocos` (+N).

@@ -10,7 +10,7 @@ for layer); the 7 others are phase_13_bottleneck_fire. Phase 11's figures and ta
     contrasts.csv            every matched pair (one unit swapped, same kernel and units per stage): B - A in FP32 / INT8,
                              params and MACs change in %
     contrasts_by_seed.csv    the same pairs at every seed where both cells ran (a `seed` column; 42 = contrasts.csv)
-    all_runs.csv             every run of the cells found
+    all_runs.csv             every run of the cells found (+ winograd_pct: % of the MACs a Winograd engine runs)
 
 Phase 11's conventions: test top-1, INT8 hollow, early-best ring.
 
@@ -22,7 +22,7 @@ from matplotlib.lines import Line2D
 
 from ml.plotting import NEUTRAL, TEXT_SECONDARY, apply_report_style
 from scripts.phase11.analyze_geometry import ROOT, RUNS, band_for, early_handle, early_ring, load, noise_bands, savefig
-from scripts.phase11.design_figures import KCOLOR, LIVE_NOTE, frame, legend_kernels
+from scripts.phase11.design_figures import KCOLOR, LIVE_NOTE, frame, legend_kernels, winograd_share
 from scripts.phase13.hybrids import GRID, contrasts_by_seed
 
 FIGS = ROOT / "results/figures_generated/phase_13_bottleneck_fire"
@@ -118,6 +118,7 @@ def main():
         print("no phase_13_bottleneck_fire run yet")
         return
     TABLES.mkdir(parents=True, exist_ok=True)
+    df["winograd_pct"] = df.apply(winograd_share, axis=1)  # the article's tab:winograd rule: stride-1 dense 2x2 / 3x3 MACs
     df.drop(columns="results").sort_values(["key", "seed"]).to_csv(TABLES / "all_runs.csv", index=False)
     s42 = df[df.seed == 42]
     c = contrasts(s42)

@@ -25,7 +25,9 @@ def test_stage_b_figure_and_contrasts(tmp_path, monkeypatch):
     bf = _patch(monkeypatch, tmp_path, runs)
     bf.main()
     assert (tmp_path / "figs" / "01_bottleneck_fire.png").exists()
-    assert set(pd.read_csv(tmp_path / "tables" / "all_runs.csv").key) == set(bf.CELLS.values())
+    all_runs = pd.read_csv(tmp_path / "tables" / "all_runs.csv")
+    assert set(all_runs.key) == set(bf.CELLS.values())
+    assert "winograd_pct" in all_runs.columns
     c = pd.read_csv(tmp_path / "tables" / "contrasts.csv")
     # 2 kernels x 2 units per stage = 4 pairs per swap
     assert c.groupby("factor").size().to_dict() == {label: 4 for label, _, _ in bf.CHANGES}
