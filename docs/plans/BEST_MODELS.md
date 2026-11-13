@@ -102,11 +102,15 @@ figures 02, 11, 14 and 16.
    3×3 convs: depthwise nets (MobileNetV2, DepthwiseSep) get none. 3×3 is systematically faster than 5×5 (Wilcoxon p = 4.7e-10),
    but the stricter 1.8×-margin criterion holds in only 31% of layer groups (bar: 60%), so H1 is PARTIAL. FP32 latency ranks nets like
    INT8 latency (ρ = 0.9999). conv1 has stride 2 in every 64px cell, so restricting its kernel buys no eligibility.
-9. **Winograd-FPGA study (M7): the transform size, not the kernel, sets the accuracy cost of the accelerator.** Median over 14
-   networks, packed at the iso-DSP point: F(2,3) ≈ FP32 (+0.05 pp), F(4,3) −5.1 pp, F(6,3) −18.9 pp. Reproducible from `main`
-   since 2026-10-19 (`wino_f*_pack.yaml` list the 14 networks; `docs/logs/PHASE11_LOG.md` "M7 extension"). The `_hw` / `_orig` / `_s43`
-   follow-ups of the PCAD checkout `~/dnn_study_m7` (still running in October: `wino_f43v3_hw` on PCAD, `wino_f63c_hw` on nyx) are
-   not summarized here.
+9. **Winograd-FPGA numerics (Phase 14, on Phase 11's one recipe): the transform size, not the kernel, sets the accuracy cost of the
+   accelerator.** Packed `qat_wino` arms at the iso-DSP point, arm − FP32 on the test set, median over 16 networks (48 of 48 arms,
+   2026-11-09; `docs/logs/PHASE14_LOG.md`, `results/phase_14_winograd_numerics/medians.csv`): F(2,3) −0.16 pp (−0.69..+3.79),
+   F(4,3) −6.30 (−8.57..+0.47), F(6,3) −40.09 (−59.84..−10.48). F(6,3) is not a uniform drop: the plain-conv deep nets (VGG, WRN,
+   ResNet-18, `vgg_style`) fall to chance (< 1 %), RepVGG-A0 keeps 4.2 %, the AlexNet-class nets 11-28 % and GoogLeNet 48.5 %. Not a pipeline bug: the
+   observers, calibrated on the Winograd net's own activations, are inflated by the compounded error until almost no signal crosses
+   the net (`scripts/phase14/f63_collapse.py` on `resnet18_fpga`, `vgg13_fpga`, `googlenet_fpga`; why it compounds on some nets and
+   not others is not isolated). The AdamW-recipe numbers this item used to quote (F(4,3) −5.1, F(6,3) −18.9, 14 nets) are archived in
+   `outputs/pcad/archive_winograd_old_recipe/`; the `~/dnn_study_m7` follow-ups (`_hw` / `_orig` / `_s43`) are not summarized here.
 10. **Detection (Phase 7): compensation transfers only partly.** Bottleneck is the best detector (20.98 mAP FP32, 20.85 INT8) and
    quantization-stable; Fire is the worst (8.94 mAP) and loses 2.6 pp in QAT; the 223 MB AlexNetTV backbone does not turn its size
    into a proportional lead. Segmentation (VOC2012 mIoU 17.8 / 17.0 / 16.3 for bottleneck / fire / tv) separates the backbones far
@@ -123,14 +127,19 @@ figures 02, 11, 14 and 16.
 
 ### What is not established yet
 
-- **Runs still out (2026-11-07).** Phases 11, 12 and 13: none. Phase 13 (do two convs per stage, a residual skip, an 11×11
+- **Runs still out (2026-11-13).** Phase 12: none. Phase 11: the FC-head width control (`phase_11_kernel_controls_fc`, 2x2 w150 /
+  3x3 w67 with FC + Dropout + BN, seeds 42-44, 6 runs, pending on PCAD; PHASE11_LOG "FC capacity control queued") and the one-machine
+  latency re-evaluation of the Phase 11 cells (queued behind every training job). Phase 13: seeds 43 / 44 of `k11-2residual` stride 1
+  (2 runs) and of the two Fire stacked cells (`k2x2firestacked` s44 running, `k3x3firestacked` s43 / s44 queued). Phase 14: 48 of 48
+  arms done (item 9); the calibrated-scale follow-up `f63c` has its epoch-0 runs done on PCAD (not synced or read yet) and its
+  `resnet18_fpga` arm pending. Phase 13 (do two convs per stage, a residual skip, an 11×11
   conv1 and conv1 stride 1 add up?, `docs/logs/PHASE13_LOG.md`): 18 of 18 at seed 42 (the last, `k11-2residual` stride 1: 60.48 FP32 / 60.85 INT8, 954 M MACs, PCAD job 835178).
   Stride 1 is the largest factor (+3.0 pp median, 12 of 12 pairs, at 4× the MACs); two convs per stage next (+2.1 pp, 8 of 8);
   3×3 → 2×2 wins on all 8 two-conv pairs (+0.5 to +1.8 pp, 51-55% fewer MACs) and loses on the 5-conv body (−1.1 / −1.3); a residual skip
   adds +0.4 pp median but 2 of 8 pairs are negative, all inside the noise; the 11×11 conv1 adds nothing once the body has two convs per stage
   (median −0.1). The gains add up only partly (each big step keeps 37-82% of its gain once the other is in). Best: all-2×2 residual at stride 1,
   60.75 FP32 / 60.46 INT8 at 862 M MACs and 2.5 M params, and all-2×2 stacked at stride 1, 60.35 / 60.79 at 803 M, against VGG16 3×3 GAP + BN
-  59.35 (14.8 M, 1255 M) -- those are seed 42. With seeds 43 / 44 (all 8 in 2026-11-07, PHASE13_LOG "all eight seed runs are in"), stride 1, FP32 / INT8 mean over 3 seeds: all-2×2 stacked 60.47 / 60.63, all-2×2 residual 60.35 / 60.34, against the 3×3 twins' 59.39 / 59.50 (residual) and 58.70 / 58.61 (stacked), VGG16 59.27 / 59.45; 3×3 → 2×2 wins in 3 of 3 seeds with the stacked body (+1.7 to +1.8 FP32) and in 2 of 3 with the residual one (one 3×3 run at 60.10), so quote it as +1 to +2 pp; the factor order is unchanged (stride +3.0, two convs per stage +2.1, 3×3 → 2×2 +1.2, skip +0.4, 11×11 −0.1 pp, medians over matched pairs). Phase 14 (item 9 on the one recipe, `docs/logs/PHASE14_LOG.md`): 14 of 14 FP32 done, 3 of 48 `qat_wino` arms; item 9 keeps the old protocol's numbers until the arms land.
+  59.35 (14.8 M, 1255 M) -- those are seed 42. With seeds 43 / 44 (all 8 in 2026-11-07, PHASE13_LOG "all eight seed runs are in"), stride 1, FP32 / INT8 mean over 3 seeds: all-2×2 stacked 60.47 / 60.63, all-2×2 residual 60.35 / 60.34, against the 3×3 twins' 59.39 / 59.50 (residual) and 58.70 / 58.61 (stacked), VGG16 59.27 / 59.45; 3×3 → 2×2 wins in 3 of 3 seeds with the stacked body (+1.7 to +1.8 FP32) and in 2 of 3 with the residual one (one 3×3 run at 60.10), so quote it as +1 to +2 pp; the factor order is unchanged (stride +3.0, two convs per stage +2.1, 3×3 → 2×2 +1.2, skip +0.4, 11×11 −0.1 pp, medians over matched pairs). Phase 13 Stage B (`phase_13_bottleneck_fire`, every conv of the stride-1 body a Bottleneck or Fire unit, 7 of 7 runs in 2026-11-13, PHASE13_LOG "2026-11-13"), seed 42: one unit per stage loses 1.7-3.6 pp in all four cells; at two per stage Fire keeps or beats the plain body at a quarter to a fifth of the params -- `k3x3firestacked` 60.20 / 59.88 (1.00 M params, 368 M MACs) against `k3x3stacked`'s 3-seed 58.70 / 58.61, `k2x2firestacked` 60.11 / 59.80 (0.60 M, 211 M) against `k2x2stacked`'s 60.47 / 60.63 (seed 43: 59.97 / 59.88; seeds 44 and the 3×3 seeds still out).
 - **Seeds.** Most contrasts are seed 42 against a pooled floor of ±0.7-0.8 pp FP32; differences below ~1.5 pp are not resolved, and
   the 11-5-3-3-3 → 3×3 point is one of them. ResNet-18's floor rests on 3 seeds of 2 cells (±1.0 pp FP32); its INT8 band is wide (3 of the 6 runs early best).
 - **Scope.** Two low-resolution datasets (Tiny ImageNet at 64 px, CIFAR-100 at 32 px; the 224 runs are enlarged 64 px images, no

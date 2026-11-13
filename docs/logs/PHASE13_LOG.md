@@ -425,3 +425,38 @@ landed inside the noise; it landed outside. The user asked for the 3-seed check 
 
 Phase 13 jobs on PCAD at ~09:00: 835674 (`k3x3bottleneck`, beagle) and 836100 (`k2x2firestacked` s43, tupi1, FP32 epoch 31) running;
 836101 (s44) waits for a node; 836175 / 836179 (`k11-2residual` s43 / s44) pending (priority). tupi1-6 are back from the BIOS drain.
+
+## 2026-11-13: Stage B, 7 of 7 runs in; `k2x2firestacked` seed 43
+
+Synced from PCAD (run dirs only, no `*.pth` / logs; 24 files md5-identical to PCAD's): `k3x3bottleneck` (835674, beagle, 15 h 29) and
+`k2x2firestacked` seed 43 (836100, tupi1, 8 h 11), plus `outputs/pcad/aggregates/phase_13_bottleneck_fire_comparison.csv` (7 rows, one
+per run). Both 500 + 50 epochs, FP32 best epoch 495 / 486 (none early), `agreement_qat_int8` 0.982 / 0.979. `bottleneck_fire` rerun
+(figure 01 now has all 24 points); `runs_index.csv` gains the 2 rows (the 54 archive rows and the existing row order kept).
+
+`k3x3bottleneck`: 55.98 FP32 / 55.91 INT8, 0.38 M params, 156 M MACs. Its two pairs, seed 42, B - A:
+
+| swap | kernel, units per stage | FP32 | INT8 | params | MACs |
+|---|---|---|---|---|---|
+| conv -> Bottleneck | 3x3, one | 57.66 -> 55.98 (-1.68) | 57.56 -> 55.91 (-1.65) | -83 % | -77 % |
+| Bottleneck -> Fire | 3x3, one (`alexnet_fire`) | 55.98 -> 54.57 (-1.41) | 55.91 -> 54.44 (-1.47) | +34 % | +14 % |
+
+All 12 pairs at seed 42, FP32 B - A (INT8 in `results/phase_13_bottleneck_fire/contrasts.csv`):
+
+| swap | 3x3, one | 2x2, one | 3x3, two | 2x2, two | median (FP32 / INT8) | params / MACs (median) |
+|---|---|---|---|---|---|---|
+| conv -> Bottleneck | -1.68 | -2.61 | +0.40 | -1.78 | -1.73 / -1.80 | -80 % / -75 % |
+| conv -> Fire | -3.09 | -3.56 | +1.67 | -0.24 | -1.66 / -2.06 | -76 % / -74 % |
+| Bottleneck -> Fire | -1.41 | -0.95 | +1.27 | +1.54 | +0.16 / -0.09 | +24 % / +5 % |
+
+Stage B at seed 42, closed: one unit per stage costs 1.7-3.6 pp in all four cells, and there Bottleneck beats Fire (by 0.9-1.4 pp).
+At two per stage the order flips: Fire beats Bottleneck by 1.3-1.5 pp and keeps (2x2, -0.24) or beats (3x3, +1.67) its plain body at a
+quarter to a fifth of the params; Bottleneck keeps the 3x3 body (+0.40) and loses 1.8 pp on the 2x2 one. Units per stage decides more
+than the unit: the Bottleneck -> Fire median (+0.16) averages two opposite signs.
+
+Seed 43 of `k2x2firestacked`: 59.97 FP32 / 59.88 INT8 against `k2x2stacked` s43 60.65 / 60.56: -0.68 / -0.68 (seed 42: -0.24 / -0.99).
+Means over the seeds so far, FP32 / INT8: `k2x2firestacked` 60.04 / 59.84 (s42-43), `k2x2stacked` 60.47 / 60.63 (s42-44): -0.43 / -0.79.
+The FP32 gap is inside the ±0.7 seed noise, the INT8 one a little wider; s44 settles it.
+
+Jobs at 08:25: 836101 (`k2x2firestacked` s44, beagle) at FP32 epoch 497 of 500, QAT next (ends in the afternoon). `k3x3firestacked`
+s43 / s44 are not submitted yet: the last 2 lines of `~/queue_followups.txt`, waiting for a slot (QOS normal at 10 of 10 = 836101 +
+9 pending on tupi by Priority, none of ours running there). `phase_13_bottleneck_fire_seed43_comparison.csv` waits for `k3x3firestacked` s43.
