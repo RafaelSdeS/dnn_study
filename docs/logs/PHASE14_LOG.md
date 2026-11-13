@@ -144,3 +144,26 @@ split. The user asked for everything on one recipe, so this phase reruns them on
   (`resnet18_fpga`, the f63 arm with `hw_params: f63c`, outside the 48-arm medians; FP32 copied in as its yaml says) is in
   `~/queue_followups.txt` (`feed_queue.sh`, QOS normal, `--slurm tupi_4090`), fifth of nine. The epoch-0 run says whether the signal now
   crosses the nets; the arm, whether resnet18 leaves chance.
+- 2026-11-13: **`f63c` at epoch 0: with the netlist's calibrated scales the signal crosses all three nets.** 836176-836178 COMPLETED 2026-11-11 19:17-19:20
+  (tupi6, QOS short, 1-3 min each, bridge f44da9a, clean); the three JSONs synced to `results/phase_14_winograd_numerics/f63_collapse_<net>_f63c.json` (md5 = PCAD's).
+  Same measurement as 2026-11-08 / 11-11 (400 calibration train images, first 1000 test images, observers calibrated on the Winograd net's own activations,
+  no `qat_wino` epoch), F63 only, `su` / `sv` / `align_base` from `gate_flags/params_f63c.txt` instead of the analytic worst-case shift. Top-1, first 1000 test images:
+
+  | net | base | FP32 | F63 default | F63 `f63c` | F43 default | F23 default |
+  |---|---|---|---|---|---|---|
+  | `resnet18_fpga` | new (one recipe) | 56.5 | 0.3 | **23.7** | 5.9 | 53.5 |
+  | | old (AdamW) | 53.7 | 0.1 | 37.0 | 37.9 | 51.7 |
+  | `vgg13_fpga` | new | 56.5 | 0.1 | **16.4** | 3.3 | 54.8 |
+  | | old | 48.7 | 0.6 | 28.4 | 21.8 | 46.2 |
+  | `googlenet_fpga` | new | 60.9 | 0.3 | **38.1** | 35.4 | 60.5 |
+  | | old | 54.8 | 0.5 | 37.8 | 38.8 | 54.3 |
+
+  Per Winograd conv, new base, default -> `f63c` (range over the convs): `absmax_ratio` 1.0-51.2 -> 0.48-3.04 (resnet18), 1.0-34.2 -> 0.66-1.95 (vgg13),
+  0.92-4.32 -> 0.66-2.11 (googlenet); `u_kept` 0.00-0.79 -> 0.66-0.96 over the three nets, convs passing under 5 % of U 13 of 19 -> 0 (resnet18) and 5 of 10 -> 0 (vgg13);
+  `x_kept` ≥ 0.92; `cos_clean` 0.46-0.96 -> 0.80-0.99 (resnet18); `v_kept` about unchanged (0.91-0.99). No conv of any net or base has an observer over 4x the
+  clean signal any more (default: 15 / 6 / 2 convs on the new base). So the analytic worst-case `su` was what starved U and started the compounding;
+  with the calibrated shifts no conv starves, the observers stay near the clean signal, and on the new base F63 at epoch 0 is now above the default
+  F43 at epoch 0 on all three nets (23.7 vs 5.9, 16.4 vs 3.3, 38.1 vs 35.4). The new base still sits under the old on resnet18 and vgg13 (23.7 vs 37.0,
+  16.4 vs 28.4): some of the base difference is left, googlenet shows none. Epoch 0 on 1000 images, not an arm: where QAT takes `f63c` is the arm's
+  question (`phase_14_winograd_f63c_pack`, `resnet18_fpga`, job 836205, pending on tupi by priority). The article's limitation "escalas recalibradas
+  não testadas" can now say they were tested at epoch 0; its F(6,3) paragraph waits for the arm. `~/f63_out` on PCAD left in place.

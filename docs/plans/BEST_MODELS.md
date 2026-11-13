@@ -109,7 +109,8 @@ figures 02, 11, 14 and 16.
    ResNet-18, `vgg_style`) fall to chance (< 1 %), RepVGG-A0 keeps 4.2 %, the AlexNet-class nets 11-28 % and GoogLeNet 48.5 %. Not a pipeline bug: the
    observers, calibrated on the Winograd net's own activations, are inflated by the compounded error until almost no signal crosses
    the net (`scripts/phase14/f63_collapse.py` on `resnet18_fpga`, `vgg13_fpga`, `googlenet_fpga`; why it compounds on some nets and
-   not others is not isolated). The AdamW-recipe numbers this item used to quote (F(4,3) −5.1, F(6,3) −18.9, 14 nets) are archived in
+   not others is not isolated). The netlist's calibrated shifts (`f63c`) remove the starvation: at epoch 0 (first 1000 test images,
+   no QAT) `resnet18_fpga` 0.3 -> 23.7 %, `vgg13_fpga` 0.1 -> 16.4 %, `googlenet_fpga` 0.3 -> 38.1 %; the `f63c` QAT arm is still out. The AdamW-recipe numbers this item used to quote (F(4,3) −5.1, F(6,3) −18.9, 14 nets) are archived in
    `outputs/pcad/archive_winograd_old_recipe/`; the `~/dnn_study_m7` follow-ups (`_hw` / `_orig` / `_s43`) are not summarized here.
 10. **Detection (Phase 7): compensation transfers only partly.** Bottleneck is the best detector (20.98 mAP FP32, 20.85 INT8) and
    quantization-stable; Fire is the worst (8.94 mAP) and loses 2.6 pp in QAT; the 223 MB AlexNetTV backbone does not turn its size
@@ -131,8 +132,8 @@ figures 02, 11, 14 and 16.
   3x3 w67 with FC + Dropout + BN, seeds 42-44, 6 runs, pending on PCAD; PHASE11_LOG "FC capacity control queued") and the one-machine
   latency re-evaluation of the Phase 11 cells (queued behind every training job). Phase 13: seeds 43 / 44 of `k11-2residual` stride 1
   (2 runs) and of the two Fire stacked cells (`k2x2firestacked` s44 running, `k3x3firestacked` s43 / s44 queued). Phase 14: 48 of 48
-  arms done (item 9); the calibrated-scale follow-up `f63c` has its epoch-0 runs done on PCAD (not synced or read yet) and its
-  `resnet18_fpga` arm pending. Phase 13 (do two convs per stage, a residual skip, an 11×11
+  arms done (item 9); the calibrated-scale follow-up `f63c` has its epoch-0 runs in (2026-11-13: the signal crosses all three
+  nets, item 9) and its `resnet18_fpga` arm pending. Phase 13 (do two convs per stage, a residual skip, an 11×11
   conv1 and conv1 stride 1 add up?, `docs/logs/PHASE13_LOG.md`): 18 of 18 at seed 42 (the last, `k11-2residual` stride 1: 60.48 FP32 / 60.85 INT8, 954 M MACs, PCAD job 835178).
   Stride 1 is the largest factor (+3.0 pp median, 12 of 12 pairs, at 4× the MACs); two convs per stage next (+2.1 pp, 8 of 8);
   3×3 → 2×2 wins on all 8 two-conv pairs (+0.5 to +1.8 pp, 51-55% fewer MACs) and loses on the 5-conv body (−1.1 / −1.3); a residual skip
