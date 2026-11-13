@@ -731,38 +731,14 @@ de 1,0 a 1,4 p.p. acima dela, com cerca de um sexto dos parâmetros e dois terç
 \subsection{Blocos Bottleneck e Fire barateiam o melhor corpo?}
 \label{sec:unidades}
 
-\textbf{Com dois blocos por estágio, o Fire sim; com um, nenhum dos dois.} Partimos do corpo de stride 1 do estudo de combinações, sem atalho, e trocamos cada convolução por um bloco Bottleneck ou Fire com o mesmo kernel (Tabela~\ref{tab:unidades}, seed 42).
+\textbf{Com dois blocos por estágio, o Fire sim; com um, nenhum dos dois.} Partimos do corpo de stride 1 do estudo de combinações, sem atalho, e trocamos cada convolução por um bloco Bottleneck ou Fire com o mesmo kernel (Figura~\ref{fig:unidades}).
 
-\begin{table}[!t]
-\caption{Blocos Bottleneck e Fire no corpo de stride 1 (AlexNet com GAP e BN, seed 42)}
-\label{tab:unidades}
+\begin{figure*}[!t]
 \centering
-\footnotesize
-\setlength{\tabcolsep}{3pt}
-\begin{tabular}{@{}llccccc@{}}
-\toprule
-\textbf{Kernel} & \textbf{Bloco} & \textbf{FP32} & \textbf{INT8} & \textbf{Parâm.} & \textbf{MACs} & \textbf{Winograd} \\
- & & \textbf{(\%)} & \textbf{(\%)} & \textbf{(M)} & \textbf{(M)} & \textbf{(\%)} \\
-\midrule
-\multicolumn{7}{@{}l}{\textit{Um bloco por estágio (corpo de 5 convoluções)}} \\
-3\by3 & Conv comum & 57,66 & 57,56 & 2,30 & 669 & 99,8 \\
-3\by3 & Bottleneck & 55,98 & 55,91 & 0,39 & 156 & 63,5 \\
-3\by3 & Fire & 54,57 & 54,44 & 0,52 & 178 & 79,7 \\
-2\by2 & Conv comum & 56,38 & 56,22 & 1,05 & 298 & 99,5 \\
-2\by2 & Bottleneck & 53,77 & 53,89 & 0,28 & 101 & 43,7 \\
-2\by2 & Fire & 52,82 & 52,77 & 0,32 & 99 & 63,5 \\
-\midrule
-\multicolumn{7}{@{}l}{\textit{Dois blocos por estágio}} \\
-3\by3 & Conv comum & 58,53 & 58,27 & 5,18 & 1803 & 99,8 \\
-3\by3 & Bottleneck & 58,93 & 58,34 & 0,74 & 329 & 60,3 \\
-3\by3 & Fire & 60,20 & 59,88 & 1,00 & 368 & 76,9 \\
-2\by2 & Conv comum & 60,35 & 60,79 & 2,33 & 803 & 99,6 \\
-2\by2 & Bottleneck & 58,57 & 58,85 & 0,53 & 219 & 40,3 \\
-2\by2 & Fire & 60,11 & 59,80 & 0,60 & 211 & 59,7 \\
-\bottomrule
-\multicolumn{7}{@{}p{\linewidth}@{}}{\footnotesize A coluna Winograd segue a regra da Tabela~\ref{tab:winograd}. A Fire 3\by3 com um bloco por estágio é a Fire do estudo principal.}
-\end{tabular}
-\end{table}
+\includegraphics[width=\textwidth,trim=0 0 0 61.9,clip]{phase_13_bottleneck_fire/01_bottleneck_fire.png}
+\caption{Blocos Bottleneck e Fire no corpo de stride 1 (AlexNet com GAP e BN, seed 42; variação de um treino: $\pm$0,7 p.p. em FP32). À esquerda, um bloco por estágio; à direita, dois. Círculo cheio: FP32; losango vazio: INT8; os pontos pequenos são as seeds 43 e 44, onde houver. Sob cada bloco estão os MACs do 3\by3 e, abaixo, os do 2\by2; entre parênteses, a parte que um acelerador Winograd executa (a regra da Tabela~\ref{tab:winograd}). A Fire 3\by3 com um bloco por estágio é a Fire do estudo principal.}
+\label{fig:unidades}
+\end{figure*}
 
 \textbf{Um bloco por estágio.} Os blocos cortam de 70 a 83\% dos parâmetros e de 66 a 77\% dos MACs, mas perdem de 1,68 a 3,56 p.p. em FP32 nas quatro trocas, sempre além da variação de $\pm$0,7 p.p. Aqui o Bottleneck fica à frente do Fire nos dois kernels (por 1,41 p.p. no 3\by3 e 0,95 p.p. no 2\by2).
 

@@ -472,3 +472,13 @@ a new `winograd_pct` column of `results/phase_13_bottleneck_fire/all_runs.csv` (
 `design_figures.winograd_share`, the rule of the article's `tab:winograd`; test asserts the column). The 12 table rows were checked
 against the CSV by script. PDF rebuilt: 21 pages, as before; one new 5 pt overfull vbox on a float page, nothing visible.
 When the seeds land: the 2x2 Fire pair at 3 seeds, the 3x3 one replaces its `\pendente`, `tab:blocos` (+N).
+
+**Table -> figure, and `report/` split (2026-11-13, later; user).** The article's `tab:unidades` became Figure `fig:unidades`:
+`01_bottleneck_fire.png` redrawn at its printed size (8.9 x 4.2 in, constrained layout, legend under the panels, as `01_hybrids.png`;
+`test_article_figures_print_at_a_readable_scale` would have failed the old 13 x 6 in), with each block's MACs and Winograd share
+(3x3 above 2x2) under it, the other seeds as small FP32 dots beside their cell (`k2x2firestacked` s43 and the plain bodies' s43 / s44
+show now; the Fire seeds will appear on a rerun), panels titled "um / dois blocos por estágio"; title cropped at 61.9 bp
+(`test_artigo_trim` passes). PDF: still 21 pages, the figure on p. 15 under the hybrids figure, no overfull box left.
+`report/` now holds one folder per document (8950cf5): `report/ic_report/` (IC report, its figures/ and generators, `pareto.py`) and
+`report/artigo_kernel/` (the article); paths fixed in the scripts, `presentation/make_figures.py`, the two tests and the current docs;
+both PDFs build from their folders with the same page counts (21 / 24).

@@ -6,7 +6,9 @@ The 4 plain bodies are Phase 13's hybrids (or Phase 11's), `k3x3fire` is `alexne
 for layer); the 7 others are phase_13_bottleneck_fire. Phase 11's figures and tables never read these runs.
 
     01_bottleneck_fire.png   one panel per units-per-stage; conv / Bottleneck / Fire left to right, 3x3 and 2x2 side by side
-                             (FP32 filled, INT8 hollow, early-best ring), a line through each kernel's FP32 across the units
+                             (FP32 filled, INT8 hollow, early-best ring, other seeds as small FP32 dots), a line through each
+                             kernel's FP32 across the units; under each unit its MACs and Winograd share. Drawn at its printed
+                             size (8.9 in wide, printed at 0.80 of it at the article's \textwidth, report/artigo_kernel/artigo_kernel.tex)
     contrasts.csv            every matched pair (one unit swapped, same kernel and units per stage): B - A in FP32 / INT8,
                              params and MACs change in %
     contrasts_by_seed.csv    the same pairs at every seed where both cells ran (a `seed` column; 42 = contrasts.csv)
@@ -28,7 +30,7 @@ from scripts.phase13.hybrids import GRID, contrasts_by_seed
 FIGS = ROOT / "results/figures_generated/phase_13_bottleneck_fire"
 TABLES = ROOT / "results/phase_13_bottleneck_fire"
 UNITS = [("", "conv comum"), ("bottleneck", "Bottleneck"), ("fire", "Fire")]
-PER_STAGE = [(1, "uma unidade por estágio (corpo de 5 convs)"), (2, "duas unidades por estágio")]
+PER_STAGE = [(1, "um bloco por estágio (corpo de 5 convs)"), (2, "dois blocos por estágio")]
 FIRE_3X3 = "alexnet_fire"  # = k3x3fire, one unit per stage: read from phase_11_families, never retrained
 
 
@@ -67,10 +69,12 @@ def contrasts(s42):
     return pd.DataFrame(rows)
 
 
-def fig_bottleneck_fire(s42, bands, figs):
+def fig_bottleneck_fire(s42, bands, figs, reps=None):
+    """`reps`: the runs at other seeds, drawn as small FP32 dots beside their cell (as hybrids.fig_hybrids)."""
     v = s42.set_index("key")
+    extra = {k: g.fp32.tolist() for k, g in reps.groupby("key")} if reps is not None and len(reps) else {}
     kernels = ((3, -0.14), (2, 0.14))
-    fig, axes = plt.subplots(1, 2, figsize=(13, 6), sharey=True)
+    fig, axes = plt.subplots(1, 2, figsize=(8.9, 4.2), sharey=True, layout="constrained")  # printed at \textwidth
     queued, ringed = 0, False
     for ax, (n, nlabel) in zip(axes, PER_STAGE):
         ticks = []
@@ -84,30 +88,33 @@ def fig_bottleneck_fire(s42, bands, figs):
                 r, c = v.loc[key], KCOLOR[f"k{k}x{k}"]
                 ax.scatter(ui + dx, r.fp32, s=60, color=c, zorder=3)
                 ax.scatter(ui + dx, r.int8, s=60, marker="D", facecolors="white", edgecolors=c, lw=1.6, zorder=3)
+                for y in extra.get(key, []):
+                    ax.scatter(ui + 1.6 * dx, y, s=18, color=c, alpha=0.6, zorder=2)  # beside the cell, outward
                 if r.early_best:
                     early_ring(ax, ui + dx, r.int8)
                     ringed = True
-                costs.append(f"{r.params_eff_m:.2f}")
-            ticks.append((ui, f"{ulabel}\n" + (f"{' · '.join(costs)} M params" if costs else "pendente")))
+                costs.append(f"{r.macs_eff_m:.0f}M" + (f" ({r.winograd_pct:.0f}%)" if pd.notna(r.get("winograd_pct")) else ""))
+            ticks.append((ui, f"{ulabel}\n" + ("\n".join(costs) if costs else "pendente")))
         for k, dx in kernels:  # each kernel's FP32 across the three units
             pts = [(ui + dx, v.loc[CELLS[(k, u, n)], "fp32"]) for ui, (u, _) in enumerate(UNITS) if CELLS[(k, u, n)] in v.index]
             if len(pts) > 1:
                 ax.plot(*zip(*pts), color=KCOLOR[f"k{k}x{k}"], lw=1, alpha=0.6, zorder=2)
         ax.set_xticks([t for t, _ in ticks])
         ax.set_xticklabels([t for _, t in ticks], fontsize=9)
-        ax.set_title(nlabel, fontsize=10)
+        ax.set_title(nlabel, fontsize=9)
         ax.margins(x=0.1, y=0.12)
     axes[0].set_ylabel("Top-1 (%)")
     handles = legend_kernels(["k3x3", "k2x2"]) + [
         Line2D([], [], marker="o", color=TEXT_SECONDARY, ls="", ms=8, label="FP32"),
         Line2D([], [], marker="D", mfc="white", mec=TEXT_SECONDARY, ls="", ms=8, label="INT8")]
-    fig.legend(handles=handles + ([early_handle("ring")] if ringed else []), loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=6, fontsize=9)
+    if extra:
+        handles.append(Line2D([], [], marker="o", color=TEXT_SECONDARY, alpha=0.5, ls="", ms=4, label="seeds 43 e 44 (FP32)"))
+    fig.legend(handles=handles + ([early_handle("ring")] if ringed else []), loc="outside lower center", ncol=6, fontsize=9)
     band = band_for(bands, "alexnet", True)["fp32"]
     fig.suptitle("Bottleneck e Fire: custo menor sem perder acurácia? (AlexNet, conv1 stride 1, 2 max-pools 2×2, GAP + BN)\n"
-                 "sob cada unidade: milhões de parâmetros do 3×3 · do 2×2\n" + LIVE_NOTE
-                 + (f" · ruído entre seeds (GAP + BN): ±{band:.1f} p.p. FP32" if pd.notna(band) else "")
+                 "sob cada bloco: MACs do 3×3 e, abaixo, do 2×2; entre parênteses, a parte que um acelerador Winograd executa\n"
+                 + LIVE_NOTE + (f" · ruído entre seeds (GAP + BN): ±{band:.1f} p.p. FP32" if pd.notna(band) else "")
                  + (f"\nainda na fila: {queued} de 24 pontos" if queued else ""), fontsize=11)
-    fig.tight_layout()
     savefig(fig, "01_bottleneck_fire.png", figs)
 
 
@@ -124,7 +131,7 @@ def main():
     c = contrasts(s42)
     c.to_csv(TABLES / "contrasts.csv", index=False)
     contrasts_by_seed(df, contrasts).to_csv(TABLES / "contrasts_by_seed.csv", index=False)
-    fig_bottleneck_fire(s42, noise_bands(frame()), FIGS)
+    fig_bottleneck_fire(s42, noise_bands(frame()), FIGS, df[df.seed != 42])
     if len(c):
         print(c.groupby("factor", sort=False)[["d_fp32", "d_int8", "params_change_pct", "macs_change_pct"]].agg(["median", "count"]).round(2).to_string())
 
