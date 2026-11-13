@@ -1,4 +1,4 @@
-"""report/artigo_kernel.tex crops the title each figure carries with a fixed `trim` (its caption says the same). The crop
+"""report/artigo_kernel/artigo_kernel.tex crops the title each figure carries with a fixed `trim` (its caption says the same). The crop
 is silent: a title that gains or loses a line when a figure is redrawn moves the cut into text or into the plot. This
 holds every cut to a band with no dark pixel below some title (2026-11-05)."""
 import re
@@ -9,7 +9,7 @@ import pytest
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
-TEX = ROOT / "report" / "artigo_kernel.tex"
+TEX = ROOT / "report" / "artigo_kernel" / "artigo_kernel.tex"
 FIGS = ROOT / "results" / "figures_generated"  # the article's \graphicspath
 CUTS = re.findall(r"\\includegraphics\[[^\]]*trim=0 0 0 ([\d.]+)[^\]]*\]\{([^}]+)\}", TEX.read_text())
 

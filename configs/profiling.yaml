@@ -43,7 +43,7 @@ models:
   - mobilenetv2
   - alexnet_fire
   - alexnet_dilated_gap
-  - resnet18tv  # third "baseline não restrito" named alongside mobilenetv2/vgg_style in report/ic_report.tex
+  - resnet18tv  # third "baseline não restrito" named alongside mobilenetv2/vgg_style in report/ic_report/ic_report.tex
 
 precisions: [fp32, int8]  # fp32 on GPU, int8 on CPU (shared by both the layer and model sweeps)
                           # model sweep int8: build_qat_from_model (uncalibrated) + convert_to_int8

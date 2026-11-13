@@ -1,4 +1,4 @@
-"""Pareto-frontier helpers shared by report/generate_figures.py and
+"""Pareto-frontier helpers shared by report/ic_report/generate_figures.py and
 presentation/make_figures.py -- both plot fp32/int8 accuracy vs. size/latency/MACs
 figures from the same results/ CSVs and used to reimplement this independently."""
 

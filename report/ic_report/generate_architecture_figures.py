@@ -7,7 +7,7 @@ cruder implementation that did NOT reproduce them (hardcoded figsize=(42,16) ins
 the canvas from the diagram content), so running it silently replaced good figures with bad
 ones. Keep this file and the notebook cells in sync.
 
-Usage:  python report/generate_architecture_figures.py
+Usage:  python report/ic_report/generate_architecture_figures.py
 """
 import matplotlib
 matplotlib.use("Agg")
@@ -43,7 +43,7 @@ from models.final_architecture import _FireResBlock
 
 apply_report_style()
 
-FIGURES_DIR = project_root / "report" / "figures"
+FIGURES_DIR = project_root / "report" / "ic_report" / "figures"
 FIGURES_DIR.mkdir(parents=True, exist_ok=True)
 
 

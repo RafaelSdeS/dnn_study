@@ -11,8 +11,8 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "report"))
-from pareto import pareto_frontier  # noqa: E402 -- shared with report/generate_figures.py
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "report" / "ic_report"))
+from pareto import pareto_frontier  # noqa: E402 -- shared with report/ic_report/generate_figures.py
 
 # Setup
 OUTPUT_DIR = Path("presentation/figures")

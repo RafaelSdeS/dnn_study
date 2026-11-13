@@ -487,7 +487,7 @@ bottleneck. This is a first read of the raw numbers, not yet the H1–H4 hypothe
 Segmentation (Part B) has a fully implemented model/trainer/CLI (`build_deeplabv3_segmenter`,
 `SegmentationTrainer`, `run_segmentation` — no longer placeholders) and PCAD runs are now complete
 for all 3 backbones × FP32/QAT/INT8 (`outputs/pcad/phase_7_detection_segmentation/seg_*`), and they are
-analysed in the notebook's Part B (stage bars, size, efficiency; outputs stored) and in `report/ic_report.tex` Eixo 6
+analysed in the notebook's Part B (stage bars, size, efficiency; outputs stored) and in `report/ic_report/ic_report.tex` Eixo 6
 (`tab:phase_7_segmentation`), VOC2012 val:
 
 | Backbone | FP32 mIoU | QAT mIoU | INT8 mIoU | Size FP32 / INT8 (MB) |
@@ -522,7 +522,7 @@ FP32 (measured post-fit) and INT8 (measured from a QAT run that correctly starte
 checkpoint) were scored on different weights. `ml/trainer.py` is fixed and this run's FP32 was
 re-evaluated from the surviving best checkpoint (`scripts/oneoff/backfill_best_epoch_eval.py`); INT8 is
 unchanged (the QAT stage already started from the correct checkpoint). See `docs/logs/PHASE8_LOG.md`
-Stage 11 and `report/ic_report.tex` Eixo 4.
+Stage 11 and `report/ic_report/ic_report.tex` Eixo 4.
 
 **The bypass-alone fraction of Phase 4's total gain grew substantially with more training — and
 the correction pushes it further still.** The original ~55% estimate (git commit `924d553`) came

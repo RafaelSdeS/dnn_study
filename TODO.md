@@ -153,7 +153,7 @@ Results in `results/phase_2_kernel_restriction/` (57 epochs, full QAT + INT8).
 Closed by the Phase 11 redesign (2026-10-03/04, `docs/logs/PHASE11_LOG.md` "One recipe", "Minimal design"): the old
 `phase_11_geometry_controls` / `_geometry_factorial` / `_geometry_seeds_*` runs are archived (`outputs/pcad/archive_adamw_recipe/`),
 and the one-recipe design has what they were for -- the large-kernel control at the adapted geometry (`alexnet_k11-5-3_stride2_...`)
-and Bottleneck / Fire next to their parents under one recipe (`phase_11_families`). ✅ 2026-11-10: `report/ic_report.tex` no longer
+and Bottleneck / Fire next to their parents under one recipe (`phase_11_families`). ✅ 2026-11-10: `report/ic_report/ic_report.tex` no longer
 quotes the archived Phase 11 numbers (it covers Phases 1-10 only and cites the article for the controlled comparison; user, 2026-11-10).
 
 M7 extension (2026-09-25, `docs/logs/PHASE11_LOG.md` "M7 extension"): ✅ reproducible from `main` since 2026-10-19 (the qat_wino-only
@@ -374,7 +374,7 @@ Status: `results/phase_11_geometry_analysis/design_status.csv`; findings: `docs/
 
 1. [ ] `exclude: tupi4` in `configs/slurm/tupi_4090.yaml` / `tupi_beagle.yaml`: **keep it (decision 2026-11-06).** Over every user's jobs of >= 30 min since 2026-10-01, tupi4 lost 10 of 126 to a signal vs 9 of 903 elsewhere, and the i9 nodes (tupi3-6) 19 of 678 vs 0 of 351 on the Xeons (PHASE13_LOG "2026-11-06"). Drop it only after the GPPD admin checks the node (dmesg/MCE, BIOS microcode, memtest) or several long real runs finish there. Open: ask the admin about tupi4 (and tupi3 / tupi5); a short stress job on tupi4 with tupi5/6 as control, if wanted (a submission: needs the user's go).
 2. [ ] Re-evaluate the 152 Phase 11 cells on one machine type so latency compares across cells (docs/REFERENCE.md "Running": tupi3-6). Resubmitting a finished run only re-evaluates it. **Postponed (user, 2026-11-06)** until the more important runs (Phase 13 seeds, Phase 14) are done; the 2-cell pilot (one beagle-trained, one nyx-trained cell) **ran 2026-11-10** (835989 / 835990, tupi6, 3.5-4 min each in QOS `short`; accuracy unchanged, latency only; synced 2026-11-11, PHASE11_LOG "Re-evaluation pilot"). **The other 150 queued 2026-11-11** (`~/queue_phase11_reeval.txt`, `--slurm tupi36`, QOS `short`): the feeder waits until no normal-QOS training job is pending (Stage B started), then feeds 8 at a time; log `~/queue_phase11_reeval.log`. When done: check `sacct` for signal deaths (rerun those), sync the 152 run dirs, regenerate figure 17. tupi3-6 are the nodes with crashes: a re-evaluation killed by a signal is rerun, never resumed.
-3. ~~Report (`report/ic_report.tex`): an Eixo 8 for Phases 11-13~~ -- **dropped (user, 2026-11-07): `ic_report.tex` is not changed with the Phase 11-14 data**; those results go to the article (`report/artigo_kernel.tex`, branch `docs/article-phases-11-13`) only.
+3. ~~Report (`report/ic_report/ic_report.tex`): an Eixo 8 for Phases 11-13~~ -- **dropped (user, 2026-11-07): `ic_report.tex` is not changed with the Phase 11-14 data**; those results go to the article (`report/artigo_kernel/artigo_kernel.tex`, branch `docs/article-phases-11-13`) only.
 
 ## Phase 10 — Extended Architecture Search (Future)
 

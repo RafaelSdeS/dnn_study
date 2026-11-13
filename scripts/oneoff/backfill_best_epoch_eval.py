@@ -35,7 +35,7 @@ loading with strict=False would silently leave that observer at its uncalibrated
 (it was never trained), producing a meaningless INT8 number instead of a merely-imprecise
 one. This script detects the mismatch and falls back to the previously-measured INT8 value
 for alexnet_fire_bypass too, printing why. Net effect: only FP32 accuracy is corrected here
-for all 6 models; every INT8 number is left as previously measured (see report/ic_report.tex
+for all 6 models; every INT8 number is left as previously measured (see report/ic_report/ic_report.tex
 for how the two caveats differ in what they say about that number's remaining meaning).
 
 Needs the Tiny ImageNet-200 val split, downloaded via kagglehub on first run (same fallback

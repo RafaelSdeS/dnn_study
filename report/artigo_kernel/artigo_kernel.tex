@@ -1,5 +1,5 @@
 % RASCUNHO. Resultados das fases 11 a 14, no formato de ic_report.tex.
-% Compilar a partir de report/:  latexmk -pdf -outdir=<pasta fora do repo> artigo_kernel.tex
+% Compilar a partir de report/artigo_kernel/:  latexmk -pdf -outdir=<pasta fora do repo> artigo_kernel.tex
 % As figuras vêm direto de results/figures_generated/; os títulos embutidos são cortados com trim e a informação vai para a legenda.
 % \pendente{...} marca, em vermelho, o que depende de treinos em andamento (hoje: as seeds 43 e 44 do Fire 3x3 com dois blocos por
 % estágio, sec:unidades). A fase 14 (Winograd-FPGA na receita única, docs/logs/PHASE14_LOG.md) terminou em 2026-11-09; as seeds 43 e 44
@@ -19,7 +19,7 @@
 \usepackage{xcolor}
 \usepackage{placeins}
 
-\graphicspath{{../results/figures_generated/}}
+\graphicspath{{../../results/figures_generated/}}
 \newcommand{\pendente}[1]{\textcolor{red}{[#1]}}
 \newcommand{\by}{\ensuremath{\times}}
 \newcommand{\mn}{\ensuremath{-}}

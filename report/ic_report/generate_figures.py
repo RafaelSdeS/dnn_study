@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Generate the report-only figure variants for report/ic_report.tex.
+Generate the report-only figure variants for report/ic_report/ic_report.tex.
 
 These two PNGs (kernel_restriction_cost, extreme_compression_methods)
 started as copies of presentation/make_figures.py's slide figures, hand-edited ad hoc for print
@@ -32,7 +32,7 @@ from matplotlib.lines import Line2D
 from matplotlib.text import Text
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # so `import ml` resolves when run as a script
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # the repo root, so `import ml` resolves when run as a script
 from ml.plotting import (
     BLUE, RED, GREEN, PURPLE, AMBER, TEXT_PRIMARY, TEXT_SECONDARY,
     GROUP_COLORS, MODEL_GROUP, BACKBONE_COLORS, apply_report_style, group_legend,
@@ -41,7 +41,7 @@ from pareto import pareto_frontier, pareto_front_mask
 
 apply_report_style()
 
-OUTPUT_DIR = Path("report/figures")
+OUTPUT_DIR = Path("report/ic_report/figures")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # One legend fontsize for every figure in this script -- previously each legend picked its own
@@ -114,7 +114,7 @@ rows = df[df["base_model"].isin(models_fig1)
 model_to_acc = dict(zip(rows["base_model"], rows["top1_%_FP32"]))
 model_to_size = dict(zip(rows["base_model"], rows["size_MB_FP32"]))
 # ponytail: no Phase 11 run here -- the report covers Phases 1-10 only (user, 2026-11-10); the unmodified
-# AlexNet from scratch lives in report/artigo_kernel.tex.
+# AlexNet from scratch lives in report/artigo_kernel/artigo_kernel.tex.
 accuracies = [model_to_acc[m] for m in models_fig1]
 sizes = [model_to_size[m] for m in models_fig1]
 

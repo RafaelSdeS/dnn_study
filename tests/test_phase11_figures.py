@@ -96,7 +96,7 @@ def test_every_phase_11_figure_renders(tmp_path, monkeypatch, subset):
 
 
 def test_figure_numbers_get_a_decimal_comma(tmp_path):
-    """savefig writes numbers as report/ic_report.tex does (pt-BR): texts, table cells and ticks; only digit.digit."""
+    """savefig writes numbers as report/ic_report/ic_report.tex does (pt-BR): texts, table cells and ticks; only digit.digit."""
     import matplotlib.pyplot as plt
     from scripts.phase11.analyze_geometry import savefig
 
@@ -171,13 +171,13 @@ def test_every_phase_12_figure_renders(tmp_path, monkeypatch):
 
 
 def test_article_figures_print_at_a_readable_scale():
-    """report/artigo_kernel.tex shrinks each PNG to its \\includegraphics width; below 0.75 of the drawn size, matplotlib's
+    """report/artigo_kernel/artigo_kernel.tex shrinks each PNG to its \\includegraphics width; below 0.75 of the drawn size, matplotlib's
     10 pt text prints under ~7.5 pt (2026-11-11 review: 0.29-0.62, 2-5 pt). Draw each figure near its printed size."""
     import re
     import struct
 
     root = Path(__file__).resolve().parents[1]
-    tex = (root / "report/artigo_kernel.tex").read_text()
+    tex = (root / "report/artigo_kernel/artigo_kernel.tex").read_text()
     textwidth_in = 516 / 72.27  # IEEEtran conference's \textwidth, 516 pt
     for frac, path in re.findall(r"\\includegraphics\[width=([\d.]*)\\textwidth[^]]*\]\{([^}]+)\}", tex):
         png = root / "results/figures_generated" / path
