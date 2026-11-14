@@ -507,3 +507,14 @@ The article's `sec:unidades` ("No 2x2, o Fire empata com o corpo comum") needs t
 Jobs at 08:45: `k3x3firestacked` s43 (837758, beagle) at QAT 10 of 50, ~250 s/epoch, ends ~11:30, inside its wall (13:08); s44 is the
 last line of `~/queue_followups.txt` (feeder `QOS=normal MAX=10`). The f63c arm 836205 moved to QOS short (`scontrol update QOS=short
 TimeLimit=04:00:00`, user OK; QOS short's cap is now 4 h, priority 10000), which also frees the normal slot the s44 line waits for.
+
+**The article, same day (user: "um texto mais fluido", no bold run-in labels).** `report/artigo_kernel/artigo_kernel.tex` rewritten as
+running prose: no paragraph or list item opens with a bold label any more (66 paragraphs + 20 items; the 4 study names and the 2
+principles are italic), runs of short sentences joined, the Discussion's limitations are three paragraphs by theme; the design
+recommendations and the 4-step pipeline stay lists, without labels. Structure, order, floats and captions untouched. The style pass was
+checked by script against ab68098: preamble, the 29 floats and the bibliography byte-identical; the same 537 numbers, 54 cite keys and
+65 refs in the prose. Then one content edit, kept apart: the 2x2 Fire pair at 3 seeds in `sec:unidades` ("fica um pouco abaixo",
+-0,66 FP32 outside the ±0,4 band / -1,06 INT8), the Fire recommendation and the seeds limitation in the Discussion, `tab:blocos`
+7 (+2), combinations 35, total 287 -> 288 (abstract, "Dados", caption). The 3x3 Fire pair keeps its `\pendente`. PDF rebuilt: 21 pages,
+no overfull box; `test_artigo_trim` and `test_article_figures_print_at_a_readable_scale` pass. Plan:
+`~/.claude/plans/crystalline-chasing-rocket.md`. Not committed.

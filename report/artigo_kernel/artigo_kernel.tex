@@ -57,7 +57,7 @@ mateus.grellert@inf.ufrgs.br}
 \begin{abstract}
 O algoritmo de Winograd faz convoluções com menos multiplicações, mas só compensa com kernels pequenos, como 2\by2 e 3\by3, enquanto
 redes clássicas, como a AlexNet, usam kernels bem maiores. Este artigo mede quanto custa trocar esses kernels e como recuperar a
-acurácia perdida. Para isso, fizemos 287 treinos no Tiny ImageNet e no CIFAR-100, quase todos com uma única receita e mudando um fator
+acurácia perdida. Para isso, fizemos 288 treinos no Tiny ImageNet e no CIFAR-100, quase todos com uma única receita e mudando um fator
 de cada vez, e avaliamos cada rede em FP32 e em INT8. O custo depende da rede e do classificador. Com classificador GAP e BatchNorm,
 passar de 3\by3 para 2\by2 custa de 1,0 a 2,4 pontos percentuais (p.p.) na AlexNet, na VGG16 e na ResNet-18. Na AlexNet com GAP, essa
 perda some quando as duas redes têm a mesma capacidade, e a rede inteira em 2\by2 fica só 0,5 p.p. abaixo dos kernels originais, com
@@ -194,7 +194,7 @@ segundo é \textit{mudar uma coisa de cada vez}, para que cada diferença tenha 
 \subsection{Dados}
 
 O conjunto principal é o Tiny ImageNet \cite{le2015tiny}, com imagens 64\by64 de 200 classes, 100 mil imagens de treino e 10 mil de
-validação oficial. Escolhemos esse conjunto pela velocidade, já que 287 treinos longos no ImageNet completo seriam inviáveis, e porque
+validação oficial. Escolhemos esse conjunto pela velocidade, já que 288 treinos longos no ImageNet completo seriam inviáveis, e porque
 conclusões sobre hiperparâmetros obtidas em versões reduzidas do ImageNet costumam valer para o conjunto completo
 \cite{chrabaszcz2017downsampled}.
 
@@ -319,7 +319,7 @@ um por tamanho de bloco, com as mesmas 50 épocas e a mesma taxa do QAT comum, d
 pesos e só diferem na aritmética. Comparamos cada braço com o FP32 da própria rede, no conjunto de teste, com uma seed.
 
 \begin{table}[!t]
-\caption{Treinos por estudo (total: 287). Entre parênteses, os treinos extras com as seeds 43 e 44}
+\caption{Treinos por estudo (total: 288). Entre parênteses, os treinos extras com as seeds 43 e 44}
 \label{tab:blocos}
 \centering
 \footnotesize
@@ -346,9 +346,9 @@ Taxa de aprendizado 0,005 e 0,02 & 6 \\
 Ajuste fino de redes pré-treinadas & 12 \\
 CIFAR-100 (3 seeds) & 21 \\
 \midrule
-\multicolumn{2}{@{}l}{\textit{Estudo de combinações (34; mais 7 redes do principal)}} \\
+\multicolumn{2}{@{}l}{\textit{Estudo de combinações (35; mais 7 redes do principal)}} \\
 Kernel, conv1, corpo e stride da conv1 & 18 (+8) \\
-Blocos Bottleneck e Fire no corpo de stride 1 & 7 (+1) \\
+Blocos Bottleneck e Fire no corpo de stride 1 & 7 (+2) \\
 \midrule
 \multicolumn{2}{@{}l}{\textit{Aritmética Winograd (62)}} \\
 Redes FP32 novas & 14 \\
@@ -755,7 +755,7 @@ Como essas duas redes saíram do topo das 24, a seed 42 pode estar favorecendo a
 \subsection{Blocos Bottleneck e Fire barateiam o melhor corpo?}
 \label{sec:unidades}
 
-A resposta é sim para o Fire com dois blocos por estágio; com um bloco por estágio, nenhum dos dois consegue. Para chegar a ela, partimos do corpo de stride 1 do estudo de combinações, sem atalho, e trocamos cada convolução por um bloco Bottleneck ou Fire com o mesmo kernel (Figura~\ref{fig:unidades}).
+Com dois blocos por estágio, o Fire barateia o corpo a um custo pequeno ou nulo em acurácia; com um bloco por estágio, nenhum dos dois consegue. Para chegar a essa resposta, partimos do corpo de stride 1 do estudo de combinações, sem atalho, e trocamos cada convolução por um bloco Bottleneck ou Fire com o mesmo kernel (Figura~\ref{fig:unidades}).
 
 \begin{figure*}[!t]
 \centering
@@ -766,9 +766,9 @@ A resposta é sim para o Fire com dois blocos por estágio; com um bloco por est
 
 Com um bloco por estágio, os blocos cortam de 70 a 83\% dos parâmetros e de 66 a 77\% dos MACs, mas perdem de 1,68 a 3,56 p.p. em FP32 nas quatro trocas, sempre além da variação de $\pm$0,7 p.p. Nesse caso, o Bottleneck fica à frente do Fire nos dois kernels (por 1,41 p.p. no 3\by3 e 0,95 p.p. no 2\by2).
 
-Com dois blocos por estágio, a ordem se inverte: o Fire fica 1,27 p.p. (3\by3) e 1,54 p.p. (2\by2) acima do Bottleneck. No 2\by2, o Fire empata com o corpo comum ($-$0,24 p.p. na seed 42 e $-$0,68 p.p. na seed 43), com um quarto dos parâmetros e dos MACs. No 3\by3, ele fica 1,67 p.p. acima do corpo comum (60,20\% contra 58,53\%) e 1,50 p.p. acima da média de 3 seeds dele (58,70\%), com um quinto dos parâmetros e dos MACs. \pendente{Uma seed só: as seeds 43 e 44 desta rede estão na fila.} Com o Fire, os dois kernels ficam juntos (60,20\% e 60,11\%), enquanto os corpos comuns ficam 1,82 p.p. separados. Já o Bottleneck empata com o corpo comum no 3\by3 ($+$0,40 p.p.) e perde 1,78 p.p. no 2\by2.
+Com dois blocos por estágio, a ordem se inverte: o Fire fica 1,27 p.p. (3\by3) e 1,54 p.p. (2\by2) acima do Bottleneck. No 2\by2, o Fire fica um pouco abaixo do corpo comum nas três seeds ($-$0,24, $-$0,68 e $-$1,06 p.p. em FP32). Na média das três, são 59,81\% contra 60,47\% em FP32 ($-$0,66 p.p., fora da faixa de $\pm$0,4 p.p. para médias de 3 seeds) e 59,57\% contra 60,63\% em INT8 ($-$1,06 p.p.), com um quarto dos parâmetros e dos MACs. No 3\by3, ele fica 1,67 p.p. acima do corpo comum (60,20\% contra 58,53\%) e 1,50 p.p. acima da média de 3 seeds dele (58,70\%), com um quinto dos parâmetros e dos MACs. \pendente{Uma seed só: as seeds 43 e 44 desta rede estão na fila.} Na seed 42, os dois kernels ficam juntos com o Fire (60,20\% e 60,11\%), enquanto os corpos comuns ficam 1,82 p.p. separados. Já o Bottleneck empata com o corpo comum no 3\by3 ($+$0,40 p.p.) e perde 1,78 p.p. no 2\by2.
 
-Para um acelerador Winograd, o Fire é um meio-termo, porque os blocos põem parte da conta em convoluções 1\by1, que o acelerador não executa. Com dois por estágio, o Fire 3\by3 deixa no acelerador 76,9\% dos seus MACs, ou 283M, contra 1800M da rede comum, e põe 81M em convoluções 1\by1. O Fire 2\by2 deixa 59,7\%, e o Bottleneck, de 40 a 64\% nas quatro redes. O Fire reduz, portanto, o trabalho do acelerador em cerca de seis vezes sem perder acurácia, mas exige outra unidade para as convoluções 1\by1. É a mesma tensão da Seção~\ref{sec:hardware}, em escala menor.
+Para um acelerador Winograd, o Fire é um meio-termo, porque os blocos põem parte da conta em convoluções 1\by1, que o acelerador não executa. Com dois por estágio, o Fire 3\by3 deixa no acelerador 76,9\% dos seus MACs, ou 283M, contra 1800M da rede comum, e põe 81M em convoluções 1\by1. O Fire 2\by2 deixa 59,7\%, e o Bottleneck, de 40 a 64\% nas quatro redes. O Fire 3\by3 reduz, portanto, o trabalho do acelerador em cerca de seis vezes sem perder acurácia (uma seed), mas exige outra unidade para as convoluções 1\by1. É a mesma tensão da Seção~\ref{sec:hardware}, em escala menor.
 
 \FloatBarrier
 
@@ -818,7 +818,7 @@ Os resultados apontam para algumas escolhas:
 \item Acerte primeiro a geometria e o treino: use stride baixo na conv1 para imagens pequenas, BN e, na AlexNet, GAP. Esses fatores pesam tanto ou mais que o kernel. O stride 1 é o mais caro, pois quadruplica os MACs, e cabe a cada projeto decidir se vale esse custo.
 \item Não aumente o kernel para ganhar acurácia: com GAP e BN, gastar a mais em largura ou em uma segunda convolução por estágio rende mais.
 \item Use a conv1 11\by11 com cuidado. Ela ajuda um corpo de 5 convoluções, mas não acrescenta nada com dois por estágio e tira de 5 a 23 p.p. da parcela Winograd (10 p.p. no 2\by2 com dois por estágio).
-\item Evite redes dominadas por convoluções \textit{depthwise} ou 1\by1 se o alvo é Winograd. Se a meta também é cortar custo, o Fire com dois blocos por estágio mantém a acurácia com um quarto a um quinto dos MACs e ainda deixa de 60 a 77\% deles no acelerador (Seção~\ref{sec:unidades}).
+\item Evite redes dominadas por convoluções \textit{depthwise} ou 1\by1 se o alvo é Winograd. Se a meta também é cortar custo, o Fire com dois blocos por estágio usa de um quarto a um quinto dos MACs e ainda deixa de 60 a 77\% deles no acelerador; em acurácia, mantém a do corpo 3\by3 (uma seed) e custa 0,7 p.p. no 2\by2 (3 seeds; Seção~\ref{sec:unidades}).
 \item Não trate a quantização como obstáculo, mas confira se o FP32 convergiu antes do QAT, para não confundir treino extra com efeito da quantização.
 \end{itemize}
 
@@ -839,7 +839,7 @@ As demais fases do projeto entram só como contexto, porque usaram protocolos di
 
 \subsection{Limitações}
 
-A principal limitação é o número de seeds: a maioria das comparações usa uma só. As duas melhores redes só com 2\by2 foram repetidas com as seeds 43 e 44 e continuam acima da VGG16, mas as outras 22 combinações têm só a seed 42, entre elas a com conv1 11\by11 que empata com essas duas. Os blocos Bottleneck e Fire também têm só a seed 42, exceto o Fire 2\by2 com dois blocos por estágio, repetido com a seed 43.
+A principal limitação é o número de seeds: a maioria das comparações usa uma só. As duas melhores redes só com 2\by2 foram repetidas com as seeds 43 e 44 e continuam acima da VGG16, mas as outras 22 combinações têm só a seed 42, entre elas a com conv1 11\by11 que empata com essas duas. Os blocos Bottleneck e Fire também têm só a seed 42, exceto o Fire 2\by2 com dois blocos por estágio, repetido com as seeds 43 e 44.
 
 O alcance da receita e dos controles também é limitado. A receita única não é a melhor para cada rede, e uma receita pode mudar a ordem entre arquiteturas \cite{bello2021revisiting,wightman2021resnet}; a taxa 0,02, por exemplo, pode melhorar as três redes testadas. O controle de capacidade e os testes de taxa e de CIFAR-100 usam GAP e BN, e o custo do 2\by2 com FC na AlexNet não foi explicado nem repetido. Os dados têm 64 px e 32 px, e as imagens de 224 px são apenas ampliações. Além disso, os três treinos da MobileNetV2 pré-treinada ficaram abaixo da nossa guarda de conversão, e a causa não foi investigada.
 
