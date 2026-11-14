@@ -517,4 +517,6 @@ checked by script against ab68098: preamble, the 29 floats and the bibliography 
 -0,66 FP32 outside the ±0,4 band / -1,06 INT8), the Fire recommendation and the seeds limitation in the Discussion, `tab:blocos`
 7 (+2), combinations 35, total 287 -> 288 (abstract, "Dados", caption). The 3x3 Fire pair keeps its `\pendente`. PDF rebuilt: 21 pages,
 no overfull box; `test_artigo_trim` and `test_article_figures_print_at_a_readable_scale` pass. Plan:
-`~/.claude/plans/crystalline-chasing-rocket.md`. Not committed.
+`~/.claude/plans/crystalline-chasing-rocket.md`. Committed 9653625 (style) + 18aaab5 (content).
+Later the same day (user: "coloque alguns negritos ao longo do texto"): 32 inline bold spans on the key finding of each passage (the three Winograd consequences, the two principles, the answer
+of each Results subsection, the main limitation, the conclusion), none opening a paragraph or a list item; numbers, cites and floats unchanged, 21 pages.
