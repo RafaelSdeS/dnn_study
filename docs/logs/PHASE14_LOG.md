@@ -167,3 +167,5 @@ split. The user asked for everything on one recipe, so this phase reruns them on
   16.4 vs 28.4): some of the base difference is left, googlenet shows none. Epoch 0 on 1000 images, not an arm: where QAT takes `f63c` is the arm's
   question (`phase_14_winograd_f63c_pack`, `resnet18_fpga`, job 836205, pending on tupi by priority). The article's limitation "escalas recalibradas
   não testadas" can now say they were tested at epoch 0; its F(6,3) paragraph waits for the arm. `~/f63_out` on PCAD left in place.
+  2026-11-14 (user OK): 836205, pending on Priority since 11-11, moved to QOS short (`scontrol update JobId=836205 QOS=short TimeLimit=04:00:00`;
+  short's cap is now 4 h, priority 10000; the job sits at priority 32023, top of tupi). Revert: `QOS=normal TimeLimit=1-00:00:00`.

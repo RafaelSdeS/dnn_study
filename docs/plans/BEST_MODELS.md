@@ -128,12 +128,12 @@ figures 02, 11, 14 and 16.
 
 ### What is not established yet
 
-- **Runs still out (2026-11-13).** Phase 12: none. Phase 11: the FC-head width control (`phase_11_kernel_controls_fc`, 2x2 w150 /
+- **Runs still out (2026-11-14).** Phase 12: none. Phase 11: the FC-head width control (`phase_11_kernel_controls_fc`, 2x2 w150 /
   3x3 w67 with FC + Dropout + BN, seeds 42-44, 6 runs, pending on PCAD; PHASE11_LOG "FC capacity control queued") and the one-machine
   latency re-evaluation of the Phase 11 cells (queued behind every training job). Phase 13: seeds 43 / 44 of `k11-2residual` stride 1
-  (2 runs) and of the two Fire stacked cells (`k2x2firestacked` s44 running, `k3x3firestacked` s43 / s44 queued). Phase 14: 48 of 48
+  (2 runs) and of the two Fire stacked cells (`k2x2firestacked` 3 of 3 in 2026-11-14: Fire - plain -0.66 FP32 / -1.06 INT8; `k3x3firestacked` s43 running, s44 queued). Phase 14: 48 of 48
   arms done (item 9); the calibrated-scale follow-up `f63c` has its epoch-0 runs in (2026-11-13: the signal crosses all three
-  nets, item 9) and its `resnet18_fpga` arm pending. Phase 13 (do two convs per stage, a residual skip, an 11×11
+  nets, item 9) and its `resnet18_fpga` arm pending (836205, QOS short since 2026-11-14). Phase 13 (do two convs per stage, a residual skip, an 11×11
   conv1 and conv1 stride 1 add up?, `docs/logs/PHASE13_LOG.md`): 18 of 18 at seed 42 (the last, `k11-2residual` stride 1: 60.48 FP32 / 60.85 INT8, 954 M MACs, PCAD job 835178).
   Stride 1 is the largest factor (+3.0 pp median, 12 of 12 pairs, at 4× the MACs); two convs per stage next (+2.1 pp, 8 of 8);
   3×3 → 2×2 wins on all 8 two-conv pairs (+0.5 to +1.8 pp, 51-55% fewer MACs) and loses on the 5-conv body (−1.1 / −1.3); a residual skip

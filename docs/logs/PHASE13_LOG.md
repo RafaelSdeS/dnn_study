@@ -482,3 +482,28 @@ show now; the Fire seeds will appear on a rerun), panels titled "um / dois bloco
 `report/` now holds one folder per document (8950cf5): `report/ic_report/` (IC report, its figures/ and generators, `pareto.py`) and
 `report/artigo_kernel/` (the article); paths fixed in the scripts, `presentation/make_figures.py`, the two tests and the current docs;
 both PDFs build from their folders with the same page counts (21 / 24).
+
+## 2026-11-14: `k2x2firestacked` seed 44; the 2x2 Fire pair at 3 seeds
+
+Synced from PCAD (run dir only, no `*.pth` / logs; summary md5-identical): `k2x2firestacked` s44 (836101, beagle), plus
+`outputs/pcad/aggregates/phase_13_bottleneck_fire_seed43/44_comparison.csv` (one row each so far). FP32 best epoch 464 of 500,
+`agreement_qat_int8` 0.977. The job hit beagle's 24 h wall in QAT (REQUEUED 2026-11-13 10:49, resumed from its epoch checkpoint, done
+13:05): FP32 ran in one piece, QAT is a resumed stage. `bottleneck_fire` rerun (`contrasts_by_seed.csv` +1 row, figure 01 shows the s44
+dot); `runs_index.csv` +1 row (the 54 archive rows and the row order kept); `results_cross_phase` unchanged.
+
+s44: 59.35 FP32 / 59.03 INT8 against `k2x2stacked` s44 60.41 / 60.54. Fire - plain body, two units per stage, 2x2:
+
+| seed | FP32 | INT8 |
+|---|---|---|
+| 42 | -0.24 | -0.99 |
+| 43 | -0.68 | -0.68 |
+| 44 | -1.06 | -1.51 |
+| 3-seed means | 59.81 - 60.47 = -0.66 | 59.57 - 60.63 = -1.06 |
+
+Same sign in 3 of 3 seeds, and outside the ±0.4 pp band of a 3-seed mean (±0.7 / √3, the article's rule): on the 2x2 body two Fire
+units per stage cost a little (0.7 FP32 / 1.1 INT8) at a quarter of the params and MACs, they do not tie it as the 11-13 reading said.
+The article's `sec:unidades` ("No 2x2, o Fire empata com o corpo comum") needs this.
+
+Jobs at 08:45: `k3x3firestacked` s43 (837758, beagle) at QAT 10 of 50, ~250 s/epoch, ends ~11:30, inside its wall (13:08); s44 is the
+last line of `~/queue_followups.txt` (feeder `QOS=normal MAX=10`). The f63c arm 836205 moved to QOS short (`scontrol update QOS=short
+TimeLimit=04:00:00`, user OK; QOS short's cap is now 4 h, priority 10000), which also frees the normal slot the s44 line waits for.
