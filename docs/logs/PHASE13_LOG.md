@@ -520,3 +520,32 @@ no overfull box; `test_artigo_trim` and `test_article_figures_print_at_a_readabl
 `~/.claude/plans/crystalline-chasing-rocket.md`. Committed 9653625 (style) + 18aaab5 (content).
 Later the same day (user: "coloque alguns negritos ao longo do texto"): 32 inline bold spans on the key finding of each passage (the three Winograd consequences, the two principles, the answer
 of each Results subsection, the main limitation, the conclusion), none opening a paragraph or a list item; numbers, cites and floats unchanged, 21 pages.
+
+## 2026-11-16: `k11-2residual` and `k3x3firestacked` seeds 43 / 44 -- every Phase 13 seed run is in
+
+Synced from PCAD (run dirs only, no `*.pth` / logs) with the four seed aggregate CSVs (`phase_13_hybrids_seed43/44`,
+`phase_13_bottleneck_fire_seed43/44`; PCAD's copies are the local rows + the new ones, two old rows differ only in float repr):
+`k11-2residual` stride 1 s43 (836175, tupi3, done 11-14) / s44 (836179, tupi3), `k3x3firestacked` s43 (837758, beagle, 22.5 h) / s44
+(837830, beagle, 20 h); all COMPLETED, `agreement_qat_int8` 0.975-0.978. `hybrids` and `bottleneck_fire` rerun: `all_runs` and
+`contrasts_by_seed` +2 rows each; Stage B figure 01 shows the 3x3 Fire dots; hybrids figure 01 is byte-identical (the k11 dots, 60.51 /
+60.59, sit under the seed-42 marker at 60.48); `runs_index.csv` +4 (no row lost); `results_cross_phase` unchanged.
+
+Conv1 11x11 + 2x2 residual, stride 1: s43 60.51 / 60.60, s44 60.59 / 60.81 (FP32 / INT8); 3-seed mean 60.53 / 60.75 (SD 0.06 / 0.13).
+Against the 2x2 residual twin, by seed: FP32 -0.27 / +0.13 / +0.67 (mean +0.18, sign changes), INT8 +0.39 / +0.12 / +0.72 (mean +0.41,
+3 of 3, at the edge of the ±0.4 band). The three best nets stay tied: 2x2 stacked 60.47 / 60.63, 2x2 residual 60.35 / 60.34, k11 + 2x2
+residual 60.53 / 60.75; each one's worst seed is above VGG16's best (59.37).
+
+Fire - plain body, two units per stage, 3x3:
+
+| seed | FP32 | INT8 |
+|---|---|---|
+| 42 | +1.67 | +1.61 |
+| 43 | +0.31 | +0.09 |
+| 44 | +0.62 | +0.72 |
+| 3-seed means | 59.57 - 58.70 = +0.87 | 59.42 - 58.61 = +0.81 |
+
+Same sign in 3 of 3 and outside the ±0.4 band: on the 3x3 body two Fire units per stage gain a little at a fifth of the params / MACs;
+seed 42 overstated it. With Fire the two kernels sit together (3x3 59.57, 2x2 59.81 FP32) while the plain bodies are 1.77 apart.
+Article (`sec:unidades` and its opening answer, the Fire recommendation and the Winograd-share paragraph, the seeds limitation -- "15 of 24
+combinations have seed 42 only" --, "As melhores redes" seeds paragraph with the third net, `tab:blocos` 18 (+10) / 7 (+4), combinations
+39) updated with the Phase 11 FC controls and the Phase 14 `f63c` arm: total 288 -> 298, PDF rebuilt (22 pages).

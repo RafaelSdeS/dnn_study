@@ -169,3 +169,13 @@ split. The user asked for everything on one recipe, so this phase reruns them on
   não testadas" can now say they were tested at epoch 0; its F(6,3) paragraph waits for the arm. `~/f63_out` on PCAD left in place.
   2026-11-14 (user OK): 836205, pending on Priority since 11-11, moved to QOS short (`scontrol update JobId=836205 QOS=short TimeLimit=04:00:00`;
   short's cap is now 4 h, priority 10000; the job sits at priority 32023, top of tupi). Revert: `QOS=normal TimeLimit=1-00:00:00`.
+- 2026-11-16: **the `f63c` arm: with the netlist's calibrated scales, `resnet18_fpga` in F63 reaches 54.66 %.** 836205 COMPLETED 2026-11-14 12:46
+  (tupi1, QOS short, 3:39 h, 50 of 50 `qat_wino` epochs, best epoch 41, git 05e6277); the run dir synced (no `*.pth`, no logs) with
+  `outputs/pcad/aggregates/phase_14_winograd_f63c_pack_comparison.csv`; its copied FP32 logits are md5-identical to `phase_14_winograd_fp32`'s.
+  Test top-1, `resnet18_fpga`, one seed: FP32 59.22, F23 59.00 (−0.22), F43 55.26 (−3.96), F63 default 0.56 (−58.66), **F63 `f63c` 54.66 (−4.56)**;
+  agreement with FP32 0.67 (F43 0.64, F63 default 0.005). So the F63 collapse was the analytic worst-case shifts, not the tile size: with the
+  calibrated ones F63 lands 0.6 pp under F43 (F43 still on the default scales -- `f43` has no calibrated set here). The arm stays outside the
+  48-arm medians (`winograd_numerics` reads only `f{23,43,63}_pack`; not rerun, its inputs are unchanged); `runs_index` +2 rows (the FP32 copy
+  and the arm, as for every arm). Article: abstract, the methods' Winograd paragraph (one extra arm), a new paragraph after "A diferença ... não é
+  falha de treino" (epoch-0 numbers of 2026-11-13 + this arm), "2x2 ou 3x3?", the conclusion, the limitation ("só treinadas em uma rede e não
+  testadas em F(4,3)") and future work; `tab:blocos` Winograd 62 -> 63. `~/f63_out` on PCAD still in place.

@@ -51,7 +51,11 @@ figures 02, 11, 14 and 16.
    53.83% (3 seeds) against 3×3's 53.81% (3 seeds), and a 3×3 net narrowed to 2×2's MACs 52.59% (3 seeds) against 2×2's 52.58%
    (3 seeds), figure 26. The other direction does not buy accuracy: 5×5 in every conv (464M MACs, 2.8× 3×3's) reaches 49.25%
    (3 seeds, 49.16-49.36), 4.6 pp under 3×3 -- MACs pay off as width, not as kernel size. Only with an FC + Dropout head does the 5×5
-   pay (52.14%, 1 seed, above 3×3 FC 50.75% and level with 11-5-3-3-3 FC 52.23%). In VGG16 + GAP + BN the all-2×2 net costs 2.4 pp
+   pay (52.14%, 1 seed, above 3×3 FC 50.75% and level with 11-5-3-3-3 FC 52.23%). With FC + Dropout + BN the width control does
+   **not** remove the 2×2 deficit (`phase_11_kernel_controls_fc`, 2026-11-16; only the convs' MACs match, the FC head grows with the
+   width): 2×2 widened to 3×3's conv MACs 47.90% (seeds 42/43; s44 running) against 3×3's 50.75% (1 seed) -- -2.85 pp with more
+   params (76 vs 58 M) and total MACs (241 vs 223 M); 3×3 narrowed 47.55% (3 seeds, 47.39-47.64) against 2×2's 45.68% (1 seed) --
+   +1.87 pp with fewer params (44 vs 56 M). With FC the 2×2 loss is the kernel, not capacity (widening recovers 2.2 of its 5.1 pp). In VGG16 + GAP + BN the all-2×2 net costs 2.4 pp
    (56.84 vs 59.27%, 3 seeds each); a single 2×2 block costs nothing measurable except in block 4 (3 seeds per pattern: block
    1 / 2 / 3 / 5 59.54 / 59.34 / 59.05 / 59.18%, block 4 58.56%, −0.71 pp, below its 3×3 twin at all three seeds) (figure 24).
 2. **Kernel size is a second-order factor.** conv1 stride, BatchNorm, Dropout and pretraining move accuracy by 4-10 pp, the kernel
@@ -110,7 +114,9 @@ figures 02, 11, 14 and 16.
    observers, calibrated on the Winograd net's own activations, are inflated by the compounded error until almost no signal crosses
    the net (`scripts/phase14/f63_collapse.py` on `resnet18_fpga`, `vgg13_fpga`, `googlenet_fpga`; why it compounds on some nets and
    not others is not isolated). The netlist's calibrated shifts (`f63c`) remove the starvation: at epoch 0 (first 1000 test images,
-   no QAT) `resnet18_fpga` 0.3 -> 23.7 %, `vgg13_fpga` 0.1 -> 16.4 %, `googlenet_fpga` 0.3 -> 38.1 %; the `f63c` QAT arm is still out. The AdamW-recipe numbers this item used to quote (F(4,3) −5.1, F(6,3) −18.9, 14 nets) are archived in
+   no QAT) `resnet18_fpga` 0.3 -> 23.7 %, `vgg13_fpga` 0.1 -> 16.4 %, `googlenet_fpga` 0.3 -> 38.1 %; the `f63c` QAT arm on
+   `resnet18_fpga` (`phase_14_winograd_f63c_pack`, 50 of 50 epochs, one seed) reaches 54.66 % (F63 default 0.56, F43 55.26, F23 59.00, FP32
+   59.22): the collapse is the worst-case scales, while the larger tile still costs (−4.56 pp vs −0.22 F23 / −3.96 F43, F43 on default scales). The AdamW-recipe numbers this item used to quote (F(4,3) −5.1, F(6,3) −18.9, 14 nets) are archived in
    `outputs/pcad/archive_winograd_old_recipe/`; the `~/dnn_study_m7` follow-ups (`_hw` / `_orig` / `_s43`) are not summarized here.
 10. **Detection (Phase 7): compensation transfers only partly.** Bottleneck is the best detector (20.98 mAP FP32, 20.85 INT8) and
    quantization-stable; Fire is the worst (8.94 mAP) and loses 2.6 pp in QAT; the 223 MB AlexNetTV backbone does not turn its size
@@ -128,19 +134,16 @@ figures 02, 11, 14 and 16.
 
 ### What is not established yet
 
-- **Runs still out (2026-11-14).** Phase 12: none. Phase 11: the FC-head width control (`phase_11_kernel_controls_fc`, 2x2 w150 /
-  3x3 w67 with FC + Dropout + BN, seeds 42-44, 6 runs, pending on PCAD; PHASE11_LOG "FC capacity control queued") and the one-machine
-  latency re-evaluation of the Phase 11 cells (queued behind every training job). Phase 13: seeds 43 / 44 of `k11-2residual` stride 1
-  (2 runs) and of the two Fire stacked cells (`k2x2firestacked` 3 of 3 in 2026-11-14: Fire - plain -0.66 FP32 / -1.06 INT8; `k3x3firestacked` s43 running, s44 queued). Phase 14: 48 of 48
-  arms done (item 9); the calibrated-scale follow-up `f63c` has its epoch-0 runs in (2026-11-13: the signal crosses all three
-  nets, item 9) and its `resnet18_fpga` arm pending (836205, QOS short since 2026-11-14). Phase 13 (do two convs per stage, a residual skip, an 11×11
+- **Runs still out (2026-11-16).** Phase 12, 13 and 14: none (Phase 13's seeds 43 / 44 of `k11-2residual` stride 1 and of both Fire
+  stacked cells, and Phase 14's `f63c` arm, synced 2026-11-16). Phase 11: the FC-head width control is 5 of 6 in (item 1; the seed-44
+  2x2 w150, 836331, running) and the one-machine latency re-evaluation of the Phase 11 cells (117 of 150 done 2026-11-16). Phase 13 (do two convs per stage, a residual skip, an 11×11
   conv1 and conv1 stride 1 add up?, `docs/logs/PHASE13_LOG.md`): 18 of 18 at seed 42 (the last, `k11-2residual` stride 1: 60.48 FP32 / 60.85 INT8, 954 M MACs, PCAD job 835178).
   Stride 1 is the largest factor (+3.0 pp median, 12 of 12 pairs, at 4× the MACs); two convs per stage next (+2.1 pp, 8 of 8);
   3×3 → 2×2 wins on all 8 two-conv pairs (+0.5 to +1.8 pp, 51-55% fewer MACs) and loses on the 5-conv body (−1.1 / −1.3); a residual skip
   adds +0.4 pp median but 2 of 8 pairs are negative, all inside the noise; the 11×11 conv1 adds nothing once the body has two convs per stage
   (median −0.1). The gains add up only partly (each big step keeps 37-82% of its gain once the other is in). Best: all-2×2 residual at stride 1,
   60.75 FP32 / 60.46 INT8 at 862 M MACs and 2.5 M params, and all-2×2 stacked at stride 1, 60.35 / 60.79 at 803 M, against VGG16 3×3 GAP + BN
-  59.35 (14.8 M, 1255 M) -- those are seed 42. With seeds 43 / 44 (all 8 in 2026-11-07, PHASE13_LOG "all eight seed runs are in"), stride 1, FP32 / INT8 mean over 3 seeds: all-2×2 stacked 60.47 / 60.63, all-2×2 residual 60.35 / 60.34, against the 3×3 twins' 59.39 / 59.50 (residual) and 58.70 / 58.61 (stacked), VGG16 59.27 / 59.45; 3×3 → 2×2 wins in 3 of 3 seeds with the stacked body (+1.7 to +1.8 FP32) and in 2 of 3 with the residual one (one 3×3 run at 60.10), so quote it as +1 to +2 pp; the factor order is unchanged (stride +3.0, two convs per stage +2.1, 3×3 → 2×2 +1.2, skip +0.4, 11×11 −0.1 pp, medians over matched pairs). Phase 13 Stage B (`phase_13_bottleneck_fire`, every conv of the stride-1 body a Bottleneck or Fire unit, 7 of 7 runs in 2026-11-13, PHASE13_LOG "2026-11-13"), seed 42: one unit per stage loses 1.7-3.6 pp in all four cells; at two per stage Fire keeps or beats the plain body at a quarter to a fifth of the params -- `k3x3firestacked` 60.20 / 59.88 (1.00 M params, 368 M MACs) against `k3x3stacked`'s 3-seed 58.70 / 58.61, `k2x2firestacked` 60.11 / 59.80 (0.60 M, 211 M) against `k2x2stacked`'s 60.47 / 60.63 (seed 43: 59.97 / 59.88; seeds 44 and the 3×3 seeds still out).
+  59.35 (14.8 M, 1255 M) -- those are seed 42. With seeds 43 / 44 (all 8 in 2026-11-07, PHASE13_LOG "all eight seed runs are in"), stride 1, FP32 / INT8 mean over 3 seeds: all-2×2 stacked 60.47 / 60.63, all-2×2 residual 60.35 / 60.34, against the 3×3 twins' 59.39 / 59.50 (residual) and 58.70 / 58.61 (stacked), VGG16 59.27 / 59.45; 3×3 → 2×2 wins in 3 of 3 seeds with the stacked body (+1.7 to +1.8 FP32) and in 2 of 3 with the residual one (one 3×3 run at 60.10), so quote it as +1 to +2 pp; the factor order is unchanged (stride +3.0, two convs per stage +2.1, 3×3 → 2×2 +1.2, skip +0.4, 11×11 −0.1 pp, medians over matched pairs). Phase 13 Stage B (`phase_13_bottleneck_fire`, every conv of the stride-1 body a Bottleneck or Fire unit, 7 of 7 runs in 2026-11-13, PHASE13_LOG "2026-11-13"), seed 42: one unit per stage loses 1.7-3.6 pp in all four cells; at two per stage Fire keeps or beats the plain body at a quarter to a fifth of the params -- `k3x3firestacked` 60.20 / 59.88 (1.00 M params, 368 M MACs) against `k3x3stacked`'s 3-seed 58.70 / 58.61, `k2x2firestacked` 60.11 / 59.80 (0.60 M, 211 M) against `k2x2stacked`'s 60.47 / 60.63. Over seeds 42-44 (2026-11-16): `k3x3firestacked` 59.57 / 59.42, +0.87 / +0.81 over its plain body (same sign in 3 of 3 seeds, +0.31 to +1.67 FP32; seed 42 overstated it); `k2x2firestacked` 59.81 / 59.57, −0.66 / −1.06 (3 of 3). Conv1 11×11 + 2×2 residual stride 1 (`k11-2residual`) over seeds 42-44: 60.53 / 60.75, tied with the two all-2×2 nets (+0.18 FP32 over the 2×2 residual, sign changes; +0.41 INT8, 3 of 3).
 - **Seeds.** Most contrasts are seed 42 against a pooled floor of ±0.7-0.8 pp FP32; differences below ~1.5 pp are not resolved, and
   the 11-5-3-3-3 → 3×3 point is one of them. ResNet-18's floor rests on 3 seeds of 2 cells (±1.0 pp FP32); its INT8 band is wide (3 of the 6 runs early best).
 - **Scope.** Two low-resolution datasets (Tiny ImageNet at 64 px, CIFAR-100 at 32 px; the 224 runs are enlarged 64 px images, no

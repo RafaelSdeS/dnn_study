@@ -1,0 +1,1099 @@
+{
+  "features.0.squeeze.0": {
+    "type": "Conv2d",
+    "params": 48,
+    "macs": 196608,
+    "weight_max_abs": 0.489707350730896,
+    "weight_std": 0.23816341161727905,
+    "activation_in": {
+      "max": 2.640000104904175,
+      "p999": 2.640000104904175,
+      "p9999": 2.640000104904175
+    },
+    "activation_out": {
+      "max": 1.8212422132492065,
+      "p999": 1.409601092338562,
+      "p9999": 1.4583839178085327
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 3,
+    "out_channels": 16
+  },
+  "features.0.expand1.0": {
+    "type": "Conv2d",
+    "params": 512,
+    "macs": 2097152,
+    "weight_max_abs": 0.4886559545993805,
+    "weight_std": 0.0726000964641571,
+    "activation_in": {
+      "max": 0.9711322784423828,
+      "p999": 0.806989848613739,
+      "p9999": 0.8241730332374573
+    },
+    "activation_out": {
+      "max": 0.3970593512058258,
+      "p999": 0.18488986790180206,
+      "p9999": 0.26279163360595703
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 16,
+    "out_channels": 32
+  },
+  "features.0.expand3.0": {
+    "type": "Conv2d",
+    "params": 4608,
+    "macs": 18874368,
+    "weight_max_abs": 0.519202470779419,
+    "weight_std": 0.05496222525835037,
+    "activation_in": {
+      "max": 0.9711322784423828,
+      "p999": 0.80768221616745,
+      "p9999": 0.8235377669334412
+    },
+    "activation_out": {
+      "max": 1.4892034530639648,
+      "p999": 0.7700961828231812,
+      "p9999": 0.9867040514945984
+    },
+    "kernel_size": [
+      3,
+      3
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      1,
+      1
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 16,
+    "out_channels": 32
+  },
+  "features.1.squeeze.0": {
+    "type": "Conv2d",
+    "params": 1024,
+    "macs": 4194304,
+    "weight_max_abs": 0.5132992267608643,
+    "weight_std": 0.08375729620456696,
+    "activation_in": {
+      "max": 2.0385258197784424,
+      "p999": 0.799090564250946,
+      "p9999": 1.1047502756118774
+    },
+    "activation_out": {
+      "max": 2.235994577407837,
+      "p999": 1.019453763961792,
+      "p9999": 1.421247959136963
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 64,
+    "out_channels": 16
+  },
+  "features.1.expand1.0": {
+    "type": "Conv2d",
+    "params": 512,
+    "macs": 2097152,
+    "weight_max_abs": 0.37666553258895874,
+    "weight_std": 0.09521285444498062,
+    "activation_in": {
+      "max": 1.982243299484253,
+      "p999": 0.8594447374343872,
+      "p9999": 1.0889548063278198
+    },
+    "activation_out": {
+      "max": 0.6198983788490295,
+      "p999": 0.36380672454833984,
+      "p9999": 0.4463711380958557
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 16,
+    "out_channels": 32
+  },
+  "features.1.expand3.0": {
+    "type": "Conv2d",
+    "params": 4608,
+    "macs": 18874368,
+    "weight_max_abs": 0.245091050863266,
+    "weight_std": 0.05028986930847168,
+    "activation_in": {
+      "max": 1.982243299484253,
+      "p999": 0.8644497990608215,
+      "p9999": 1.1289857625961304
+    },
+    "activation_out": {
+      "max": 1.9818029403686523,
+      "p999": 0.7101405262947083,
+      "p9999": 0.9715064167976379
+    },
+    "kernel_size": [
+      3,
+      3
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      1,
+      1
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 16,
+    "out_channels": 32
+  },
+  "features.3.squeeze.0": {
+    "type": "Conv2d",
+    "params": 3072,
+    "macs": 3145728,
+    "weight_max_abs": 0.5590856671333313,
+    "weight_std": 0.07203564792871475,
+    "activation_in": {
+      "max": 1.6523250341415405,
+      "p999": 0.7474018335342407,
+      "p9999": 0.9280861616134644
+    },
+    "activation_out": {
+      "max": 1.0973546504974365,
+      "p999": 0.5697219967842102,
+      "p9999": 0.7017685770988464
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 64,
+    "out_channels": 48
+  },
+  "features.3.expand1.0": {
+    "type": "Conv2d",
+    "params": 4608,
+    "macs": 4718592,
+    "weight_max_abs": 0.26311761140823364,
+    "weight_std": 0.04142279177904129,
+    "activation_in": {
+      "max": 1.5820035934448242,
+      "p999": 0.8027142286300659,
+      "p9999": 1.0273101329803467
+    },
+    "activation_out": {
+      "max": 0.4427797198295593,
+      "p999": 0.23734325170516968,
+      "p9999": 0.2898573875427246
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 48,
+    "out_channels": 96
+  },
+  "features.3.expand3.0": {
+    "type": "Conv2d",
+    "params": 41472,
+    "macs": 42467328,
+    "weight_max_abs": 0.28611722588539124,
+    "weight_std": 0.028833597898483276,
+    "activation_in": {
+      "max": 1.5820035934448242,
+      "p999": 0.8097898364067078,
+      "p9999": 1.051590085029602
+    },
+    "activation_out": {
+      "max": 1.4685626029968262,
+      "p999": 0.6708548069000244,
+      "p9999": 0.8710778951644897
+    },
+    "kernel_size": [
+      3,
+      3
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      1,
+      1
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 48,
+    "out_channels": 96
+  },
+  "features.4.squeeze.0": {
+    "type": "Conv2d",
+    "params": 9216,
+    "macs": 9437184,
+    "weight_max_abs": 0.3128969073295593,
+    "weight_std": 0.04651760682463646,
+    "activation_in": {
+      "max": 1.4824657440185547,
+      "p999": 0.4228702783584595,
+      "p9999": 0.620679497718811
+    },
+    "activation_out": {
+      "max": 0.9539944529533386,
+      "p999": 0.3543766140937805,
+      "p9999": 0.4811113178730011
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 192,
+    "out_channels": 48
+  },
+  "features.4.expand1.0": {
+    "type": "Conv2d",
+    "params": 4608,
+    "macs": 4718592,
+    "weight_max_abs": 0.3204501271247864,
+    "weight_std": 0.043181162327528,
+    "activation_in": {
+      "max": 1.5206565856933594,
+      "p999": 0.6835005879402161,
+      "p9999": 0.9612645506858826
+    },
+    "activation_out": {
+      "max": 0.3694933354854584,
+      "p999": 0.19144907593727112,
+      "p9999": 0.23098786175251007
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 48,
+    "out_channels": 96
+  },
+  "features.4.expand3.0": {
+    "type": "Conv2d",
+    "params": 41472,
+    "macs": 42467328,
+    "weight_max_abs": 0.1879877895116806,
+    "weight_std": 0.02734615094959736,
+    "activation_in": {
+      "max": 1.5206565856933594,
+      "p999": 0.6798198819160461,
+      "p9999": 0.9309764504432678
+    },
+    "activation_out": {
+      "max": 1.1860227584838867,
+      "p999": 0.5394293665885925,
+      "p9999": 0.673846423625946
+    },
+    "kernel_size": [
+      3,
+      3
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      1,
+      1
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 48,
+    "out_channels": 96
+  },
+  "features.6.squeeze.0": {
+    "type": "Conv2d",
+    "params": 18432,
+    "macs": 4718592,
+    "weight_max_abs": 0.33241555094718933,
+    "weight_std": 0.0412081703543663,
+    "activation_in": {
+      "max": 1.4470118284225464,
+      "p999": 0.6529309153556824,
+      "p9999": 0.834915280342102
+    },
+    "activation_out": {
+      "max": 0.824687123298645,
+      "p999": 0.42370954155921936,
+      "p9999": 0.5116895437240601
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 192,
+    "out_channels": 96
+  },
+  "features.6.expand1.0": {
+    "type": "Conv2d",
+    "params": 18432,
+    "macs": 4718592,
+    "weight_max_abs": 0.23203319311141968,
+    "weight_std": 0.02842259220778942,
+    "activation_in": {
+      "max": 1.7208964824676514,
+      "p999": 0.7949482798576355,
+      "p9999": 1.0436612367630005
+    },
+    "activation_out": {
+      "max": 0.34230396151542664,
+      "p999": 0.21713951230049133,
+      "p9999": 0.24776260554790497
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 96,
+    "out_channels": 192
+  },
+  "features.6.expand3.0": {
+    "type": "Conv2d",
+    "params": 165888,
+    "macs": 42467328,
+    "weight_max_abs": 0.15656206011772156,
+    "weight_std": 0.021083714440464973,
+    "activation_in": {
+      "max": 1.7208964824676514,
+      "p999": 0.7860928773880005,
+      "p9999": 1.0242854356765747
+    },
+    "activation_out": {
+      "max": 1.7604070901870728,
+      "p999": 0.7378074526786804,
+      "p9999": 1.0136455297470093
+    },
+    "kernel_size": [
+      3,
+      3
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      1,
+      1
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 96,
+    "out_channels": 192
+  },
+  "features.7.squeeze.0": {
+    "type": "Conv2d",
+    "params": 36864,
+    "macs": 9437184,
+    "weight_max_abs": 0.36090582609176636,
+    "weight_std": 0.037114616483449936,
+    "activation_in": {
+      "max": 1.3470878601074219,
+      "p999": 0.4808276891708374,
+      "p9999": 0.6515321135520935
+    },
+    "activation_out": {
+      "max": 0.6953758001327515,
+      "p999": 0.28445735573768616,
+      "p9999": 0.35704299807548523
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 384,
+    "out_channels": 96
+  },
+  "features.7.expand1.0": {
+    "type": "Conv2d",
+    "params": 18432,
+    "macs": 4718592,
+    "weight_max_abs": 0.14055992662906647,
+    "weight_std": 0.03227610886096954,
+    "activation_in": {
+      "max": 2.515211582183838,
+      "p999": 0.8429225087165833,
+      "p9999": 1.1565179824829102
+    },
+    "activation_out": {
+      "max": 0.5650508403778076,
+      "p999": 0.2348288893699646,
+      "p9999": 0.29047518968582153
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 96,
+    "out_channels": 192
+  },
+  "features.7.expand3.0": {
+    "type": "Conv2d",
+    "params": 165888,
+    "macs": 42467328,
+    "weight_max_abs": 0.18011018633842468,
+    "weight_std": 0.02187146246433258,
+    "activation_in": {
+      "max": 2.515211582183838,
+      "p999": 0.8399474620819092,
+      "p9999": 1.1639671325683594
+    },
+    "activation_out": {
+      "max": 1.2696292400360107,
+      "p999": 0.6012184619903564,
+      "p9999": 0.7626317143440247
+    },
+    "kernel_size": [
+      3,
+      3
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      1,
+      1
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 96,
+    "out_channels": 192
+  },
+  "features.8.squeeze.0": {
+    "type": "Conv2d",
+    "params": 24576,
+    "macs": 6291456,
+    "weight_max_abs": 0.3209424614906311,
+    "weight_std": 0.04176275432109833,
+    "activation_in": {
+      "max": 1.3592529296875,
+      "p999": 0.43423184752464294,
+      "p9999": 0.6142964363098145
+    },
+    "activation_out": {
+      "max": 0.7076449990272522,
+      "p999": 0.23277276754379272,
+      "p9999": 0.30868422985076904
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 384,
+    "out_channels": 64
+  },
+  "features.8.expand1.0": {
+    "type": "Conv2d",
+    "params": 8192,
+    "macs": 2097152,
+    "weight_max_abs": 0.14859579503536224,
+    "weight_std": 0.038275111466646194,
+    "activation_in": {
+      "max": 3.2758357524871826,
+      "p999": 0.9236875176429749,
+      "p9999": 1.2735921144485474
+    },
+    "activation_out": {
+      "max": 0.6081566214561462,
+      "p999": 0.24533170461654663,
+      "p9999": 0.316257119178772
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 64,
+    "out_channels": 128
+  },
+  "features.8.expand3.0": {
+    "type": "Conv2d",
+    "params": 73728,
+    "macs": 18874368,
+    "weight_max_abs": 0.12779933214187622,
+    "weight_std": 0.025523005053400993,
+    "activation_in": {
+      "max": 3.2758357524871826,
+      "p999": 0.9199094772338867,
+      "p9999": 1.25788414478302
+    },
+    "activation_out": {
+      "max": 1.366060733795166,
+      "p999": 0.7024140357971191,
+      "p9999": 0.8794443011283875
+    },
+    "kernel_size": [
+      3,
+      3
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      1,
+      1
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 64,
+    "out_channels": 128
+  },
+  "features.9.squeeze.0": {
+    "type": "Conv2d",
+    "params": 16384,
+    "macs": 4194304,
+    "weight_max_abs": 0.20048096776008606,
+    "weight_std": 0.04661444574594498,
+    "activation_in": {
+      "max": 2.050483226776123,
+      "p999": 0.5178224444389343,
+      "p9999": 0.7442453503608704
+    },
+    "activation_out": {
+      "max": 0.808140754699707,
+      "p999": 0.2719223201274872,
+      "p9999": 0.37071123719215393
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 256,
+    "out_channels": 64
+  },
+  "features.9.expand1.0": {
+    "type": "Conv2d",
+    "params": 8192,
+    "macs": 2097152,
+    "weight_max_abs": 0.1458754539489746,
+    "weight_std": 0.03942900896072388,
+    "activation_in": {
+      "max": 3.429494857788086,
+      "p999": 1.0026845932006836,
+      "p9999": 1.451215386390686
+    },
+    "activation_out": {
+      "max": 0.817633867263794,
+      "p999": 0.27142971754074097,
+      "p9999": 0.3655315637588501
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 64,
+    "out_channels": 128
+  },
+  "features.9.expand3.0": {
+    "type": "Conv2d",
+    "params": 73728,
+    "macs": 18874368,
+    "weight_max_abs": 0.11922863125801086,
+    "weight_std": 0.024591650813817978,
+    "activation_in": {
+      "max": 3.429494857788086,
+      "p999": 1.0124807357788086,
+      "p9999": 1.4711999893188477
+    },
+    "activation_out": {
+      "max": 1.7816036939620972,
+      "p999": 0.7455382347106934,
+      "p9999": 0.9846492409706116
+    },
+    "kernel_size": [
+      3,
+      3
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      1,
+      1
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 64,
+    "out_channels": 128
+  },
+  "features.10.squeeze.0": {
+    "type": "Conv2d",
+    "params": 16384,
+    "macs": 4194304,
+    "weight_max_abs": 0.20586994290351868,
+    "weight_std": 0.04702584445476532,
+    "activation_in": {
+      "max": 2.8731770515441895,
+      "p999": 0.5387192964553833,
+      "p9999": 0.834213137626648
+    },
+    "activation_out": {
+      "max": 0.7611429691314697,
+      "p999": 0.2876666188240051,
+      "p9999": 0.4117436707019806
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 256,
+    "out_channels": 64
+  },
+  "features.10.expand1.0": {
+    "type": "Conv2d",
+    "params": 8192,
+    "macs": 2097152,
+    "weight_max_abs": 0.16218186914920807,
+    "weight_std": 0.03964763879776001,
+    "activation_in": {
+      "max": 3.8293910026550293,
+      "p999": 1.0833284854888916,
+      "p9999": 1.6651051044464111
+    },
+    "activation_out": {
+      "max": 1.1196720600128174,
+      "p999": 0.30477601289749146,
+      "p9999": 0.43734779953956604
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 64,
+    "out_channels": 128
+  },
+  "features.10.expand3.0": {
+    "type": "Conv2d",
+    "params": 73728,
+    "macs": 18874368,
+    "weight_max_abs": 0.10835497081279755,
+    "weight_std": 0.022426730021834373,
+    "activation_in": {
+      "max": 3.8293910026550293,
+      "p999": 1.089829921722412,
+      "p9999": 1.6543300151824951
+    },
+    "activation_out": {
+      "max": 2.824108600616455,
+      "p999": 0.9837509989738464,
+      "p9999": 1.3784761428833008
+    },
+    "kernel_size": [
+      3,
+      3
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      1,
+      1
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 64,
+    "out_channels": 128
+  },
+  "features.11.squeeze.0": {
+    "type": "Conv2d",
+    "params": 16384,
+    "macs": 4194304,
+    "weight_max_abs": 0.2017059475183487,
+    "weight_std": 0.0455971285700798,
+    "activation_in": {
+      "max": 2.1829254627227783,
+      "p999": 0.5172523856163025,
+      "p9999": 0.8150482177734375
+    },
+    "activation_out": {
+      "max": 0.8040371537208557,
+      "p999": 0.2993209660053253,
+      "p9999": 0.4217778146266937
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 256,
+    "out_channels": 64
+  },
+  "features.11.expand1.0": {
+    "type": "Conv2d",
+    "params": 8192,
+    "macs": 2097152,
+    "weight_max_abs": 0.16636131703853607,
+    "weight_std": 0.014376186765730381,
+    "activation_in": {
+      "max": 2.8838181495666504,
+      "p999": 0.90464848279953,
+      "p9999": 1.3025901317596436
+    },
+    "activation_out": {
+      "max": 0.3717053532600403,
+      "p999": 0.08429036289453506,
+      "p9999": 0.12496666610240936
+    },
+    "kernel_size": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      0,
+      0
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 64,
+    "out_channels": 128
+  },
+  "features.11.expand3.0": {
+    "type": "Conv2d",
+    "params": 73728,
+    "macs": 18874368,
+    "weight_max_abs": 0.20024804770946503,
+    "weight_std": 0.01677926629781723,
+    "activation_in": {
+      "max": 2.8838181495666504,
+      "p999": 0.9029873013496399,
+      "p9999": 1.2877391576766968
+    },
+    "activation_out": {
+      "max": 2.037355422973633,
+      "p999": 0.533894419670105,
+      "p9999": 0.8111631274223328
+    },
+    "kernel_size": [
+      3,
+      3
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "padding": [
+      1,
+      1
+    ],
+    "groups": 1,
+    "dilation": [
+      1,
+      1
+    ],
+    "in_channels": 64,
+    "out_channels": 128
+  },
+  "classifier.1": {
+    "type": "Linear",
+    "params": 51400,
+    "macs": 51200,
+    "weight_max_abs": 1.0694944858551025,
+    "weight_std": 0.1007017120718956,
+    "activation_in": {
+      "max": 8.238826751708984,
+      "p999": 4.781076431274414,
+      "p9999": 6.477077484130859
+    },
+    "activation_out": {
+      "max": 17.55612564086914,
+      "p999": 9.960715293884277,
+      "p9999": 13.629729270935059
+    }
+  }
+}

@@ -2465,3 +2465,28 @@ If 2x2 w150 lands within ~1 pp of 3x3, the two base FC cells need seeds 43 / 44 
 Figure 17 (latency x MACs) redrawn at its printed size (8.9 in, constrained layout, one legend under the panels; 0.79 at `\textwidth`,
 96a3f84) for the article's latency paragraph once the one-machine re-evaluation is in; that re-evaluation's feeder now also waits
 behind these runs (it starts only with no normal-QOS training job pending).
+
+## FC capacity control: 5 of 6 in (2026-11-16)
+
+Synced from PCAD (run dirs without `*.pth`; the gitignored logs too, for `convergence`) with the three `phase_11_kernel_controls_fc*`
+aggregate CSVs: seed 42 836181 (2x2 w150) / 836182 (3x3 w67), seed 43 836207 / 836248, seed 44 3x3 w67 836438, all COMPLETED on RTX 4090
+nodes (tupi2/3/6); seed 44 2x2 w150 (836331, tupi5) at FP32 epoch 358 of 500 on 2026-11-16 09:00. Test top-1 FP32 / INT8:
+
+| cell | seeds | FP32 | INT8 | params | MACs (total) | against (1 seed) |
+|---|---|---|---|---|---|---|
+| 2x2 w150 FC | 42, 43 | 47.95, 47.85 (mean 47.90) | 48.09, 47.76 | 76.5 M | 241.1 M | 3x3 FC 50.75 / 50.62 (57.6 M, 222.6 M): **-2.85** |
+| 3x3 w67 FC | 42, 43, 44 | 47.64, 47.63, 47.39 (mean 47.55) | 47.94, 47.54, 47.49 | 43.8 M | 117.9 M | 2x2 FC 45.68 / 45.67 (56.4 M, 129.9 M): **+1.87** |
+
+With FC + Dropout + BN the width control does not close the gap (with GAP + BN it does, figure 26): at the same conv MACs 3x3 wins both
+ways, by 2-3 pp, although the widened 2x2 has more params and total MACs than the 3x3 net and the narrowed 3x3 fewer than the 2x2 one.
+Widening the 2x2 net recovers 2.2 of its 5.07 pp. So with FC the 2x2 cost is the kernel, not capacity. The 2026-11-11 rule (seeds 43 / 44
+of the base FC cells if 2x2 w150 lands within ~1 pp of 3x3) does not fire: 2.85 pp against a ±0.7 single-run floor; the controls' own
+seeds spread 0.10 / 0.25 pp. The seed cells do not move `tab:ruido`: `noise_bands` runs on `core()`, which drops `width != 1` cells
+(with them the AlexNet-BN FP32 band would be 0.65 instead of 0.69).
+
+Reruns: `analyze_geometry` (design status 157 / 158; `all_runs` +5, and the 2 pilot re-evaluated `kernel_controls` rows it had not picked up
+since 2026-11-11; `convergence` unchanged after fetching 3 ResNet-18 seed logs Hestia lacked), `design_figures` (12, 25, 30 gain the two FC
+points; 26 is GAP only, unchanged), `factor_effects` (no FC pair: controls stay out of the pairing). Article: methods (the FC pair), the
+"O 2x2 perde pelo kernel ou pela capacidade?" answer for FC (with a `\pendente` for s44), the FC kernel-cost paragraph, abstract,
+conclusions, limitation and future work; `tab:blocos` 6 (+9), principal 157, RTX 4090 runs 96. When s44 lands: sync, rerun, drop the
+`\pendente`, 3-seed mean, counts 158 / 299.
