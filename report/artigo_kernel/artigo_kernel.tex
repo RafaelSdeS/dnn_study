@@ -691,7 +691,7 @@ O custo do kernel se repete. Trocar 3\by3 por 2\by2 custa de 0,7 a 2,4 p.p. em F
 \begin{figure*}[!t]
 \centering
 \includegraphics[width=\textwidth,trim=0 0 0 48.5,clip]{phase_12_robustness/04_kernel_effect_everywhere.png}
-\caption{O efeito do kernel em cada cenário: duas redes iguais exceto pelo kernel (top-1 no teste de cada conjunto de dados: Tiny ImageNet, salvo onde diz CIFAR-100; entre parênteses, o número de seeds). O custo do 2\by2 aparece em todas as linhas do primeiro grupo e some no último, em que os MACs são iguais (o 2\by2 com 1,5 vez os canais, ou o 3\by3 com 0,67 vez). O grupo do meio compara os kernels originais (11-5-3-3-3 na AlexNet, 7\by7 na ResNet-18) com 3\by3. Um ponto muito à direita no INT8 da ResNet-18, com anel, é um caso de INT8 inflado pelo QAT.}
+\caption{O efeito do kernel em cada cenário: duas redes iguais exceto pelo kernel (top-1 no teste de cada conjunto de dados: Tiny ImageNet, salvo onde diz CIFAR-100; entre parênteses, o número de seeds). O custo do 2\by2 aparece em todas as linhas do primeiro grupo e some no último, em que os MACs são iguais (o 2\by2 com 1,5 vez os canais, ou o 3\by3 com 0,67 vez). O grupo do meio compara os kernels originais (11-5-3-3-3 na AlexNet, 7\by7 na ResNet-18) com 3\by3. Um ponto muito à direita no INT8 da ResNet-18, com anel, é um caso de INT8 inflado pelo QAT. Cada ponto é uma seed, e o losango é a média; com no máximo 3 seeds por linha, não há intervalo de confiança, e o ponto vazado fica dentro da variação entre seeds daquele cenário.}
 \label{fig:cenarios}
 \end{figure*}
 
