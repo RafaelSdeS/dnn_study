@@ -102,25 +102,47 @@
     "int8"
   ],
   "provenance": {
-    "git_hash": "01fe1e1088a3458b47285259015e6dd501c986ef",
+    "git_hash": "05e6277799efff2aa1725e04814d6a96583f9d2b",
     "git_dirty": false,
     "git_dirty_files": [],
-    "hostname": "tupi1",
-    "timestamp_utc": "2026-10-29T21:26:19.982385+00:00",
+    "hostname": "tupi6",
+    "timestamp_utc": "2026-11-16T14:20:07.194716+00:00",
     "torch_version": "2.5.1+cu121",
     "torchvision_version": "0.20.1+cu121",
     "cuda_version": "12.1",
     "cudnn_version": 90100,
     "gpu_name": "NVIDIA GeForce RTX 4090",
     "python_version": "3.11.2",
-    "cpu_count": 16,
-    "cpu_model": "Intel(R) Xeon(R) CPU E5-2620 v4 @ 2.10GHz",
-    "slurm_job_id": "834071",
+    "cpu_count": 32,
+    "cpu_model": "Intel(R) Core(TM) i9-14900KF",
+    "slurm_job_id": "838139",
     "dataset": {
       "root": "/home/users/rsdsouza/.cache/kagglehub/datasets/akash2sharma/tiny-imagenet/versions/1/tiny-imagenet-200",
       "sha256": "932bfab8d48cad33429a81435b1fe98336629b5adca6e6cff0eb54b8c24c3bda",
       "n_files": 110201
     }
   },
-  "provenance_history": []
+  "provenance_history": [
+    {
+      "git_hash": "01fe1e1088a3458b47285259015e6dd501c986ef",
+      "git_dirty": false,
+      "git_dirty_files": [],
+      "hostname": "tupi1",
+      "timestamp_utc": "2026-10-29T21:26:19.982385+00:00",
+      "torch_version": "2.5.1+cu121",
+      "torchvision_version": "0.20.1+cu121",
+      "cuda_version": "12.1",
+      "cudnn_version": 90100,
+      "gpu_name": "NVIDIA GeForce RTX 4090",
+      "python_version": "3.11.2",
+      "cpu_count": 16,
+      "cpu_model": "Intel(R) Xeon(R) CPU E5-2620 v4 @ 2.10GHz",
+      "slurm_job_id": "834071",
+      "dataset": {
+        "root": "/home/users/rsdsouza/.cache/kagglehub/datasets/akash2sharma/tiny-imagenet/versions/1/tiny-imagenet-200",
+        "sha256": "932bfab8d48cad33429a81435b1fe98336629b5adca6e6cff0eb54b8c24c3bda",
+        "n_files": 110201
+      }
+    }
+  ]
 }

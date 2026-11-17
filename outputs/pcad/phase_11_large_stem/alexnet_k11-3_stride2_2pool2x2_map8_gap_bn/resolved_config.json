@@ -56,7 +56,8 @@
     "pin_memory": true,
     "train_val_split": 0.9,
     "seed": 42,
-    "train_aug": "crop_flip_autoaug"
+    "train_aug": "crop_flip_autoaug",
+    "upscale_to": null
   },
   "training": {
     "epochs": 500,
@@ -101,25 +102,47 @@
     "int8"
   ],
   "provenance": {
-    "git_hash": "8dd735c95b77048d3d62e002721bb1282ec00c84",
+    "git_hash": "05e6277799efff2aa1725e04814d6a96583f9d2b",
     "git_dirty": false,
     "git_dirty_files": [],
-    "hostname": "beagle",
-    "timestamp_utc": "2026-10-19T21:11:39.293302+00:00",
+    "hostname": "tupi3",
+    "timestamp_utc": "2026-11-16T10:15:10.287732+00:00",
     "torch_version": "2.5.1+cu121",
     "torchvision_version": "0.20.1+cu121",
     "cuda_version": "12.1",
     "cudnn_version": 90100,
-    "gpu_name": "NVIDIA GeForce GTX 1080 Ti",
+    "gpu_name": "NVIDIA GeForce RTX 4090",
     "python_version": "3.11.2",
     "cpu_count": 32,
-    "cpu_model": "Intel(R) Xeon(R) CPU E5-2650 0 @ 2.00GHz",
-    "slurm_job_id": "832113",
+    "cpu_model": "Intel(R) Core(TM) i9-14900KF",
+    "slurm_job_id": "838088",
     "dataset": {
       "root": "/home/users/rsdsouza/.cache/kagglehub/datasets/akash2sharma/tiny-imagenet/versions/1/tiny-imagenet-200",
       "sha256": "932bfab8d48cad33429a81435b1fe98336629b5adca6e6cff0eb54b8c24c3bda",
       "n_files": 110201
     }
   },
-  "provenance_history": []
+  "provenance_history": [
+    {
+      "git_hash": "8dd735c95b77048d3d62e002721bb1282ec00c84",
+      "git_dirty": false,
+      "git_dirty_files": [],
+      "hostname": "beagle",
+      "timestamp_utc": "2026-10-19T21:11:39.293302+00:00",
+      "torch_version": "2.5.1+cu121",
+      "torchvision_version": "0.20.1+cu121",
+      "cuda_version": "12.1",
+      "cudnn_version": 90100,
+      "gpu_name": "NVIDIA GeForce GTX 1080 Ti",
+      "python_version": "3.11.2",
+      "cpu_count": 32,
+      "cpu_model": "Intel(R) Xeon(R) CPU E5-2650 0 @ 2.00GHz",
+      "slurm_job_id": "832113",
+      "dataset": {
+        "root": "/home/users/rsdsouza/.cache/kagglehub/datasets/akash2sharma/tiny-imagenet/versions/1/tiny-imagenet-200",
+        "sha256": "932bfab8d48cad33429a81435b1fe98336629b5adca6e6cff0eb54b8c24c3bda",
+        "n_files": 110201
+      }
+    }
+  ]
 }

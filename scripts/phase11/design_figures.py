@@ -539,7 +539,8 @@ def fig_latency(df, figs, note):
     handles = (legend_kernels(d.kernels) + family_handles(d)
                + ([BASE_HANDLE, Line2D([], [], ls="--", color=TEXT_PRIMARY, lw=1.2, label="ms por MAC da AlexNet sem adaptar")]
                   if b is not None else []))
-    fig.legend(handles=handles, loc="outside lower center", ncol=3, fontsize=9)
+    # 2026-11-17: with all 82 nets the merged kernel labels widen the 3 columns past 8.9 in; tighter spacing keeps 9 pt text
+    fig.legend(handles=handles, loc="outside lower center", ncol=3, fontsize=9, columnspacing=1.0, handlelength=1.5)
     fig.suptitle("A latência acompanha os MACs? Cada ponto é uma rede; acima da linha tracejada = mais lenta por MAC que o AlexNet "
                  "original, abaixo = mais rápida\n" + note + f" · {len(d)} redes medidas em {ref}"
                  + (f"\n{len(out)} redes medidas em outras máquinas ficam de fora: latência só se compara na mesma máquina"

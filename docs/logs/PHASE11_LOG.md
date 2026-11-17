@@ -2490,3 +2490,65 @@ points; 26 is GAP only, unchanged), `factor_effects` (no FC pair: controls stay 
 "O 2x2 perde pelo kernel ou pela capacidade?" answer for FC (with a `\pendente` for s44), the FC kernel-cost paragraph, abstract,
 conclusions, limitation and future work; `tab:blocos` 6 (+9), principal 157, RTX 4090 runs 96. When s44 lands: sync, rerun, drop the
 `\pendente`, 3-seed mean, counts 158 / 299.
+
+## FC + BN column at 3 seeds; why the 2x2 loses with FC (2026-11-16)
+
+User's plan (`~/.claude/plans/ticklish-wondering-blanket.md`, fronts A and C): the article's future work, the items this study can close.
+
+**A. Seeds 43/44 of the AlexNet FC + Dropout + BN column.** The FC capacity control (`phase_11_kernel_controls_fc*`, 3 seeds) is read
+against `alexnet_{k3x3,k2x2}_stride2_2pool2x2_map8_fcdrop_bn`, which had seed 42 only (the article's limitation "as duas redes de
+referência com FC têm uma seed só"); the "6,5 p.p." of the conclusion also reads `k11-5-3`. The 4 kernels' `fcdrop_bn` cells join
+`phase_11_kernel_head_bn_seed43/44` (the 2026-10-13 precedent: the FC no-BN column joined the same yamls), so the whole FC + BN column
+has 3 seeds like the GAP + BN and FC no-BN columns; `tests/test_phase11_figures.py` pins the new set. Side effect: `NOISE_KEYS` reads
+every `*_seed43.yaml`, so these cells join the AlexNet-with-BN floor (`REFERENCE_REGIME`, which already pools the FC width controls);
+the band may move a little -- check the band numbers the article cites after the sync. 8 runs, ~11-13 h each on `tupi_4090`.
+
+**C. Why the 2x2 loses with FC: the tables already say most of it (no run).** Seed 42, AlexNet, from `convergence.csv` (final
+FP32 train accuracy, augmented, Dropout on) and `all_runs.csv` (INT8 test):
+
+| head | train 2x2 / 3x3 (%) | test 2x2 - 3x3 (pp) |
+|---|---|---|
+| GAP + BN, map 8 | 57.8 / 73.6 | -1.9 |
+| FC no Dropout, no BN | 99.6 / 99.8 | -2.8 |
+| FC + Dropout + BN | 96.5 / 97.6 | -4.5 |
+| FC + Dropout no BN, map 1x1 | 84.3 / 88.8 | -3.2 (GAP on the same map: +1.1) |
+| two per stage, FC + BN | -- | -3.3 (GAP: +1.6) |
+
+With GAP the 2x2 sits far below the 3x3 on its own training set: a capacity loss, and the width control ties. With the FC head both
+nets memorize the training set and the loss is in generalization: the 2x2 body's features generalize worse once the head can memorize,
+so matching capacity does not close it. The 1x1 map rules out a spatial explanation (the FC head sees no position there and the loss
+stays); the FC head without Dropout rules out Dropout as the main cause. To redo with 3 seeds once A lands (`analyze_geometry`; the
+logs live on PCAD only), then a paragraph in the article's `sec:controles`. No new run: a pair with a more regularized FC head only if
+a reviewer asks.
+
+## FC capacity control 6 of 6; one-machine re-evaluation synced, latency in the article (2026-11-17)
+
+**FC control, last seed.** 836331 (seed 44, `alexnet_k2x2_stride2_2pool2x2_map8_fcdrop_bn_w150`, tupi5, 14 h 04, COMPLETED 2026-11-16 14:07):
+FP32 48.26 / INT8 48.23, `agreement_qat_int8` 0.9912. 2x2 w150 over 3 seeds: 47.95, 47.85, 48.26, mean **48.02** -> **-2.73 pp** under the 3x3
+FC net's 50.75 (was -2.85 at 2 seeds); widening recovers 2.34 of the 5.07 pp; the controls' seed spread is now up to 0.41 pp (w150) / 0.25
+(w67). Synced with its logs and `aggregates/phase_11_kernel_controls_fc_seed44_comparison.csv`. Article: the 3-seed mean, "de 1,9 a 2,7 p.p."
+(abstract, contributions, conclusion), no `\pendente` left, counts 158 / 299, `tab:blocos` 6 (+10), RTX 4090 runs 97.
+
+**Re-evaluation.** The 150 cells fed from `~/queue_phase11_reeval.txt` (QOS `short`, `--slurm tupi36`) all ended by 2026-11-16 14:17:
+149 COMPLETED (tupi3 91, tupi6 54, tupi5 4), `mobilenetv2` (838021) FAILED the 0.90 guard as expected, after writing its summary; no
+signal death (`sacct`). With the 2-cell pilot, all 152 cells now carry latencies from one machine type, RTX 4090 / i9-14900KF (of the 158
+summaries only the FC control `seed43 w67`, trained on a Xeon node, is elsewhere; figure 17 reads seed 42 only, so it leaves none out).
+What the re-evaluation changed (against Hestia's copies, before the sync): test INT8 top-1 identical in all 157 (qnnpack); QAT (evaluated
+on the GPU) moved by up to 0.09 pp in 32 cells and FP32 by up to 0.02 pp in 3 (`k11-5-3 gap_bn` 52.81 -> 52.83, `k11-5-3 in224` 49.54 ->
+49.55, `kblocks2-2-2-3-3` 58.46 -> 58.45), as in the pilot; the logits of 55 cells (those trained on another machine) changed by up to
+0.004. Synced: summaries, `resolved_config`, layer stats and the logits (consistent with the summaries; ~1.25 GB of new blobs). Not
+synced: the 151 rewritten `qat_*.pth.gz` -- same CRC32 and uncompressed size on both sides (`gzip -lv`), only the gzip header's mtime
+differs. PCAD's re-evaluated `phase_11_*` aggregate CSVs left as they are (like the pilot's).
+
+Reruns: `analyze_geometry` (the AlexNet-with-BN FP32 band 0.65 -> 0.66: `tab:ruido` still ±0,7 / ±0,4; one `converged` flag flips at the
+band's edge), `design_figures`, `factor_effects`, `phase12.robustness`, `phase13.bottleneck_fire`, `build_runs_index` (642 rows, the 54
+archive rows kept), `build_cross_phase_results`. Article numbers that moved: 49,54 -> 49,55; 53,07 -> 53,08 (two places); 3x3 over
+11-5-3-3-3 0,74 -> 0,73; 2x2 under 11-5-3-3-3 0,49 -> 0,50; 52,81 -> 52,83 (two tables); INT8 - FP32 range low end -0,38 -> -0,40 (two places).
+
+**Latency (figure 17 -> `fig:latencia`, end of `sec:hardware`).** 82 seed-42 nets, batch 1: on the GPU latency does not follow MACs
+(0.15-3.4 ms, Spearman 0.0 with effective MACs; launch-bound); FP32 on the CPU follows them more (0.6), 77 of 82 nets below the AlexNet
+original's ms per MAC; INT8 on the CPU is slower than FP32 in 75 of 82 (median 2.9x; ResNet-18 ~86 ms median), yet batched it is
+faster in 82 of 82 (median 0.29 vs 0.78 ms per image) -- the batch-1 slowness is not investigated. The article keeps MACs as its cost
+measure; limitation and future work updated (the "reavaliar ... latência" item dropped). PDF 22 pages.
+Figure 17's legend spacing tightened (`columnspacing` 1.0, `handlelength` 1.5, still 9 pt): with all 82 nets the merged kernel labels
+widened it to 9.9 in, 0.72 at `\textwidth` (`test_article_figures_print_at_a_readable_scale` wants >= 0.75); now 9.4 in, 0.76.

@@ -53,9 +53,9 @@ figures 02, 11, 14 and 16.
    (3 seeds, 49.16-49.36), 4.6 pp under 3×3 -- MACs pay off as width, not as kernel size. Only with an FC + Dropout head does the 5×5
    pay (52.14%, 1 seed, above 3×3 FC 50.75% and level with 11-5-3-3-3 FC 52.23%). With FC + Dropout + BN the width control does
    **not** remove the 2×2 deficit (`phase_11_kernel_controls_fc`, 2026-11-16; only the convs' MACs match, the FC head grows with the
-   width): 2×2 widened to 3×3's conv MACs 47.90% (seeds 42/43; s44 running) against 3×3's 50.75% (1 seed) -- -2.85 pp with more
+   width): 2×2 widened to 3×3's conv MACs 48.02% (3 seeds, 47.85-48.26) against 3×3's 50.75% (1 seed) -- -2.73 pp with more
    params (76 vs 58 M) and total MACs (241 vs 223 M); 3×3 narrowed 47.55% (3 seeds, 47.39-47.64) against 2×2's 45.68% (1 seed) --
-   +1.87 pp with fewer params (44 vs 56 M). With FC the 2×2 loss is the kernel, not capacity (widening recovers 2.2 of its 5.1 pp). In VGG16 + GAP + BN the all-2×2 net costs 2.4 pp
+   +1.87 pp with fewer params (44 vs 56 M). With FC the 2×2 loss is the kernel, not capacity (widening recovers 2.3 of its 5.1 pp). In VGG16 + GAP + BN the all-2×2 net costs 2.4 pp
    (56.84 vs 59.27%, 3 seeds each); a single 2×2 block costs nothing measurable except in block 4 (3 seeds per pattern: block
    1 / 2 / 3 / 5 59.54 / 59.34 / 59.05 / 59.18%, block 4 58.56%, −0.71 pp, below its 3×3 twin at all three seeds) (figure 24).
 2. **Kernel size is a second-order factor.** conv1 stride, BatchNorm, Dropout and pretraining move accuracy by 4-10 pp, the kernel
@@ -134,9 +134,10 @@ figures 02, 11, 14 and 16.
 
 ### What is not established yet
 
-- **Runs still out (2026-11-16).** Phase 12, 13 and 14: none (Phase 13's seeds 43 / 44 of `k11-2residual` stride 1 and of both Fire
-  stacked cells, and Phase 14's `f63c` arm, synced 2026-11-16). Phase 11: the FC-head width control is 5 of 6 in (item 1; the seed-44
-  2x2 w150, 836331, running) and the one-machine latency re-evaluation of the Phase 11 cells (117 of 150 done 2026-11-16). Phase 13 (do two convs per stage, a residual skip, an 11×11
+- **Runs still out (2026-11-17).** Phase 11: the FC + BN column's seeds 43 / 44 (8 runs); Phase 14: the calibrated arms `f43c` (16 nets)
+  and `f63c` (15 more), queued 2026-11-17. Done: the FC-head width control (6 of 6) and the one-machine latency re-evaluation of the
+  Phase 11 cells (RTX 4090 / i9-14900KF, synced 2026-11-17; batch 1: GPU latency does not follow MACs, Spearman 0.0 over 82 nets; INT8 on the
+  CPU is slower than FP32 in 75 of 82, median 2.9x, but faster batched in 82 of 82). Phase 13 (do two convs per stage, a residual skip, an 11×11
   conv1 and conv1 stride 1 add up?, `docs/logs/PHASE13_LOG.md`): 18 of 18 at seed 42 (the last, `k11-2residual` stride 1: 60.48 FP32 / 60.85 INT8, 954 M MACs, PCAD job 835178).
   Stride 1 is the largest factor (+3.0 pp median, 12 of 12 pairs, at 4× the MACs); two convs per stage next (+2.1 pp, 8 of 8);
   3×3 → 2×2 wins on all 8 two-conv pairs (+0.5 to +1.8 pp, 51-55% fewer MACs) and loses on the 5-conv body (−1.1 / −1.3); a residual skip
