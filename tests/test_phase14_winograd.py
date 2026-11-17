@@ -21,7 +21,7 @@ def _arm(runs, variant, net, arm_top1, agreement, fp32_correct):
 
 def test_arm_minus_fp32_and_medians(tmp_path):
     runs, out = tmp_path / "runs", tmp_path / "out"
-    for v, a, b in [("f23", 60.0, 59.0), ("f43", 55.0, 50.0), ("f63", 40.0, None)]:
+    for v, a, b in [("f23", 60.0, 59.0), ("f43", 55.0, 50.0), ("f43c", 58.0, None), ("f63", 40.0, None)]:
         _arm(runs, v, "net_a", a, 0.9, fp32_correct=6)  # FP32 60.0
         if b is not None:
             _arm(runs, v, "net_b", b, 0.8, fp32_correct=7)  # FP32 70.0
@@ -31,7 +31,8 @@ def test_arm_minus_fp32_and_medians(tmp_path):
     assert r.loc[("net_a", "f43"), "fp32"] == 60.0 and r.loc[("net_a", "f43"), "d"] == -5.0
     assert r.loc[("net_b", "f23"), "d"] == -11.0
     m = pd.read_csv(out / "medians.csv").set_index("variant")
-    assert m.n.to_dict() == {"f23": 2, "f43": 2, "f63": 1}
+    assert m.n.to_dict() == {"f23": 2, "f43": 2, "f43c": 1, "f63": 1}  # the calibrated arm: own row, own median
+    assert r.loc[("net_a", "f43c"), "d"] == -2.0
     assert m.loc["f23", "median_d"] == -5.5 and m.loc["f63", "median_d"] == -20.0  # f63: only net_a's arm exists
 
 

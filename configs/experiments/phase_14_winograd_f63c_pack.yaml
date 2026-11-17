@@ -1,14 +1,13 @@
 # Phase 14 (2026-11-11, docs/logs/PHASE14_LOG.md): phase_14_winograd_f63_pack with the synthesized netlist's CALIBRATED scales
 # (hw_params: f63c = the bridge's gate_flags/params_f63c.txt: `su` 7-9 instead of the analytic worst case 9-11, `sv` and
-# `align_base` fixed by the netlist), on the net the F(6,3) collapse was diagnosed on. The article's limitation: "as escalas
-# recalibradas, que poderiam evitar o colapso em F(6,3), não foram testadas". scripts/phase14/f63_collapse.py --hw-params
-# f63=f63c measures the same scales at epoch 0; this arm says where the recipe's QAT takes them. Kept out of the 48-arm
-# medians (winograd_numerics reads only phase_14_winograd_f{23,43,63}_pack) and cited on its own.
-# Everything else is phase_14_winograd_f63_pack's, tests/test_config.py checks it. Before submitting, copy the FP32 run in,
-# as that yaml's header shows -- on PCAD, from ~/dnn_study:
-#   m=resnet18_fpga; src=outputs/pcad/phase_14_winograd_fp32/$m; dst=outputs/pcad/phase_14_winograd_f63c_pack/$m
-#   mkdir -p $dst/checkpoints $dst/results && cp -n $src/checkpoints/${m}_best.pth $dst/checkpoints/ \
-#     && cp -n $src/results/${m}_fp32_{val,test}_logits.npz $src/results/${m}_summary.json $dst/results/
+# `align_base` fixed by the netlist). First on the net the F(6,3) collapse was diagnosed on (resnet18_fpga, 836205,
+# 2026-11-14: 54.66 % vs 0.56 at the analytic scales); since 2026-11-16 on all 16 nets of the f63 arm, the article's
+# future work "treinar as escalas calibradas do circuito [...] nas outras redes". scripts/phase14/f63_collapse.py
+# --hw-params f63=f63c measures the same scales at epoch 0; this arm says where the recipe's QAT takes them. Kept out of
+# the 48-arm medians: scripts/phase14/winograd_numerics.py gives the calibrated arms their own median.
+# Everything else is phase_14_winograd_f63_pack's, tests/test_config.py checks it. Before submitting a net, copy its FP32
+# run in, as phase_14_winograd_f43_pack.yaml's header shows (src = phase_14_winograd_fp32/$m, or the Phase 11 cell's dir),
+# with dst=outputs/pcad/phase_14_winograd_f63c_pack/$m.
 # Submit with WINOGRAD_FPGA_ROOT=~/winograd_bridge_m7/avaliacao_redes (bridge f44da9a).
 extends: _protocols/no_patience
 name: phase_14_winograd_f63c_pack
@@ -26,4 +25,21 @@ qat_wino:
   k_dsp: 2
   hw_params: f63c
 models:
+  # the 14 nets of phase_14_winograd_fp32
+  - vgg_style_fpga
+  - alexnet_stacked_fpga
+  - repvgg_a0_fpga
+  - vgg13_fpga
+  - alexnet_3x3_fc_fpga
+  - alexnet_fire_fpga
+  - alexnet_fire_bypass_fpga
+  - alexnet_bottleneck_fpga
+  - alexnet_final_fire_residual_fpga
+  - alexnet_final_bottleneck_residual_fpga
+  - googlenet_fpga
   - resnet18_fpga
+  - wrn_16_4_fpga
+  - wrn_28_2_fpga
+  # Phase 11's one-recipe twins of the old arms' alexnet_tv_3x3 and vgg16 (FP32 already trained there)
+  - alexnet_k3x3_stride4_3pool3x3_map1_fcdrop_nobn
+  - vgg16_k3x3_stride1_5pool2x2_map2_fcdrop_bn

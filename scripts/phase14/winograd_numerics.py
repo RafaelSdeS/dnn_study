@@ -2,11 +2,13 @@
 net and each packed-Winograd variant (F23 / F43 / F63), the test top-1 of its `qat_wino` arm minus the net's FP32 top-1 on the same
 10k test images (Tiny ImageNet's official val split).
 
-    runs.csv     one row per (net, variant) with a finished arm: fp32, arm (test top-1, %), d = arm - fp32 (pp), the top-1
+    runs.csv     one row per (net, variant) with a finished arm (variant f43c / f63c: the base arm with the synthesized
+                 netlist's calibrated scales, hw_params f43v3 / f63c, own rows and own median): fp32, arm (test top-1, %), d = arm - fp32 (pp), the top-1
                  agreement of the arm with the FP32 net on the test set
     medians.csv  per variant: the number of nets (n) and the median / min / max of d
     results/figures_generated/phase_14_winograd_numerics/01_winograd_numerics.png
-                 d per net, one panel per variant, the median a line; a ring on a net whose FP32 best epoch came early
+                 d per net, one panel per variant, the median a line (the calibrated arm hollow in its base variant's
+                 panel, its median dotted); a ring on a net whose FP32 best epoch came early
                  (scripts/phase11/analyze_geometry.py:EARLY_FRAC), as every Phase 11 figure marks it
 
 The FP32 number is recomputed from `<net>_fp32_test_logits.npz` (copied into every arm dir, the same source for all 16 nets, the two
@@ -22,10 +24,12 @@ import numpy as np
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_RUNS = ROOT / "outputs/pcad"  # holds phase_14_winograd_f{23,43,63}_pack/<net>/results/
+DEFAULT_RUNS = ROOT / "outputs/pcad"  # holds phase_14_winograd_f{23,43,43c,63,63c}_pack/<net>/results/
 DEFAULT_OUT = ROOT / "results/phase_14_winograd_numerics"
 DEFAULT_FIGS = ROOT / "results/figures_generated/phase_14_winograd_numerics"
-VARIANTS = ("f23", "f43", "f63")
+VARIANTS = ("f23", "f43", "f63")  # the analytic-scale arms (scripts/phase14/f63_collapse.py measures these)
+CALIBRATED = {"f43": "f43c", "f63": "f63c"}  # base -> the arm with the netlist's calibrated scales (2026-11-11 / -16)
+ARMS = ("f23", "f43", "f43c", "f63", "f63c")
 TITLES = {"f23": "F(2,3)", "f43": "F(4,3)", "f63": "F(6,3)"}
 # Plain names for the figure; a net missing here keeps its key
 NAMES = {
@@ -45,9 +49,9 @@ def fp32_top1(logits_npz):
 
 
 def collect(runs):
-    """One row per finished arm: every `<net>_qat_wino_summary.json` under the three arm experiments."""
+    """One row per finished arm: every `<net>_qat_wino_summary.json` under the arm experiments."""
     rows = []
-    for v in VARIANTS:
+    for v in ARMS:
         for summary in sorted((runs / f"phase_14_winograd_{v}_pack").glob("*/results/*_qat_wino_summary.json")):
             net = summary.name.removesuffix("_qat_wino_summary.json")
             s = json.loads(summary.read_text())
@@ -58,7 +62,7 @@ def collect(runs):
 
 def medians(df):
     g = df.groupby("variant").d
-    return pd.DataFrame({"n": g.size(), "median_d": g.median(), "min_d": g.min(), "max_d": g.max()}).reindex(VARIANTS).dropna().astype({"n": int}).reset_index()
+    return pd.DataFrame({"n": g.size(), "median_d": g.median(), "min_d": g.min(), "max_d": g.max()}).reindex(ARMS).dropna().astype({"n": int}).reset_index()
 
 
 def early_best(runs, net):
@@ -76,12 +80,13 @@ def early_best(runs, net):
 def fig_numerics(df, figs):
     """d per net, one panel per variant (own x scale: F(6,3) reaches -60), nets in the order of their F(6,3) loss."""
     import matplotlib.pyplot as plt
+    from matplotlib.lines import Line2D
 
     from ml.plotting import BLUE, RED, TEXT_SECONDARY, apply_report_style
     from scripts.phase11.analyze_geometry import early_handle, early_ring, savefig
 
     apply_report_style()
-    order = df[df.variant == VARIANTS[-1]].sort_values("d").net.tolist()
+    order = df[df.variant == "f63"].sort_values("d").net.tolist()
     order += sorted(set(df.net) - set(order))
     y = {n: i for i, n in enumerate(order)}
     variants = [v for v in VARIANTS if (df.variant == v).any()]
@@ -94,15 +99,26 @@ def fig_numerics(df, figs):
         ax.scatter(s.d, s.net.map(y), color=BLUE, s=30, zorder=5)
         for _, r in s[s.early].iterrows():
             early_ring(ax, r.d, y[r.net], s=120)
-        ax.set_title(f"{TITLES[v]}\nmediana {s.d.median():+.1f} p.p.", fontsize=9)
+        title = f"{TITLES[v]}\nmediana {s.d.median():+.1f} p.p."
+        c = df[df.variant == CALIBRATED.get(v)]
+        if len(c):
+            ax.axvline(c.d.median(), color=RED, lw=1.2, ls=":")
+            ax.scatter(c.d, c.net.map(y), facecolors="none", edgecolors=BLUE, s=30, zorder=5)
+            title += f"\ncalibrada {c.d.median():+.1f} p.p."
+        ax.set_title(title, fontsize=9)
         ax.set_xlabel("simulação − FP32 (p.p.)", fontsize=9)
         ax.grid(axis="x", alpha=0.3)
     axes[0][0].set_yticks(range(len(order)), [NAMES.get(n, n) for n in order], fontsize=9)
     axes[0][0].invert_yaxis()
+    handles = []
+    if df.variant.isin(CALIBRATED.values()).any():
+        handles.append(Line2D([], [], ls="none", marker="o", mfc="none", mec=BLUE, label="escalas calibradas do circuito"))
     if df.early.any():
         ring = early_handle("ring")
         ring.set_label("simulação inflada pelo QAT (melhor época FP32 antes de 80% do treino)")
-        fig.legend(handles=[ring], loc="outside lower center", frameon=False, fontsize=9)
+        handles.append(ring)
+    if handles:
+        fig.legend(handles=handles, loc="outside lower center", frameon=False, fontsize=9, ncols=len(handles))
     savefig(fig, "01_winograd_numerics.png", Path(figs))
 
 

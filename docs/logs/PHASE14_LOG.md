@@ -179,3 +179,14 @@ split. The user asked for everything on one recipe, so this phase reruns them on
   and the arm, as for every arm). Article: abstract, the methods' Winograd paragraph (one extra arm), a new paragraph after "A diferença ... não é
   falha de treino" (epoch-0 numbers of 2026-11-13 + this arm), "2x2 ou 3x3?", the conclusion, the limitation ("só treinadas em uma rede e não
   testadas em F(4,3)") and future work; `tab:blocos` Winograd 62 -> 63. `~/f63_out` on PCAD still in place.
+- 2026-11-16 (later, user's plan `~/.claude/plans/ticklish-wondering-blanket.md`, front B): **the calibrated scales on every net, F(4,3) too.**
+  Correction to the entry above: `f43` does have a calibrated set. The bridge's `gate_flags/params_f43v3.txt` is Thomas's F(4,3) synthesis with the
+  scale constants calibrated on 2026-10-26 (its header: "Netlist com as constantes de escala CALIBRADAS", tag iscas-2027; `ALIGN_BASE` 9 vs 12 in
+  `params_f43`, `SU_FLAT`/`SV_FLAT` lower). `ml/yolov2.py` already names it as f43's calibrated line next to `f63c`, and
+  `make_wino_conv("f43", pack=True, hw_params="f43v3")` builds and runs (checked on Hestia; it warns that `SU_FLAT` differs from the analytic `su` by up
+  to 3 bits, as `f63c` does). New arm `phase_14_winograd_f43c_pack` (= `f43_pack` + `hw_params: f43v3`, the same 16 nets); `phase_14_winograd_f63c_pack`
+  goes from `resnet18_fpga` to the same 16 nets (`resnet18_fpga` done, not resubmitted). `tests/test_config.py` now checks both calibrated arms with
+  one rule: the base yaml plus `hw_params`. `scripts/phase14/winograd_numerics.py`: `ARMS` = the 3 analytic arms + `f43c` / `f63c`, each with its own
+  rows and median (the 48-arm medians unchanged); figure 01 keeps 3 panels and draws a calibrated arm hollow in its base variant's panel, its median
+  dotted. `VARIANTS` stays the 3 analytic arms (`f63_collapse` reads it). Not rerun yet: the outputs change once the arms land. 31 arms,
+  ~3.5-4.5 h each (~125 GPU-h), queued behind the 8 Phase 11 FC + BN seeds (PHASE11_LOG "FC + BN column at 3 seeds").

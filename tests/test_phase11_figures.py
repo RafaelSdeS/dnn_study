@@ -143,11 +143,12 @@ def test_the_design_has_every_contrast_and_no_orphan_cell():
     assert pairs.groupby("contrast").size().to_dict() == DESIGN_PAIRS
     assert set(cells.cell) == set(pairs.cell_a) | set(pairs.cell_b), "a design cell no contrast reads: compute for nothing"
     # the noise floors, one per regime (2026-10-13): AlexNet GAP + BN and FC + Dropout without BN, 4 kernels x 3 seeds
-    # each; VGG16's own head (FC + Dropout), 3x3 and 2x2 x 3 seeds
+    # each; VGG16's own head (FC + Dropout), 3x3 and 2x2 x 3 seeds. Since 2026-11-16 also AlexNet FC + Dropout + BN (the
+    # FC capacity control's references)
     seeds = [set(load_config(f"experiments/phase_11_kernel_head_bn_seed{s}.yaml")["models"]) for s in (43, 44)]
     k64 = cells[(cells.family == "alexnet") & (cells.stride == 2) & (cells.pooling == "2pool2x2")
                 & cells.kernels.isin(["k11-5-3", "k3x3", "k2x2", "kalt3-2"]) & ~cells.pretrained]
-    assert seeds[0] == seeds[1] == set(k64[(k64["head"] == "gap") & k64.bn].cell) | set(k64[k64.dropout & ~k64.bn].cell)
+    assert seeds[0] == seeds[1] == set(k64[(k64["head"] == "gap") & k64.bn].cell) | set(k64[k64.dropout].cell)
     # VGG16: 3x3 and 2x2 x 3 seeds at its own head (FC + Dropout) and at GAP, the kernel blocks' regime (2026-10-17)
     vgg = [set(load_config(f"experiments/phase_11_vgg_kernel_head_seed{s}.yaml")["models"]) for s in (43, 44)]
     assert vgg[0] == vgg[1] == set(cells[(cells.family == "vgg16") & (cells.dropout | (cells["head"] == "gap")) & ~cells.pretrained

@@ -8,6 +8,9 @@
 # where a run's ranking moves 2-4 pp between its own FP32 and QAT (the early best epoch), so the GAP + BN band
 # (0.6 pp) cannot judge it. Each single-seed contrast is judged by its cells' regime bands (PHASE11_LOG
 # "Noise floors per regime and a ResNet block").
+# Since 2026-11-16 also the 4 kernel cells with FC + Dropout + BN: the references of the FC capacity control
+# (phase_11_kernel_controls_fc*, 3 seeds) had seed 42 only, and the article's "with FC the 2x2 loses to the kernel"
+# compares against them. With them the whole FC + BN column has 3 seeds, like the GAP + BN and FC no-BN columns.
 # Same protocol as every Phase 11 run (_protocols/no_patience.yaml), enforced by tests/test_config.py. Queued last on PCAD:
 #   python -m scripts.cluster submit --experiment phase_11_kernel_head_bn_seed44 --runtime pcad --slurm tupi_beagle --model <m>
 extends: _protocols/no_patience
@@ -23,3 +26,8 @@ models:
   - alexnet_k3x3_stride2_2pool2x2_map8_fcdrop_nobn
   - alexnet_k2x2_stride2_2pool2x2_map8_fcdrop_nobn
   - alexnet_kalt3-2_stride2_2pool2x2_map8_fcdrop_nobn
+  # the FC + Dropout + BN column (2026-11-16): the FC capacity control's references
+  - alexnet_k11-5-3_stride2_2pool2x2_map8_fcdrop_bn
+  - alexnet_k3x3_stride2_2pool2x2_map8_fcdrop_bn
+  - alexnet_k2x2_stride2_2pool2x2_map8_fcdrop_bn
+  - alexnet_kalt3-2_stride2_2pool2x2_map8_fcdrop_bn

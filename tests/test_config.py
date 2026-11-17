@@ -133,13 +133,15 @@ def test_phase_14_runs_the_phase_11_recipe_on_the_winograd_numerics():
     phase_11_nets = {m for n in _experiment_names() if n.startswith("phase_11_") and "_seed" not in n
                      for m in load_config(f"experiments/{n}.yaml")["models"]}
     arms = [n for n in _experiment_names() if n.startswith("phase_14_") and n != "phase_14_winograd_fp32"]
-    assert arms == [f"phase_14_winograd_f{v}_pack" for v in (23, 43, "63", "63c")]
-    # f63c (2026-11-11): the f63 arm on one net with the netlist's calibrated scales, nothing else changed
-    f63, f63c = (load_config(f"experiments/phase_14_winograd_{v}_pack.yaml") for v in ("f63", "f63c"))
-    assert f63c.pop("name") == "phase_14_winograd_f63c_pack" and f63c.pop("models") == ["resnet18_fpga"]
-    assert f63c["qat_wino"].pop("hw_params") == "f63c"
-    assert {k: v for k, v in f63.items() if k not in ("name", "models")} == f63c
-    arms.remove("phase_14_winograd_f63c_pack")
+    assert arms == [f"phase_14_winograd_f{v}_pack" for v in (23, 43, "43c", "63", "63c")]
+    # the calibrated arms (f63c 2026-11-11, f43c 2026-11-16): their base arm with the netlist's calibrated scales on the
+    # same nets, nothing else changed
+    for v, hw in (("f43", "f43v3"), ("f63", "f63c")):
+        base, calibrated = (load_config(f"experiments/phase_14_winograd_{a}_pack.yaml") for a in (v, f"{v}c"))
+        assert calibrated.pop("name") == f"phase_14_winograd_{v}c_pack"
+        assert calibrated["qat_wino"].pop("hw_params") == hw
+        assert {k: x for k, x in base.items() if k != "name"} == calibrated
+        arms.remove(f"phase_14_winograd_{v}c_pack")
     recipe_qat = {k: reference["qat"][k] for k in ("epochs", "lr", "eta_min", "weight_decay")}
     for name in arms:
         cfg = load_config(f"experiments/{name}.yaml")
