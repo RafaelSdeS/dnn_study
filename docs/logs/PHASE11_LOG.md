@@ -2552,3 +2552,31 @@ faster in 82 of 82 (median 0.29 vs 0.78 ms per image) -- the batch-1 slowness is
 measure; limitation and future work updated (the "reavaliar ... latência" item dropped). PDF 22 pages.
 Figure 17's legend spacing tightened (`columnspacing` 1.0, `handlelength` 1.5, still 9 pt): with all 82 nets the merged kernel labels
 widened it to 9.9 in, 0.72 at `\textwidth` (`test_article_figures_print_at_a_readable_scale` wants >= 0.75); now 9.4 in, 0.76.
+
+## FC + BN column: seed 43 in (2026-11-18)
+
+838378-838381 (`phase_11_kernel_head_bn_seed43`, the 4 kernels' `..._map8_fcdrop_bn`) COMPLETED 2026-11-17 19:55 .. 11-18 05:59 on
+tupi1 / tupi2 (RTX 4090), 8.5-8.7 h each, `agreement_qat_int8` 0.989-0.992. Synced (run dirs without `*.pth`; the 4 rows appended to
+the local `aggregates/phase_11_kernel_head_bn_seed43_comparison.csv`, PCAD's re-evaluated copy left as it is). Seed 44 (838388-838391)
+pending on tupi. Test top-1 FP32 / INT8, seeds 42 and 43:
+
+| kernel | s42 | s43 | mean FP32 / INT8 | final train acc s42 / s43 |
+|---|---|---|---|---|
+| 11-5-3 | 52.23 / 51.92 | 51.64 / 51.54 | 51.93 / 51.73 | 97.71 / 97.61 |
+| 3x3 | 50.75 / 50.62 | 50.56 / 50.31 | 50.65 / 50.47 | 97.58 / 97.62 |
+| alt 3-2 | 50.00 / 49.79 | 49.66 / 49.69 | 49.83 / 49.74 | 97.48 / 97.37 |
+| 2x2 | 45.68 / 45.67 | 45.77 / 45.97 | 45.73 / 45.82 | 96.48 / 96.47 |
+
+2x2 - 3x3 -4.93 FP32 / -4.65 INT8 (seed 42: -5.07 / -4.95); 2x2 - 11-5-3 -6.21 FP32 (the conclusion's "6,5" is seed 42); 3x3 - 11-5-3
+-1.28. Seed 43 repeats front C's picture: both nets memorize the training set (train 96.5 / 97.6) and the 2x2 loses on test.
+Against the FC width control: 2x2 w150 (48.02, 3 seeds) is now 2.63 under the 3x3 FC net's 2-seed mean, 3x3 w67 (47.55) 1.82 over the
+2x2 one -- same story as at one seed.
+
+Reruns: `analyze_geometry` (design status 162 / 166; the AlexNet-with-BN FP32 band 0.66 -> 0.73, INT8 0.69: `tab:ruido` still ±0,7 /
+±0,4), `design_figures` (04 and 09 redrawn; none of the article's figures changed), `factor_effects` (the FC + BN kernel pairs now at
+n = 2), `build_runs_index` (645 rows, the 54 archive rows kept), `build_cross_phase_results` (unchanged). `convergence` used to rebuild
+`convergence.csv` from the logs present only (the laptop keeps none: the first rerun here left 8 of 244 rows; refetched the 468 Phase 11 logs,
+~25 MB, reran, deleted them). Fixed: a run stage without its log keeps its row from the previous `convergence.csv` (`converged` re-judged at
+the current band; read with `float_precision="round_trip"`, so a rerun without any log rewrites the file byte for byte), and the stages with
+neither are printed; `test_convergence_keeps_the_row_of_a_run_whose_log_is_gone`. New runs still need their logs once. Article untouched until seed 44: then the 3-seed
+means in `sec:controles`, drop the "uma seed só" limitation, the "6,5 p.p.", `tab:blocos` (+8), the run counts, front C's paragraph.

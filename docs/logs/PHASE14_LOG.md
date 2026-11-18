@@ -190,3 +190,6 @@ split. The user asked for everything on one recipe, so this phase reruns them on
   rows and median (the 48-arm medians unchanged); figure 01 keeps 3 panels and draws a calibrated arm hollow in its base variant's panel, its median
   dotted. `VARIANTS` stays the 3 analytic arms (`f63_collapse` reads it). Not rerun yet: the outputs change once the arms land. 31 arms,
   ~3.5-4.5 h each (~125 GPU-h), queued behind the 8 Phase 11 FC + BN seeds (PHASE11_LOG "FC + BN column at 3 seeds").
+- 2026-11-18: every one of the 31 calibrated arm dirs (`phase_14_winograd_{f43c,f63c}_pack`) holds its net's FP32 `*_best.pth` on PCAD; the feeder
+  (`~/queue_followups.txt`) has submitted `f43c` on `vgg_style_fpga` (838470), `alexnet_stacked_fpga` (838483), `repvgg_a0_fpga` (838528), `vgg13_fpga`
+  (838534), all pending on tupi behind the 4 Phase 11 FC + BN seed-44 runs; 27 arms left in the feeder (12 `f43c`, 15 `f63c`). None done yet.

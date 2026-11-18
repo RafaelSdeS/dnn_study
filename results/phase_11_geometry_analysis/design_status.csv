@@ -85,10 +85,10 @@ kernel_head_bn_seed43,alexnet_k11-5-3_stride2_2pool2x2_map8_fcdrop_nobn,43,tupi6
 kernel_head_bn_seed43,alexnet_k3x3_stride2_2pool2x2_map8_fcdrop_nobn,43,tupi3,42.7700012922287,46.00000083446503,46.11000120639801,True
 kernel_head_bn_seed43,alexnet_k2x2_stride2_2pool2x2_map8_fcdrop_nobn,43,tupi6,40.139999985694885,42.899999022483826,42.8600013256073,True
 kernel_head_bn_seed43,alexnet_kalt3-2_stride2_2pool2x2_map8_fcdrop_nobn,43,tupi3,42.570000886917114,45.39999961853027,45.37999927997589,True
-kernel_head_bn_seed43,alexnet_k11-5-3_stride2_2pool2x2_map8_fcdrop_bn,43,,,,,False
-kernel_head_bn_seed43,alexnet_k3x3_stride2_2pool2x2_map8_fcdrop_bn,43,,,,,False
-kernel_head_bn_seed43,alexnet_k2x2_stride2_2pool2x2_map8_fcdrop_bn,43,,,,,False
-kernel_head_bn_seed43,alexnet_kalt3-2_stride2_2pool2x2_map8_fcdrop_bn,43,,,,,False
+kernel_head_bn_seed43,alexnet_k11-5-3_stride2_2pool2x2_map8_fcdrop_bn,43,tupi1,51.63999795913696,51.56000256538391,51.53999924659729,True
+kernel_head_bn_seed43,alexnet_k3x3_stride2_2pool2x2_map8_fcdrop_bn,43,tupi2,50.55999755859375,50.30999779701233,50.30999779701233,True
+kernel_head_bn_seed43,alexnet_k2x2_stride2_2pool2x2_map8_fcdrop_bn,43,tupi1,45.77000141143799,45.9199994802475,45.969998836517334,True
+kernel_head_bn_seed43,alexnet_kalt3-2_stride2_2pool2x2_map8_fcdrop_bn,43,tupi2,49.66000020503998,49.70000088214874,49.68999922275543,True
 kernel_head_bn_seed44,alexnet_k11-5-3_stride2_2pool2x2_map8_gap_bn,44,tupi6,53.09000015258789,53.109997510910034,53.07000279426575,True
 kernel_head_bn_seed44,alexnet_k3x3_stride2_2pool2x2_map8_gap_bn,44,tupi3,53.93000245094299,54.089999198913574,54.11999821662903,True
 kernel_head_bn_seed44,alexnet_k2x2_stride2_2pool2x2_map8_gap_bn,44,tupi6,52.70000100135803,52.469998598098755,52.4399995803833,True
