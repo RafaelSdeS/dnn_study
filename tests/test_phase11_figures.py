@@ -187,6 +187,17 @@ def test_article_figures_print_at_a_readable_scale():
         assert scale >= 0.75, f"{path}: printed at {scale:.2f} of its size"
 
 
+def test_convergence_keeps_the_row_of_a_run_whose_log_is_gone(tmp_path):
+    """Logs live on PCAD only: without its log a run keeps its last row (re-judged at today's band), never drops out."""
+    from scripts.phase11.analyze_geometry import convergence
+
+    df = pd.DataFrame({"exp": ["e"], "key": ["m"], "seed": [42], "results": [tmp_path / "m" / "results"]})
+    previous = pd.DataFrame([dict(exp="e", key="m", seed=42, stage="fp32", complete=True, gain_last20pct=0.6, converged=True)])
+    conv, missing = convergence(df, 0.5, previous)
+    assert conv[["stage", "converged"]].values.tolist() == [["fp32", False]]
+    assert missing == ["e/m s42 qat"]
+
+
 def test_int8_noise_band_leaves_early_best_out():
     """An early-best seed's INT8 is QAT's extra training, not seed noise: the INT8 floor compares it only with early seeds."""
     from scripts.phase11.analyze_geometry import noise_band

@@ -367,22 +367,28 @@ LOG_EPOCH = re.compile(r"Epoch\s+(\d+)/(\d+) \| train_loss=[\d.]+ train_acc=([\d
 CONVERGED_PP = 0.5  # fallback threshold until the seed replicates carry test numbers (then noise_band's FP32 value)
 
 
-def convergence(df, band_pp: float) -> pd.DataFrame:
+def convergence(df, band_pp: float, previous: pd.DataFrame | None = None) -> tuple[pd.DataFrame, list[str]]:
     """Per run and stage (FP32, QAT), from the per-epoch lines Trainer logs. A run counts as converged when its last
     20% of epochs raised the best validation top-1 by less than band_pp: the cosine schedule has annealed to ~0 there
     (a fixed budget with the LR decayed to zero, Li, Yumer & Ramanan, ICLR 2020), so a longer one would act on a
-    plateau. Logs are gitignored and PCAD holds the only copy -- fetch them first:
+    plateau. Logs are gitignored and PCAD holds the only copy, so a run stage without its log keeps its row from
+    `previous` (the last convergence.csv; `converged` re-judged at band_pp). The stages with neither come back as the
+    second value -- fetch their logs:
         rsync -a --prune-empty-dirs --include='*/' --include='phase_11_*/*/logs/*.log' --exclude='*' \\
             rsdsouza@gppd-hpc.inf.ufrgs.br:dnn_study/outputs/pcad/ outputs/pcad/"""
-    rows = []
+    # ponytail: a kept row is trusted as is; a run retrained in place needs its log fetched to refresh it
+    prev = {} if previous is None else {(p["exp"], p["key"], p["seed"], p["stage"]): p for p in previous.to_dict("records")}
+    rows, missing = [], []
     for r in df.itertuples():
         for stage, log in (("fp32", r.results.parent / "logs" / f"{r.key}.log"),
                            ("qat", r.results.parent / "logs" / f"qat_{r.key}.log")):
-            if not log.exists():
-                continue
             ep = {int(m[1]): (int(m[2]), float(m[3]), float(m[4]), float(m[5]))  # a resumed epoch keeps its last line
-                  for m in LOG_EPOCH.finditer(log.read_text(errors="ignore"))}
+                  for m in LOG_EPOCH.finditer(log.read_text(errors="ignore"))} if log.exists() else {}
             if not ep:
+                if (r.exp, r.key, r.seed, stage) in prev:
+                    rows.append(prev[r.exp, r.key, r.seed, stage])
+                else:
+                    missing.append(f"{r.exp}/{r.key} s{r.seed} {stage}")
                 continue
             budget, last = ep[max(ep)][0], max(ep)
             va = [ep[e][3] for e in sorted(ep)]
@@ -397,7 +403,7 @@ def convergence(df, band_pp: float) -> pd.DataFrame:
     c = pd.DataFrame(rows)
     if not c.empty:
         c["converged"] = c.complete & (c.gain_last20pct < band_pp)
-    return c
+    return c, missing
 
 
 def design_status(df) -> pd.DataFrame:
@@ -430,8 +436,12 @@ def main():
     df = core(everything)
     band = band_for(noise_bands(df), *REFERENCE_REGIME)["fp32"]  # the strictest floor
     band = band if np.isfinite(band) else CONVERGED_PP
-    conv = convergence(df, band)
-    conv.to_csv(TABLES / "convergence.csv", index=False)
+    conv_csv = TABLES / "convergence.csv"
+    conv, missing = convergence(df, band, pd.read_csv(conv_csv, float_precision="round_trip") if conv_csv.exists() else None)
+    conv.to_csv(conv_csv, index=False)
+    if missing:
+        print(f"\n== convergence: {len(missing)} run stages have no log and no earlier row (fetch the logs, see convergence()): "
+              + ", ".join(missing[:10]) + (" ..." if len(missing) > 10 else ""))
     if not conv.empty:
         done = conv[conv.complete]
         print(f"\n== convergence (last 20% of epochs < {band:.2f}pp): {int(done.converged.sum())}/{len(done)} complete runs; "
