@@ -424,7 +424,7 @@ keeps tracked files modified on purpose: the `outputs/pcad/aggregates/*_comparis
 
 ## Stack
 
-Python 3.12 · PyTorch 2.5.1+cu121 · torchvision 0.20.1 · torchmetrics · torchinfo · fvcore (FLOPs) · wandb (offline-first) · kagglehub · optuna (not yet wired) · CUDA 12.1 on RTX 4060 Laptop (8.2 GB).
+Python 3.12 · PyTorch 2.5.1+cu121 · torchvision 0.20.1 · torchmetrics · torchinfo · fvcore (FLOPs) · wandb (offline-first) · kagglehub · CUDA 12.1 on RTX 4060 Laptop (8.2 GB).
 
 Quantization backend: INT8 **accuracy** on **qnnpack** (`ml.quantization.ACCURACY_ENGINE`, `convert_to_int8`'s default), INT8 **latency** on **onednn** (`QUANT_ENGINE`). Both run the literature's full 8-bit activations, but onednn and fbgemm sum u8×s8 pairs in int16 and saturate on CPUs without VNNI (oneDNN dev guide "Nuances of int8 computations"; pytorch/pytorch#103646) — beagle, tupi1/2 and this laptop (tupi3–6 have AVX-VNNI, unverified); fbgemm's `reduce_range` (7-bit, every run until 2026-10-03) avoided it. INT8 convert + inference are **CPU-only**.
 
