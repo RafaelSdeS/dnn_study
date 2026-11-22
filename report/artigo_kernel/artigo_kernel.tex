@@ -594,7 +594,7 @@ vir de enxergar mais da imagem, e não testamos a causa.
 \subsection{A quantização INT8 atrapalha?}
 \label{sec:int8}
 
-A quantização \textbf{quase não altera a acurácia}, e o tamanho do kernel não muda esse quadro (Figura~\ref{fig:int8}). Comparando o FP32 e o INT8 de cada rede no mesmo conjunto de teste, a diferença nos 134 treinos do estudo principal sem a marca de melhor época cedo vai de $-$0,40 a $+$0,58 p.p., com mediana de $+$0,04 p.p. No estudo de combinações, em que nenhum treino recebeu a marca, ela vai de
+A quantização \textbf{quase não altera a acurácia}, e o tamanho do kernel não muda esse quadro (Figura~\ref{fig:int8}). Comparando o FP32 e o INT8 de cada rede no mesmo conjunto de teste, a diferença nos 140 treinos do estudo principal sem a marca de melhor época cedo vai de $-$0,40 a $+$0,58 p.p., com mediana de $+$0,04 p.p. No estudo de combinações, em que nenhum treino recebeu a marca, ela vai de
 $-$0,44 a $+$0,77 p.p.
 
 Os ganhos grandes em INT8 aparecem apenas nos 26 treinos marcados, em que a diferença vai de $+$0,56 a $+$6,69 p.p., e \textbf{não são efeito da quantização}: ali o QAT continua treinando, agora com uma taxa de aprendizado baixa, uma rede que ainda não tinha terminado de convergir.

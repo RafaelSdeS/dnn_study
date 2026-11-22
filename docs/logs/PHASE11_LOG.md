@@ -2613,5 +2613,5 @@ run counts, front C's paragraph (TODO).
 
 Article (2026-11-22): `report/artigo_kernel/artigo_kernel.tex` carries the 3-seed FC + BN column (`tab:grade`, `sec:controles`, abstract, conclusion), the new noise band
 (AlexNet with BN 0.73 -> 0.79 FP32, INT8 0.69 -> 0.85; `tab:ruido` now one row for AlexNet and VGG16, ±0,8 / ±0,5; the text's ±0,7 -> ±0,8 and ±0,4 -> ±0,5), 166 main-study runs
-(`tab:blocos`, total 338 with Phase 14's 94), 134 unmarked INT8 runs (was 126; range -0.40..+0.58 and median +0.04 unchanged). `scripts.phase13.{hybrids,bottleneck_fire}` rerun
+(`tab:blocos`, total 338 with Phase 14's 94), 140 unmarked INT8 runs (166 - 26 marked; the article's 126 was the 2026-11-14 count of 152 runs, stale since the 6 FC controls and FC + BN seeds 43 / 44 -- checked 2026-11-22 against `all_runs.csv`: 126 at 9653625, 140 now; range -0.40..+0.58 and median +0.04 unchanged; training GPUs read from `resolved_config.json:provenance_history`: 105 RTX 4090 / 35 GTX 1080 Ti / 26 RTX 4060 Ti). `scripts.phase13.{hybrids,bottleneck_fire}` rerun
 for the band: `02_caminho` (the + BN step is now the 3-seed FC + BN column, 52.2 %, +8.1) and the two figures' band note redrawn; their contrasts unchanged.
