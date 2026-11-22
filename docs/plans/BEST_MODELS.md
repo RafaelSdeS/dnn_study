@@ -116,7 +116,7 @@ figures 02, 11, 14 and 16.
    not others is not isolated). The netlist's calibrated shifts (`f63c`) remove the starvation: at epoch 0 (first 1000 test images,
    no QAT) `resnet18_fpga` 0.3 -> 23.7 %, `vgg13_fpga` 0.1 -> 16.4 %, `googlenet_fpga` 0.3 -> 38.1 %; the `f63c` QAT arm on
    `resnet18_fpga` (`phase_14_winograd_f63c_pack`, 50 of 50 epochs, one seed) reaches 54.66 % (F63 default 0.56, F43 55.26, F23 59.00, FP32
-   59.22): the collapse is the worst-case scales, while the larger tile still costs (−4.56 pp vs −0.22 F23 / −3.96 F43, F43 on default scales). The AdamW-recipe numbers this item used to quote (F(4,3) −5.1, F(6,3) −18.9, 14 nets) are archived in
+   59.22): the collapse is the worst-case scales, while the larger tile still costs (−4.56 pp vs −0.22 F23 / −3.96 F43, F43 on default scales). On all 16 nets (2026-11-22, `phase_14_winograd_{f43c,f63c}_pack`, one seed each) the calibrated arms give median −0.83 pp for F(4,3) (−1.54..+3.19) and −4.58 for F(6,3) (−6.60..+0.28), beating the analytic scales on 16 of 16 nets; no net collapses on `f63c` and F(2,3) stays ahead of `f43c` on 15 of 16. The AdamW-recipe numbers this item used to quote (F(4,3) −5.1, F(6,3) −18.9, 14 nets) are archived in
    `outputs/pcad/archive_winograd_old_recipe/`; the `~/dnn_study_m7` follow-ups (`_hw` / `_orig` / `_s43`) are not summarized here.
 10. **Detection (Phase 7): compensation transfers only partly.** Bottleneck is the best detector (20.98 mAP FP32, 20.85 INT8) and
    quantization-stable; Fire is the worst (8.94 mAP) and loses 2.6 pp in QAT; the 223 MB AlexNetTV backbone does not turn its size
@@ -134,8 +134,7 @@ figures 02, 11, 14 and 16.
 
 ### What is not established yet
 
-- **Runs still out (2026-11-17).** Phase 11: the FC + BN column's seeds 43 / 44 (8 runs); Phase 14: the calibrated arms `f43c` (16 nets)
-  and `f63c` (15 more), queued 2026-11-17. Done: the FC-head width control (6 of 6) and the one-machine latency re-evaluation of the
+- **Runs still out (2026-11-22): none on PCAD** (`squeue` empty, both feeder queues in `.done`; Phase 11 FC + BN seeds 43 / 44 and Phase 14 calibrated arms `f43c` / `f63c` all done and synced). Done: the FC-head width control (6 of 6) and the one-machine latency re-evaluation of the
   Phase 11 cells (RTX 4090 / i9-14900KF, synced 2026-11-17; batch 1: GPU latency does not follow MACs, Spearman 0.0 over 82 nets; INT8 on the
   CPU is slower than FP32 in 75 of 82, median 2.9x, but faster batched in 82 of 82). Phase 13 (do two convs per stage, a residual skip, an 11×11
   conv1 and conv1 stride 1 add up?, `docs/logs/PHASE13_LOG.md`): 18 of 18 at seed 42 (the last, `k11-2residual` stride 1: 60.48 FP32 / 60.85 INT8, 954 M MACs, PCAD job 835178).

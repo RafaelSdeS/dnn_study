@@ -193,3 +193,16 @@ split. The user asked for everything on one recipe, so this phase reruns them on
 - 2026-11-18: every one of the 31 calibrated arm dirs (`phase_14_winograd_{f43c,f63c}_pack`) holds its net's FP32 `*_best.pth` on PCAD; the feeder
   (`~/queue_followups.txt`) has submitted `f43c` on `vgg_style_fpga` (838470), `alexnet_stacked_fpga` (838483), `repvgg_a0_fpga` (838528), `vgg13_fpga`
   (838534), all pending on tupi behind the 4 Phase 11 FC + BN seed-44 runs; 27 arms left in the feeder (12 `f43c`, 15 `f63c`). None done yet.
+- 2026-11-22: **all 31 calibrated arms are done: with the netlists' calibrated scales F(4,3) costs −0.83 pp (median over 16 nets) and F(6,3) −4.58, against −6.30 and −40.09 on the analytic scales.**
+  `phase_14_winograd_{f43c,f63c}_pack`, 16 nets each (`resnet18_fpga` f63c from 2026-11-16); `qat_wino_summary.json` dated 2026-11-17..22 on PCAD, the last job
+  (838976, `vgg16_k3x3_stride1_5pool2x2_map2_fcdrop_bn`) ended 07:27. `squeue` empty; `~/queue_followups.txt` and `~/queue_phase14.txt` fully in `.done` (50 / 73 lines).
+  Synced to the laptop: `rsync -rnc` of both pack dirs against PCAD (no `*.pth`/logs) lists 0 differences; `phase_14_winograd_{f43c,f63c}_pack_comparison.csv` hold the same
+  16 rows as PCAD's. `scripts.phase14.winograd_numerics`, `build_runs_index` and `build_cross_phase_results` outputs regenerated (80 rows in `runs.csv` = 5 arms x 16 nets).
+  Median d (arm − FP32, test top-1, pp), min..max: F23 −0.16 (−0.69..+3.79) · F43 −6.30 (−8.57..+0.47) · **F43c −0.83 (−1.54..+3.19)** · F63 −40.09 (−59.84..−10.48) · **F63c −4.58 (−6.60..+0.28)**.
+  Per net, the calibrated arm beats its analytic arm on 16 of 16 (F43c > F43, F63c > F63); F23 ≥ F43c on 15 of 16 and F43c ≥ F63c on 16 of 16 (median F63c − F43c −3.62 pp).
+  No net collapses on `f63c` (worst `wrn_28_2_fpga` −6.60; the 6 nets below −5 pp are `alexnet_final_fire_residual`, `alexnet_fire_bypass`, `alexnet_stacked`, `vgg16_k3x3…_bn`, `vgg_style`,
+  `wrn_28_2`); the worst `f43c` is `vgg13_fpga` (−1.54). One seed per arm, so the medians carry no seed spread. The 11 jobs / array tasks that did not end COMPLETED since 2026-11-10 (8 TIMEOUT at 12 h, 2 `f63_collapse` failing in 1 s, 1 guard)
+  are all superseded: the TIMEOUTs are the 12 h chunks of the `tr_C4_V10` / `tr_C4q_s1` / `tr_C4q_s2` arrays (each array's last task COMPLETED), `f63_collapse_{vgg13,googlenet}_fpga` re-ran 2026-11-11 (COMPLETED),
+  `train-mobilenetv2` was re-run as `-scratch`. Not done: the article (`sec:numerica`, "2x2 ou 3x3?", abstract, limitation, conclusion, future work, `tab:blocos`) still carries the 17 pre-calibration numbers (TODO).
+- 2026-11-22 (later): article updated with the 31 calibrated arms (`report/artigo_kernel/`, TODO): F43c −0,8 / F63c −4,6 pp (16 nets) in the abstract, contribution bullet, methods, `sec:numerica`
+  (+ figure caption: hollow circles = calibrated, dotted line = their median), "2x2 ou 3x3?", limitations, conclusion; `tab:blocos` Winograd 63 -> 94. Future work: the "train the calibrated scales on F(4,3) and the other nets" item is gone (done).

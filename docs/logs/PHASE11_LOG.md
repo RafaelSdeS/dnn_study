@@ -2580,3 +2580,38 @@ n = 2), `build_runs_index` (645 rows, the 54 archive rows kept), `build_cross_ph
 the current band; read with `float_precision="round_trip"`, so a rerun without any log rewrites the file byte for byte), and the stages with
 neither are printed; `test_convergence_keeps_the_row_of_a_run_whose_log_is_gone`. New runs still need their logs once. Article untouched until seed 44: then the 3-seed
 means in `sec:controles`, drop the "uma seed só" limitation, the "6,5 p.p.", `tab:blocos` (+8), the run counts, front C's paragraph.
+
+## FC + BN column: seed 44 in, the column at 3 seeds (2026-11-22)
+
+838388-838391 (`phase_11_kernel_head_bn_seed44`, the 4 kernels' `..._map8_fcdrop_bn`) COMPLETED 2026-11-18 14:42 .. 22:16 on tupi3 / tupi1 / tupi2
+(RTX 4090; 5.3-9.5 h each), `agreement_qat_int8` 0.988-0.992. Synced 2026-11-22 (run dirs without `*.pth` / logs; the 4 rows appended to the local
+`aggregates/phase_11_kernel_head_bn_seed44_comparison.csv`, PCAD's re-evaluated copy of the other 8 rows left as it is). The column
+is now at 3 seeds, 166 of 166 planned runs done (`design_status.csv`). Test top-1 FP32 / INT8:
+
+| kernel | s42 | s43 | s44 | mean FP32 / INT8 (SD) | final train acc s44 |
+|---|---|---|---|---|---|
+| 11-5-3 | 52.23 / 51.92 | 51.64 / 51.54 | 52.77 / 52.79 | 52.21 / 52.08 (0.57 / 0.64) | 97.57 |
+| 3x3 | 50.75 / 50.62 | 50.56 / 50.31 | 50.74 / 50.93 | 50.68 / 50.62 (0.11 / 0.31) | 97.61 |
+| alt 3-2 | 50.00 / 49.79 | 49.66 / 49.69 | 49.69 / 49.78 | 49.78 / 49.75 (0.19 / 0.06) | 97.43 |
+| 2x2 | 45.68 / 45.67 | 45.77 / 45.97 | 45.49 / 45.83 | 45.65 / 45.82 (0.14 / 0.15) | 96.61 |
+
+3-seed means: 2x2 - 3x3 -5.03 FP32 / -4.80 INT8 (per seed -5.07 / -4.79 / -5.25 FP32; -4.95 / -4.34 / -5.10 INT8: same sign and size in 3 of 3);
+2x2 - 11-5-3 -6.56 FP32 / -6.26 INT8 (the conclusion's "6,5" was seed 42; the 3-seed mean rounds to 6,6); 3x3 - 11-5-3 -1.53 FP32 / -1.46 INT8.
+Seed 44 repeats seeds 42 / 43: both nets memorize the training set (train 96.6 / 97.6) and the 2x2 loses on test. Against the FC width control: 2x2 w150
+(48.02, 3 seeds) is 2.37 over the plain 2x2 FC net (45.65) and still 2.66 under the 3x3's 3-seed mean (50.68); 3x3 w67 (47.55) is 3.13 under the 3x3
+and 1.90 over the 2x2: the capacity story of 2026-11-16 holds at 3 seeds on both sides.
+
+Reruns: `analyze_geometry` (the FC + BN rows now n = 3 in `factor_effects` / `factorial_pairs`; the AlexNet-with-BN noise band moved **0.73 -> 0.79 FP32
+and 0.69 -> 0.85 INT8** (no-BN 0.80 / 0.85, ResNet-18 1.02 / 0.35, VGG16 0.83 / 0.75): `tab:ruido` in the article, still ±0,7 / ±0,4, needs the new
+values), `design_figures` (04, 09, 11 and 14 redrawn; 18 / 19 / 29 read the per-epoch logs, so all Phase 11 logs were refetched, ~25 MB, the figures
+came out byte-identical to HEAD, the logs deleted), `factor_effects`, `build_runs_index` (the 54 `archive_adamw_recipe` rows merged back from git
+-- the script drops them while the dir is sparse-checkout-hidden), `build_cross_phase_results` (unchanged). `convergence.csv`: +8 rows (the 4 runs x
+FP32 / QAT: the 4 QAT stages converged, the 4 FP32 ones did not -- their last 20 % of epochs still gained 0.85-1.18 pp against the 0.79 band),
+3 `converged` flags re-judged at the new band, all False -> True (`alexnet_kalt3-2` conv1 stride 2 with 3 pools 3×3 and FC no BN, `vgg16_kalt3-2` GAP + BN, `vgg16_k2x2` FC + Dropout seed 43).
+Article untouched: the 3-seed means in `sec:controles`, drop the "uma seed só" limitation, the "6,5 p.p.", `tab:ruido` ±, `tab:blocos` (+8) and the
+run counts, front C's paragraph (TODO).
+
+Article (2026-11-22): `report/artigo_kernel/artigo_kernel.tex` carries the 3-seed FC + BN column (`tab:grade`, `sec:controles`, abstract, conclusion), the new noise band
+(AlexNet with BN 0.73 -> 0.79 FP32, INT8 0.69 -> 0.85; `tab:ruido` now one row for AlexNet and VGG16, ±0,8 / ±0,5; the text's ±0,7 -> ±0,8 and ±0,4 -> ±0,5), 166 main-study runs
+(`tab:blocos`, total 338 with Phase 14's 94), 134 unmarked INT8 runs (was 126; range -0.40..+0.58 and median +0.04 unchanged). `scripts.phase13.{hybrids,bottleneck_fire}` rerun
+for the band: `02_caminho` (the + BN step is now the 3-seed FC + BN column, 52.2 %, +8.1) and the two figures' band note redrawn; their contrasts unchanged.
