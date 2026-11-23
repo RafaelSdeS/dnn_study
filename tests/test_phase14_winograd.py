@@ -42,6 +42,36 @@ def test_no_arm_yet(tmp_path, capsys):
 
 
 
+def test_f63_probe_helpers():
+    """f63_collapse's probes that need no bridge: which convs stay Winograd (--wino-on), the swap of a qat_wino conv back to an
+    exact conv with its weights, the 99.9th percentile of |x| (--observer p999) and the relative drift (the layer fields)."""
+    import torch
+
+    from scripts.phase14.f63_collapse import pct, rel, to_exact, wino_mask
+
+    assert wino_mask(5, "all") == {0, 1, 2, 3, 4} and wino_mask(5, "every2") == {0, 2, 4} and wino_mask(0, "every2") == set()
+
+    class Stub(torch.nn.Module):  # stands in for a qat_wino conv: weight (cout, cin, 3, 3) and an optional bias
+        def __init__(self, bias):
+            super().__init__()
+            self.weight = torch.nn.Parameter(torch.randn(6, 4, 3, 3))
+            self.bias = torch.nn.Parameter(torch.randn(6)) if bias else None
+
+    torch.manual_seed(0)
+    x = torch.randn(2, 4, 8, 8)
+    for bias in (True, False):
+        stub = Stub(bias)
+        net = torch.nn.Sequential(torch.nn.Sequential(stub), torch.nn.ReLU())  # a nested name, "0.0", like resnet's conv1.0
+        to_exact(net, ["0.0"])
+        assert isinstance(net[0][0], torch.nn.Conv2d)
+        want = torch.nn.functional.conv2d(x, stub.weight, stub.bias, padding=1)
+        assert torch.allclose(net[0][0](x), want, atol=1e-6)
+
+    v = torch.arange(1001.0) - 500  # |v| = 0, 1, 1, 2, 2, ..., 500, 500
+    assert abs(pct(v).item() - 500) < 0.1 and abs(pct(v, 0.5).item() - 250) < 1
+    assert abs(rel(torch.tensor([3.0, 4.0]), torch.tensor([3.0, 0.0])) - 4 / 3) < 1e-6
+
+
 def test_f63_kept_fractions():
     """scripts/phase14/f63_collapse.kept_fractions on one packed F(6,3) conv: an input filling the observer's INT8 range
     keeps its codes and most of U, a 6x6 map (resnet18's layer4) gets the forward's tile padding, and a signal far below

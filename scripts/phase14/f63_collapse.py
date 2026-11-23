@@ -18,6 +18,15 @@ images with BN frozen, as the arm's first epoch does, then measure:
 bridge's gate_flags/params_<name>.txt: the calibrated ones the article's limitation names) and measures only the variants
 named; still epoch 0, so it says whether the signal now crosses the net, not where QAT would take it.
 
+Probes for WHY the error compounds in some nets and not in others (plan 2026-11-23; defaults reproduce the runs above):
+    --variants f63 --new-only    one variant, the new base only
+    --wino-on every2             Winograd on every second eligible conv, the others swapped back to exact FP32 convs
+    --observer clean|p999        calibrate the observers on the FP32 net's own activations (clean) / with the 99.9th percentile
+                                 of |x| per batch instead of the max (p999); `own` (default) = the Winograd net's own, max
+    every layer also gets cin, drift (|x_w - x_fp| / |x_fp| at its input), max_ratio / p999_ratio (Winograd net's input max /
+    99.9th percentile over the FP32 net's), obs_over_p999 (observer / the clean 99.9th percentile); each variant gets
+    conv_gain: the relative drift at the input and output of EVERY Conv2d (exact and Winograd) on 16 test images.
+
 -> results/phase_14_winograd_numerics/f63_collapse.json. Checkpoints are gitignored and the laptop keeps none: rsync the two
 `<net>_best.pth` from PCAD to the same relpaths first (CLAUDE.md "Artifacts"), or pass --new / --old. Export
 WINOGRAD_FPGA_ROOT = the bridge the arms ran (f44da9a, PCAD ~/winograd_bridge_m7/avaliacao_redes). CPU only, a few minutes.
@@ -27,7 +36,7 @@ WINOGRAD_FPGA_ROOT = the bridge the arms ran (f44da9a, PCAD ~/winograd_bridge_m7
 import argparse
 import json
 from pathlib import Path
-from types import SimpleNamespace
+from types import MethodType, SimpleNamespace
 
 import torch
 import torch.nn.functional as F
@@ -57,6 +66,77 @@ def crest(t):
     return (t.abs().max() / t.pow(2).mean().sqrt()).item()
 
 
+def rel(a, b):
+    """Relative L2 distance of a from the reference b."""
+    return ((a - b).norm() / b.norm().clamp_min(1e-12)).item()
+
+
+def pct(t, q=0.999):
+    """q-quantile of |t| (torch.quantile stops at 16M elements: a strided subsample above that)."""
+    a = t.detach().abs().flatten()
+    return torch.quantile(a[:: -(-a.numel() // 16_000_000)], q)
+
+
+def wino_mask(n, mode):
+    """Indices, of n eligible convs in module order, that stay Winograd: all, or every second one from the first."""
+    return set(range(0, n, {"all": 1, "every2": 2}[mode]))
+
+
+def to_exact(model, names):
+    """Swap each named qat_wino conv back to an exact FP32 Conv2d with its weights (eligible = 3x3, stride 1, pad 1)."""
+    for n in names:
+        parent, _, child = n.rpartition(".")
+        p = model.get_submodule(parent)  # "" -> the model itself
+        w = getattr(p, child)
+        c = torch.nn.Conv2d(w.weight.shape[1], w.weight.shape[0], 3, padding=1, bias=w.bias is not None)
+        c.weight.data.copy_(w.weight.data)
+        if w.bias is not None:
+            c.bias.data.copy_(w.bias.data)
+        setattr(p, child, c)
+
+
+def _p999_act_scale(self, x):
+    """qat_wino's `_act_scale` with the batch's 99.9th percentile of |x| where it has the max (the observer's EMA is kept)."""
+    if self.training:
+        cur = pct(x)
+        if self.act_absmax == 0:
+            self.act_absmax.copy_(cur)
+        else:
+            self.act_absmax.mul_(1 - self.momentum).add_(self.momentum * cur)
+    return torch.clamp(self.act_absmax, min=1e-8) / 127.0
+
+
+def _feed(w):
+    """Forward hook for an FP32 conv: run the Winograd conv `w` (train mode: its observers calibrate) on the same input."""
+    def hook(_m, i, _o):
+        w(i[0])
+    return hook
+
+
+def conv_gain(fp32, m, x):
+    """Relative drift of the Winograd net's activations from the FP32 net's, same batch, at the input and the output of every
+    Conv2d (exact, swapped-back and Winograd alike): what each conv does to the error that reaches it."""
+    ref = {n: c for n, c in fp32.named_modules() if isinstance(c, torch.nn.Conv2d)}
+    fp, rows = {}, {}
+    hs = [c.register_forward_hook(lambda _m, i, o, n=n: fp.__setitem__(n, (i[0], o))) for n, c in ref.items()]
+    with torch.no_grad():
+        fp32(x)
+    for h in hs:
+        h.remove()
+
+    def grab(mod, i, o, n):
+        a, b = fp[n]
+        rows[n] = dict(kind="winograd" if hasattr(mod, "act_absmax") else "exact", k=ref[n].kernel_size[0],
+                       cin=ref[n].in_channels, cout=ref[n].out_channels, drift_in=rel(i[0], a), drift_out=rel(o, b))
+
+    hs = [m.get_submodule(n).register_forward_hook(lambda mod, i, o, n=n: grab(mod, i, o, n)) for n in ref]
+    with torch.no_grad():
+        m(x)
+    for h in hs:
+        h.remove()
+    return rows
+
+
 def kept_fractions(layer, x):
     """(x_kept, u_kept, v_kept) of one Winograd conv on input x at its current observer scale: its forward's packing
     quantization step by step (x and w to INT8, U = Bt d B per tile, V = G g Gt, then qs_pos by `su` / `sv`), counting
@@ -83,27 +163,49 @@ def top1(model, loader):
         return 100 * sum((model(x).argmax(1) == y).sum().item() for x, y in loader) / len(loader.dataset)
 
 
-def measure(label, net, ckpt_dir, calib, test, hw=None):
-    """hw: {variant: hw_params}; when given, only those variants, built with the netlist's scales (`su` is the layer's)."""
+def measure(label, net, ckpt_dir, calib, test, hw=None, only=None, wino_on="all", observer="own"):
+    """hw: {variant: hw_params}; when given, only those variants, built with the netlist's scales (`su` is the layer's).
+    only: the variants to measure when hw is not given (default VARIANTS). wino_on / observer: the probes in the docstring."""
     spec, dev = MODEL_REGISTRY[net], torch.device("cpu")
     fp32 = load_best_model(net, spec["ctor"], ckpt_dir, dev)
     out = {"fp32_top1": top1(fp32, test)}
     xb = next(iter(test))[0]
-    for v in hw or VARIANTS:
+    ref = dict(fp32.named_modules())
+    for v in hw or only or VARIANTS:
         arm = load_profile(f"phase_14_winograd_{v}_pack", "experiments")["qat_wino"]
         cfg = SimpleNamespace(**{k: arm[k] for k in ("variant", "pack", "u_w", "v_w", "k_dsp")}, hw_params=(hw or {}).get(v))
         m = load_qat_wino_model(net, spec, ckpt_dir, dev, cfg)
+        wino = {n: mod for n, mod in m.named_modules() if hasattr(mod, "act_absmax")}
+        keep = wino_mask(len(wino), wino_on)
+        to_exact(m, [n for i, n in enumerate(wino) if i not in keep])
+        wino = {n: mod for n, mod in m.named_modules() if hasattr(mod, "act_absmax")}
         m.train()
         for b in m.modules():
             if isinstance(b, torch.nn.modules.batchnorm._BatchNorm):
                 b.eval()  # only the Winograd observers calibrate; BN keeps the FP32 statistics
+        if observer == "p999":
+            for mod in wino.values():
+                mod._act_scale = MethodType(_p999_act_scale, mod)
         with torch.no_grad():
-            for x, _ in calib:
-                m(x)
+            if observer == "clean":  # each observer (and post_shift) sees the FP32 net's activations, not the error-compounded ones
+                hs = [ref[n].register_forward_hook(_feed(w)) for n, w in wino.items()]
+                for x, _ in calib:
+                    fp32(x)
+                for h in hs:
+                    h.remove()
+            else:
+                for x, _ in calib:
+                    m(x)
         m.eval()
         out[v] = {"top1": top1(m, test)}
-        wino = {n: mod for n, mod in m.named_modules() if hasattr(mod, "act_absmax")}
-        ref = dict(fp32.named_modules())
+        # the probes read the arm as calibrated, so they come before the per-layer loop below, which resets each observer
+        seen_w = {}
+        hs = [mod.register_forward_pre_hook(lambda _m, a, n=n: seen_w.__setitem__(n, a[0])) for n, mod in wino.items()]
+        with torch.no_grad():
+            m(xb)
+        for h in hs:
+            h.remove()
+        out[v]["conv_gain"] = conv_gain(fp32, m, xb[:16])
         seen = {}
         hooks = [ref[n].register_forward_hook(lambda mod, i, o, n=n: seen.__setitem__(n, (i[0], o))) for n in wino]
         with torch.no_grad():
@@ -115,6 +217,9 @@ def measure(label, net, ckpt_dir, calib, test, hw=None):
                 x, y = seen[n]
                 xk, uk, vk = kept_fractions(mod, x)  # at the arm's calibration
                 ratio = (mod.act_absmax / x.abs().max()).item()
+                xw = seen_w[n]
+                probe = dict(cin=mod.weight.shape[1], drift=rel(xw, x), max_ratio=(xw.abs().max() / x.abs().max()).item(),
+                             p999_ratio=(pct(xw) / pct(x)).item(), obs_over_p999=(mod.act_absmax / pct(x)).item())
                 mod.act_absmax.zero_()
                 mod.post_shift.zero_()
                 mod.train()
@@ -122,29 +227,33 @@ def measure(label, net, ckpt_dir, calib, test, hw=None):
                 mod.eval()
                 layers.append(dict(name=n, cos_clean=F.cosine_similarity(mod(x).flatten(), y.flatten(), dim=0).item(),
                                    absmax_ratio=ratio, x_kept=xk, u_kept=uk, v_kept=vk, x_crest=crest(x),
-                                   w_crest=crest(mod.weight)))
+                                   w_crest=crest(mod.weight), **probe))
         out[v]["layers"] = layers
         print(f"{label} {v}: top1 {out[v]['top1']:5.2f} (FP32 {out['fp32_top1']:.2f})", flush=True)
     return out
 
 
 def main(net=DEFAULT_NET, new=DEFAULT_NEW, old=DEFAULT_OLD, out=DEFAULT_OUT, n_calib=DEFAULT_CALIB, n_test=DEFAULT_TEST,
-         bs=DEFAULT_BS, seed=DEFAULT_SEED, hw=None):
+         bs=DEFAULT_BS, seed=DEFAULT_SEED, hw=None, only=None, new_only=False, wino_on="all", observer="own"):
+    torch.manual_seed(seed)  # qat_wino's post_shift draws a 1M-element sample (torch.randint) on layers above that
     train_dir = ensure_dataset_path(load_profile("local", "runtime"))
     tf = _val_transform(64)
     train = ImageFolder(train_dir, transform=tf)
     pick = torch.randperm(len(train), generator=torch.Generator().manual_seed(seed))[:n_calib].tolist()
     calib = DataLoader(Subset(train, pick), batch_size=bs)
     test = DataLoader(Subset(_TinyImageNetVal(train_dir.parent / "val", train.class_to_idx, tf), range(n_test)), batch_size=bs)
+    kw = dict(hw=hw, only=only, wino_on=wino_on, observer=observer)
     res = {"net": net, "n_calib": n_calib, "n_test": n_test, "seed": seed, "bridge": bridge_provenance(), "hw_params": hw,
-           "new": measure("new", net, Path(new), calib, test, hw), "old": measure("old", net, Path(old), calib, test, hw)}
+           "wino_on": wino_on, "observer": observer, "new": measure("new", net, Path(new), calib, test, **kw),
+           "old": None if new_only else measure("old", net, Path(old), calib, test, **kw)}
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     Path(out).write_text(json.dumps(res, indent=1))
     cols = ("cos_clean", "absmax_ratio", "x_kept", "u_kept", "x_crest")
-    for v in hw or VARIANTS:
+    for v in hw or only or VARIANTS:
         print(f"\n{v} {'layer':22s}" + "".join(f"| {c + ' new/old':>21s} " for c in cols))
-        for a, b in zip(res["new"][v]["layers"], res["old"][v]["layers"]):
-            print(f"   {a['name']:22s}" + "".join(f"| {a[c]:10.2f} {b[c]:10.2f} " for c in cols))
+        olds = res["old"][v]["layers"] if res["old"] else [None] * len(res["new"][v]["layers"])
+        for a, b in zip(res["new"][v]["layers"], olds):
+            print(f"   {a['name']:22s}" + "".join(f"| {a[c]:10.2f} {b[c] if b else float('nan'):10.2f} " for c in cols))
 
 
 if __name__ == "__main__":
@@ -155,5 +264,10 @@ if __name__ == "__main__":
     p.add_argument("--out", type=Path, default=DEFAULT_OUT)
     p.add_argument("--n-test", type=int, default=DEFAULT_TEST)
     p.add_argument("--hw-params", nargs="+", metavar="VARIANT=NAME", help="e.g. f63=f63c: only these variants, netlist scales")
+    p.add_argument("--variants", nargs="+", choices=VARIANTS, help="only these variants, the layer's own scales (default: all)")
+    p.add_argument("--new-only", action="store_true", help="skip the old (budget_unico) base")
+    p.add_argument("--wino-on", choices=("all", "every2"), default="all", help="every2: the others swapped back to exact convs")
+    p.add_argument("--observer", choices=("own", "clean", "p999"), default="own", help="how the observers calibrate")
     a = p.parse_args()
-    main(a.net, a.new, a.old, a.out, n_test=a.n_test, hw=dict(x.split("=") for x in a.hw_params) if a.hw_params else None)
+    main(a.net, a.new, a.old, a.out, n_test=a.n_test, hw=dict(x.split("=") for x in a.hw_params) if a.hw_params else None,
+         only=a.variants, new_only=a.new_only, wino_on=a.wino_on, observer=a.observer)
