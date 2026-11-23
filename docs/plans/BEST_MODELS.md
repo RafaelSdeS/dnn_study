@@ -12,11 +12,11 @@ Results after implementing phases 1–4, 6, 8, and 9. **Most baselines (MobileNe
 
 ---
 
-## Cross-phase synthesis (2026-10-31; Phase 11 complete, 152 runs; Phase 12 complete, 39 runs)
+## Cross-phase synthesis (2026-10-31; Phase 11 complete, 166 runs; Phase 12 complete, 39 runs)
 
 What the project supports so far, strongest evidence first. **Phases 11-13 are the only phases run under one recipe** (500 epochs,
 no early stopping, SGD, one augmentation, the literature's INT8, reported on Tiny ImageNet's official val split as the test set;
-every value and its reference in `docs/plans/PROTOCOL.tex`), with a seed noise floor measured per regime: ±0.7 pp FP32 for AlexNet
+every value and its reference in `docs/plans/PROTOCOL.tex`), with a seed noise floor measured per regime: ±0.8 pp FP32 for AlexNet
 + BN, ±0.8 pp without BN, ±0.8 pp for VGG16 + BN. Their contrasts are the ones to trust. The Phase 1-4 and 9 numbers in the
 sections below come from earlier protocols (early stopping, BN / geometry / head differences between the compared models, see
 `docs/logs/PHASE11_LOG.md` 2026-09-24): compare models within a phase, not across phases.
@@ -75,7 +75,7 @@ figures 02, 11, 14 and 16.
    48.36, MobileNetV2 from scratch 47.83, DepthwiseSep 46.53, GroupConv 46.12, FinalDepthwiseFire 45.76). Fire, FireBypass and the
    Fire / Bottleneck hybrids now sit within 1.5 pp of each other, against ~6 pp between Fire and FireBypass / FinalFireResidual
    in the earlier protocols (finding 12).
-5. **INT8 is robust, and the big "INT8 gains" are not quantization.** 26 of 152 runs reach their best FP32 epoch before 80% of the
+5. **INT8 is robust, and the big "INT8 gains" are not quantization.** 26 of 166 runs reach their best FP32 epoch before 80% of the
    budget (most no-BN FC + Dropout cells, 4 of the 6 pretrained nets, both ResNet-18 seed 43 runs and the 2×2 seed 44); QAT starts there from an un-annealed
    checkpoint and gains up to +6 pp from its extra training. Everywhere else |INT8 − FP32| stays within ~±0.5 pp (the 18
    non-pretrained families lose at most 0.23 pp) and shows no dependence on kernel size (Spearman ρ = +0.06 between a net's worst
@@ -83,7 +83,7 @@ figures 02, 11, 14 and 16.
    QAT model on 10-14% of test images in all 3 of its runs (one recipe, fine-tuned at lr 1e-3 / 1e-4; the scratch twin 6%), tripping
    the 0.90 agreement guard, while INT8 − QAT stays ≤ 0.34 pp. Fine-tuned (Phase 12, QAT 10 epochs at 1/100 of the lr) it is also the
    one net that loses in INT8: −1.49 / −1.16 pp FP32 → INT8 at lr 1e-4 / 1e-3, nearly all in QAT itself (−1.15 / −1.25); the other
-   158 non-early-best runs of Phases 11-12 stay within −0.38 / +0.76 pp (median +0.03 over all 159). The only pretrained depthwise
+   173 non-early-best runs of Phases 11-12 stay within −0.40 / +0.76 pp (median +0.04 over all 174). The only pretrained depthwise
    net. Its QAT validation is already ~1 pp under FP32 at QAT epoch 1 (62.76 → 61.82, 53.25 → 51.54) and stays flat for the 10
    epochs: QAT at 1/100 of the lr does not train the quantization error away. Recipe kept as is (user, 2026-10-30).
 6. **It holds under another lr and another dataset (Phase 12).** At lr ×0.5 and ×2 the AlexNet order 3×3 > 11-5-3-3-3 > 2×2 stays

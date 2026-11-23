@@ -301,7 +301,7 @@ uma gêmea treinada do zero, de modo que o pré-treino seja a única diferença.
 
 Os experimentos formam quatro estudos (fases 11 a 14 do projeto), resumidos na Tabela~\ref{tab:blocos}.
 
-O \textit{estudo principal} mede cada fator isolado. Como uma grade completa teria 424 treinos e cerca de 3 mil horas de GPU,
+O \textit{estudo principal} mede cada fator isolado. Como uma grade completa teria 424 treinos e cerca de 3,4 mil horas de GPU,
 escolhemos os pares que respondem às perguntas e repetimos com outras seeds onde o efeito era pequeno.
 
 Os \textit{testes de robustez} perguntam se as conclusões dependem da receita ou dos dados. Cada um muda uma coisa declarada: a taxa de
@@ -841,7 +841,7 @@ Os resultados apontam para algumas escolhas:
 \begin{itemize}
 \item Acerte primeiro a geometria e o treino: use stride baixo na conv1 para imagens pequenas, BN e, na AlexNet, GAP. Esses fatores pesam tanto ou mais que o kernel. O stride 1 é o mais caro, pois quadruplica os MACs, e cabe a cada projeto decidir se vale esse custo.
 \item Não aumente o kernel para ganhar acurácia: com GAP e BN, gastar a mais em largura ou em uma segunda convolução por estágio rende mais.
-\item Use a conv1 11\by11 com cuidado. Ela ajuda um corpo de 5 convoluções, mas não acrescenta nada com dois por estágio e tira de 5 a 23 p.p. da parcela Winograd (10 p.p. no 2\by2 com dois por estágio).
+\item Use a conv1 11\by11 com cuidado. Ela ajuda um corpo de 5 convoluções, mas não acrescenta nada com dois por estágio e tira de 4 a 24 p.p. da parcela Winograd (10 p.p. no 2\by2 com dois por estágio).
 \item Evite redes dominadas por convoluções \textit{depthwise} ou 1\by1 se o alvo é Winograd. Se a meta também é cortar custo, o Fire com dois blocos por estágio usa de um quarto a um quinto dos MACs e ainda deixa de 60 a 77\% deles no acelerador; em acurácia, ganha 0,9 p.p. sobre o corpo 3\by3 e custa 0,7 p.p. no 2\by2 (3 seeds cada; Seção~\ref{sec:unidades}).
 \item Não trate a quantização como obstáculo, mas confira se o FP32 convergiu antes do QAT, para não confundir treino extra com efeito da quantização.
 \end{itemize}
