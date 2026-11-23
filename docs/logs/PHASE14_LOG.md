@@ -206,3 +206,27 @@ split. The user asked for everything on one recipe, so this phase reruns them on
   `train-mobilenetv2` was re-run as `-scratch`. Not done: the article (`sec:numerica`, "2x2 ou 3x3?", abstract, limitation, conclusion, future work, `tab:blocos`) still carries the 17 pre-calibration numbers (TODO).
 - 2026-11-22 (later): article updated with the 31 calibrated arms (`report/artigo_kernel/`, TODO): F43c −0,8 / F63c −4,6 pp (16 nets) in the abstract, contribution bullet, methods, `sec:numerica`
   (+ figure caption: hollow circles = calibrated, dotted line = their median), "2x2 ou 3x3?", limitations, conclusion; `tab:blocos` Winograd 63 -> 94. Future work: the "train the calibrated scales on F(4,3) and the other nets" item is gone (done).
+- 2026-11-23: **why the packed F(6,3) error compounds in some nets and not in others -- probes added, the runs are pending.**
+  *Mechanism, read in `qat_wino.py` (bridge f44da9a):* `su` is a constant per (variant, `u_w`) -- the analytic worst case with the input range fixed at 127 -- and does NOT follow the observer; the observer is an EMA (momentum 0.05)
+  of the batch max |x|. So the loop is: error -> rare large activations -> observer max up -> x_q uses few INT8 levels -> U = Bt x B small -> the fixed `su` zeroes it (`u_kept`) -> more error.
+  *Already in the tracked JSONs (new base, F63, default scales):* ln(observer / clean max) per Winograd conv grows +0.206 on `resnet18_fpga` (x1.23), +0.411 on `vgg13_fpga` (x1.51), -0.033 on `googlenet_fpga` (x0.97);
+  `u_kept` < 0.2 from the 5th / 4th conv, never on googlenet; with `f63c` the observer / clean ratio tops at 3.0 / 1.9 / 2.1. Over the 16 nets the F63 arm is 0.4-0.6 % on the six deep plain-3x3 nets, 4.2 `repvgg_a0`,
+  11-28 on the AlexNet-class nets (Fire / Bottleneck 21-28, `alexnet_stacked` 11.2), 48.5 `googlenet`. A correlation only: the number of 3x3 convs varies too.
+  *Hypotheses* (plan `~/.claude/plans/glimmering-doodling-cascade.md`): A the max estimator is the weak link (error makes outliers; test `p999_ratio` vs `max_ratio` and a 99.9th-percentile observer), B the observer loop is necessary
+  (observers calibrated on the FP32 activations), C the count of consecutive Winograd convs (Winograd on every second conv), D 1x1 reduce convs filter the error (relative drift at every conv, exact and Winograd).
+  *Decision rules, fixed before the numbers:* `p999` takes resnet18 / vgg13 to >= ~20 % at epoch 0 (as `f63c`: 23.7 / 16.4) -> A; `clean` survives -> the loop is the cause, collapses -> the worst-case `su` per layer suffices;
+  `every2` leaves the per-conv growth at ~x1.2 -> a local property of the layer, not of the chain; nothing separates -> keep the question open and report the table. Epoch 0 on 1000 images does not predict the arm
+  (googlenet 0.3 -> 48.5 %), so the per-layer trajectories (`absmax_ratio`, `u_kept`, `drift`) are the criterion; saying where QAT goes needs an arm (not planned).
+  *Code (5c8351c):* `scripts/phase14/f63_collapse.py` gets `--wino-on all|every2` (the others swapped back to exact FP32 convs), `--observer own|clean|p999`, `--variants`, `--new-only`; per layer `cin`, `drift`, `max_ratio`,
+  `p999_ratio`, `obs_over_p999`; per variant `conv_gain` (relative drift at the input and output of every Conv2d); `main()` seeds torch (post_shift draws a 1M-element `randint` sample on large layers); defaults unchanged.
+  `tests/test_phase14_winograd.py::test_f63_probe_helpers` (no bridge needed). Smoke-tested on a random net with real `qat_wino` layers (bridge 3a15cd0 on Hestia -- not for results).
+  *Jobs (PCAD, CPU, no training):* `~/f63_probe/run.sh <net>` runs `default`, `every2`, `clean`, `p999`, `f63c` in sequence on one node -> `~/f63_probe/f63_probe_<net>_<mode>.json`. 840195 (resnet18) sat PENDING on `tupi` (64 of 64 CPUs taken,
+  the tupi3-6 nodes have 8) and was cancelled; resubmitted with `-p shared,tupi --exclude=tupi4 -q short`: 840197 resnet18 (limit 1:30 -- a user cannot raise it; may time out on the last modes), 840199 vgg13, 840200 googlenet
+  (3:00). 840197 runs on `bali2`, an **Intel Xeon E5-2650 (2012, AVX only)**; the 2026-11-08 / 11 JSONs ran on tupi nodes, so a mismatch in the regression may be the CPU, not the code (rerun `default` on a tupi node to tell).
+  *Regression:* the `default` JSON must match `results/phase_14_winograd_numerics/f63_collapse.json` (`new.f63`): `absmax_ratio`, `x_kept`, `u_kept`, `v_kept`, crests to 1e-4, `cos_clean` / top-1 loosely (post_shift's random draw).
+  *When they land:* rsync the JSONs to `results/phase_14_winograd_numerics/f63_probe_<net>_<mode>.json` (md5 = PCAD's), a table per net and mode, the decision rules above, then `sec:numerica` (replace "Não medimos por que...") and the future-work item;
+  delete `~/f63_probe` on PCAD.
+- 2026-11-23 (housekeeping): PCAD pulled main (`6f806a8`, then `5c8351c`): 376 untracked clashing files (FC + BN seeds 43 / 44, `f43c` / `f63c`) moved aside, `git merge --ff-only`, all 376 `cmp`-identical, copies deleted; the 3 aggregate CSVs
+  PCAD had modified (re-evaluation, last-digit noise) are kept in `~/dnn_study_prepull_untracked_20261123/csv_modified/`. Article audit (read-only, ~190 numbers against `all_runs.csv` / `runs.csv` / `medians.csv`): no wrong result number;
+  two imprecisions fixed in the article and four stale lines in `docs/plans/BEST_MODELS.md` (300a7eb). The 27 files that existed only on Hestia (Phase 7 SSD checkpoints, Phase 9 / legacy resume files, logs; 1.16 GB) copied to the same
+  relpaths on PCAD, md5-identical.
