@@ -27,6 +27,11 @@ Probes for WHY the error compounds in some nets and not in others (plan 2026-11-
     99.9th percentile over the FP32 net's), obs_over_p999 (observer / the clean 99.9th percentile); each variant gets
     conv_gain: the relative drift at the input and output of EVERY Conv2d (exact and Winograd) on 16 test images.
 
+Randomness: post_shift draws a 1M-element sample (torch.randint) on large layers, and a different draw can round one
+post_shift the other way, which every later layer inherits. --torch-seed sets that draw only (the calibration images stay
+seed 0's); the runs before 5c8351c set no torch seed and this torch's default seed changes per process, so they cannot be
+replayed bit for bit (PHASE14_LOG 2026-11-24). Every JSON records torch_seed and capture_provenance() (host, CPU).
+
 -> results/phase_14_winograd_numerics/f63_collapse.json. Checkpoints are gitignored and the laptop keeps none: rsync the two
 `<net>_best.pth` from PCAD to the same relpaths first (CLAUDE.md "Artifacts"), or pass --new / --old. Export
 WINOGRAD_FPGA_ROOT = the bridge the arms ran (f44da9a, PCAD ~/winograd_bridge_m7/avaliacao_redes). CPU only, a few minutes.
@@ -47,7 +52,7 @@ import ml.model_registrations  # noqa: F401  (fills MODEL_REGISTRY)
 from ml.data import _TinyImageNetVal, _val_transform
 from ml.quantization import load_best_model
 from ml.registry import MODEL_REGISTRY
-from ml.runtime import ensure_dataset_path, load_profile
+from ml.runtime import capture_provenance, ensure_dataset_path, load_profile
 from ml.winograd_bridge import bridge_provenance, import_bridge_module, load_qat_wino_model
 from scripts.phase14.winograd_numerics import VARIANTS
 
@@ -234,8 +239,10 @@ def measure(label, net, ckpt_dir, calib, test, hw=None, only=None, wino_on="all"
 
 
 def main(net=DEFAULT_NET, new=DEFAULT_NEW, old=DEFAULT_OLD, out=DEFAULT_OUT, n_calib=DEFAULT_CALIB, n_test=DEFAULT_TEST,
-         bs=DEFAULT_BS, seed=DEFAULT_SEED, hw=None, only=None, new_only=False, wino_on="all", observer="own"):
-    torch.manual_seed(seed)  # qat_wino's post_shift draws a 1M-element sample (torch.randint) on layers above that
+         bs=DEFAULT_BS, seed=DEFAULT_SEED, hw=None, only=None, new_only=False, wino_on="all", observer="own",
+         torch_seed=None):
+    torch_seed = seed if torch_seed is None else torch_seed
+    torch.manual_seed(torch_seed)  # qat_wino's post_shift draws a 1M-element sample (torch.randint) on layers above that
     train_dir = ensure_dataset_path(load_profile("local", "runtime"))
     tf = _val_transform(64)
     train = ImageFolder(train_dir, transform=tf)
@@ -243,7 +250,8 @@ def main(net=DEFAULT_NET, new=DEFAULT_NEW, old=DEFAULT_OLD, out=DEFAULT_OUT, n_c
     calib = DataLoader(Subset(train, pick), batch_size=bs)
     test = DataLoader(Subset(_TinyImageNetVal(train_dir.parent / "val", train.class_to_idx, tf), range(n_test)), batch_size=bs)
     kw = dict(hw=hw, only=only, wino_on=wino_on, observer=observer)
-    res = {"net": net, "n_calib": n_calib, "n_test": n_test, "seed": seed, "bridge": bridge_provenance(), "hw_params": hw,
+    res = {"net": net, "n_calib": n_calib, "n_test": n_test, "seed": seed, "torch_seed": torch_seed,
+           "provenance": capture_provenance(), "bridge": bridge_provenance(), "hw_params": hw,
            "wino_on": wino_on, "observer": observer, "new": measure("new", net, Path(new), calib, test, **kw),
            "old": None if new_only else measure("old", net, Path(old), calib, test, **kw)}
     Path(out).parent.mkdir(parents=True, exist_ok=True)
@@ -268,6 +276,7 @@ if __name__ == "__main__":
     p.add_argument("--new-only", action="store_true", help="skip the old (budget_unico) base")
     p.add_argument("--wino-on", choices=("all", "every2"), default="all", help="every2: the others swapped back to exact convs")
     p.add_argument("--observer", choices=("own", "clean", "p999"), default="own", help="how the observers calibrate")
+    p.add_argument("--torch-seed", type=int, help="global torch seed: post_shift's random sample only (default: seed 0)")
     a = p.parse_args()
     main(a.net, a.new, a.old, a.out, n_test=a.n_test, hw=dict(x.split("=") for x in a.hw_params) if a.hw_params else None,
-         only=a.variants, new_only=a.new_only, wino_on=a.wino_on, observer=a.observer)
+         only=a.variants, new_only=a.new_only, wino_on=a.wino_on, observer=a.observer, torch_seed=a.torch_seed)
