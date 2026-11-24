@@ -36,11 +36,13 @@ partition that trained it so its FP32/QAT numbers reproduce exactly. Phase 11's 
 `*.pth`/log from all three runtimes, at the same relative path under `~/dnn_study`. Fetch one when
 needed: `rsync -avP rsdsouza@gppd-hpc.inf.ufrgs.br:dnn_study/<relpath> <relpath>`. Before deleting
 a checkpoint on either side, compare by md5, not size — same-model checkpoints have identical sizes.
-What the laptop does hold (checked 2026-10-27): copies of the training logs of the `phase_1[12]_*` runs and the archives
-(figures 18 / 19 / 29 and `convergence.csv` read them -- regenerating without them silently drops rows, fetch them first), the 4
-VGG16 FC + Dropout seed INT8 artifacts and the lr 1e-3 VGG16 fine-tune's (104.5 MB, 2026-10-30) over GitHub's limit, 3 `.pth` in `archive_legacy_phases/` (also on PCAD), and the gitignored files of
-`outputs/local/archive_winograd_old_recipe/{wino_f{23,43,63}_pack,_pcad_fp32}/` (archived 2026-11-09, Phase 14 replaced them) (the 2026-09-18 local M7 runs: 32 files, 26 of them checkpoints), copied to
-PCAD's `~/dnn_study` on 2026-10-30 (md5 identical) -- until then the laptop was their only copy.
+What the laptop does hold (checked 2026-11-24): only training logs, all md5-identical on PCAD -- 332 of the live `phase_11_*`
+runs and 61 of `archive_adamw_recipe/`. Keep them: figures 18 / 19 / 29 (`scripts/phase11/design_figures.py:curve()`) draw from
+them and silently drop a curve whose log is missing, and `convergence.csv` reads a log once (it keeps the row afterwards); bring a
+new run's `logs/` with its sync. The other archives' logs (83, `archive_{old_init,qat_bnfreeze,quantized_logits_qat,unfused_qat}`,
+read by no script) were deleted 2026-11-24. The INT8 artifacts over GitHub's limit, the `archive_legacy_phases/` `.pth` and the
+2026-09-18 local M7 runs (`outputs/local/archive_winograd_old_recipe/`, copied to PCAD 2026-10-30, md5 identical) left the laptop in the
+2026-11-10 cleanup; PCAD holds them.
 
 **One slug per phase**, `phase_N_description`, used identically in `notebooks/`, `results/`,
 `results/figures_generated/`, `outputs/*/` **and `configs/experiments/`**. The experiment name
