@@ -310,3 +310,7 @@ split. The user asked for everything on one recipe, so this phase reruns them on
   checkpoint the f63 arm used); bridge `~/winograd_bridge_m7` f44da9a (BRIDGE_COMMIT.json, clean); dry-run `--exclude tupi4`. Jobs **840409**
   (resnet18_fpga) and **840410** (vgg13_fpga), `tupi_4090`, pending on resources. Past f63 arms took 1:03-1:13, f63c 2:50-3:40. First check once a job
   starts: its `qat_wino_<net>.log` must say `wino_on=every2: 9 conv(s) back to exact` (resnet18) / `5` (vgg13).
+  *CNPq, corrected the same evening:* CNPq's RN-017/2006 (bolsas por quota, IC included), item 5.3, prescribes the expression "in the language of the work":
+  "O presente trabalho foi realizado com apoio do CNPq, Conselho Nacional de Desenvolvimento Científico e Tecnológico - Brasil" if published individually,
+  "Bolsista do CNPq - Brasil" if co-authored (RN-028/2015 5.9, individual grants, adds the process number). Both reports are co-authored, so the free sentence in the
+  acknowledgments became "Bolsista do CNPq -- Brasil" under the first author's name in the author block of `artigo_kernel.tex` and `ic_report.tex` (22 / 24 pp, no warning).
