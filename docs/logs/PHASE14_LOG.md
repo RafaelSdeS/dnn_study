@@ -306,3 +306,7 @@ split. The user asked for everything on one recipe, so this phase reruns them on
   *Decision rule, fixed before the numbers:* test top-1 < 5 % = still collapses (the exact convs in between do not save it after QAT); otherwise they do,
   reported as arm - FP32 and against the calibrated f63c arm (54.66 / 53.78). every2 also halves the number of F(6,3) convs: the arm does not separate
   "chained" from "how many", and the text must say so.
+  *Queued 2026-11-24 ~17:00:* PCAD pulled `e90a2fe` (ff, no clash); FP32 of both nets copied from `phase_14_winograd_fp32` (cmp-identical, the same
+  checkpoint the f63 arm used); bridge `~/winograd_bridge_m7` f44da9a (BRIDGE_COMMIT.json, clean); dry-run `--exclude tupi4`. Jobs **840409**
+  (resnet18_fpga) and **840410** (vgg13_fpga), `tupi_4090`, pending on resources. Past f63 arms took 1:03-1:13, f63c 2:50-3:40. First check once a job
+  starts: its `qat_wino_<net>.log` must say `wino_on=every2: 9 conv(s) back to exact` (resnet18) / `5` (vgg13).
