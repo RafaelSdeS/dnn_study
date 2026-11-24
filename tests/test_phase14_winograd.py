@@ -100,3 +100,26 @@ def test_f63_kept_fractions():
     assert kept_fractions(hw, x)[1] >= uk
     hw.sv_hw.fill_(30.0)
     assert kept_fractions(hw, x)[2] == 0.0
+
+
+def test_f63_probe_summary_row(tmp_path):
+    """scripts/phase14/f63_probe_summary: observers doubling at every Winograd conv -> growth x2 per conv; conv_gain's median
+    drift_out / drift_in per kind (a conv with no drift reaching it is skipped); file names -> net / mode / draw."""
+    import pytest
+
+    from scripts.phase14.f63_probe_summary import row, rows
+
+    layer = lambda i: dict(absmax_ratio=2.0 ** i, x_kept=1 - i / 10, u_kept=0.5 / (i + 1))
+    cg = {"a": dict(kind="winograd", k=3, drift_in=0.0, drift_out=0.1), "b": dict(kind="winograd", k=3, drift_in=0.1, drift_out=0.2),
+          "c": dict(kind="exact", k=1, drift_in=0.2, drift_out=0.1), "d": dict(kind="exact", k=3, drift_in=0.2, drift_out=0.3)}
+    f63 = dict(top1=1.5, layers=[layer(i) for i in range(4)], conv_gain=cg)
+    r = row(f63)
+    assert r["growth_per_conv"] == pytest.approx(2.0) and r["max_absmax_ratio"] == 8.0
+    assert r["min_x_kept"] == pytest.approx(0.7) and r["min_u_kept"] == pytest.approx(0.125)
+    assert (r["gain_wino"], r["gain_exact1x1"], r["gain_exact3x3"]) == pytest.approx((2.0, 0.5, 1.5))
+    (tmp_path / "f63_probe_vgg13_fpga_every2_s1.json").write_text(json.dumps({"new": {"f63": f63}}))
+    (tmp_path / "f63_probe_vgg13_fpga_default_s0_draco1.json").write_text(json.dumps({"new": {"f63": f63}}))
+    (tmp_path / "f63_collapse_vgg13_fpga_f63c.json").write_text(json.dumps({"net": "vgg13_fpga", "hw_params": {"f63": "f63c"},
+                                                                            "new": {"f63": f63}}))
+    assert sorted((x["net"], x["mode"], x["draw"]) for x in rows(tmp_path)) == [
+        ("vgg13_fpga", "default", "s0_draco1"), ("vgg13_fpga", "every2", "s1"), ("vgg13_fpga", "f63c", "unseeded")]

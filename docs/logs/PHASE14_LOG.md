@@ -230,3 +230,17 @@ split. The user asked for everything on one recipe, so this phase reruns them on
   PCAD had modified (re-evaluation, last-digit noise) are kept in `~/dnn_study_prepull_untracked_20261123/csv_modified/`. Article audit (read-only, ~190 numbers against `all_runs.csv` / `runs.csv` / `medians.csv`): no wrong result number;
   two imprecisions fixed in the article and four stale lines in `docs/plans/BEST_MODELS.md` (300a7eb). The 27 files that existed only on Hestia (Phase 7 SSD checkpoints, Phase 9 / legacy resume files, logs; 1.16 GB) copied to the same
   relpaths on PCAD, md5-identical.
+- 2026-11-24: **the F(6,3) probes, closed (plan `~/.claude/plans/sleepy-toasting-cat.md`).** 840197 / 840199 / 840200 COMPLETED on `bali2` (1:09 / 1:04 / 1:03), all 15 JSONs written.
+  *The regression above could not pass, and not because of a bug.* In all six pairs (3 nets x `default` / `f63c`) the new JSON equals the tracked one up to some layer and then drifts (resnet18 `default` from the 7th
+  Winograd conv, `layer1.1.conv2`: `absmax_ratio` 14.36 vs 14.39, growing to 60.6 vs 51.2 at `layer4.1.conv1`, top-1 0.6 vs 0.3; vgg13 `f63c` equal to 2.7e-6 everywhere); `cos_clean` and the crests, which see no draw, agree to <= 1e-5.
+  Cause: post_shift's 1M-element `torch.randint` sample (`qat_wino.py` l.507) can round one post_shift the other way, and every later layer inherits it; the tracked runs set no torch seed, and **this torch (2.5.1) starts each
+  process from a different default seed** (`torch.initial_seed()` differs per run, checked), so they cannot be replayed bit for bit. The 1e-4 rule is dropped. In its place, fixed before the numbers:
+  R1 (code) -- the code of 4636092 (which wrote the tracked JSONs) and the current code, same node, torch seed 0 set after the same imports (the `model_registrations` import draws from the RNG), F63 on both bases:
+  every field the old code writes must be exactly equal, else 5c8351c changed the measurement; R2 (CPU) -- the current code at seed 0 on `draco1` (Xeon E5-2640 v2) vs `bali2`'s seed-0 JSON on the three nets. Both are
+  AVX-only Xeons (tupi1/2 are E5-2620 v4 with AVX2, tupi3-6 i9-14900KF), so R2 does not test against the CPUs the tracked JSONs ran on (tupi had 0 of 64 CPUs free for hours, so a tupi run was left out); a CPU can only act
+  through the same kind of flipped rounding the seeds vary. Draw spread: torch seeds 1 and 2 of all five modes on `bali2` (the seed-0 CPU), the calibration images staying seed 0's; only what holds over every draw counts.
+  *Code (305920b):* `f63_collapse --torch-seed` (the global torch seed only) and `torch_seed` + `capture_provenance()` (host, CPU model, git hash, Slurm job) in every JSON. `scripts/phase14/f63_probe_summary.py` -> `results/phase_14_winograd_numerics/f63_probe_summary.csv`:
+  per net x mode x draw, top-1, growth per Winograd conv = exp(least-squares slope of ln `absmax_ratio`; reproduces the +0.206 / +0.411 / -0.033 above), max `absmax_ratio`, min `x_kept` / `u_kept`, median `conv_gain`
+  drift_out / drift_in over Winograd / exact 1x1 / exact 3x3 convs; the tracked `f63_collapse*.json` enter as draw "unseeded". Test `test_f63_probe_summary_row`.
+  *Jobs (QOS `short`, 8 CPUs):* `~/f63_probe/run.sh <net> <seed>` 840357 / 840358 (resnet18 s1 / s2), 840360 / 840361 (vgg13), 840363 / 840364 (googlenet) on `-w bali2`; `~/f63_probe/check.sh <net>` 840359 (resnet18, R1 + R2),
+  840362 (vgg13), 840365 (googlenet) on `-w draco1`. Seed-0 JSONs renamed `f63_probe_<net>_<mode>_s0.json`.
