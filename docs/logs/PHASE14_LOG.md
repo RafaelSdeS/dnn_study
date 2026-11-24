@@ -237,10 +237,50 @@ split. The user asked for everything on one recipe, so this phase reruns them on
   process from a different default seed** (`torch.initial_seed()` differs per run, checked), so they cannot be replayed bit for bit. The 1e-4 rule is dropped. In its place, fixed before the numbers:
   R1 (code) -- the code of 4636092 (which wrote the tracked JSONs) and the current code, same node, torch seed 0 set after the same imports (the `model_registrations` import draws from the RNG), F63 on both bases:
   every field the old code writes must be exactly equal, else 5c8351c changed the measurement; R2 (CPU) -- the current code at seed 0 on `draco1` (Xeon E5-2640 v2) vs `bali2`'s seed-0 JSON on the three nets. Both are
-  AVX-only Xeons (tupi1/2 are E5-2620 v4 with AVX2, tupi3-6 i9-14900KF), so R2 does not test against the CPUs the tracked JSONs ran on (tupi had 0 of 64 CPUs free for hours, so a tupi run was left out); a CPU can only act
-  through the same kind of flipped rounding the seeds vary. Draw spread: torch seeds 1 and 2 of all five modes on `bali2` (the seed-0 CPU), the calibration images staying seed 0's; only what holds over every draw counts.
+  AVX-only Xeons (tupi1/2 are E5-2620 v4 with AVX2, tupi3-6 i9-14900KF), so R2 does not test against the CPUs the tracked JSONs ran on (tupi had 0 of 64 CPUs free for hours, so a tupi run was left out; the tracked JSONs,
+  which ran on AVX2 machines, serve as that comparison below). Draw spread: torch seeds 1 and 2 of all five modes on `bali2` (the seed-0 CPU), the calibration images staying seed 0's; only what holds over every draw counts.
   *Code (305920b):* `f63_collapse --torch-seed` (the global torch seed only) and `torch_seed` + `capture_provenance()` (host, CPU model, git hash, Slurm job) in every JSON. `scripts/phase14/f63_probe_summary.py` -> `results/phase_14_winograd_numerics/f63_probe_summary.csv`:
   per net x mode x draw, top-1, growth per Winograd conv = exp(least-squares slope of ln `absmax_ratio`; reproduces the +0.206 / +0.411 / -0.033 above), max `absmax_ratio`, min `x_kept` / `u_kept`, median `conv_gain`
   drift_out / drift_in over Winograd / exact 1x1 / exact 3x3 convs; the tracked `f63_collapse*.json` enter as draw "unseeded". Test `test_f63_probe_summary_row`.
   *Jobs (QOS `short`, 8 CPUs):* `~/f63_probe/run.sh <net> <seed>` 840357 / 840358 (resnet18 s1 / s2), 840360 / 840361 (vgg13), 840363 / 840364 (googlenet) on `-w bali2`; `~/f63_probe/check.sh <net>` 840359 (resnet18, R1 + R2),
   840362 (vgg13), 840365 (googlenet) on `-w draco1`. Seed-0 JSONs renamed `f63_probe_<net>_<mode>_s0.json`.
+  **R1 and R2: exactly equal.** R1 (840359, 11:06-11:33): the code of 4636092 and the current code give the same top-1 and the same value in all 133 fields of each base (new 0.6 %, old 0.3 %; FP32 56.5 / 53.7), so the probes
+  did not change the measurement. R2 (840359 / 840362 / 840365): draco1 and bali2 at seed 0 are bit-identical on the three nets (228 / 120 / 264 layer fields, top-1 and every `conv_gain` row). Kept as
+  `f63_probe_<net>_default_s0_draco1.json` (resnet18's has both bases). With R2 equal, the two googlenet seed jobs pending on bali2 (840363 / 840364) were moved to draco1 (`scontrol update ReqNodeList`, 11:35).
+  **Seeds: the draw almost never matters; the machine does.** 840357 / 58 / 60 / 61 (bali2, 1:10-1:14) and 840363 / 64 (draco1, 0:19) COMPLETED, 30 JSONs (md5 = PCAD's, provenance 305920b clean). Seeds 0 / 1 / 2 are
+  bit-identical in 14 of the 15 net x mode cells; the exception is resnet18 `f63c` seed 2 (from `layer1.1.conv2`; top-1 23.5 vs 24.4). Yet the tracked JSONs differ from seed 0 in 5 of 6 pairs, and even `w_crest`, a function
+  of the same weights only, differs by 8e-8 to 1.1e-7 in 3-5 layers of every pair, while bali2 and draco1 are bit-identical: the AVX2 machines the tracked runs used (laptop, tupi2, tupi6) and the AVX-only Xeons compute
+  different floats (presumably torch's AVX2 kernels vs its default ones; the thread count may count too), and a ~1e-7 difference sometimes flips a rounding that every later layer inherits. So the machine, not the draw,
+  explains most of the 2026-11-23 mismatch. Its size: resnet18 `default` max `absmax_ratio` 51.2 (laptop) vs 60.6, top-1 0.3 vs 0.6; vgg13 top-1 0.1 vs 0.8; resnet18's old base max 3.74 vs 5.13; `f63c` top-1 23.5-24.4 /
+  16.4 / 38.1-38.4. No conclusion below changes over the 3-5 draws of a cell (seeds, draco1, tracked).
+  *Table* (`results/phase_14_winograd_numerics/f63_probe_summary.csv`, `python -m scripts.phase14.f63_probe_summary`; min-max over the draws; top-1 at epoch 0 on 1000 test images; growth per Winograd conv; gain = median
+  drift_out / drift_in of `conv_gain`):
+
+  | net | mode | top-1 % | growth | max obs. ratio | min `u_kept` | gain F63 | gain exact 1x1 | gain exact 3x3 |
+  |---|---|---|---|---|---|---|---|---|
+  | resnet18 | default | 0.3-0.6 | 1.23-1.24 | 51-61 | < 1e-4 | 1.32 | 1.11 | - |
+  | resnet18 | every2 | 2.0 | 0.89 | 1.84 | 0.33 | 1.17 | 0.96 | 0.67 |
+  | resnet18 | clean | 0.6 | 0.99 | 1.17 | 0.32 | 0.92 | 0.99 | - |
+  | resnet18 | p999 | 7.8 | 0.96 | 1.00 | 0.51 | 0.85 | 0.98 | - |
+  | resnet18 | f63c | 23.5-24.4 | 0.94 | 3.04 | 0.68-0.69 | 0.80 | 0.96 | - |
+  | vgg13 | default | 0.1-0.8 | 1.51 | 34.1-34.2 | 6e-4 | 1.27 | - | - |
+  | vgg13 | every2 | 0.8 | 1.15 | 1.79 | 0.36 | 1.34 | - | 0.59 |
+  | vgg13 | clean | 0.9 | 1.00 | 1.06 | 0.37 | 0.93 | - | - |
+  | vgg13 | p999 | 6.1 | 0.97 | 1.00 | 0.52 | 0.82 | - | - |
+  | vgg13 | f63c | 16.4 | 0.94 | 1.95 | 0.66 | 0.80 | - | - |
+  | googlenet | default | 0.2-0.3 | 0.95-0.97 | 4.32 | 0.29-0.32 | 1.10 | 0.85 | - |
+  | googlenet | every2 | 5.3 | 0.96 | 1.27 | 0.36 | 1.04 | 0.82 | 0.92 |
+  | googlenet | clean | 1.1 | 1.00 | 1.11 | 0.34 | 1.09 | 0.84 | - |
+  | googlenet | p999 | 22.3 | 0.98 | 1.00 | 0.53 | 1.01 | 0.82 | - |
+  | googlenet | f63c | 38.1-38.4 | 0.97 | 2.11 | 0.68-0.70 | 0.96 | 0.82 | - |
+
+  *Decision rules (fixed 2026-11-23):* **A no** -- `p999` leaves resnet18 / vgg13 at 7.8 / 6.1 % (googlenet 22.3): the 99.9th-percentile observer stops the growth (ratio <= 1, `u_kept` >= 0.51) but the max estimator is not
+  the weak link by itself. **B: the loop is necessary for the compounding** -- by top-1 `clean` collapses (0.6 / 0.9 / 1.1 %), by the trajectories (the criterion fixed above) it survives (observers <= 1.17x, `u_kept` >= 0.32,
+  growth ~1.0); the per-layer error with the worst-case `su` alone still leaves epoch 0 at chance, as it does googlenet `default`, which QAT takes to 48.5 %. **C: a property of the chain, not of the layer** -- with F63 on every
+  second conv the growth falls from x1.23 / x1.51 to x0.89 / x1.15 and the max observer ratio from 61 / 34 to 1.8 / 1.8; the convs swapped back to exact 3x3 shrink the relative drift (median x0.67 / x0.59) while each F63
+  conv grows it (x1.17-1.34). **D supported** -- googlenet's exact 1x1 convs shrink the drift (x0.82-0.85 in every mode); after its three stem convs, each of its other 19 F63 convs comes right after an exact 1x1 (module
+  order), against 15 of 19 right after another F63 conv in resnet18 and 9 of 9 in vgg13, and its F63 convs grow the drift less (x1.10 vs 1.32 / 1.27).
+  *Answer:* the error compounds where F63 convs follow one another with nothing between them that shrinks it, and the observers, calibrated on the error-carrying activations, follow it up; googlenet puts an exact 1x1
+  before each one. Any of `every2`, `clean`, `p999` stops the compounding; none takes resnet18 / vgg13 out of chance at epoch 0, and whether QAT would (as for googlenet) needs an arm -- the article's future work, not planned.
+  *Article* (`sec:numerica`): "Não medimos por que..." replaced by a paragraph with this answer; the numbers it cites that change with the machine now hold for every draw ("14 a mais de 50 vezes", "1\% a 57\%",
+  "no máximo 5 vezes na anterior", `f63c` "cerca de 24\%, 16\% e 38\% ... contra menos de 1\%"); the future-work item now asks whether exact convs between the Winograd ones avoid the collapse after QAT. Compiled, no error.

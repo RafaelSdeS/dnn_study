@@ -1,0 +1,844 @@
+{
+ "net": "googlenet_fpga",
+ "n_calib": 400,
+ "n_test": 1000,
+ "seed": 0,
+ "torch_seed": 1,
+ "provenance": {
+  "git_hash": "305920bd0e20795db5e3e06eba85dd078b7c0616",
+  "git_dirty": false,
+  "git_dirty_files": [],
+  "hostname": "draco1",
+  "timestamp_utc": "2026-11-24T14:34:55.099683+00:00",
+  "torch_version": "2.5.1+cu121",
+  "torchvision_version": "0.20.1+cu121",
+  "cuda_version": "12.1",
+  "cudnn_version": 90100,
+  "gpu_name": null,
+  "python_version": "3.11.2",
+  "cpu_count": 32,
+  "cpu_model": "Intel(R) Xeon(R) CPU E5-2640 v2 @ 2.00GHz",
+  "slurm_job_id": "840363"
+ },
+ "bridge": {
+  "root": "/home/users/rsdsouza/winograd_bridge_m7/avaliacao_redes",
+  "git_hash": "f44da9a518ee94ede15094754045f1b9f14c6510",
+  "git_dirty": false
+ },
+ "hw_params": null,
+ "wino_on": "all",
+ "observer": "own",
+ "new": {
+  "fp32_top1": 60.9,
+  "f63": {
+   "top1": 0.2,
+   "conv_gain": {
+    "conv1.0": {
+     "kind": "winograd",
+     "k": 3,
+     "cin": 3,
+     "cout": 32,
+     "drift_in": 0.0,
+     "drift_out": 0.27681154012680054
+    },
+    "conv1.3": {
+     "kind": "winograd",
+     "k": 3,
+     "cin": 32,
+     "cout": 32,
+     "drift_in": 0.3706841766834259,
+     "drift_out": 0.6674478650093079
+    },
+    "conv1.6": {
+     "kind": "winograd",
+     "k": 3,
+     "cin": 32,
+     "cout": 64,
+     "drift_in": 1.0519311428070068,
+     "drift_out": 1.6185081005096436
+    },
+    "conv2.conv": {
+     "kind": "exact",
+     "k": 1,
+     "cin": 64,
+     "cout": 64,
+     "drift_in": 1.8895882368087769,
+     "drift_out": 1.7852967977523804
+    },
+    "conv3.conv": {
+     "kind": "winograd",
+     "k": 3,
+     "cin": 64,
+     "cout": 192,
+     "drift_in": 1.5349076986312866,
+     "drift_out": 1.6409248113632202
+    },
+    "inception3a.branch1.conv": {
+     "kind": "exact",
+     "k": 1,
+     "cin": 192,
+     "cout": 64,
+     "drift_in": 2.092905282974243,
+     "drift_out": 1.8250569105148315
+    },
+    "inception3a.branch2.0.conv": {
+     "kind": "exact",
+     "k": 1,
+     "cin": 192,
+     "cout": 96,
+     "drift_in": 2.092905282974243,
+     "drift_out": 1.974291443824768
+    },
+    "inception3a.branch2.1.conv": {
+     "kind": "winograd",
+     "k": 3,
+     "cin": 96,
+     "cout": 128,
+     "drift_in": 2.1584725379943848,
+     "drift_out": 2.442207098007202
+    },
+    "inception3a.branch3.0.conv": {
+     "kind": "exact",
+     "k": 1,
+     "cin": 192,
+     "cout": 16,
+     "drift_in": 2.092905282974243,
+     "drift_out": 1.7573041915893555
+    },
+    "inception3a.branch3.1.conv": {
+     "kind": "winograd",
+     "k": 3,
+     "cin": 16,
+     "cout": 32,
+     "drift_in": 1.4059503078460693,
+     "drift_out": 1.412735939025879
+    },
+    "inception3a.branch4.1.conv": {
+     "kind": "exact",
+     "k": 1,
+     "cin": 192,
+     "cout": 32,
+     "drift_in": 2.253185749053955,
+     "drift_out": 1.8724111318588257
+    },
+    "inception3b.branch1.conv": {
+     "kind": "exact",
+     "k": 1,
+     "cin": 256,
+     "cout": 128,
+     "drift_in": 2.5442960262298584,
+     "drift_out": 1.9500502347946167
+    },
+    "inception3b.branch2.0.conv": {
+     "kind": "exact",
+     "k": 1,
+     "cin": 256,
+     "cout": 128,
+     "drift_in": 2.5442960262298584,
+     "drift_out": 2.0869860649108887
+    },
+    "inception3b.branch2.1.conv": {
+     "kind": "winograd",
+     "k": 3,
+     "cin": 128,
+     "cout": 192,
+     "drift_in": 2.242781162261963,
+     "drift_out": 2.0783026218414307
+    },
+    "inception3b.branch3.0.conv": {
+     "kind": "exact",
+     "k": 1,
+     "cin": 256,
+     "cout": 32,
+     "drift_in": 2.5442960262298584,
+     "drift_out": 1.923730731010437
+    },
+    "inception3b.branch3.1.conv": {
+     "kind": "winograd",
+     "k": 3,
+     "cin": 32,
+     "cout": 96,
+     "drift_in": 1.2465044260025024,
+     "drift_out": 1.5852656364440918
+    },
+    "inception3b.branch4.1.conv": {
+     "kind": "exact",
+     "k": 1,
+     "cin": 256,
+     "cout": 64,
+     "drift_in": 2.770581007003784,
+     "drift_out": 2.105616569519043
+    },
+    "inception4a.branch1.conv": {
+     "kind": "exact",
+     "k": 1,
+     "cin": 480,
+     "cout": 192,
+     "drift_in": 2.445737600326538,
+     "drift_out": 2.207797050476074
+    },
+    "inception4a.branch2.0.conv": {
+     "kind": "exact",
+     "k": 1,
+     "cin": 480,
+     "cout": 96,
+     "drift_in": 2.445737600326538,
+     "drift_out": 2.117846965789795
+    },
+    "inception4a.branch2.1.conv": {
+     "kind": "winograd",
+     "k": 3,
+     "cin": 96,
+     "cout": 208,
+     "drift_in": 1.6826245784759521,
+     "drift_out": 1.6910357475280762
+    },
+    "inception4a.branch3.0.conv": {
+     "kind": "exact",
+     "k": 1,
+     "cin": 480,
+     "cout": 16,
+     "drift_in": 2.445737600326538,
+     "drift_out": 2.5279595851898193
+    },
+    "inception4a.branch3.1.conv": {
+     "kind": "winograd",
+     "k": 3,
+     "cin": 16,
+     "cout": 48,
+     "drift_in": 1.750514268875122,
+     "drift_out": 2.2087020874023438
+    },
+    "inception4a.branch4.1.conv": {
+     "kind": "exact",
+     "k": 1,
+     "cin": 480,
+     "cout": 64,
+     "drift_in": 2.461550712585449,
+     "drift_out": 1.4732236862182617
+    },
+    "inception4b.branch1.conv": {
+     "kind": "exact",
+     "k": 1,
+     "cin": 512,
+     "cout": 160,
+     "drift_in": 2.214524030685425,
+     "drift_out": 1.8817107677459717
+    },
+    "inception4b.branch2.0.conv": {
+     "kind": "exact",
+     "k": 1,
+     "cin": 512,
+     "cout": 112,
+     "drift_in": 2.214524030685425,
+     "drift_out": 1.8420790433883667
+    },
+    "inception4b.branch2.1.conv": {
+     "kind": "winograd",
+     "k": 3,
+     "cin": 112,
+     "cout": 224,
+     "drift_in": 1.500146508216858,
+     "drift_out": 1.5487850904464722
+    },
+    "inception4b.branch3.0.conv": {
+     "kind": "exact",
+     "k": 1,
+     "cin": 512,
+     "cout": 24,
+     "drift_in": 2.214524030685425,
+     "drift_out": 1.8082058429718018
+    },
+    "inception4b.branch3.1.conv": {
+     "kind": "winograd",
+     "k": 3,
+     "cin": 24,
+     "cout": 64,
+     "drift_in": 1.462170124053955,
+     "drift_out": 1.5943831205368042
+    },
+    "inception4b.branch4.1.conv": {
+     "kind": "exact",
+     "k": 1,
+     "cin": 512,
+     "cout": 64,
+     "drift_in": 1.9329125881195068,
+     "drift_out": 1.4533056020736694
+    },
+    "inception4c.branch1.conv": {
+     "kind": "exact",
+     "k": 1,
+     "cin": 512,
+     "cout": 128,
+     "drift_in": 1.913807988166809,
+     "drift_out": 1.6317243576049805
+    },
+    "inception4c.branch2.0.conv": {
+     "kind": "exact",
+     "k": 1,
+     "cin": 512,
+     "cout": 128,
+     "drift_in": 1.913807988166809,
+     "drift_out": 1.6407254934310913
+    },
+    "inception4c.branch2.1.conv": {
+     "kind": "winograd",
+     "k": 3,
+     "cin": 128,
+     "cout": 256,
+     "drift_in": 1.5905663967132568,
+     "drift_out": 1.7404053211212158
+    },
+    "inception4c.branch3.0.conv": {
+     "kind": "exact",
+     "k": 1,
+     "cin": 512,
+     "cout": 24,
+     "drift_in": 1.913807988166809,
+     "drift_out": 1.5341150760650635
+    },
+    "inception4c.branch3.1.conv": {
+     "kind": "winograd",
+     "k": 3,
+     "cin": 24,
+     "cout": 64,
+     "drift_in": 1.3973411321640015,
+     "drift_out": 1.536287546157837
+    },
+    "inception4c.branch4.1.conv": {
+     "kind": "exact",
+     "k": 1,
+     "cin": 512,
+     "cout": 64,
+     "drift_in": 1.621675729751587,
+     "drift_out": 1.3074437379837036
+    },
+    "inception4d.branch1.conv": {
+     "kind": "exact",
+     "k": 1,
+     "cin": 512,
+     "cout": 112,
+     "drift_in": 1.7942259311676025,
+     "drift_out": 1.542695164680481
+    },
+    "inception4d.branch2.0.conv": {
+     "kind": "exact",
+     "k": 1,
+     "cin": 512,
+     "cout": 144,
+     "drift_in": 1.7942259311676025,
+     "drift_out": 1.5546624660491943
+    },
+    "inception4d.branch2.1.conv": {
+     "kind": "winograd",
+     "k": 3,
+     "cin": 144,
+     "cout": 288,
+     "drift_in": 1.4763202667236328,
+     "drift_out": 1.5289671421051025
+    },
+    "inception4d.branch3.0.conv": {
+     "kind": "exact",
+     "k": 1,
+     "cin": 512,
+     "cout": 32,
+     "drift_in": 1.7942259311676025,
+     "drift_out": 1.5365328788757324
+    },
+    "inception4d.branch3.1.conv": {
+     "kind": "winograd",
+     "k": 3,
+     "cin": 32,
+     "cout": 64,
+     "drift_in": 1.4462215900421143,
+     "drift_out": 1.7446388006210327
+    },
+    "inception4d.branch4.1.conv": {
+     "kind": "exact",
+     "k": 1,
+     "cin": 512,
+     "cout": 64,
+     "drift_in": 1.5515846014022827,
+     "drift_out": 1.284096360206604
+    },
+    "inception4e.branch1.conv": {
+     "kind": "exact",
+     "k": 1,
+     "cin": 528,
+     "cout": 256,
+     "drift_in": 1.640480399131775,
+     "drift_out": 1.430722713470459
+    },
+    "inception4e.branch2.0.conv": {
+     "kind": "exact",
+     "k": 1,
+     "cin": 528,
+     "cout": 160,
+     "drift_in": 1.640480399131775,
+     "drift_out": 1.544551134109497
+    },
+    "inception4e.branch2.1.conv": {
+     "kind": "winograd",
+     "k": 3,
+     "cin": 160,
+     "cout": 320,
+     "drift_in": 1.4668710231781006,
+     "drift_out": 1.532081127166748
+    },
+    "inception4e.branch3.0.conv": {
+     "kind": "exact",
+     "k": 1,
+     "cin": 528,
+     "cout": 32,
+     "drift_in": 1.640480399131775,
+     "drift_out": 1.5250636339187622
+    },
+    "inception4e.branch3.1.conv": {
+     "kind": "winograd",
+     "k": 3,
+     "cin": 32,
+     "cout": 128,
+     "drift_in": 1.318313479423523,
+     "drift_out": 1.4233534336090088
+    },
+    "inception4e.branch4.1.conv": {
+     "kind": "exact",
+     "k": 1,
+     "cin": 528,
+     "cout": 128,
+     "drift_in": 1.4891661405563354,
+     "drift_out": 1.5138379335403442
+    },
+    "inception5a.branch1.conv": {
+     "kind": "exact",
+     "k": 1,
+     "cin": 832,
+     "cout": 256,
+     "drift_in": 1.7802354097366333,
+     "drift_out": 1.7078988552093506
+    },
+    "inception5a.branch2.0.conv": {
+     "kind": "exact",
+     "k": 1,
+     "cin": 832,
+     "cout": 160,
+     "drift_in": 1.7802354097366333,
+     "drift_out": 1.5921489000320435
+    },
+    "inception5a.branch2.1.conv": {
+     "kind": "winograd",
+     "k": 3,
+     "cin": 160,
+     "cout": 320,
+     "drift_in": 1.3893903493881226,
+     "drift_out": 1.7130980491638184
+    },
+    "inception5a.branch3.0.conv": {
+     "kind": "exact",
+     "k": 1,
+     "cin": 832,
+     "cout": 32,
+     "drift_in": 1.7802354097366333,
+     "drift_out": 1.5516821146011353
+    },
+    "inception5a.branch3.1.conv": {
+     "kind": "winograd",
+     "k": 3,
+     "cin": 32,
+     "cout": 128,
+     "drift_in": 1.4185439348220825,
+     "drift_out": 1.8144426345825195
+    },
+    "inception5a.branch4.1.conv": {
+     "kind": "exact",
+     "k": 1,
+     "cin": 832,
+     "cout": 128,
+     "drift_in": 1.4486242532730103,
+     "drift_out": 0.9405062198638916
+    },
+    "inception5b.branch1.conv": {
+     "kind": "exact",
+     "k": 1,
+     "cin": 832,
+     "cout": 384,
+     "drift_in": 1.648712396621704,
+     "drift_out": 1.390487551689148
+    },
+    "inception5b.branch2.0.conv": {
+     "kind": "exact",
+     "k": 1,
+     "cin": 832,
+     "cout": 192,
+     "drift_in": 1.648712396621704,
+     "drift_out": 0.9370408654212952
+    },
+    "inception5b.branch2.1.conv": {
+     "kind": "winograd",
+     "k": 3,
+     "cin": 192,
+     "cout": 384,
+     "drift_in": 1.0472354888916016,
+     "drift_out": 1.5886363983154297
+    },
+    "inception5b.branch3.0.conv": {
+     "kind": "exact",
+     "k": 1,
+     "cin": 832,
+     "cout": 48,
+     "drift_in": 1.648712396621704,
+     "drift_out": 0.8696738481521606
+    },
+    "inception5b.branch3.1.conv": {
+     "kind": "winograd",
+     "k": 3,
+     "cin": 48,
+     "cout": 128,
+     "drift_in": 1.2392268180847168,
+     "drift_out": 1.443971037864685
+    },
+    "inception5b.branch4.1.conv": {
+     "kind": "exact",
+     "k": 1,
+     "cin": 832,
+     "cout": 128,
+     "drift_in": 1.4648646116256714,
+     "drift_out": 1.5149279832839966
+    }
+   },
+   "layers": [
+    {
+     "name": "conv1.0",
+     "cos_clean": 0.962705671787262,
+     "absmax_ratio": 1.0,
+     "x_kept": 0.9943587239583334,
+     "u_kept": 0.7890234626513519,
+     "v_kept": 0.9539387822151184,
+     "x_crest": 2.14791202545166,
+     "w_crest": 6.183367729187012,
+     "cin": 3,
+     "drift": 0.0,
+     "max_ratio": 1.0,
+     "p999_ratio": 1.0,
+     "obs_over_p999": 1.0
+    },
+    {
+     "name": "conv1.3",
+     "cos_clean": 0.8717176914215088,
+     "absmax_ratio": 1.0776561498641968,
+     "x_kept": 0.9660544304207846,
+     "u_kept": 0.42437837773682796,
+     "v_kept": 0.961669921875,
+     "x_crest": 13.450620651245117,
+     "w_crest": 12.600761413574219,
+     "cin": 32,
+     "drift": 0.37272578477859497,
+     "max_ratio": 1.100018858909607,
+     "p999_ratio": 1.0082581043243408,
+     "obs_over_p999": 2.2747867107391357
+    },
+    {
+     "name": "conv1.6",
+     "cos_clean": 0.8613873720169067,
+     "absmax_ratio": 2.505244731903076,
+     "x_kept": 0.9505060647815898,
+     "u_kept": 0.43077481774946336,
+     "v_kept": 0.962677001953125,
+     "x_crest": 10.821002960205078,
+     "w_crest": 9.511849403381348,
+     "cin": 32,
+     "drift": 1.0557578802108765,
+     "max_ratio": 2.5346434116363525,
+     "p999_ratio": 1.7410674095153809,
+     "obs_over_p999": 5.107752323150635
+    },
+    {
+     "name": "conv3.conv",
+     "cos_clean": 0.9224546551704407,
+     "absmax_ratio": 2.8117666244506836,
+     "x_kept": 0.9611770060395661,
+     "u_kept": 0.4427661806554375,
+     "v_kept": 0.9520835876464844,
+     "x_crest": 7.284240245819092,
+     "w_crest": 14.383515357971191,
+     "cin": 64,
+     "drift": 1.5520983934402466,
+     "max_ratio": 3.004305839538574,
+     "p999_ratio": 2.8169050216674805,
+     "obs_over_p999": 5.179382801055908
+    },
+    {
+     "name": "inception3a.branch2.1.conv",
+     "cos_clean": 0.9122141599655151,
+     "absmax_ratio": 4.32330846786499,
+     "x_kept": 0.9103257630934252,
+     "u_kept": 0.3328480098668798,
+     "v_kept": 0.9469223022460938,
+     "x_crest": 9.998212814331055,
+     "w_crest": 10.457986831665039,
+     "cin": 96,
+     "drift": 2.155362844467163,
+     "max_ratio": 3.626258134841919,
+     "p999_ratio": 3.605053186416626,
+     "obs_over_p999": 9.387887001037598
+    },
+    {
+     "name": "inception3a.branch3.1.conv",
+     "cos_clean": 0.9258860945701599,
+     "absmax_ratio": 2.2505595684051514,
+     "x_kept": 0.9710321802317425,
+     "u_kept": 0.6523121673883582,
+     "v_kept": 0.974212646484375,
+     "x_crest": 5.296452045440674,
+     "w_crest": 6.666135787963867,
+     "cin": 16,
+     "drift": 1.397825002670288,
+     "max_ratio": 2.454357147216797,
+     "p999_ratio": 2.0744411945343018,
+     "obs_over_p999": 3.1586098670959473
+    },
+    {
+     "name": "inception3b.branch2.1.conv",
+     "cos_clean": 0.9077790379524231,
+     "absmax_ratio": 4.161200046539307,
+     "x_kept": 0.8916986135613154,
+     "u_kept": 0.3220171388944516,
+     "v_kept": 0.9663410186767578,
+     "x_crest": 11.914754867553711,
+     "w_crest": 8.901432991027832,
+     "cin": 128,
+     "drift": 2.2405879497528076,
+     "max_ratio": 4.2064032554626465,
+     "p999_ratio": 3.4982683658599854,
+     "obs_over_p999": 9.371811866760254
+    },
+    {
+     "name": "inception3b.branch3.1.conv",
+     "cos_clean": 0.9299434423446655,
+     "absmax_ratio": 3.834254026412964,
+     "x_kept": 0.9466863265225975,
+     "u_kept": 0.551078766654811,
+     "v_kept": 0.974395751953125,
+     "x_crest": 6.208418369293213,
+     "w_crest": 5.438061714172363,
+     "cin": 32,
+     "drift": 1.2402145862579346,
+     "max_ratio": 3.0961034297943115,
+     "p999_ratio": 2.348109006881714,
+     "obs_over_p999": 5.866701126098633
+    },
+    {
+     "name": "inception4a.branch2.1.conv",
+     "cos_clean": 0.8777357935905457,
+     "absmax_ratio": 2.333618640899658,
+     "x_kept": 0.9514352431939856,
+     "u_kept": 0.33162666909305977,
+     "v_kept": 0.9380164742469788,
+     "x_crest": 8.744305610656738,
+     "w_crest": 10.026189804077148,
+     "cin": 96,
+     "drift": 1.682777762413025,
+     "max_ratio": 2.0202152729034424,
+     "p999_ratio": 2.2470390796661377,
+     "obs_over_p999": 4.412978172302246
+    },
+    {
+     "name": "inception4a.branch3.1.conv",
+     "cos_clean": 0.8751164078712463,
+     "absmax_ratio": 2.0587270259857178,
+     "x_kept": 0.9808958338508931,
+     "u_kept": 0.39220147902983915,
+     "v_kept": 0.9561360478401184,
+     "x_crest": 5.351140975952148,
+     "w_crest": 7.705910682678223,
+     "cin": 16,
+     "drift": 1.7471789121627808,
+     "max_ratio": 2.051525831222534,
+     "p999_ratio": 2.2290875911712646,
+     "obs_over_p999": 3.0281944274902344
+    },
+    {
+     "name": "inception4b.branch2.1.conv",
+     "cos_clean": 0.8460501432418823,
+     "absmax_ratio": 1.8746943473815918,
+     "x_kept": 0.958338141950375,
+     "u_kept": 0.3694967741525447,
+     "v_kept": 0.9506754875183105,
+     "x_crest": 9.462321281433105,
+     "w_crest": 12.370237350463867,
+     "cin": 112,
+     "drift": 1.4892929792404175,
+     "max_ratio": 2.0127642154693604,
+     "p999_ratio": 1.8626340627670288,
+     "obs_over_p999": 3.6787500381469727
+    },
+    {
+     "name": "inception4b.branch3.1.conv",
+     "cos_clean": 0.8726835250854492,
+     "absmax_ratio": 1.728446364402771,
+     "x_kept": 0.9761232604373757,
+     "u_kept": 0.4682039377525578,
+     "v_kept": 0.9813334345817566,
+     "x_crest": 6.148618221282959,
+     "w_crest": 4.688236713409424,
+     "cin": 24,
+     "drift": 1.4418275356292725,
+     "max_ratio": 1.7596633434295654,
+     "p999_ratio": 1.7300159931182861,
+     "obs_over_p999": 2.675201892852783
+    },
+    {
+     "name": "inception4c.branch2.1.conv",
+     "cos_clean": 0.6550129652023315,
+     "absmax_ratio": 0.8638930916786194,
+     "x_kept": 0.9628934737891915,
+     "u_kept": 0.40185873800684435,
+     "v_kept": 0.9749369621276855,
+     "x_crest": 18.430219650268555,
+     "w_crest": 8.581842422485352,
+     "cin": 128,
+     "drift": 1.5610703229904175,
+     "max_ratio": 0.9527555108070374,
+     "p999_ratio": 1.6898785829544067,
+     "obs_over_p999": 2.7945942878723145
+    },
+    {
+     "name": "inception4c.branch3.1.conv",
+     "cos_clean": 0.8160344958305359,
+     "absmax_ratio": 1.1673535108566284,
+     "x_kept": 0.9781198973641241,
+     "u_kept": 0.48444260833641367,
+     "v_kept": 0.9822184443473816,
+     "x_crest": 8.585098266601562,
+     "w_crest": 4.355607509613037,
+     "cin": 24,
+     "drift": 1.3776620626449585,
+     "max_ratio": 1.0886726379394531,
+     "p999_ratio": 1.3990556001663208,
+     "obs_over_p999": 2.1473522186279297
+    },
+    {
+     "name": "inception4d.branch2.1.conv",
+     "cos_clean": 0.7857734560966492,
+     "absmax_ratio": 1.179679274559021,
+     "x_kept": 0.9635631316752604,
+     "u_kept": 0.39568885897215134,
+     "v_kept": 0.980492115020752,
+     "x_crest": 12.989062309265137,
+     "w_crest": 5.646076202392578,
+     "cin": 144,
+     "drift": 1.454511284828186,
+     "max_ratio": 1.4438260793685913,
+     "p999_ratio": 1.4041434526443481,
+     "obs_over_p999": 2.5227456092834473
+    },
+    {
+     "name": "inception4d.branch3.1.conv",
+     "cos_clean": 0.8111684322357178,
+     "absmax_ratio": 1.4061802625656128,
+     "x_kept": 0.9705302436025187,
+     "u_kept": 0.427028991453793,
+     "v_kept": 0.9834136962890625,
+     "x_crest": 8.930569648742676,
+     "w_crest": 4.767183780670166,
+     "cin": 32,
+     "drift": 1.4360895156860352,
+     "max_ratio": 1.2730445861816406,
+     "p999_ratio": 1.4127836227416992,
+     "obs_over_p999": 2.3766820430755615
+    },
+    {
+     "name": "inception4e.branch2.1.conv",
+     "cos_clean": 0.7563038468360901,
+     "absmax_ratio": 1.155338168144226,
+     "x_kept": 0.9582770142781669,
+     "u_kept": 0.3509759524791114,
+     "v_kept": 0.978767991065979,
+     "x_crest": 15.587845802307129,
+     "w_crest": 6.829465389251709,
+     "cin": 160,
+     "drift": 1.423833966255188,
+     "max_ratio": 1.2296181917190552,
+     "p999_ratio": 1.247789978981018,
+     "obs_over_p999": 2.626286506652832
+    },
+    {
+     "name": "inception4e.branch3.1.conv",
+     "cos_clean": 0.8470150232315063,
+     "absmax_ratio": 1.191744089126587,
+     "x_kept": 0.9772274520526542,
+     "u_kept": 0.465846841183602,
+     "v_kept": 0.9812126159667969,
+     "x_crest": 7.815935134887695,
+     "w_crest": 5.91544771194458,
+     "cin": 32,
+     "drift": 1.292048692703247,
+     "max_ratio": 1.3328288793563843,
+     "p999_ratio": 1.097733497619629,
+     "obs_over_p999": 1.776460886001587
+    },
+    {
+     "name": "inception5a.branch2.1.conv",
+     "cos_clean": 0.6194762587547302,
+     "absmax_ratio": 0.9103055596351624,
+     "x_kept": 0.9561874329081059,
+     "u_kept": 0.5743515230052487,
+     "v_kept": 0.9680642485618591,
+     "x_crest": 19.605735778808594,
+     "w_crest": 7.055072784423828,
+     "cin": 160,
+     "drift": 1.3728694915771484,
+     "max_ratio": 0.9946706295013428,
+     "p999_ratio": 1.306273341178894,
+     "obs_over_p999": 2.546475410461426
+    },
+    {
+     "name": "inception5a.branch3.1.conv",
+     "cos_clean": 0.756371259689331,
+     "absmax_ratio": 1.1225512027740479,
+     "x_kept": 0.9742337487369485,
+     "u_kept": 0.7262044274333144,
+     "v_kept": 0.9808273315429688,
+     "x_crest": 9.162866592407227,
+     "w_crest": 4.159101486206055,
+     "cin": 32,
+     "drift": 1.3597440719604492,
+     "max_ratio": 0.9936286807060242,
+     "p999_ratio": 1.2432620525360107,
+     "obs_over_p999": 1.8251800537109375
+    },
+    {
+     "name": "inception5b.branch2.1.conv",
+     "cos_clean": 0.7261653542518616,
+     "absmax_ratio": 1.0523089170455933,
+     "x_kept": 0.9164825046040516,
+     "u_kept": 0.32248089382260836,
+     "v_kept": 0.9898204803466797,
+     "x_crest": 30.73426055908203,
+     "w_crest": 3.209895372390747,
+     "cin": 192,
+     "drift": 1.0410584211349487,
+     "max_ratio": 1.1973217725753784,
+     "p999_ratio": 1.0207035541534424,
+     "obs_over_p999": 2.712284803390503
+    },
+    {
+     "name": "inception5b.branch3.1.conv",
+     "cos_clean": 0.7210825085639954,
+     "absmax_ratio": 0.8173024654388428,
+     "x_kept": 0.9498824221046444,
+     "u_kept": 0.4783169816290248,
+     "v_kept": 0.9913711547851562,
+     "x_crest": 21.384090423583984,
+     "w_crest": 3.46989107131958,
+     "cin": 48,
+     "drift": 1.2827301025390625,
+     "max_ratio": 0.8623799085617065,
+     "p999_ratio": 0.8629926443099976,
+     "obs_over_p999": 1.6982927322387695
+    }
+   ]
+  }
+ },
+ "old": null
+}

@@ -812,19 +812,27 @@ chegava a 37,5\% em F(6,3).
 
 A diferença entre os dois estudos não é falha de treino. Medimos a ResNet-18: cada camada F(6,3), sozinha, erra de forma parecida nas duas receitas (cosseno com a
 convolução FP32 de 0,46 a 0,96 na nova e de 0,75 a 0,96 na anterior). O que muda é o acúmulo do erro, porque os observadores da quantização se calibram nas ativações da própria rede simulada, que já carregam o erro das camadas anteriores.
-Na receita única, a partir da sétima convolução (13 de 19), eles ficam de 14 a 51 vezes acima do sinal limpo (de 1 a 3,7 vezes na anterior, em
-todas). Nessas convoluções, só 2\% a 57\% das entradas diferentes de zero mantêm um código INT8 diferente de zero, e menos de 2\% dos blocos
+Na receita única, a partir da sétima convolução (13 de 19), eles ficam de 14 a mais de 50 vezes acima do sinal limpo (no máximo 5 vezes na
+anterior). Nessas convoluções, só 1\% a 57\% das entradas diferentes de zero mantêm um código INT8 diferente de zero, e menos de 2\% dos blocos
 transformados passam: quase nada chega ao fim da rede.
 
 A VGG-13 colapsa do mesmo jeito: a partir da sexta convolução (5 de 10), os observadores
 ficam de 12 a 34 vezes acima do sinal, e só 0,1\% a 2,4\% dos blocos passam. Já a GoogLeNet, com a mesma receita, não acumula o erro: os observadores
 ficam no máximo 4,3 vezes acima do sinal, e pelo menos 29\% dos blocos passam em todas as convoluções. No início do QAT, as três estão no acaso em
-F(6,3), mas só a GoogLeNet chega a 48,5\%. O que decide, portanto, é \textbf{se o sinal atravessa a rede}: sem sinal, o QAT não tem de onde partir. Não
-medimos por que o erro se acumula em umas redes e não em outras.
+F(6,3), mas só a GoogLeNet chega a 48,5\%. O que decide, portanto, é \textbf{se o sinal atravessa a rede}: sem sinal, o QAT não tem de onde partir.
+
+Para entender por que o erro se acumula em umas redes e não em outras, mudamos uma coisa de cada vez nas três redes, ainda no início do QAT. O acúmulo
+vem de \textbf{convoluções F(6,3) em sequência}. Cada uma aumenta o erro que recebe (1,3 vezes, na mediana, na ResNet-18 e na VGG-13), e nessas redes
+quase todas vêm logo após outra convolução F(6,3). Com F(6,3) em só uma convolução a cada duas, e as outras exatas, as duas redes deixam de acumular:
+cada convolução exata reduz o erro (para 0,6 a 0,7 vezes), e os observadores ficam no máximo 1,8 vezes acima do sinal. Na GoogLeNet, depois das três
+primeiras, toda convolução F(6,3) vem logo após uma convolução 1\by1 exata, que também reduz o erro (para 0,8 vezes). O acúmulo também some quando os
+observadores se calibram nas ativações limpas da rede FP32 ou usam o percentil 99,9 em vez do máximo. Em nenhum desses casos, porém, a ResNet-18 e a
+VGG-13 saem do acaso no início do QAT (no máximo 7,8\%), e só um treino diria se o QAT as recupera, como recupera a GoogLeNet. Repetimos essas medidas
+com três sementes e em dois tipos de processador, e as conclusões não mudam.
 
 O colapso, porém, \textbf{vem das escalas de pior caso} do simulador. O circuito sintetizado do acelerador traz escalas calibradas para F(4,3) e F(6,3), e com as de F(6,3)
 o sinal atravessa as três redes já no início do QAT: os observadores ficam no máximo 3,0 vezes acima do sinal limpo, pelo menos 66\% dos blocos transformados
-passam em todas as convoluções, e as redes saem do acaso (23,7\%, 16,4\% e 38,1\% nas primeiras 1000 imagens de teste, contra 0,1\% a 0,3\% com as escalas de pior caso).
+passam em todas as convoluções, e as redes saem do acaso (cerca de 24\%, 16\% e 38\% nas primeiras 1000 imagens de teste, contra menos de 1\% com as escalas de pior caso).
 Depois das 50 épocas de QAT, nas 16 redes, a mediana da diferença para o FP32 é de $-$0,8 p.p. em F(4,3) com as escalas calibradas (de $-$1,5 a $+$3,2) e de
 $-$4,6 p.p. em F(6,3) (de $-$6,6 a $+$0,3), contra $-$6,3 e $-$40,1 p.p. com as escalas de pior caso. A calibrada fica acima da de pior caso nas 16 redes, nos dois
 tamanhos, e nenhuma rede colapsa: a pior em F(6,3), a WRN-28-2, perde 6,6 p.p. A ResNet-18, por exemplo, vai de 0,56\% a 54,66\% em F(6,3), contra 57,81\% em F(4,3)
@@ -883,7 +891,7 @@ Para quem projeta redes para aceleradores Winograd, a mensagem é simples: \text
 Queremos:
 \begin{itemize}
 \item entender por que, com classificador FC, o kernel 2\by2 custa acurácia na AlexNet mesmo com o custo igualado;
-\item entender por que, no F(6,3), o erro da simulação se acumula em umas redes e não em outras;
+\item testar se, no F(6,3), convoluções exatas entre as convoluções Winograd evitam o colapso também depois do QAT;
 \item medir a vazão em um acelerador real;
 \item investigar a MobileNetV2 pré-treinada em INT8;
 \item repetir as comparações principais em imagens de resolução maior.

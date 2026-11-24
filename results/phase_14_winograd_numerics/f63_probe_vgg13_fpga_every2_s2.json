@@ -1,0 +1,197 @@
+{
+ "net": "vgg13_fpga",
+ "n_calib": 400,
+ "n_test": 1000,
+ "seed": 0,
+ "torch_seed": 2,
+ "provenance": {
+  "git_hash": "305920bd0e20795db5e3e06eba85dd078b7c0616",
+  "git_dirty": false,
+  "git_dirty_files": [],
+  "hostname": "bali2",
+  "timestamp_utc": "2026-11-24T14:24:24.337850+00:00",
+  "torch_version": "2.5.1+cu121",
+  "torchvision_version": "0.20.1+cu121",
+  "cuda_version": "12.1",
+  "cudnn_version": 90100,
+  "gpu_name": null,
+  "python_version": "3.11.2",
+  "cpu_count": 32,
+  "cpu_model": "Intel(R) Xeon(R) CPU E5-2650 0 @ 2.00GHz",
+  "slurm_job_id": "840361"
+ },
+ "bridge": {
+  "root": "/home/users/rsdsouza/winograd_bridge_m7/avaliacao_redes",
+  "git_hash": "f44da9a518ee94ede15094754045f1b9f14c6510",
+  "git_dirty": false
+ },
+ "hw_params": null,
+ "wino_on": "every2",
+ "observer": "own",
+ "new": {
+  "fp32_top1": 56.5,
+  "f63": {
+   "top1": 0.8,
+   "conv_gain": {
+    "features.0": {
+     "kind": "winograd",
+     "k": 3,
+     "cin": 3,
+     "cout": 64,
+     "drift_in": 0.0,
+     "drift_out": 0.3163130283355713
+    },
+    "features.3": {
+     "kind": "exact",
+     "k": 3,
+     "cin": 64,
+     "cout": 64,
+     "drift_in": 0.443082720041275,
+     "drift_out": 0.24992415308952332
+    },
+    "features.7": {
+     "kind": "winograd",
+     "k": 3,
+     "cin": 64,
+     "cout": 128,
+     "drift_in": 0.4422529935836792,
+     "drift_out": 0.8815149068832397
+    },
+    "features.10": {
+     "kind": "exact",
+     "k": 3,
+     "cin": 128,
+     "cout": 128,
+     "drift_in": 1.2838809490203857,
+     "drift_out": 0.762527346611023
+    },
+    "features.14": {
+     "kind": "winograd",
+     "k": 3,
+     "cin": 128,
+     "cout": 256,
+     "drift_in": 0.8267837166786194,
+     "drift_out": 1.1705520153045654
+    },
+    "features.17": {
+     "kind": "exact",
+     "k": 3,
+     "cin": 256,
+     "cout": 256,
+     "drift_in": 1.768563151359558,
+     "drift_out": 1.0398328304290771
+    },
+    "features.21": {
+     "kind": "winograd",
+     "k": 3,
+     "cin": 256,
+     "cout": 512,
+     "drift_in": 0.9757944941520691,
+     "drift_out": 1.1758875846862793
+    },
+    "features.24": {
+     "kind": "exact",
+     "k": 3,
+     "cin": 512,
+     "cout": 512,
+     "drift_in": 1.9735840559005737,
+     "drift_out": 1.2409429550170898
+    },
+    "features.28": {
+     "kind": "winograd",
+     "k": 3,
+     "cin": 512,
+     "cout": 512,
+     "drift_in": 1.1695060729980469,
+     "drift_out": 1.482817530632019
+    },
+    "features.31": {
+     "kind": "exact",
+     "k": 3,
+     "cin": 512,
+     "cout": 512,
+     "drift_in": 3.7365357875823975,
+     "drift_out": 3.1296653747558594
+    }
+   },
+   "layers": [
+    {
+     "name": "features.0",
+     "cos_clean": 0.9517121315002441,
+     "absmax_ratio": 1.0,
+     "x_kept": 0.9943587239583334,
+     "u_kept": 0.7890234626513519,
+     "v_kept": 0.9620768427848816,
+     "x_crest": 2.14791202545166,
+     "w_crest": 5.637943267822266,
+     "cin": 3,
+     "drift": 0.0,
+     "max_ratio": 1.0,
+     "p999_ratio": 1.0,
+     "obs_over_p999": 1.0
+    },
+    {
+     "name": "features.7",
+     "cos_clean": 0.8242291212081909,
+     "absmax_ratio": 1.091719627380371,
+     "x_kept": 0.9701167585463435,
+     "u_kept": 0.5531253946382517,
+     "v_kept": 0.9472846984863281,
+     "x_crest": 10.968299865722656,
+     "w_crest": 19.100175857543945,
+     "cin": 64,
+     "drift": 0.42788541316986084,
+     "max_ratio": 1.0503231287002563,
+     "p999_ratio": 1.0064705610275269,
+     "obs_over_p999": 2.3030176162719727
+    },
+    {
+     "name": "features.14",
+     "cos_clean": 0.8709695339202881,
+     "absmax_ratio": 1.7913987636566162,
+     "x_kept": 0.9554607404393816,
+     "u_kept": 0.6320638496526083,
+     "v_kept": 0.9364194869995117,
+     "x_crest": 9.637039184570312,
+     "w_crest": 11.3786039352417,
+     "cin": 128,
+     "drift": 0.8058021068572998,
+     "max_ratio": 1.9624303579330444,
+     "p999_ratio": 1.318611741065979,
+     "obs_over_p999": 3.53711199760437
+    },
+    {
+     "name": "features.21",
+     "cos_clean": 0.7907321453094482,
+     "absmax_ratio": 1.5069317817687988,
+     "x_kept": 0.9536569593067971,
+     "u_kept": 0.363592831972438,
+     "v_kept": 0.866402268409729,
+     "x_crest": 12.01681900024414,
+     "w_crest": 26.840335845947266,
+     "cin": 256,
+     "drift": 0.9689425230026245,
+     "max_ratio": 1.3045916557312012,
+     "p999_ratio": 1.3387356996536255,
+     "obs_over_p999": 3.2682077884674072
+    },
+    {
+     "name": "features.28",
+     "cos_clean": 0.7136925458908081,
+     "absmax_ratio": 1.6777596473693848,
+     "x_kept": 0.9182811538533256,
+     "u_kept": 0.4403533516993513,
+     "v_kept": 0.9477299451828003,
+     "x_crest": 21.15978240966797,
+     "w_crest": 17.417383193969727,
+     "cin": 512,
+     "drift": 1.182517409324646,
+     "max_ratio": 1.6390292644500732,
+     "p999_ratio": 1.253649115562439,
+     "obs_over_p999": 4.888757705688477
+    }
+   ]
+  }
+ },
+ "old": null
+}

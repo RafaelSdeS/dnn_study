@@ -112,9 +112,11 @@ figures 02, 11, 14 and 16.
    F(4,3) −6.30 (−8.57..+0.47), F(6,3) −40.09 (−59.84..−10.48). F(6,3) is not a uniform drop: the plain-conv deep nets (VGG, WRN,
    ResNet-18, `vgg_style`) fall to chance (< 1 %), RepVGG-A0 keeps 4.2 %, the AlexNet-class nets 11-28 % and GoogLeNet 48.5 %. Not a pipeline bug: the
    observers, calibrated on the Winograd net's own activations, are inflated by the compounded error until almost no signal crosses
-   the net (`scripts/phase14/f63_collapse.py` on `resnet18_fpga`, `vgg13_fpga`, `googlenet_fpga`; why it compounds on some nets and
-   not others is not isolated). The netlist's calibrated shifts (`f63c`) remove the starvation: at epoch 0 (first 1000 test images,
-   no QAT) `resnet18_fpga` 0.3 -> 23.7 %, `vgg13_fpga` 0.1 -> 16.4 %, `googlenet_fpga` 0.3 -> 38.1 %; the `f63c` QAT arm on
+   the net (`scripts/phase14/f63_collapse.py` on `resnet18_fpga`, `vgg13_fpga`, `googlenet_fpga`). It compounds where F(6,3) convs
+   follow one another (resnet18, vgg13); GoogLeNet puts an exact 1x1 before each, which shrinks the error, and F(6,3) on every second
+   conv stops it in the other two (PHASE14_LOG 2026-11-24, `f63_probe_summary.csv`). The netlist's calibrated shifts (`f63c`) remove the
+   starvation: at epoch 0 (first 1000 test images, no QAT; ranges over machines and seeds) `resnet18_fpga` 0.3-0.6 -> 23.5-24.4 %,
+   `vgg13_fpga` 0.1-0.8 -> 16.4 %, `googlenet_fpga` 0.2-0.3 -> 38.1-38.4 %; the `f63c` QAT arm on
    `resnet18_fpga` (`phase_14_winograd_f63c_pack`, 50 of 50 epochs, one seed) reaches 54.66 % (F63 default 0.56, F43 55.26, F23 59.00, FP32
    59.22): the collapse is the worst-case scales, while the larger tile still costs (−4.56 pp vs −0.22 F23 / −3.96 F43, F43 on default scales). On all 16 nets (2026-11-22, `phase_14_winograd_{f43c,f63c}_pack`, one seed each) the calibrated arms give median −0.83 pp for F(4,3) (−1.54..+3.19) and −4.58 for F(6,3) (−6.60..+0.28), beating the analytic scales on 16 of 16 nets; no net collapses on `f63c` and F(2,3) stays ahead of `f43c` on 15 of 16. The AdamW-recipe numbers this item used to quote (F(4,3) −5.1, F(6,3) −18.9, 14 nets) are archived in
    `outputs/pcad/archive_winograd_old_recipe/`; the `~/dnn_study_m7` follow-ups (`_hw` / `_orig` / `_s43`) are not summarized here.
