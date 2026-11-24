@@ -291,3 +291,18 @@ split. The user asked for everything on one recipe, so this phase reruns them on
   0.41-0.56 %, RepVGG 4.21, GoogLeNet 48.51), limitations (the mechanism comes from 3 nets at epoch 0 only) and reproducibility (the CPU probes are not bit-identical across processor types; cited
   numbers hold for every draw). Abstract, conclusion and design list unchanged. Checked by script against HEAD: no number removed, cites / labels identical, +1 `\ref{sec:numerica}`, 30 floats
   byte-identical; compiled with no error or warning, 22 pp; tests/test_artigo_trim.py 21 passed.
+- 2026-11-24 (evening): **article closing items and the every2 arm.**
+  *Article:* the acknowledgments name the first author's CNPq scholarship (user). The simulator now cites the group's published F(2,3) accelerator
+  (Schmitz, Picinin, Pereira, Grellert, SBCCI 2026, entry copied from the OJCAS draft's `schmitz_sbcci_2026` in the Winograd-FPGA repo), as "a versão F(2,3) do
+  acelerador está descrita em [3]" (F(4,3) / F(6,3) are unpublished). The "estudo anterior do grupo" (+0.05 / -5.1 / -18.9 pp, resnet18 37.5 %) has no
+  publication -- only the internal report `docs/relatorios/relatorio_avaliacao_redes.pdf` of that repo -- so it reads "Um estudo anterior nosso, não publicado".
+  The author e-mail stays as it is (user). Checked against HEAD (no number removed, +1 cite, 30 floats identical), 22 pp, no warning, test_artigo_trim 21 passed.
+  *The every2 arm (user OK; the article's future-work item):* `phase_14_winograd_f63_every2_pack` = `phase_14_winograd_f63_pack` + `qat_wino.wino_on: every2` on
+  resnet18_fpga / vgg13_fpga (the two nets the probes measured that collapse in the f63 arm: 0.56 / 0.48 %, FP32 59.21 / 58.39). Packed F(6,3) on the 1st, 3rd, ...
+  eligible conv in module order, the others exact FP32 convs, as the qat_wino model keeps every non-eligible conv: resnet18 10 of 19 Winograd, vgg13 5 of 10
+  (checked on the real nets with the bridge's convert). One swap for the arm and the probes: `wino_mask` / `to_exact` moved from `f63_collapse.py` to
+  `ml/winograd_bridge.py` with `keep_winograd()`, which `load_qat_wino_model` applies when `QATWinoConfig.wino_on != "all"` (logged) and `f63_collapse` calls;
+  tests `test_keep_winograd`, `test_config` (the arm = f63_pack but name / wino_on / models). Same recipe, analytic scales, one seed.
+  *Decision rule, fixed before the numbers:* test top-1 < 5 % = still collapses (the exact convs in between do not save it after QAT); otherwise they do,
+  reported as arm - FP32 and against the calibrated f63c arm (54.66 / 53.78). every2 also halves the number of F(6,3) convs: the arm does not separate
+  "chained" from "how many", and the text must say so.

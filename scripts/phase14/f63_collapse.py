@@ -53,7 +53,7 @@ from ml.data import _TinyImageNetVal, _val_transform
 from ml.quantization import load_best_model
 from ml.registry import MODEL_REGISTRY
 from ml.runtime import capture_provenance, ensure_dataset_path, load_profile
-from ml.winograd_bridge import bridge_provenance, import_bridge_module, load_qat_wino_model
+from ml.winograd_bridge import bridge_provenance, import_bridge_module, keep_winograd, load_qat_wino_model
 from scripts.phase14.winograd_numerics import VARIANTS
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -80,24 +80,6 @@ def pct(t, q=0.999):
     """q-quantile of |t| (torch.quantile stops at 16M elements: a strided subsample above that)."""
     a = t.detach().abs().flatten()
     return torch.quantile(a[:: -(-a.numel() // 16_000_000)], q)
-
-
-def wino_mask(n, mode):
-    """Indices, of n eligible convs in module order, that stay Winograd: all, or every second one from the first."""
-    return set(range(0, n, {"all": 1, "every2": 2}[mode]))
-
-
-def to_exact(model, names):
-    """Swap each named qat_wino conv back to an exact FP32 Conv2d with its weights (eligible = 3x3, stride 1, pad 1)."""
-    for n in names:
-        parent, _, child = n.rpartition(".")
-        p = model.get_submodule(parent)  # "" -> the model itself
-        w = getattr(p, child)
-        c = torch.nn.Conv2d(w.weight.shape[1], w.weight.shape[0], 3, padding=1, bias=w.bias is not None)
-        c.weight.data.copy_(w.weight.data)
-        if w.bias is not None:
-            c.bias.data.copy_(w.bias.data)
-        setattr(p, child, c)
 
 
 def _p999_act_scale(self, x):
@@ -180,9 +162,7 @@ def measure(label, net, ckpt_dir, calib, test, hw=None, only=None, wino_on="all"
         arm = load_profile(f"phase_14_winograd_{v}_pack", "experiments")["qat_wino"]
         cfg = SimpleNamespace(**{k: arm[k] for k in ("variant", "pack", "u_w", "v_w", "k_dsp")}, hw_params=(hw or {}).get(v))
         m = load_qat_wino_model(net, spec, ckpt_dir, dev, cfg)
-        wino = {n: mod for n, mod in m.named_modules() if hasattr(mod, "act_absmax")}
-        keep = wino_mask(len(wino), wino_on)
-        to_exact(m, [n for i, n in enumerate(wino) if i not in keep])
+        keep_winograd(m, wino_on)  # the same swap the arm phase_14_winograd_f63_every2_pack trains with
         wino = {n: mod for n, mod in m.named_modules() if hasattr(mod, "act_absmax")}
         m.train()
         for b in m.modules():

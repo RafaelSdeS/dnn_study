@@ -87,6 +87,35 @@ def _he_init(model):
     return model
 
 
+def wino_mask(n: int, mode: str) -> set[int]:
+    """Indices, of n eligible convs in module order, that stay Winograd: all, or every second one from the first."""
+    return set(range(0, n, {"all": 1, "every2": 2}[mode]))
+
+
+def to_exact(model, names) -> None:
+    """Swap each named qat_wino conv back to an exact FP32 Conv2d with its weights (eligible = 3x3, stride 1, pad 1)."""
+    for n in names:
+        parent, _, child = n.rpartition(".")
+        p = model.get_submodule(parent)  # "" -> the model itself
+        w = getattr(p, child)
+        c = torch.nn.Conv2d(w.weight.shape[1], w.weight.shape[0], 3, padding=1, bias=w.bias is not None)
+        c.weight.data.copy_(w.weight.data)
+        if w.bias is not None:
+            c.bias.data.copy_(w.bias.data)
+        setattr(p, child, c)
+
+
+def keep_winograd(model, wino_on: str = "all") -> list[str]:
+    """Keep Winograd on the qat_wino convs wino_mask picks (module order) and swap the others back to exact FP32 convs,
+    the way a qat_wino model already keeps every non-eligible conv. One definition for the arm
+    phase_14_winograd_f63_every2_pack and scripts/phase14/f63_collapse.py --wino-on. Returns the swapped names."""
+    wino = [n for n, m in model.named_modules() if hasattr(m, "act_absmax")]  # duck-typed, as dump_wino_calibration
+    keep = wino_mask(len(wino), wino_on)
+    swapped = [n for i, n in enumerate(wino) if i not in keep]
+    to_exact(model, swapped)
+    return swapped
+
+
 def bridge_provenance() -> dict[str, Any]:
     """Which Winograd-FPGA code a run used: git hash/dirty flag of the sibling's scripts/
     tree, or on PCAD (a tarball, no .git) the BRIDGE_COMMIT.json the packaging script
@@ -161,6 +190,11 @@ def load_qat_wino_model(model_name: str, spec: dict[str, Any], checkpoints_dir: 
             model_name, len(ineligible), ineligible)
     logging.getLogger(f"pcad_runner.{model_name}").info(
         "qat_wino converted %d conv layer(s): %s", len(trocadas), trocadas)
+    wino_on = getattr(cfg, "wino_on", "all")
+    if wino_on != "all":
+        exatas = keep_winograd(model, wino_on)
+        logging.getLogger(f"pcad_runner.{model_name}").info(
+            "wino_on=%s: %d conv(s) back to exact FP32: %s", wino_on, len(exatas), exatas)
     return model.to(device)
 
 

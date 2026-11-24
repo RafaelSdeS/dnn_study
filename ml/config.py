@@ -86,6 +86,9 @@ class QATWinoConfig(QATConfig):
     # netlist sintetizado (RT_SH=0): f23 | f23mf | f43 | f63 | f63ab18. None = sv
     # escolhido pelo V de cada camada (o M7 de 2026-09-24), um limite SUPERIOR.
     hw_params: Optional[str] = None
+    # Quais convs elegíveis ficam Winograd: all | every2 (a 1ª, 3ª, ... na ordem dos módulos; as outras voltam a conv
+    # exata FP32, ml.winograd_bridge.keep_winograd). every2 = o braço phase_14_winograd_f63_every2_pack (2026-11-24).
+    wino_on: str = "all"
 
 
 @dataclass

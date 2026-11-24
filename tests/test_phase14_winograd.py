@@ -47,7 +47,8 @@ def test_f63_probe_helpers():
     exact conv with its weights, the 99.9th percentile of |x| (--observer p999) and the relative drift (the layer fields)."""
     import torch
 
-    from scripts.phase14.f63_collapse import pct, rel, to_exact, wino_mask
+    from ml.winograd_bridge import to_exact, wino_mask
+    from scripts.phase14.f63_collapse import pct, rel
 
     assert wino_mask(5, "all") == {0, 1, 2, 3, 4} and wino_mask(5, "every2") == {0, 2, 4} and wino_mask(0, "every2") == set()
 
@@ -70,6 +71,29 @@ def test_f63_probe_helpers():
     v = torch.arange(1001.0) - 500  # |v| = 0, 1, 1, 2, 2, ..., 500, 500
     assert abs(pct(v).item() - 500) < 0.1 and abs(pct(v, 0.5).item() - 250) < 1
     assert abs(rel(torch.tensor([3.0, 4.0]), torch.tensor([3.0, 0.0])) - 4 / 3) < 1e-6
+
+
+def test_keep_winograd():
+    """ml.winograd_bridge.keep_winograd, the swap of the arm phase_14_winograd_f63_every2_pack and of f63_collapse --wino-on:
+    every2 keeps Winograd on the 1st, 3rd, ... qat_wino conv in module order (an exact 1x1 in between does not count) and
+    makes the others exact convs with the same output; "all" changes nothing."""
+    import torch
+
+    from ml.winograd_bridge import keep_winograd
+
+    class Wino(torch.nn.Conv2d):  # stands in for a qat_wino conv: a 3x3 conv that carries an observer
+        def __init__(self):
+            super().__init__(4, 4, 3, padding=1)
+            self.register_buffer("act_absmax", torch.ones(()))
+
+    torch.manual_seed(0)
+    net = torch.nn.Sequential(Wino(), torch.nn.ReLU(), torch.nn.Sequential(Wino(), torch.nn.Conv2d(4, 4, 1)), Wino())
+    x = torch.randn(2, 4, 8, 8)
+    want = net(x)
+    assert keep_winograd(net, "all") == []
+    assert keep_winograd(net, "every2") == ["2.0"]
+    assert [type(m) is Wino for m in (net[0], net[2][0], net[3])] == [True, False, True]
+    assert torch.allclose(net(x), want, atol=1e-6)
 
 
 def test_f63_kept_fractions():

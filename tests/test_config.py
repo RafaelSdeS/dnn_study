@@ -133,7 +133,14 @@ def test_phase_14_runs_the_phase_11_recipe_on_the_winograd_numerics():
     phase_11_nets = {m for n in _experiment_names() if n.startswith("phase_11_") and "_seed" not in n
                      for m in load_config(f"experiments/{n}.yaml")["models"]}
     arms = [n for n in _experiment_names() if n.startswith("phase_14_") and n != "phase_14_winograd_fp32"]
-    assert arms == [f"phase_14_winograd_f{v}_pack" for v in (23, 43, "43c", "63", "63c")]
+    assert arms == [f"phase_14_winograd_f{v}_pack" for v in (23, 43, "43c", "63_every2", "63", "63c")]
+    # the every2 arm (2026-11-24): the f63 arm with Winograd on every second eligible conv, on the two nets that collapse
+    base, every2 = (load_config(f"experiments/phase_14_winograd_{a}_pack.yaml") for a in ("f63", "f63_every2"))
+    assert every2.pop("name") == "phase_14_winograd_f63_every2_pack"
+    assert every2["qat_wino"].pop("wino_on") == "every2"
+    assert every2.pop("models") == ["resnet18_fpga", "vgg13_fpga"]
+    assert {k: x for k, x in base.items() if k not in ("name", "models")} == every2
+    arms.remove("phase_14_winograd_f63_every2_pack")
     # the calibrated arms (f63c 2026-11-11, f43c 2026-11-16): their base arm with the netlist's calibrated scales on the
     # same nets, nothing else changed
     for v, hw in (("f43", "f43v3"), ("f63", "f63c")):
