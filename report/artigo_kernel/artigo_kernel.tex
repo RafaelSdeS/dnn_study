@@ -4,7 +4,8 @@
 % \pendente{...} marca, em vermelho, o que depende de treinos em andamento (hoje: nada). A seed 44 do 2x2 com canais x1,5 e FC entrou e a
 % reavaliação da latência em um só tipo de máquina (fig:latencia) foi sincronizada em 2026-11-17. A fase 14 (Winograd-FPGA na receita única, docs/logs/PHASE14_LOG.md) terminou em 2026-11-09,
 % e os braços com escalas calibradas (F(4,3) e F(6,3), 16 redes cada) entraram em 2026-11-22; a coluna FC + BN da fase 11 (seeds 43 e 44) entrou em 2026-11-18 e 2026-11-22; as seeds 43 e 44 da fase 13 entraram em 2026-11-07 e 2026-11-16, e a etapa de
-% blocos Bottleneck e Fire (7 de 7) em 2026-11-13 (docs/logs/PHASE13_LOG.md).
+% blocos Bottleneck e Fire (7 de 7) em 2026-11-13 (docs/logs/PHASE13_LOG.md). As sondas do F(6,3) (por que o erro se acumula: 3 redes, 3 sementes,
+% 2 tipos de CPU) entraram em 2026-11-24.
 \documentclass[conference]{IEEEtran}
 \IEEEoverridecommandlockouts
 \renewcommand{\figurename}{Figura}
@@ -120,7 +121,7 @@ Nossas principais conclusões são:
 \item O stride da conv1 ($+$9,7 p.p.) e o BatchNorm ($+$5,2 p.p.) pesam mais que trocar os kernels originais por 3\by3 ($-$1,5 p.p.) ou 3\by3 por 2\by2 ($-$2,5 p.p.), nas medianas de todos os pares, com e sem FC.
 \item Duas convoluções pequenas por estágio recuperam a perda. Com esse corpo, o 2\by2 fica acima do 3\by3 nos 8 pares da seed 42, com cerca de metade dos MACs. Com as seeds 43 e 44, a vantagem se repete nas três seeds sem atalho e em duas de três com atalho.
 \item A quantização INT8 quase não muda a acurácia, seja qual for o kernel. Os grandes ``ganhos'' em INT8 vêm de treino extra.
-\item Na aritmética do acelerador Winograd, o tamanho do bloco de saída custa mais acurácia do que a troca de kernel custou no estudo principal: F(2,3) quase não custa, F(4,3) custa cerca de 6 p.p., e F(6,3) leva seis redes profundas ao acaso. Esse colapso vem das escalas de pior caso: com as escalas calibradas do circuito, F(4,3) custa 0,8 p.p. e F(6,3), 4,6 p.p. (medianas das 16 redes), sem nenhum colapso.
+\item Na aritmética do acelerador Winograd, o tamanho do bloco de saída custa mais acurácia do que a troca de kernel custou no estudo principal: F(2,3) quase não custa, F(4,3) custa cerca de 6 p.p., e F(6,3) leva seis redes profundas ao acaso. Esse colapso vem das escalas de pior caso, com as quais o erro cresce de uma convolução F(6,3) para a seguinte: com as escalas calibradas do circuito, F(4,3) custa 0,8 p.p. e F(6,3), 4,6 p.p. (medianas das 16 redes), sem nenhum colapso.
 \item Boa parte dos ganhos atribuídos antes a blocos de compensação vinha das diferenças de treino.
 \end{itemize}
 
@@ -322,6 +323,10 @@ com kernels 3\by3: 14 treinadas em FP32 com a mesma receita e 2 vindas do estudo
 um por tamanho de bloco, com as mesmas 50 épocas e a mesma taxa do QAT comum, de modo que os três braços de uma rede partem dos mesmos
 pesos e só diferem na aritmética. Comparamos cada braço com o FP32 da própria rede, no conjunto de teste, com uma seed. Dois braços extras
 por rede, um de F(4,3) e um de F(6,3), partem dos mesmos pesos FP32 e trocam as escalas de pior caso do simulador pelas escalas calibradas do circuito sintetizado.
+Para entender o colapso em F(6,3), medimos ainda três redes (ResNet-18, VGG-13 e GoogLeNet) no início do QAT, antes de qualquer atualização dos pesos: com os
+observadores calibrados em 400 imagens de treino, como na primeira época, medimos em cada convolução quanto o observador fica acima do maior valor do sinal
+limpo da rede FP32, que fração dos blocos transformados diferentes de zero continua diferente de zero depois do empacotamento em ponto fixo e quanto a
+convolução aumenta ou reduz o erro relativo que recebe, além da acurácia nas primeiras 1000 imagens de teste, e repetimos essas medidas mudando uma coisa de cada vez.
 
 \begin{table}[!t]
 \caption{Treinos por estudo (total: 338). Entre parênteses, os treinos extras com as seeds 43 e 44}
@@ -443,7 +448,10 @@ INT8 e conferem o resultado contra a definição da literatura.
 O treino FP32 das redes do estudo principal rodou em RTX 4090 (105), GTX 1080 Ti (35) e RTX 4060 Ti (26). Para o resultado não depender
 da máquina, desligamos o TF32, modo de GPUs recentes que troca precisão por velocidade. Medimos que a mesma seed, na mesma GPU, retreina
 uma rede GAP bit a bit; redes FC não têm essa garantia, porque uma operação do redimensionamento antes do classificador não é
-determinística em GPU, mas a faixa da Tabela~\ref{tab:ruido} já inclui essa variação.
+determinística em GPU, mas a faixa da Tabela~\ref{tab:ruido} já inclui essa variação. As medidas da aritmética Winograd no início do QAT
+(Seção~\ref{sec:numerica}) rodam em CPU e não se repetem bit a bit entre tipos de processador: diferenças da ordem de $10^{-7}$ às vezes
+arredondam uma escala para o outro lado, e as camadas seguintes herdam a diferença. Por isso, os números citados dessas medidas valem para
+todas as repetições.
 
 \section{Resultados}
 
@@ -812,7 +820,7 @@ chegava a 37,5\% em F(6,3).
 
 A diferença entre os dois estudos não é falha de treino. Medimos a ResNet-18: cada camada F(6,3), sozinha, erra de forma parecida nas duas receitas (cosseno com a
 convolução FP32 de 0,46 a 0,96 na nova e de 0,75 a 0,96 na anterior). O que muda é o acúmulo do erro, porque os observadores da quantização se calibram nas ativações da própria rede simulada, que já carregam o erro das camadas anteriores.
-Na receita única, a partir da sétima convolução (13 de 19), eles ficam de 14 a mais de 50 vezes acima do sinal limpo (no máximo 5 vezes na
+Na receita única, a partir da sétima convolução (13 de 19), eles ficam de 14 a mais de 50 vezes acima do sinal limpo (no máximo cerca de 5 vezes na
 anterior). Nessas convoluções, só 1\% a 57\% das entradas diferentes de zero mantêm um código INT8 diferente de zero, e menos de 2\% dos blocos
 transformados passam: quase nada chega ao fim da rede.
 
@@ -860,7 +868,7 @@ Os resultados apontam para algumas escolhas:
 A escolha \textbf{depende do hardware}. Em acurácia, com dois por estágio, o 2\by2 fica à frente e faz cerca de metade dos MACs diretos, ou cerca de 1,8 vez menos com Winograd (Seção~\ref{sec:hardware}). Esse kernel, porém, precisa de um acelerador preparado para ele.
 
 A aritmética do acelerador também pesa (Seção~\ref{sec:numerica}). Os resultados de F($m$,3) vêm da simulação, não do hardware, e o kernel 2\by2
-fica fora dessas transformações, então não há medida equivalente para F($m$,2). Assim, um acelerador com F(2,3) e redes 3\by3 é \textbf{a opção sem custo de acurácia medido}. Com F(4,3) e as escalas de pior caso, a perda é de cerca de 6 p.p. (no pior caso, 8,6); com as escalas calibradas do circuito, cai para 0,8 p.p. (no pior caso, 1,5). Com F(6,3) e as escalas de pior caso, as redes profundas ficam inutilizáveis; com as calibradas, a perda é de 4,6 p.p. (no pior caso, 6,6) e nenhuma rede colapsa (16 redes, uma seed cada).
+fica fora dessas transformações, então não há medida equivalente para F($m$,2). Assim, um acelerador com F(2,3) e redes 3\by3 é \textbf{a opção sem custo de acurácia medido}. Com F(4,3) e as escalas de pior caso, a perda é de cerca de 6 p.p. (no pior caso, 8,6); com as escalas calibradas do circuito, cai para 0,8 p.p. (no pior caso, 1,5). Com F(6,3) e as escalas de pior caso, sete das oito redes profundas ficam inutilizáveis; a exceção, a GoogLeNet, tem uma convolução 1\by1 exata antes de quase todas as convoluções F(6,3), o que impede o erro de se acumular. Com as calibradas, a perda é de 4,6 p.p. (no pior caso, 6,6) e nenhuma rede colapsa (16 redes, uma seed cada).
 
 \subsection{O que muda em relação ao trabalho anterior}
 
@@ -875,7 +883,7 @@ A principal limitação é \textbf{o número de seeds}: a maioria das comparaç�
 
 O alcance da receita e dos controles também é limitado. A receita única não é a melhor para cada rede, e uma receita pode mudar a ordem entre arquiteturas \cite{bello2021revisiting,wightman2021resnet}; a taxa 0,02, por exemplo, pode melhorar as três redes testadas. Os testes de taxa e de CIFAR-100 usam GAP e BN. Com FC, o controle de capacidade mostra que a perda do 2\by2 na AlexNet vem do kernel, mas não explica por quê. Os dados têm 64 px e 32 px, e as imagens de 224 px são apenas ampliações. Além disso, os três treinos da MobileNetV2 pré-treinada ficaram abaixo da nossa guarda de conversão, e a causa não foi investigada.
 
-Do lado do hardware, \textbf{nada foi medido em um acelerador real}. Os resultados F($m$,3) têm uma seed por rede e vêm da simulação, e as escalas calibradas, que evitam o colapso em F(6,3), vêm de um circuito sintetizado e também têm uma seed por rede. A parcela de MACs e a estimativa com Winograd usam só a geometria das camadas, e não medimos a vazão. A latência foi medida só em uma GPU e uma CPU comuns, e não sabemos por que o INT8 com batch 1 é mais lento que o FP32. Os treinos rodaram em GPUs diferentes; essa diferença faz parte da variação entre execuções e também afeta a seed 42 do estudo de combinações: as duas melhores redes foram treinadas em GPUs diferentes.
+Do lado do hardware, \textbf{nada foi medido em um acelerador real}. Os resultados F($m$,3) têm uma seed por rede e vêm da simulação, e as escalas calibradas, que evitam o colapso em F(6,3), vêm de um circuito sintetizado e também têm uma seed por rede. A explicação do acúmulo do erro vem de três redes, medidas só no início do QAT. A parcela de MACs e a estimativa com Winograd usam só a geometria das camadas, e não medimos a vazão. A latência foi medida só em uma GPU e uma CPU comuns, e não sabemos por que o INT8 com batch 1 é mais lento que o FP32. Os treinos rodaram em GPUs diferentes; essa diferença faz parte da variação entre execuções e também afeta a seed 42 do estudo de combinações: as duas melhores redes foram treinadas em GPUs diferentes.
 
 \section{Conclusão}
 

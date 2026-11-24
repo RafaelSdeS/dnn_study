@@ -284,3 +284,10 @@ split. The user asked for everything on one recipe, so this phase reruns them on
   before each one. Any of `every2`, `clean`, `p999` stops the compounding; none takes resnet18 / vgg13 out of chance at epoch 0, and whether QAT would (as for googlenet) needs an arm -- the article's future work, not planned.
   *Article* (`sec:numerica`): "Não medimos por que..." replaced by a paragraph with this answer; the numbers it cites that change with the machine now hold for every draw ("14 a mais de 50 vezes", "1\% a 57\%",
   "no máximo 5 vezes na anterior", `f63c` "cerca de 24\%, 16\% e 38\% ... contra menos de 1\%"); the future-work item now asks whether exact convs between the Winograd ones avoid the collapse after QAT. Compiled, no error.
+  *Article, later the same day (plan `~/.claude/plans/recursive-weaving-dawn.md`):* every number of `sec:numerica` re-checked against all draws (seeds 0-2, draco1, tracked); all hold except
+  "no máximo 5 vezes na anterior" (the old base reaches 5.13 on the seeded draws, 3.74 tracked) -> "no máximo cerca de 5 vezes". The mechanism carried to the rest of the text: the contribution bullet (the
+  error grows from one F(6,3) conv to the next), the methods (what the epoch-0 probes measure: 3 nets, 400 calibration images, observer vs clean max, transformed tiles kept, per-conv gain, 1000 test images,
+  one change at a time), "2x2 ou 3x3?" ("as redes profundas ficam inutilizáveis" -> 7 of 8 deep nets, the exception GoogLeNet with an exact 1x1 before almost every F(6,3) conv; `runs.csv`: six at
+  0.41-0.56 %, RepVGG 4.21, GoogLeNet 48.51), limitations (the mechanism comes from 3 nets at epoch 0 only) and reproducibility (the CPU probes are not bit-identical across processor types; cited
+  numbers hold for every draw). Abstract, conclusion and design list unchanged. Checked by script against HEAD: no number removed, cites / labels identical, +1 `\ref{sec:numerica}`, 30 floats
+  byte-identical; compiled with no error or warning, 22 pp; tests/test_artigo_trim.py 21 passed.
