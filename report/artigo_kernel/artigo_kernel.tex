@@ -318,7 +318,7 @@ espacial. Com um ou dois blocos por estágio e kernel 3\by3 ou 2\by2, são 8 red
 própria Fire do estudo principal, são 7 treinos novos.
 
 O \textit{estudo da aritmética Winograd} mede quanto a conta do acelerador custa em acurácia. Para isso, usamos o simulador do
-acelerador Winograd em FPGA do grupo, que reproduz a aritmética de ponto fixo de F(2,3), F(4,3) e F(6,3) dentro do QAT. São 16 redes
+acelerador Winograd em FPGA do grupo, que reproduz a aritmética de ponto fixo de F(2,3), F(4,3) e F(6,3) dentro do QAT (a versão F(2,3) do acelerador está descrita em \cite{schmitz2026multicore}). São 16 redes
 com kernels 3\by3: 14 treinadas em FP32 com a mesma receita e 2 vindas do estudo principal. Cada rede FP32 passa depois por três QATs,
 um por tamanho de bloco, com as mesmas 50 épocas e a mesma taxa do QAT comum, de modo que os três braços de uma rede partem dos mesmos
 pesos e só diferem na aritmética. Comparamos cada braço com o FP32 da própria rede, no conjunto de teste, com uma seed. Dois braços extras
@@ -814,7 +814,7 @@ painel tem sua escala. O anel marca a rede cuja melhor época FP32 veio cedo.}
 \end{figure*}
 
 No F(6,3), porém, não se trata só de uma perda maior. Seis redes profundas (VGG-Style, VGG-13, VGG16, WRN-16-4, WRN-28-2 e ResNet-18) caem ao acaso, com 0,4 a
-0,6\% de acerto, e a RepVGG-A0 fica em 4,2\%, enquanto as AlexNets ficam entre 11 e 28\%, e a GoogLeNet, em 48,5\%. Um estudo anterior do grupo, com outra
+0,6\% de acerto, e a RepVGG-A0 fica em 4,2\%, enquanto as AlexNets ficam entre 11 e 28\%, e a GoogLeNet, em 48,5\%. Um estudo anterior nosso, não publicado, com outra
 receita (AdamW, FP32 de até 100 épocas, 15 épocas de QAT medidas na validação), tinha achado $+$0,05, $-$5,1 e $-$18,9 p.p., e nele a mesma ResNet-18
 chegava a 37,5\% em F(6,3).
 
@@ -906,7 +906,7 @@ Queremos:
 \end{itemize}
 
 \section*{Agradecimentos}
-Experimentos utilizaram recursos da infraestrutura PCAD (http://pcad.inf.ufrgs.br).
+Experimentos utilizaram recursos da infraestrutura PCAD (http://pcad.inf.ufrgs.br). O primeiro autor recebeu bolsa do Conselho Nacional de Desenvolvimento Científico e Tecnológico (CNPq).
 
 \renewcommand{\refname}{Referências}
 \begin{thebibliography}{00}
@@ -916,6 +916,9 @@ A. Lavin and S. Gray, ``Fast algorithms for convolutional neural networks,'' in 
 
 \bibitem{barabasz2020error}
 B. Barabasz, A. Anderson, K. M. Soodhalter, and D. Gregg, ``Error analysis and improving the accuracy of Winograd convolution for deep neural networks,'' \textit{ACM Transactions on Mathematical Software}, vol. 46, no. 4, Art. 37, 2020.
+
+\bibitem{schmitz2026multicore}
+T. H. Schmitz, L. Picinin, P. T. L. Pereira, and M. Grellert, ``A multi-core Winograd F(2,3) FPGA accelerator with low on-chip memory footprint for VGG16 convolution,'' in \textit{Proc. Symposium on Integrated Circuits and Systems Design (SBCCI)}, 2026.
 
 \bibitem{krizhevsky2012imagenet}
 A. Krizhevsky, I. Sutskever, and G. E. Hinton, ``ImageNet classification with deep convolutional neural networks,'' in \textit{Advances in Neural Information Processing Systems (NeurIPS)}, 2012.
