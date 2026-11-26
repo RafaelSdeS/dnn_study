@@ -3,7 +3,7 @@
 Generate the report-only figure variants for report/ic_report/ic_report.tex.
 
 These two PNGs (kernel_restriction_cost, extreme_compression_methods)
-started as copies of presentation/make_figures.py's slide figures, hand-edited ad hoc for print
+started as copies of presentation/2026-07_fases_1-4/make_figures.py's slide figures, hand-edited ad hoc for print
 (white background, portrait bar chart) with no committed source. This script is that source now,
 so the report figures can be regenerated instead of hand-patched again.
 

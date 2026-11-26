@@ -11,11 +11,11 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "report" / "ic_report"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "report" / "ic_report"))
 from pareto import pareto_frontier  # noqa: E402 -- shared with report/ic_report/generate_figures.py
 
 # Setup
-OUTPUT_DIR = Path("presentation/figures")
+OUTPUT_DIR = Path(__file__).resolve().parent / "figures"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # Palette from dataviz skill
@@ -497,4 +497,4 @@ plt.savefig(OUTPUT_DIR / "master_pareto_frontier_all_models.png", dpi=100, bbox_
 print(f"✓ master_pareto_frontier_all_models.png")
 plt.close()
 
-print("\nAll figures generated to presentation/figures/")
+print(f"\nAll figures generated to {OUTPUT_DIR}/")

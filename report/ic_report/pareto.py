@@ -1,5 +1,5 @@
 """Pareto-frontier helpers shared by report/ic_report/generate_figures.py and
-presentation/make_figures.py -- both plot fp32/int8 accuracy vs. size/latency/MACs
+presentation/2026-07_fases_1-4/make_figures.py -- both plot fp32/int8 accuracy vs. size/latency/MACs
 figures from the same results/ CSVs and used to reimplement this independently."""
 
 import numpy as np

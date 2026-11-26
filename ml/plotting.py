@@ -5,7 +5,7 @@ from matplotlib.colors import to_rgb
 from matplotlib.patches import Patch
 
 # Report palette -- the single source of figure style for report/ scripts and notebooks/.
-# presentation/make_figures.py keeps its own slide palette on purpose (different medium).
+# presentation/2026-07_fases_1-4/make_figures.py keeps its own slide palette on purpose (different medium).
 BLUE = "#1565c0"
 RED = "#dc2626"
 GREEN = "#16a34a"

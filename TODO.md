@@ -358,7 +358,7 @@ Status: `results/phase_11_geometry_analysis/design_status.csv`; findings: `docs/
 - ✅ Seeds 43 / 44 of `alexnet_k11-2residual_stride1_2pool2x2_map16_gap_bn`, synced 2026-11-16: 60.53 / 60.75 over 3 seeds, tied with the two all-2x2 nets (article, BEST_MODELS, PHASE13_LOG "2026-11-16"). History: (2026-11-11, the third net tied with the two best at seed 42;
   added to `phase_13_hybrids_seed43/44.yaml`), in `~/queue_followups.txt` (s43 = 836175). When in: sync, `scripts.phase13.hybrids`, the
   article's "As melhores redes", the "Poucas seeds" limitation, `docs/plans/BEST_MODELS.md`.
-- The deck (`presentation/slides.md`) has no Phase 13; the Narrativa / `proximos` slide are not in this repo — update those where they live.
+- The July deck (`presentation/2026-07_fases_1-4/`) covers Phases 1-4; the 2026-12-02 talk (`presentation/2026-12_fases_11-14/slides.tex`, beamer, 14 pages) presents the article's methodology and results without a per-phase breakdown. The Narrativa / `proximos` slide are not in this repo -- update those where they live.
 
 ## Phase 14 — Winograd numerics on the one recipe (`docs/logs/PHASE14_LOG.md`)
 

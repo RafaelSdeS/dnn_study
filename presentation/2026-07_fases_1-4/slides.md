@@ -129,7 +129,7 @@ Rafael Silva de Souza
 
 ## Restrição de Kernel
 
-![width:900px](../presentation/figures/kernel_restriction_cost.png)
+![width:900px](figures/kernel_restriction_cost.png)
 
 <div class="mini-table">
 
@@ -144,7 +144,7 @@ Rafael Silva de Souza
 
 ## Equivalentes em INT8
 
-![width:900px](../presentation/figures/kernel_restriction_cost_int8.png)
+![width:900px](figures/kernel_restriction_cost_int8.png)
 
 *ResNet18 e MobileNetV2 omitidos — sem resultado INT8/QAT válido para esses baselines pré-treinados (somas residuais nativas, incompatíveis com conversão INT8).*
 
@@ -167,19 +167,19 @@ Rafael Silva de Souza
 
 ## Compração FP32 vs. INT8
 
-![width:950px](../presentation/figures/best_models_fp32_vs_int8.png)
+![width:950px](figures/best_models_fp32_vs_int8.png)
 
 ---
 
 ## Melhores Modelos (até o momento)
 
-![width:920px](../presentation/figures/master_pareto_frontier_all_models.png)
+![width:920px](figures/master_pareto_frontier_all_models.png)
 
 ---
 
 ## Compressão Extrema
 
-![width:920px](../presentation/figures/extreme_compression_methods.png)
+![width:920px](figures/extreme_compression_methods.png)
 
 ---
 
